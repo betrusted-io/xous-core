@@ -4,7 +4,9 @@ members = [
     "loader",
     "tools",
     "xous-rs",
+    "examples/shell",
 ]
+default-members = ["kernel", "loader", "xous-rs", "examples/shell"]
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
