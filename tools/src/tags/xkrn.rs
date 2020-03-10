@@ -45,8 +45,12 @@ impl XousKernel {
         data_size: u32,
         bss_size: u32,
         entrypoint: u32,
-        program: Vec<u8>,
+        mut program: Vec<u8>,
     ) -> XousKernel {
+        // pad the program to 4 bytes
+        while program.len() & 3 != 0 {
+            program.push(0);
+        }
         XousKernel {
             load_offset: 0,
             text_offset,

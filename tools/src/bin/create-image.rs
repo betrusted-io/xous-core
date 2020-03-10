@@ -15,18 +15,6 @@ use tools::xous_arguments::XousArguments;
 
 use clap::{App, Arg};
 
-// fn pad_file_to_4_bytes(f: &mut File) {
-//     while f
-//         .seek(SeekFrom::Current(0))
-//         .expect("couldn't check file position")
-//         & 3
-//         != 0
-//     {
-//         println!("padding...");
-//         f.seek(SeekFrom::Current(1)).expect("couldn't pad file");
-//     }
-// }
-
 fn main() {
     env_logger::init();
     let matches = App::new("Xous Image Creator")

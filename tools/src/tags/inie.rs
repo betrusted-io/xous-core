@@ -35,7 +35,11 @@ impl fmt::Display for IniE {
 }
 
 impl IniE {
-    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, data: Vec<u8>) -> IniE {
+    pub fn new(entrypoint: u32, sections: Vec<MiniElfSection>, mut data: Vec<u8>) -> IniE {
+        // pad the data to 4 bytes
+        while data.len() & 3 != 0 {
+            data.push(0);
+        }
         IniE {
             load_offset: 0,
             entrypoint,
