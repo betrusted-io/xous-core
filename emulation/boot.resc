@@ -1,11 +1,18 @@
+# Boot Renode Script (boot.resc)
+
 using sysbus
 mach create
-machine LoadPlatformDescription @platonic.repl
+
+# Add peripherals that are defined in C#.  You must restart Renode
+# if you modify these files.
+i @peripherals/LiteX_Timer_32.cs
+
+# Load the Betrusted Renode Platform file
+machine LoadPlatformDescription @betrusted.repl
 
 machine StartGdbServer 3333 true
-
-showAnalyzer uart
 showAnalyzer uartkernel
+showAnalyzer uart
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
