@@ -10,9 +10,9 @@ showAnalyzer uartkernel
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """
-    # sysbus LoadELF @../stage1/target/riscv32imac-unknown-none-elf/debug/xous-stage1
-    sysbus LoadELF @../stage1/target/riscv32imac-unknown-none-elf/release/xous-stage1
-    sysbus LoadBinary @../kernel/args.bin 0x40800000
+    # sysbus LoadELF @../target/riscv32imac-unknown-none-elf/release/loader
+    sysbus LoadELF @../target/riscv32imac-unknown-none-elf/debug/loader
+    sysbus LoadBinary @../target/args.bin 0x40800000
     # Set $a0 to point at the args binary
     cpu SetRegisterUnsafe 10 0x40800000
     # cpu PC 0x20500000
