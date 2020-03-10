@@ -176,6 +176,10 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
         debug!("    size:             {:?}", s.size());
         debug!("    link:             {:?}", s.link());
         size += s.size();
+        // // Pad the section so it's a multiple of 4 bytes.
+        // // It's unclear if this is necessary, since this seems to indicate
+        // // that something has gone horribly wrong.
+        // size += (4 - (size & 3)) & 3;
         if size & 3 != 0 {
             return Err(ElfReadError::SectionNotAligned(name.to_owned(), s.size() as usize));
         }
