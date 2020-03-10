@@ -1,0 +1,61 @@
+cpu: CPU.VexRiscv @ sysbus
+    timeProvider: cpu_timer
+    cpuType: "rv32imac"
+    privilegeArchitecture: PrivilegeArchitecture.Priv1_10
+
+uart: UART.LiteX_UART @ {
+        sysbus 0x60001000;
+        sysbus 0xF0001000 // shadow
+    }
+    -> cpu@1002
+
+uartkernel: UART.LiteX_UART @ {
+        sysbus 0x60002000;
+        sysbus 0xF0002000 // shadow
+    }
+    -> cpu@1003
+
+timer0: Timers.LiteX_Timer @ {
+        sysbus 0x60003000;
+        sysbus 0xF0003000 // shadow
+    }
+    frequency: 12000000
+    -> cpu@1001
+
+spi: SPI.PicoRV_SPI @ {
+    sysbus 0x60004000;
+    sysbus 0xe0004000 // shadow
+}
+
+rom: Memory.MappedMemory @ {
+        sysbus 0x00000000;
+        sysbus 0x80000000 // shadow
+    }
+    size: 0x00002000
+
+sram: Memory.MappedMemory @ {
+        sysbus 0x40000000;
+        sysbus 0x90000000 // shadow
+    }
+    size: 16777216
+
+cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
+    frequency: 66000000
+    // IRQ #100 is Machine Timer Interrupt
+    -> cpu@100
+
+flash: SPI.Micron_MT25Q @ spi
+    underlyingMemory: flash_mem
+
+flash_mem: Memory.MappedMemory @ {
+        sysbus 0x20000000;
+        sysbus 0xA0000000 // shadow
+    }
+    size: 0x8000000
+
+sysbus:
+    init:
+        Tag <0xe0000000 0x800> "CTRL"
+        Tag <0xE0006000 0x800> "REBOOT"
+        Tag <0xE0006800 0x800> "RGB"
+        Tag <0xE0007000 0x800> "VERSION"

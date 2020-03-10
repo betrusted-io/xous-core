@@ -1,0 +1,14 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Core kernel for Xous, including task switching and memory management"
+
+[dependencies]
+bitflags = "1.2.1"
+vexriscv = "0.0.2"
+xous = { path = "../xous-rs" }
+
+[features]
+debug-print = []

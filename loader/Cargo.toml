@@ -1,0 +1,17 @@
+[package]
+name = "loader"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Initial kernel loader for Xous"
+
+[dependencies]
+
+[dev-dependencies]
+lazy_static = "1.4.0"
+rand = "0.7.3"
+
+[features]
+debug-print = []
+earlyprintk = []
+

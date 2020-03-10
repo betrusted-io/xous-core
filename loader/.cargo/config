@@ -1,0 +1,12 @@
+[target.riscv32i-unknown-none-elf]
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "inline-threshold=275",
+]
+
+[target.riscv32imac-unknown-none-elf]
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "inline-threshold=275",
+  "-C", "force-frame-pointers=no",
+]
