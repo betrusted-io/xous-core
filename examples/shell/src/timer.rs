@@ -6,7 +6,7 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     let ptr = TIMER_BASE as *mut usize;
 
     // acknowledge the timer
-    unsafe { ptr.add(15).write_volatile(1) };
+    unsafe { ptr.add(6).write_volatile(1) };
 }
 
 pub fn init() {
@@ -34,37 +34,29 @@ pub fn init() {
 
     // Set EV_ENABLE
     let ptr = TIMER_BASE as *mut usize;
-    unsafe { ptr.add(16).write_volatile(1) };
+    unsafe { ptr.add(7).write_volatile(1) };
 }
 
 pub fn load(value: u32) {
-    let buf = value.to_le_bytes();
     let ptr = TIMER_BASE as *mut usize;
     unsafe {
-        ptr.add(0).write_volatile(buf[0] as usize);
-        ptr.add(1).write_volatile(buf[1] as usize);
-        ptr.add(2).write_volatile(buf[2] as usize);
-        ptr.add(3).write_volatile(buf[3] as usize);
+        ptr.add(0).write_volatile(value as usize);
     }
 }
 
 pub fn reload(value: u32) {
-    let buf = value.to_le_bytes();
     let ptr = TIMER_BASE as *mut usize;
     unsafe {
-        ptr.add(4).write_volatile(buf[0] as usize);
-        ptr.add(5).write_volatile(buf[1] as usize);
-        ptr.add(6).write_volatile(buf[2] as usize);
-        ptr.add(7).write_volatile(buf[3] as usize);
+        ptr.add(1).write_volatile(value as usize);
     }
 }
 
 pub fn en(en: bool) {
     let ptr = TIMER_BASE as *mut usize;
     if en {
-        unsafe { ptr.add(8).write_volatile(1) };
+        unsafe { ptr.add(2).write_volatile(1) };
     }
     else {
-        unsafe { ptr.add(8).write_volatile(0) };
+        unsafe { ptr.add(2).write_volatile(0) };
     }
 }
