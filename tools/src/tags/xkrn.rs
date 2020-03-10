@@ -75,6 +75,8 @@ impl XousArgument for XousKernel {
 
     fn finalize(&mut self, offset: usize) -> usize {
         self.load_offset = offset as u32;
+        assert!(self.text_offset > 0xff00_0000,
+        "kernel text section is invalid: 0x{:08x} < 0xff000000 -- was it linked with a linker script?", self.text_offset);
         self.program.len()
     }
 
