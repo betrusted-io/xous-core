@@ -51,7 +51,7 @@ namespace Antmicro.Renode.Peripherals.Timers
 
         public GPIO IRQ {
             get;
-            set;
+            private set;
          }
 
         public long Size { get { return  0x20; }}
@@ -65,8 +65,6 @@ namespace Antmicro.Renode.Peripherals.Timers
                 });
             ;
 
-            // RELOAD0 contains most significant 8 bits
-            // RELOAD3 contains least significant 8 bits
             Registers.Reload.Define32(this)
                 .WithValueField(0, 32, name: "RELOAD", writeCallback: (_, val) =>
                 {
@@ -138,8 +136,6 @@ namespace Antmicro.Renode.Peripherals.Timers
         private uint reloadValue;
 
         private readonly LimitTimer innerTimer;
-
-        private const int SubregistersCount = 1;
 
         private enum Registers
         {
