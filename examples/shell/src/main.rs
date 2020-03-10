@@ -54,12 +54,12 @@ fn main() {
 
     println!("Allocating a ton of space on the stack...");
     {
-        let _big_array = [42u8; 16384];
+        let _big_array = [42u8; 131072];
     }
 
-    println!("Increasing heap to 32768...");
+    println!("Increasing heap to 131072...");
     let heap = xous::rsyscall(xous::SysCall::IncreaseHeap(
-        32768,
+        131072,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ))
     .expect("couldn't increase heap");
