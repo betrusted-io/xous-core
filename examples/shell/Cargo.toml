@@ -1,0 +1,11 @@
+[package]
+name = "shell"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Shell test program"
+
+[dependencies]
+bitflags = "1.2.1"
+xous = { path = "../../xous-rs" }
+
