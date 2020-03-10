@@ -601,7 +601,7 @@ fn copy_processes(cfg: &mut BootConfig) {
             println!("IniE has {} sections", inie.sections.len());
             for section in inie.sections.iter() {
                 if (section.virt as usize) < previous_addr {
-                    panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x}", section.virt, previous_addr);
+                    panic!("init section addresses are not strictly increasing (new virt: {:08x}, last virt: {:08x})", section.virt, previous_addr);
                 }
 
                 let this_page = section.virt as usize & !(PAGE_SIZE - 1);
