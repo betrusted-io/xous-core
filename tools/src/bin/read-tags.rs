@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process;
 use std::slice;
-use xous_tools::make_type;
+use tools::make_type;
 
 fn read_next_tag(b8: *mut u8, byte_offset: &mut usize) -> Result<(u32, u16, u32), ()> {
     let tag_name = u32::from_le(unsafe { (b8 as *mut u32).add(*byte_offset / 4).read() }) as u32;
@@ -20,7 +20,8 @@ fn read_next_tag(b8: *mut u8, byte_offset: &mut usize) -> Result<(u32, u16, u32)
 
 fn print_tag(b8: *mut u8, size: u32, crc: u16, byte_offset: &mut usize) -> Result<(), ()> {
     let data = unsafe { slice::from_raw_parts(b8.add(*byte_offset) as *const u8, size as usize) };
-    let data_32 = unsafe { slice::from_raw_parts(b8.add(*byte_offset) as *const u32, size as usize / 4) };
+    let data_32 =
+        unsafe { slice::from_raw_parts(b8.add(*byte_offset) as *const u32, size as usize / 4) };
     *byte_offset += size as usize;
 
     let mut digest = crc16::Digest::new(crc16::X25);

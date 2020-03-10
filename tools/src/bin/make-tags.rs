@@ -1,12 +1,9 @@
-extern crate xous_tools;
-
 use std::fs::File;
 
-use xous_tools::make_type;
-// use xous_tools::tags::init::Init;
-use xous_tools::tags::memory::{MemoryRegion, MemoryRegions};
-use xous_tools::tags::xkrn::XousKernel;
-use xous_tools::xous_arguments::{XousArguments, XousSize};
+use tools::make_type;
+use tools::tags::memory::{MemoryRegion, MemoryRegions};
+use tools::tags::xkrn::XousKernel;
+use tools::xous_arguments::{XousArguments, XousSize};
 
 const RAM_START: XousSize = 0x40000000;
 const RAM_SIZE: XousSize = 4 * 1024 * 1024;
@@ -36,7 +33,13 @@ fn main() {
     // args.add(init);
 
     let xkrn = XousKernel::new(
-        0x20500000, 65536, 0x02000000, 0x04000000, 32768, 5678, vec![],
+        0x20500000,
+        65536,
+        0x02000000,
+        0x04000000,
+        32768,
+        5678,
+        vec![],
     );
     args.add(xkrn);
 

@@ -5,13 +5,13 @@ extern crate crc;
 
 use std::fs::File;
 
-use xous_tools::elf::{read_minielf, read_program};
-use xous_tools::tags::bflg::Bflg;
-use xous_tools::tags::inie::IniE;
-use xous_tools::tags::memory::{MemoryRegion, MemoryRegions};
-use xous_tools::tags::xkrn::XousKernel;
-use xous_tools::utils::{parse_csr_csv, parse_u32};
-use xous_tools::xous_arguments::XousArguments;
+use tools::elf::{read_minielf, read_program};
+use tools::tags::bflg::Bflg;
+use tools::tags::inie::IniE;
+use tools::tags::memory::{MemoryRegion, MemoryRegions};
+use tools::tags::xkrn::XousKernel;
+use tools::utils::{parse_csr_csv, parse_u32};
+use tools::xous_arguments::XousArguments;
 
 use clap::{App, Arg};
 
