@@ -1,5 +1,5 @@
 use crate::processtable::ProcessContext;
-use vexriscv::register::{sepc, sstatus};
+use riscv::register::{sepc, sstatus};
 
 extern "C" {
     fn _xous_resume_context(regs: *const usize) -> !;

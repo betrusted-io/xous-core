@@ -7,7 +7,7 @@ description = "Core kernel for Xous, including task switching and memory managem
 
 [dependencies]
 bitflags = "1.2.1"
-vexriscv = "0.0.2"
+riscv = { git = "https://github.com/rust-embedded/riscv.git", rev = "30af64cad7b3869a14182ab18b48ad0c71cce1ed" }
 xous = { path = "../xous-rs" }
 
 [features]

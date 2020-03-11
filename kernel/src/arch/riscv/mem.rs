@@ -1,6 +1,6 @@
 use crate::mem::MemoryManager;
 use core::fmt;
-use vexriscv::register::satp;
+use riscv::register::satp;
 use xous::{MemoryFlags, PID};
 
 pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;

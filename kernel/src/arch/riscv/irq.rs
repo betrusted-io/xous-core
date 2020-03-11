@@ -2,7 +2,7 @@ use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::mem::MemoryManagerHandle;
 use crate::processtable::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
-use vexriscv::register::{scause, sepc, sie, sstatus, stval, vsim, vsip};
+use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
 
 extern "Rust" {
@@ -26,11 +26,11 @@ pub fn enable_all_irqs() {
 pub fn enable_irq(irq_no: usize) {
     // Note that the vexriscv "IRQ Mask" register is inverse-logic --
     // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
-    vsim::write(vsim::read() | (1 << irq_no));
+    sim::write(sim::read() | (1 << irq_no));
 }
 
 pub fn disable_irq(irq_no: usize) {
-    vsim::write(vsim::read() & !(1 << irq_no));
+    sim::write(sim::read() & !(1 << irq_no));
 }
 
 static mut PREVIOUS_PID: Option<PID> = None;
@@ -169,7 +169,7 @@ pub extern "C" fn trap_handler(
         println!("CPU Exception on PID {}: {}", pid, ex);
         loop {}
     } else {
-        let irqs_pending = vsip::read();
+        let irqs_pending = sip::read();
         // Safe to access globals since interrupts are disabled
         // when this function runs.
         unsafe {

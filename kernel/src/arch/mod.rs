@@ -2,7 +2,7 @@
 #[cfg(target_arch = "riscv32")]
 mod riscv;
 #[cfg(target_arch = "riscv32")]
-pub use riscv::*;
+pub use crate::arch::riscv::*;
 
 #[cfg(target_arch = "riscv64")]
 mod riscv;

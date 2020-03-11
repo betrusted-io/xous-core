@@ -1,4 +1,4 @@
-use vexriscv::register::{satp, sie, sstatus};
+use riscv::register::{satp, sie, sstatus};
 use xous::PID;
 
 pub mod exception;
@@ -18,6 +18,10 @@ pub fn init() {
         sie::set_ssoft();
         sie::set_sext();
     }
+}
+
+pub fn wfi() {
+    unsafe { riscv::asm::wfi() };
 }
 
 #[repr(C)]

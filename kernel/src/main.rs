@@ -1,12 +1,8 @@
 #![cfg_attr(not(test), no_main)]
 #![cfg_attr(not(test), no_std)]
 
-extern crate vexriscv;
-
 #[macro_use]
 extern crate bitflags;
-
-extern crate xous;
 
 #[macro_use]
 mod debug;
@@ -127,7 +123,7 @@ pub extern "C" fn main() {
             }
             None => {
                 println!("No runnable tasks found.  Zzz...");
-                unsafe { vexriscv::asm::wfi() };
+                arch::wfi();
             }
         }
     }

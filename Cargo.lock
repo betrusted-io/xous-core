@@ -194,7 +194,7 @@ name = "kernel"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "vexriscv",
+ "riscv",
  "xous",
 ]
 
@@ -352,6 +352,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1132f845907680735a84409c3bebc64d1364a5683ffbce899550cd09d5eaefc1"
 
 [[package]]
+name = "riscv"
+version = "0.5.5"
+source = "git+https://github.com/rust-embedded/riscv.git?rev=30af64cad7b3869a14182ab18b48ad0c71cce1ed#30af64cad7b3869a14182ab18b48ad0c71cce1ed"
+dependencies = [
+ "bare-metal",
+ "bit_field",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -469,16 +478,6 @@ name = "vec_map"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05c78687fb1a80548ae3250346c3db86a80a7cdd77bda190189f2d0a0987c81a"
-
-[[package]]
-name = "vexriscv"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8cca4a24ec0049cadb38a5a0767529d28f3ea7bb5e5233b8f6cc02a1d8f0a51"
-dependencies = [
- "bare-metal",
- "bit_field",
-]
 
 [[package]]
 name = "wasi"
