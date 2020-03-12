@@ -86,8 +86,8 @@ following values:
 
 The fields `size`, `flags`, and `offset` occupy 64 bits (8 bytes). The
 `OFFSET` is a full 32-bit address.  The `SIZE` field is in units of
-words, however as it is only 24 bits, meaning the largest section size
-is `2^26` bytes.
+bytes, however as it is only 24 bits, meaning the largest section size
+is `2^24` bytes.
 
 The `FLAGS` field contains the following four bits.  Any region may be
 marked NOCOPY, however RISC-V does not allow regions to be marked
