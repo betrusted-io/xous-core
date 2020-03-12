@@ -155,9 +155,7 @@ pub struct MiniElfSection {
 impl MiniElfSection {
     pub fn len(&self) -> usize {
         // Strip off the top four bits, which contain the flags.
-        // Also shift everything up by two bits, since it's in
-        // units of 32-bit words.
-        let len = (self.size_and_flags << 2) & !0xf000_0000;
+        let len = self.size_and_flags & !0xff00_0000;
         len as usize
     }
 
