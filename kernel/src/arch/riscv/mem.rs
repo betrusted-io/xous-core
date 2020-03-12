@@ -119,11 +119,11 @@ impl MemoryMapping {
             if *l1_entry == 0 {
                 continue;
             }
-            let superpage_addr = i as u32 * (1 << 22);
+            let _superpage_addr = i as u32 * (1 << 22);
             println!(
                 "    {:4} Superpage for {:08x} @ {:08x} (flags: {:?})",
                 i,
-                superpage_addr,
+                _superpage_addr,
                 (*l1_entry >> 10) << 12,
                 MMUFlags::from_bits(l1_entry & 0xff).unwrap()
             );
@@ -141,11 +141,11 @@ impl MemoryMapping {
                 if *l0_entry & 1 == 0 {
                     continue;
                 }
-                let page_addr = j as u32 * (1 << 12);
+                let _page_addr = j as u32 * (1 << 12);
                 println!(
                     "        {:4} {:08x} -> {:08x} (flags: {:?})",
                     j,
-                    superpage_addr + page_addr,
+                    _superpage_addr + _page_addr,
                     (*l0_entry >> 10) << 12,
                     MMUFlags::from_bits(l0_entry & 0xff).unwrap()
                 );
