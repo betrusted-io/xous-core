@@ -191,6 +191,11 @@ fn read_word(satp: usize, virt: usize) -> Result<u32, &'static str> {
     Ok(unsafe { (page_base as *mut u32).read() })
 }
 
+fn read_byte(satp: usize, virt: usize) -> Result<u8, &'static str> {
+    let word = read_word(satp, virt & 0xfffffffc)?;
+    Ok(word.to_le_bytes()[virt & 3])
+}
+
 fn verify_kernel(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgument) {
     let prog = unsafe { &*(arg.data.as_ptr() as *const crate::ProgramDescription) };
     let program_offset = prog.load_offset as usize;
@@ -273,21 +278,21 @@ fn verify_program(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgumen
     let mut program_offset = elf.load_offset as usize;
 
     for section in elf.sections.iter() {
-        for addr in (section.virt..(section.virt + section.len() as u32)).step_by(4) {
+        for addr in section.virt..(section.virt + section.len() as u32) {
             let addr = addr as usize;
-            let word = read_word(cfg.processes[pid].satp as usize, addr).unwrap();
+            let word = read_byte(cfg.processes[pid].satp as usize, addr).unwrap();
             if section.no_copy() {
                 assert!(word == 0, "bss is {:08x}, not 0 @ {:08x}", word, addr);
             } else {
                 let check_word = unsafe {
-                    (cfg.base_addr as *mut u32)
-                        .add(program_offset / 4)
+                    (cfg.base_addr as *mut u8)
+                        .add(program_offset)
                         .read()
                 };
-                program_offset += 4;
+                program_offset += 1;
                 assert!(
                     word == check_word,
-                    "program doesn't match @ {:08x} (expected: {:08x}  found: {:08x})",
+                    "program doesn't match @ {:08x} (expected: {:02x}  found: {:02x})",
                     addr,
                     check_word,
                     word,

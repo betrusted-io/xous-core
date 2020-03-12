@@ -575,13 +575,13 @@ fn copy_processes(cfg: &mut BootConfig) {
         if tag.name == make_type!("IniE") {
             let mut page_addr: usize = 0;
             let mut previous_addr: usize = 0;
-            let mut top = 0 as *mut usize;
+            let mut top = 0 as *mut u8;
 
             let inie = MiniElf::new(&tag);
             let mut src_addr = unsafe {
                 cfg.base_addr
                     .add(inie.load_offset as usize / mem::size_of::<usize>())
-            };
+            } as *const u8;
 
             // Example: Page starts at 0xf0c0 and is 8192 bytes long.
             // 1. Copy 3094 bytes to page 1
@@ -620,28 +620,18 @@ fn copy_processes(cfg: &mut BootConfig) {
                         );
                         unsafe {
                             bzero(
-                                top.add(
-                                    (previous_addr as usize & (PAGE_SIZE - 1))
-                                        / mem::size_of::<usize>(),
-                                ),
-                                top.add(PAGE_SIZE as usize / mem::size_of::<usize>()),
+                                top.add(previous_addr as usize & (PAGE_SIZE - 1)),
+                                top.add(PAGE_SIZE as usize),
                             )
                         };
                     }
 
                     // Allocate a new page.
                     cfg.extra_pages += 1;
-                    top = cfg.get_top();
+                    top = cfg.get_top() as *mut u8;
 
                     // Zero out the page, if necessary.
-                    unsafe {
-                        bzero(
-                            top,
-                            top.add(
-                                (section.virt as usize & (PAGE_SIZE - 1)) / mem::size_of::<usize>(),
-                            ),
-                        )
-                    };
+                    unsafe { bzero(top, top.add(section.virt as usize & (PAGE_SIZE - 1))) };
                 }
 
                 // Part 1: Copy the first chunk over.
@@ -654,29 +644,23 @@ fn copy_processes(cfg: &mut BootConfig) {
                     "First chunk is {} bytes, copying from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
                     first_chunk_size,
                     src_addr as usize,
-                    unsafe { src_addr.add(first_chunk_size / 4) as usize },
-                    unsafe { top.add(first_chunk_offset / mem::size_of::<usize>()) as usize },
-                    unsafe { top.add((first_chunk_size + first_chunk_offset) / mem::size_of::<usize>())
+                    unsafe { src_addr.add(first_chunk_size) as usize },
+                    unsafe { top.add(first_chunk_offset) as usize },
+                    unsafe { top.add(first_chunk_size + first_chunk_offset)
                         as usize },
                     this_page + first_chunk_offset,
                 );
                 // Perform the copy, if NOCOPY is not set
                 if !section.no_copy() {
                     unsafe {
-                        memcpy(
-                            top.add(first_chunk_offset / mem::size_of::<usize>()),
-                            src_addr,
-                            first_chunk_size,
-                        );
-                        src_addr = src_addr.add(first_chunk_size / mem::size_of::<usize>());
+                        memcpy(top.add(first_chunk_offset), src_addr, first_chunk_size);
+                        src_addr = src_addr.add(first_chunk_size);
                     }
                 } else {
                     unsafe {
                         bzero(
-                            top.add(first_chunk_offset / mem::size_of::<usize>()),
-                            top.add(
-                                (first_chunk_offset + first_chunk_size) / mem::size_of::<usize>(),
-                            ),
+                            top.add(first_chunk_offset),
+                            top.add(first_chunk_offset + first_chunk_size),
                         );
                     }
                 }
@@ -685,7 +669,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                 // Part 2: Copy any full pages.
                 while bytes_to_copy > PAGE_SIZE {
                     cfg.extra_pages += 1;
-                    top = cfg.get_top();
+                    top = cfg.get_top() as *mut u8;
                     // println!(
                     //     "Copying next page from {:08x} {:08x}",
                     //     src_addr as usize, top as usize
@@ -693,10 +677,10 @@ fn copy_processes(cfg: &mut BootConfig) {
                     if !section.no_copy() {
                         unsafe {
                             memcpy(top, src_addr, PAGE_SIZE);
-                            src_addr = src_addr.add(PAGE_SIZE / mem::size_of::<usize>());
+                            src_addr = src_addr.add(PAGE_SIZE);
                         }
                     } else {
-                        unsafe { bzero(top, top.add(PAGE_SIZE / 4)) };
+                        unsafe { bzero(top, top.add(PAGE_SIZE)) };
                     }
                     bytes_to_copy -= PAGE_SIZE;
                 }
@@ -705,14 +689,14 @@ fn copy_processes(cfg: &mut BootConfig) {
                 if bytes_to_copy > 0 {
                     println!("Copying final section -- {} bytes", bytes_to_copy);
                     cfg.extra_pages += 1;
-                    top = cfg.get_top();
+                    top = cfg.get_top() as *mut u8;
                     if !section.no_copy() {
                         unsafe {
                             memcpy(top, src_addr, bytes_to_copy);
-                            src_addr = src_addr.add(bytes_to_copy / mem::size_of::<usize>());
+                            src_addr = src_addr.add(bytes_to_copy);
                         }
                     } else {
-                        unsafe { bzero(top, top.add(bytes_to_copy / 4)) };
+                        unsafe { bzero(top, top.add(bytes_to_copy)) };
                     }
                 }
 
@@ -725,8 +709,8 @@ fn copy_processes(cfg: &mut BootConfig) {
             // Zero-out the trailing bytes
             unsafe {
                 bzero(
-                    top.add((previous_addr as usize & (PAGE_SIZE - 1)) / mem::size_of::<usize>()),
-                    top.add(PAGE_SIZE as usize / mem::size_of::<usize>()),
+                    top.add(previous_addr as usize & (PAGE_SIZE - 1)),
+                    top.add(PAGE_SIZE as usize),
                 )
             };
         } else if tag.name == make_type!("XKrn") {
