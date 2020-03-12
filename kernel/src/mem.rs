@@ -232,6 +232,18 @@ impl MemoryManager {
         Err(xous::Error::OutOfMemory)
     }
 
+    // Find a virtual address in the current process that is big enough
+    // to fit `size` bytes.
+    fn find_virtual_address(&mut self, virt_ptr: *mut usize, size: usize) -> Result<usize, xous::Error> {
+        // If we were supplied a perfectly good address, return that.
+        if virt_ptr as usize != 0 {
+            return Ok(virt_ptr as usize);
+        }
+
+        // let mm = SystemServicesHandle::get().current_process();
+        Err(xous::Error::BadAddress)
+    }
+
     /// Reserve the given range without actually allocating memory.
     /// That way we can overpromise on stack size and heap size without
     /// needing to actually have pages to back it.
@@ -241,7 +253,10 @@ impl MemoryManager {
         size: usize,
         flags: MemoryFlags,
     ) -> Result<xous::Result, xous::Error> {
-        let virt = virt_ptr as usize;
+
+        // If no address was specified, pick the next address that fits
+        // in the "default" range
+        let virt = self.find_virtual_address(virt_ptr, size)?;
 
         if virt & 0xfff != 0 {
             return Err(xous::Error::BadAlignment);
@@ -275,11 +290,11 @@ impl MemoryManager {
         let ss = SystemServicesHandle::get();
         let pid = ss.current_pid();
         let phys = phys_ptr as usize;
-        let virt = virt_ptr as usize;
+        let virt = self.find_virtual_address(virt_ptr, size)?;
 
         // If no physical address is specified, give the user the next available pages
         if phys == 0 {
-            return self.reserve_range(virt_ptr, size, flags);
+            return self.reserve_range(virt as *mut usize, size, flags);
         }
 
         // 1. Attempt to claim all physical pages in the range
