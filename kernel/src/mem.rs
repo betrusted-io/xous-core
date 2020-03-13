@@ -232,15 +232,14 @@ impl MemoryManager {
         Err(xous::Error::OutOfMemory)
     }
 
-    // Find a virtual address in the current process that is big enough
-    // to fit `size` bytes.
+    /// Find a virtual address in the current process that is big enough
+    /// to fit `size` bytes.
     fn find_virtual_address(&mut self, virt_ptr: *mut usize, size: usize) -> Result<usize, xous::Error> {
         // If we were supplied a perfectly good address, return that.
         if virt_ptr as usize != 0 {
             return Ok(virt_ptr as usize);
         }
 
-        // let mm = SystemServicesHandle::get().current_process();
         Err(xous::Error::BadAddress)
     }
 
