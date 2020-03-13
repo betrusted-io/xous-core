@@ -50,7 +50,7 @@ pub struct MemoryManager {
     ram_start: usize,
     ram_size: usize,
     ram_name: u32,
-    last_address: usize,
+    last_ram_page: usize,
 }
 
 static mut MEMORY_MANAGER: MemoryManager = MemoryManager {
@@ -59,7 +59,7 @@ static mut MEMORY_MANAGER: MemoryManager = MemoryManager {
     ram_start: 0,
     ram_size: 0,
     ram_name: 0,
-    last_address: 0,
+    last_ram_page: 0,
 };
 
 /// How many people have checked out the handle object.
@@ -213,19 +213,19 @@ impl MemoryManager {
         // Go through all RAM pages looking for a free page.
         // Optimization: start from the previous address.
         // println!("Allocating page for PID {}", pid);
-        for index in self.last_address..((self.ram_size as usize) / PAGE_SIZE) {
+        for index in self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE) {
             // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
             if self.allocations[index] == 0 {
                 self.allocations[index] = pid;
-                self.last_address = index + 1;
+                self.last_ram_page = index + 1;
                 return Ok(index * PAGE_SIZE + self.ram_start);
             }
         }
-        for index in 0..self.last_address {
+        for index in 0..self.last_ram_page {
             // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
             if self.allocations[index] == 0 {
-                self.last_address = index;
                 self.allocations[index] = pid;
+                self.last_ram_page = index + 1;
                 return Ok(index * PAGE_SIZE + self.ram_start);
             }
         }
