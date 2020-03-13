@@ -1,5 +1,9 @@
 # Boot Renode Script (boot.resc)
 
+# Add this script's path to the global path, so
+# we can include files relative to ourselves.
+path add $ORIGIN
+
 using sysbus
 mach create
 

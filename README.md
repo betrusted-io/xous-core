@@ -22,16 +22,21 @@ $ cargo build --target riscv32imac-unknown-none-elf
 $ cd kernel
 $ cargo build -p kernel --target riscv32imac-unknown-none-elf
 $ cd ..
+$ cd loader
+$ cargo build -p loader --target riscv32imac-unknown-none-elf
+$ cd ..
 ```
 
 This will compile all runtime packages for `riscv32imac-unknown-none-elf`.
+Note that the kernel and loader must currently be built separately, due
+to the fact that they have custom linker scripts.
 
 These need to be packaged into a loadable binary.  You can generate such
 a binary by running the following:
 
 ```sh
 $ cargo run -p tools --bin create-image -- \
-        --csv emulation/csr.csv
+        --csv emulation/csr.csv \
         --kernel target/riscv32imac-unknown-none-elf/debug/kernel \
         --init target/riscv32imac-unknown-none-elf/debug/shell \
         target/args.bin

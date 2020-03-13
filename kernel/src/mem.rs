@@ -6,7 +6,7 @@ use core::slice;
 use core::str;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
-use xous::{MemoryAddress, MemoryFlags, PID};
+use xous::{MemoryFlags, PID};
 
 #[derive(Debug)]
 enum ClaimOrRelease {
@@ -167,10 +167,10 @@ impl MemoryManager {
             // First, we build a &[u8]...
             let name_bytes = self.ram_name.to_le_bytes();
             // ... and then convert that slice into a string slice
-            let ram_name = str::from_utf8_unchecked(&name_bytes);
+            let _ram_name = str::from_utf8_unchecked(&name_bytes);
             println!(
                 "    Region {} ({:08x}) {:08x} - {:08x} {} bytes:",
-                ram_name,
+                _ram_name,
                 self.ram_name,
                 self.ram_start,
                 self.ram_start + self.ram_size,
@@ -232,6 +232,18 @@ impl MemoryManager {
         Err(xous::Error::OutOfMemory)
     }
 
+    // Find a virtual address in the current process that is big enough
+    // to fit `size` bytes.
+    fn find_virtual_address(&mut self, virt_ptr: *mut usize, size: usize) -> Result<usize, xous::Error> {
+        // If we were supplied a perfectly good address, return that.
+        if virt_ptr as usize != 0 {
+            return Ok(virt_ptr as usize);
+        }
+
+        // let mm = SystemServicesHandle::get().current_process();
+        Err(xous::Error::BadAddress)
+    }
+
     /// Reserve the given range without actually allocating memory.
     /// That way we can overpromise on stack size and heap size without
     /// needing to actually have pages to back it.
@@ -241,7 +253,10 @@ impl MemoryManager {
         size: usize,
         flags: MemoryFlags,
     ) -> Result<xous::Result, xous::Error> {
-        let virt = virt_ptr as usize;
+
+        // If no address was specified, pick the next address that fits
+        // in the "default" range
+        let virt = self.find_virtual_address(virt_ptr, size)?;
 
         if virt & 0xfff != 0 {
             return Err(xous::Error::BadAlignment);
@@ -253,6 +268,7 @@ impl MemoryManager {
 
         let mut mm = MemoryMapping::current();
         for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
+            // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
         Ok(xous::Result::MemoryRange(virt_ptr as *mut u8, size))
@@ -270,48 +286,47 @@ impl MemoryManager {
         virt_ptr: *mut usize,
         size: usize,
         flags: MemoryFlags,
-    ) -> Result<MemoryAddress, xous::Error> {
+    ) -> Result<xous::Result, xous::Error> {
         let ss = SystemServicesHandle::get();
         let pid = ss.current_pid();
         let phys = phys_ptr as usize;
-        let virt = virt_ptr as usize;
+        let virt = self.find_virtual_address(virt_ptr, size)?;
 
-        if phys == 0 || virt == 0 {
-            println!("Attempted to map a range without specifying phys or virt");
-            return Err(xous::Error::BadAddress);
+        // If no physical address is specified, give the user the next available pages
+        if phys == 0 {
+            return self.reserve_range(virt as *mut usize, size, flags);
         }
 
-        let mut error = None;
-        for phys in (phys..(phys + size)).step_by(PAGE_SIZE) {
-            if let Err(err) = self.claim_page(phys as *mut usize, pid) {
-                error = Some(err);
-                break;
-            }
-        }
-        if let Some(err) = error {
-            for phys in (phys..(phys + size)).step_by(PAGE_SIZE) {
-                self.release_page(phys as *mut usize, pid).ok();
-            }
-            return Err(err);
-        }
-
-        for phys in (phys..(phys + size)).step_by(PAGE_SIZE) {
-            if let Err(e) =
-                crate::arch::mem::map_page_inner(self, pid, phys as usize, virt as usize, flags)
-            {
-                error = Some(e);
-                break;
+        // 1. Attempt to claim all physical pages in the range
+        for claim_phys in (phys..(phys + size)).step_by(PAGE_SIZE) {
+            if let Err(err) = self.claim_page(claim_phys as *mut usize, pid) {
+                // If we were unable to claim one or more pages, release everything and return
+                for rel_phys in (phys..claim_phys).step_by(PAGE_SIZE) {
+                    self.release_page(rel_phys as *mut usize, pid).ok();
+                }
+                return Err(err);
             }
         }
 
-        if let Some(err) = error {
-            for phys in (phys..(phys + size)).step_by(PAGE_SIZE) {
-                self.release_page(phys as *mut usize, pid).ok();
+        // Actually perform the map.  At this stage, every physical page should be owned by us.
+        for offset in (0..size).step_by(PAGE_SIZE) {
+            if let Err(e) = crate::arch::mem::map_page_inner(
+                self,
+                pid,
+                offset + phys as usize,
+                offset + virt as usize,
+                flags,
+            ) {
+                for unmap_offset in (0..offset).step_by(PAGE_SIZE) {
+                    crate::arch::mem::unmap_page_inner(self, unmap_offset + virt).ok();
+                    self.release_page((unmap_offset + phys) as *mut usize, pid)
+                        .ok();
+                }
+                return Err(e);
             }
-            return Err(err);
         }
 
-        Ok(MemoryAddress::new(virt).unwrap())
+        Ok(xous::Result::MemoryRange(virt as *mut u8, size))
     }
 
     // /// Map a range of physical addresses into the current memory space.

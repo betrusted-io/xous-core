@@ -73,7 +73,7 @@ impl XousArgument for IniE {
         written += output.write(&self.entrypoint.to_le_bytes())?;
         for section in &self.sections {
             written += output.write(&section.virt.to_le_bytes())?;
-            let mut word2 = (section.size >> 2).to_le_bytes();
+            let mut word2 = section.size.to_le_bytes();
             word2[3] = section.flags.bits();
             written += output.write(&word2)?;
         }

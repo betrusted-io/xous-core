@@ -59,6 +59,9 @@ pub struct Process {
     /// Default virtual address when MapMemory is called with no `virt`
     pub mem_default_base: usize,
 
+    /// The last address allocated from
+    pub mem_default_last: usize,
+
     /// Address where messages are passed into
     pub mem_message_base: usize,
 
@@ -110,6 +113,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: 0,
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         mem_default_base: arch::mem::DEFAULT_BASE,
+        mem_default_last: arch::mem::DEFAULT_BASE,
         mem_message_base: arch::mem::DEFAULT_MESSAGE_BASE,
         mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
         mem_heap_size: 0,
