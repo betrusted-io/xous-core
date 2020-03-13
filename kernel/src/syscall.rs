@@ -136,7 +136,7 @@ pub fn handle(call: SysCall) -> xous::Result {
 
     println!("PID{} Syscall: {:?}", pid, call);
     match call {
-        SysCall::MapPhysical(phys, virt, size, req_flags) => {
+        SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
             // Don't let the address exceed the user area (unless it's PID 1)
             if pid != 1 && (virt as usize) != 0 && (virt as usize) >= arch::mem::USER_AREA_END {

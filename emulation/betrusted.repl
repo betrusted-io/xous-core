@@ -15,6 +15,12 @@ uartkernel: UART.LiteX_UART @ {
     }
     -> cpu@1003
 
+uartlog: UART.LiteX_UART @ {
+        sysbus 0x60004000;
+        sysbus 0xF0004000 // shadow
+    }
+    -> cpu@1004
+
 timer0: Timers.LiteX_Timer_32 @ {
         sysbus 0x60003000;
         sysbus 0xF0003000 // shadow
@@ -22,10 +28,10 @@ timer0: Timers.LiteX_Timer_32 @ {
     frequency: 12000000
     -> cpu@1001
 
-spi: SPI.PicoRV_SPI @ {
-    sysbus 0x60004000;
-    sysbus 0xe0004000 // shadow
-}
+//spi: SPI.PicoRV_SPI @ {
+ //   sysbus 0x60004000;
+ //   sysbus 0xe0004000 // shadow
+//}
 
 rom: Memory.MappedMemory @ {
         sysbus 0x00000000;
@@ -44,8 +50,8 @@ cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
 
-flash: SPI.Micron_MT25Q @ spi
-    underlyingMemory: flash_mem
+//flash: SPI.Micron_MT25Q @ spi
+//    underlyingMemory: flash_mem
 
 flash_mem: Memory.MappedMemory @ {
         sysbus 0x20000000;

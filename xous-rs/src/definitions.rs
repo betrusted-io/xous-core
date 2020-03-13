@@ -32,7 +32,8 @@ pub enum Error {
     ProcessNotChild = 11,
     ProcessTerminated = 12,
     Timeout = 13,
-    UnhandledSyscall = 14,
+    InternalError = 14,
+    UnhandledSyscall = 15,
 }
 
 #[repr(C)]

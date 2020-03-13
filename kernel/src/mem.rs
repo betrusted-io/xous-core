@@ -337,7 +337,10 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        Ok(xous::Result::MemoryRange(virt_ptr as *mut u8, size))
+        Ok(xous::Result::MemoryRange(xous::MemoryRange {
+            base: virt_ptr as *mut u8,
+            size,
+        }))
     }
 
     /// Attempt to map the given physical address into the virtual address space
@@ -394,7 +397,10 @@ impl MemoryManager {
             }
         }
 
-        Ok(xous::Result::MemoryRange(virt as *mut u8, size))
+        Ok(xous::Result::MemoryRange(xous::MemoryRange {
+            base: virt as *mut u8,
+            size,
+        }))
     }
 
     // /// Map a range of physical addresses into the current memory space.

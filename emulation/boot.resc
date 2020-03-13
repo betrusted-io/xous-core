@@ -17,6 +17,7 @@ machine LoadPlatformDescription @betrusted.repl
 machine StartGdbServer 3333 true
 showAnalyzer uartkernel
 showAnalyzer uart
+showAnalyzer uartlog
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset

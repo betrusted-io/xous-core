@@ -1,4 +1,4 @@
-use crate::{CpuID, Error, PID};
+use crate::{CpuID, Error, MemoryAddress, PID};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
@@ -69,7 +69,7 @@ pub enum SysCall {
     ///                     or the size isn't a multiple of the page width.
     /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's
     ///                    memory size has been exceeded.
-    MapPhysical(
+    MapMemory(
         *mut usize,  /* phys */
         *mut usize,  /* virt */
         usize,       /* region size */
@@ -87,7 +87,7 @@ pub enum SysCall {
     ///                     or the size isn't a multiple of the page width.
     /// * **BadAddress**: The address conflicts with the kernel
     SetMemRegion(
-        PID,    /* pid */
+        PID,        /* pid */
         MemoryType, /* region type */
         *mut usize, /* region address */
         usize,      /* region size */
@@ -224,7 +224,7 @@ pub enum SysCall {
 
 #[derive(FromPrimitive)]
 enum SysCallNumber {
-    MapPhysical = 2,
+    MapMemory = 2,
     Yield = 3,
     Suspend = 4,
     ClaimInterrupt = 5,
@@ -249,8 +249,8 @@ impl SysCall {
             "SysCall is not the expected size"
         );
         match *self {
-            SysCall::MapPhysical(a1, a2, a3, a4) => [
-                SysCallNumber::MapPhysical as usize,
+            SysCall::MapMemory(a1, a2, a3, a4) => [
+                SysCallNumber::MapMemory as usize,
                 a1 as usize,
                 a2 as usize,
                 a3,
@@ -351,7 +351,7 @@ impl SysCall {
         a7: usize,
     ) -> core::result::Result<Self, InvalidSyscall> {
         Ok(match FromPrimitive::from_usize(a0) {
-            Some(SysCallNumber::MapPhysical) => SysCall::MapPhysical(
+            Some(SysCallNumber::MapMemory) => SysCall::MapMemory(
                 a1 as *mut usize,
                 a2 as *mut usize,
                 a3,
@@ -384,13 +384,19 @@ impl SysCall {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct MemoryRange {
+    pub base: *mut u8,
+    pub size: usize,
+}
+
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {
     ReturnResult,
     Error(Error),
     MemoryAddress(*mut u8),
-    MemoryRange(*mut u8 /* base */, usize /* size */),
+    MemoryRange(MemoryRange),
     ResumeResult(usize, usize, usize, usize, usize, usize),
     ResumeProcess,
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
@@ -427,6 +433,26 @@ extern "Rust" {
         a7: usize,
         ret: &mut Result,
     );
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn map_memory(
+    phys: Option<MemoryAddress>,
+    virt: Option<MemoryAddress>,
+    size: usize,
+    flags: MemoryFlags,
+) -> core::result::Result<crate::MemoryRange, crate::Error> {
+    let result = rsyscall(SysCall::MapMemory(
+        phys.map(|x| x.get()).unwrap_or(0) as *mut usize,
+        virt.map(|x| x.get()).unwrap_or(0) as *mut usize,
+        size,
+        flags,
+    ))?;
+    if let Result::MemoryRange(range) = result {
+        return Ok(range);
+    }
+    Err(crate::Error::InternalError)
 }
 
 pub fn rsyscall(call: SysCall) -> SyscallResult {

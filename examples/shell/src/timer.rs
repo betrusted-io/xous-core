@@ -11,7 +11,7 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
 
 pub fn init() {
     println!("Allocating timer...");
-    xous::rsyscall(xous::SysCall::MapPhysical(
+    xous::rsyscall(xous::SysCall::MapMemory(
         TIMER_BASE as *mut usize,
         TIMER_BASE as *mut usize,
         4096,

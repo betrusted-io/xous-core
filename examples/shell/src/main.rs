@@ -27,28 +27,26 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
 
 #[no_mangle]
 fn main() {
-    let uart = xous::rsyscall(xous::SysCall::MapPhysical(
-        0xF0001000 as *mut usize,
-        0 as *mut usize,
+    let uart = xous::syscall::map_memory(
+        xous::MemoryAddress::new(0xf0001000),
+        None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
-    ))
-    .expect("couldn't map address");
-    let uart = match uart {
-        xous::Result::MemoryRange(base, _size) => base as *mut usize,
-        x => panic!("Unexpected result: {:?}", x),
-    };
-    unsafe { debug::DEFAULT_UART_ADDR = uart };
-    println!("Mapped UART @ {:08x}", uart as usize);
-    xous::rsyscall(xous::SysCall::MapPhysical(
-        0xF0002000 as *mut usize,
-        0xF0002000 as *mut usize,
+    )
+    .expect("couldn't map uart");
+    unsafe { debug::DEFAULT_UART_ADDR = uart.base as *mut usize };
+    println!("Mapped UART @ {:08x}", uart.base as usize);
+
+    xous::syscall::map_memory(
+        xous::MemoryAddress::new(0xf0002000),
+        None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
-    ))
+    )
     .map(|_| println!("!!!WARNING: managed to steal kernel's memory"))
     .ok();
     println!("Process: map success!");
+
     debug::DEFAULT.enable_rx();
     println!("Allocating IRQ...");
     xous::rsyscall(xous::SysCall::ClaimInterrupt(
@@ -69,14 +67,14 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ))
     .expect("couldn't increase heap");
-    if let xous::Result::MemoryRange(start, len) = heap {
+    if let xous::Result::MemoryRange(range) = heap {
         println!(
             "Heap goes from {:08x} - {:08x}",
-            start as usize,
-            start as usize + len
+            range.base as usize,
+            range.base as usize + range.size
         );
         use core::slice;
-        let mem_range = unsafe { slice::from_raw_parts_mut(start, len) };
+        let mem_range = unsafe { slice::from_raw_parts_mut(range.base, range.size) };
         println!("Filling with bytes...");
         for word in mem_range.iter_mut() {
             *word = 42;
