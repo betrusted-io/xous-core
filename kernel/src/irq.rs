@@ -1,5 +1,5 @@
 use xous::PID;
-use crate::processtable::SystemServicesHandle;
+use crate::services::SystemServicesHandle;
 use crate::arch;
 
 static mut IRQ_HANDLERS: [Option<(PID, *mut usize, *mut usize)>; 32] = [None; 32];

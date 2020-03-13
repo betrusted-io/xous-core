@@ -1,7 +1,7 @@
 use crate::arch;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::processtable::{ProcessState, SystemServicesHandle};
+use crate::services::{ProcessState, SystemServicesHandle};
 use xous::*;
 
 // extern "Rust" {

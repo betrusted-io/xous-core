@@ -219,6 +219,23 @@ pub enum SysCall {
     /// * **ProcessTerminated**: The process has crashed.
     SwitchTo(PID, usize /* thread ID */),
 
+    /// Create a new Server
+    ///
+    /// This will return a 128-bit Server ID that can be used to send messages
+    /// to this server.
+    ///
+    /// # Returns
+    ///
+    /// The ServerId can be assembled to form a 128-bit server ID in native
+    /// byte order.
+    ///
+    /// # Errors
+    ///
+    /// * **OutOfMemory**: The server table was full and a new server couldn't
+    ///                    be created.
+    CreateServer,
+
+    /// This syscall does not exist
     Invalid(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -235,6 +252,7 @@ enum SysCallNumber {
     DecreaseHeap = 11,
     UpdateMemoryFlags = 12,
     SetMemRegion = 13,
+    CreateServer = 14,
     Invalid,
 }
 
@@ -335,6 +353,7 @@ impl SysCall {
                 0,
             ],
 
+            SysCall::CreateServer => [SysCallNumber::CreateServer as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, a1, a2, a3, a4, a5, a6, a7]
             }
@@ -378,6 +397,7 @@ impl SysCall {
             Some(SysCallNumber::SetMemRegion) => {
                 SysCall::SetMemRegion(a1 as PID, MemoryType::from(a2), a3 as *mut usize, a4)
             }
+            Some(SysCallNumber::CreateServer) => SysCall::CreateServer,
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(InvalidSyscall {}),
         })
@@ -399,6 +419,7 @@ pub enum Result {
     MemoryRange(MemoryRange),
     ResumeResult(usize, usize, usize, usize, usize, usize),
     ResumeProcess,
+    ServerID(usize, usize, usize, usize),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 

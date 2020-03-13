@@ -1,4 +1,4 @@
-use crate::processtable::ProcessContext;
+use crate::services::ProcessContext;
 use riscv::register::{sepc, sstatus};
 
 extern "C" {

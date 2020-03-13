@@ -16,11 +16,11 @@ mod arch;
 mod args;
 mod irq;
 mod mem;
-mod processtable;
+mod services;
 mod syscall;
 
 use mem::MemoryManagerHandle;
-use processtable::SystemServicesHandle;
+use services::SystemServicesHandle;
 use xous::*;
 
 #[cfg(not(test))]

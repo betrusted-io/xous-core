@@ -1,7 +1,7 @@
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::mem::MemoryManagerHandle;
-use crate::processtable::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
+use crate::services::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
 
