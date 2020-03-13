@@ -1,0 +1,10 @@
+[package]
+name = "log"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Log output program"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+

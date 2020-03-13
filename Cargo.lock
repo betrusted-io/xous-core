@@ -149,7 +149,7 @@ checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 dependencies = [
  "atty",
  "humantime",
- "log",
+ "log 0.4.8",
  "regex",
  "termcolor",
 ]
@@ -216,6 +216,13 @@ version = "0.1.0"
 dependencies = [
  "lazy_static",
  "rand",
+]
+
+[[package]]
+name = "log"
+version = "0.1.0"
+dependencies = [
+ "xous",
 ]
 
 [[package]]
@@ -457,7 +464,7 @@ dependencies = [
  "crc",
  "csv",
  "env_logger",
- "log",
+ "log 0.4.8",
  "xmas-elf",
 ]
 

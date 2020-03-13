@@ -5,8 +5,9 @@ members = [
     "tools",
     "xous-rs",
     "examples/shell",
+    "examples/log",
 ]
-default-members = ["xous-rs", "examples/shell"]
+default-members = ["xous-rs", "examples/shell", "examples/log"]
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
