@@ -234,10 +234,78 @@ impl MemoryManager {
 
     /// Find a virtual address in the current process that is big enough
     /// to fit `size` bytes.
-    fn find_virtual_address(&mut self, virt_ptr: *mut usize, size: usize) -> Result<usize, xous::Error> {
+    fn find_virtual_address(
+        &mut self,
+        virt_ptr: *mut usize,
+        size: usize,
+        kind: xous::MemoryType,
+    ) -> Result<usize, xous::Error> {
         // If we were supplied a perfectly good address, return that.
         if virt_ptr as usize != 0 {
             return Ok(virt_ptr as usize);
+        }
+
+        let mut ss = SystemServicesHandle::get();
+        let process = ss.current_process_mut()?;
+
+        let (start, end, initial) = match kind {
+            xous::MemoryType::Stack => return Err(xous::Error::BadAddress),
+            xous::MemoryType::Heap => {
+                let new_virt = process.mem_heap_base + process.mem_heap_size + PAGE_SIZE;
+                if new_virt + size > process.mem_heap_base + process.mem_heap_max {
+                    return Err(xous::Error::OutOfMemory);
+                }
+                return Ok(new_virt);
+            }
+            xous::MemoryType::Default => (
+                process.mem_default_base,
+                process.mem_default_base + 0x10000000,
+                process.mem_default_last,
+            ),
+            xous::MemoryType::Messages => (
+                process.mem_message_base,
+                process.mem_message_base + 0x10000000,
+                process.mem_message_last,
+            ),
+        };
+
+        // Look for a sequence of `size` pages that are free.
+        for potential_start in (initial..end - size).step_by(PAGE_SIZE) {
+            println!("    Checking {:08x}...", potential_start);
+            let mut all_free = true;
+            for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
+                if !crate::arch::mem::address_available(check_page) {
+                    all_free = false;
+                    break;
+                }
+            }
+            if all_free {
+                match kind {
+                    xous::MemoryType::Default => process.mem_default_last = potential_start,
+                    xous::MemoryType::Messages => process.mem_message_last = potential_start,
+                    other => panic!("invalid kind: {:?}", other),
+                }
+                return Ok(potential_start);
+            }
+        }
+
+        for potential_start in (start..initial).step_by(PAGE_SIZE) {
+            println!("    Checking {:08x}...", potential_start);
+            let mut all_free = true;
+            for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
+                if !crate::arch::mem::address_available(check_page) {
+                    all_free = false;
+                    break;
+                }
+            }
+            if all_free {
+                match kind {
+                    xous::MemoryType::Default => process.mem_default_last = potential_start,
+                    xous::MemoryType::Messages => process.mem_message_last = potential_start,
+                    other => panic!("invalid kind: {:?}", other),
+                }
+                return Ok(potential_start);
+            }
         }
 
         Err(xous::Error::BadAddress)
@@ -252,10 +320,9 @@ impl MemoryManager {
         size: usize,
         flags: MemoryFlags,
     ) -> Result<xous::Result, xous::Error> {
-
         // If no address was specified, pick the next address that fits
         // in the "default" range
-        let virt = self.find_virtual_address(virt_ptr, size)?;
+        let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)?;
 
         if virt & 0xfff != 0 {
             return Err(xous::Error::BadAlignment);
@@ -286,10 +353,12 @@ impl MemoryManager {
         size: usize,
         flags: MemoryFlags,
     ) -> Result<xous::Result, xous::Error> {
-        let ss = SystemServicesHandle::get();
-        let pid = ss.current_pid();
         let phys = phys_ptr as usize;
-        let virt = self.find_virtual_address(virt_ptr, size)?;
+        let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)?;
+        let pid = {
+            let ss = SystemServicesHandle::get();
+            ss.current_pid()
+        };
 
         // If no physical address is specified, give the user the next available pages
         if phys == 0 {

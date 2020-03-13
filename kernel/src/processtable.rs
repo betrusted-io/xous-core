@@ -65,6 +65,9 @@ pub struct Process {
     /// Address where messages are passed into
     pub mem_message_base: usize,
 
+    /// The last address that was allocated from
+    pub mem_message_last: usize,
+
     /// Base address of the heap
     pub mem_heap_base: usize,
 
@@ -115,6 +118,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         mem_default_base: arch::mem::DEFAULT_BASE,
         mem_default_last: arch::mem::DEFAULT_BASE,
         mem_message_base: arch::mem::DEFAULT_MESSAGE_BASE,
+        mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
         mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
         mem_heap_size: 0,
         mem_heap_max: 524288,

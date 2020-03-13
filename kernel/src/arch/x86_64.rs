@@ -180,3 +180,7 @@ fn _xous_syscall(
 pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Result> {
     unimplemented!();
 }
+
+pub fn address_available(virt: usize) -> bool {
+    virt_to_phys(virt).is_err()
+}

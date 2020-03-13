@@ -411,7 +411,7 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
     let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
 
-    // Allocate a new level 1 pagetable entry if one doesn't exist.
+    // If the level 1 pagetable doesn't exist, then this address is invalid
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
         return Err(xous::Error::BadAddress);
     }
@@ -421,4 +421,9 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
         return Err(xous::Error::BadAddress);
     }
     Ok(l0_pt.entries[vpn0])
+}
+
+/// Determine whether a virtual address has been mapped
+pub fn address_available(virt: usize) -> bool {
+    virt_to_phys(virt).is_err()
 }
