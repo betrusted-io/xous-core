@@ -19,7 +19,7 @@ fn handle_panic(arg: &PanicInfo) -> ! {
 fn handle_irq(irq_no: usize, arg: *mut usize) {
     print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
-    while let Some(c) = debug::DEFAULT_UART.getc() {
+    while let Some(c) = debug::DEFAULT.getc() {
         print!("0x{:02x}", c);
     }
     println!("");
@@ -27,13 +27,19 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
 
 #[no_mangle]
 fn main() {
-    xous::rsyscall(xous::SysCall::MapPhysical(
+    let uart = xous::rsyscall(xous::SysCall::MapPhysical(
         0xF0001000 as *mut usize,
-        debug::DEFAULT_UART.base as *mut usize,
+        0 as *mut usize,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ))
     .expect("couldn't map address");
+    let uart = match uart {
+        xous::Result::MemoryRange(base, _size) => base as *mut usize,
+        x => panic!("Unexpected result: {:?}", x),
+    };
+    unsafe { debug::DEFAULT_UART_ADDR = uart };
+    println!("Mapped UART @ {:08x}", uart as usize);
     xous::rsyscall(xous::SysCall::MapPhysical(
         0xF0002000 as *mut usize,
         0xF0002000 as *mut usize,
@@ -43,7 +49,7 @@ fn main() {
     .map(|_| println!("!!!WARNING: managed to steal kernel's memory"))
     .ok();
     println!("Process: map success!");
-    debug::DEFAULT_UART.enable_rx();
+    debug::DEFAULT.enable_rx();
     println!("Allocating IRQ...");
     xous::rsyscall(xous::SysCall::ClaimInterrupt(
         2,

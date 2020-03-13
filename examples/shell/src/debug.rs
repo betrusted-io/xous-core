@@ -5,7 +5,7 @@ macro_rules! print
 {
 	($($args:tt)+) => ({
 			use core::fmt::Write;
-			let _ = write!(crate::debug::DEFAULT_UART, $($args)+);
+			let _ = write!(crate::debug::DEFAULT, $($args)+);
 	});
 }
 #[macro_export]
@@ -22,42 +22,41 @@ macro_rules! println
 	});
 }
 
-pub struct Uart {
-    pub base: *mut usize,
-}
+pub struct Uart {}
 
-pub const DEFAULT_UART: Uart = Uart {
-    base: 0xE000_1000 as *mut usize,
-};
+pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
+
+pub const DEFAULT: Uart = Uart {};
 
 impl Uart {
     pub fn putc(&self, c: u8) {
         unsafe {
+            let base = DEFAULT_UART_ADDR;
             // Wait until TXFULL is `0`
-            while self.base.add(1).read_volatile() != 0 {
+            while base.add(1).read_volatile() != 0 {
                 ()
             }
-            self.base.add(0).write_volatile(c as usize)
+            base.add(0).write_volatile(c as usize)
         };
     }
 
     pub fn enable_rx(self) {
         unsafe {
-            self.base
-                .add(5)
-                .write_volatile(self.base.add(5).read_volatile() | 2)
+            let base = DEFAULT_UART_ADDR;
+            base.add(5).write_volatile(base.add(5).read_volatile() | 2)
         };
     }
 
     pub fn getc(&self) -> Option<u8> {
         unsafe {
+            let base = DEFAULT_UART_ADDR;
             // If EV_PENDING_RX is 1, return the pending character.
             // Otherwise, return None.
-            match self.base.add(4).read_volatile() & 2 {
+            match base.add(4).read_volatile() & 2 {
                 0 => None,
                 ack => {
-                    let c = Some(self.base.add(0).read_volatile() as u8);
-                    self.base.add(4).write_volatile(ack);
+                    let c = Some(base.add(0).read_volatile() as u8);
+                    base.add(4).write_volatile(ack);
                     c
                 }
             }
