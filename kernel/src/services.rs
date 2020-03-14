@@ -4,9 +4,10 @@ pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
 use crate::mem::MemoryManagerHandle;
 use core::slice;
-use xous::{MemoryFlags, PID};
+use xous::{MemoryFlags, PID, SID};
 
-const MAX_PROCESS_COUNT: usize = 254;
+const MAX_PROCESS_COUNT: usize = 32;
+const MAX_SERVER_COUNT: usize = 32;
 const DEFAULT_STACK_SIZE: usize = 131072;
 pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
@@ -87,6 +88,41 @@ impl Process {
     }
 }
 
+#[derive(Copy, Clone, PartialEq)]
+enum ServerState {
+    /// This server slot is unallocated
+    Free,
+
+    /// This server can receive messages
+    Ready,
+
+    /// This server's inbox is full
+    Full,
+}
+
+/// A pointer to resolve a server ID to a particular process
+#[derive(Copy, Clone)]
+pub struct Server {
+    /// A randomly-generated ID
+    sid: SID,
+
+    /// The process that owns this server
+    pid: PID,
+
+    /// The current state of this slot
+    state: ServerState,
+}
+
+impl Default for Server {
+    fn default() -> Self {
+        Server {
+            sid: (0, 0, 0, 0),
+            pid: 0,
+            state: ServerState::Free,
+        }
+    }
+}
+
 #[repr(C)]
 /// The stage1 bootloader sets up some initial processes.  These are reported
 /// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
@@ -106,8 +142,11 @@ pub struct InitialProcess {
 /// A big unifying struct containing all of the system state.
 /// This is inherited from the stage 1 bootloader.
 pub struct SystemServices {
-    /// A table of all processes on the system
+    /// A table of all processes in the system
     pub processes: [Process; MAX_PROCESS_COUNT],
+
+    /// A table of all servers in the system
+    servers: [Server; MAX_SERVER_COUNT],
 }
 
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
@@ -123,6 +162,11 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         mem_heap_size: 0,
         mem_heap_max: 524288,
     }; MAX_PROCESS_COUNT],
+    servers: [Server {
+        sid: (0, 0, 0, 0),
+        pid: 0,
+        state: ServerState::Free,
+    }; MAX_SERVER_COUNT],
 };
 
 impl core::fmt::Debug for Process {
