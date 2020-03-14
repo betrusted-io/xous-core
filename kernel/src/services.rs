@@ -2,7 +2,7 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
-use crate::mem::MemoryManagerHandle;
+use crate::mem::{MemoryManagerHandle};
 use core::slice;
 use xous::{MemoryFlags, PID, SID};
 
@@ -111,6 +111,9 @@ pub struct Server {
 
     /// The current state of this slot
     state: ServerState,
+
+    /// Where data will appear
+    queue: *mut usize,
 }
 
 impl Default for Server {
@@ -119,6 +122,7 @@ impl Default for Server {
             sid: (0, 0, 0, 0),
             pid: 0,
             state: ServerState::Free,
+            queue: 0 as *mut usize,
         }
     }
 }
@@ -170,6 +174,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         sid: (0, 0, 0, 0),
         pid: 0,
         state: ServerState::Free,
+        queue: 0 as *mut usize,
     }; MAX_SERVER_COUNT],
 };
 
@@ -415,6 +420,26 @@ impl SystemServices {
         }
 
         Ok(())
+    }
+
+    /// Allocate a new server ID for this process and return the address.
+    /// If the server table is full, return an error.
+    pub fn create_server(&mut self) -> Result<SID, xous::Error> {
+        for entry in self.servers.iter_mut() {
+            if entry.state == ServerState::Free {
+                let pid = self.pid;
+                // Allocate memory for the new server.
+                entry.queue = {
+                    let mut mm = MemoryManagerHandle::get();
+                    mm.map_page(pid)?
+                };
+                entry.state = ServerState::Ready;
+                entry.pid = self.pid;
+                entry.sid = (pid as usize, pid as usize, pid as usize, pid as usize);
+                return Ok(entry.sid);
+            }
+        }
+        Err(xous::Error::OutOfMemory)
     }
 }
 
