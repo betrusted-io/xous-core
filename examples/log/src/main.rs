@@ -37,13 +37,10 @@ fn main() {
 
     println!("Process: map success!");
     debug::DEFAULT.enable_rx();
+
     println!("Allocating IRQ...");
-    xous::rsyscall(xous::SysCall::ClaimInterrupt(
-        4,
-        handle_irq as *mut usize,
-        0 as *mut usize,
-    ))
-    .expect("couldn't claim interrupt");
+    xous::syscall::claim_interrupt(4, handle_irq, 0 as *mut usize)
+        .expect("couldn't claim interrupt");
 
     println!("Allocating a ton of space on the stack...");
     {
