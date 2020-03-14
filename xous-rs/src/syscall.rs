@@ -413,7 +413,7 @@ pub struct MemoryRange {
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {
-    ReturnResult,
+    Ok,
     Error(Error),
     MemoryAddress(*mut u8),
     MemoryRange(MemoryRange),
@@ -463,7 +463,7 @@ pub fn map_memory(
     virt: Option<MemoryAddress>,
     size: usize,
     flags: MemoryFlags,
-) -> core::result::Result<crate::MemoryRange, crate::Error> {
+) -> core::result::Result<MemoryRange, Error> {
     let result = rsyscall(SysCall::MapMemory(
         phys.map(|x| x.get()).unwrap_or(0) as *mut usize,
         virt.map(|x| x.get()).unwrap_or(0) as *mut usize,
@@ -473,7 +473,24 @@ pub fn map_memory(
     if let Result::MemoryRange(range) = result {
         return Ok(range);
     }
-    Err(crate::Error::InternalError)
+    Err(Error::InternalError)
+}
+
+/// Claim the given interrupt for this process.
+pub fn claim_interrupt(
+    irq_no: usize,
+    callback: fn(irq_no: usize, arg: *mut usize),
+    arg: *mut usize,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ClaimInterrupt(
+        irq_no,
+        callback as *mut usize,
+        arg as *mut usize,
+    ))?;
+    if let Result::Ok = result {
+        return Ok(());
+    }
+    Err(Error::InternalError)
 }
 
 pub fn rsyscall(call: SysCall) -> SyscallResult {

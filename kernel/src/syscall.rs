@@ -203,7 +203,7 @@ pub fn handle(call: SysCall) -> xous::Result {
                 mm.unmap_page(page as *mut usize)
                     .expect("unable to unmap page");
             }
-            xous::Result::ReturnResult
+            xous::Result::Ok
         }
         SysCall::SwitchTo(pid, context) => {
             if context as usize != 0 {
@@ -216,7 +216,7 @@ pub fn handle(call: SysCall) -> xous::Result {
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
-                .map(|_| xous::Result::ReturnResult)
+                .map(|_| xous::Result::Ok)
                 .unwrap_or_else(|e| xous::Result::Error(e))
         }
         SysCall::Yield => {
