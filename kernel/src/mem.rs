@@ -218,7 +218,9 @@ impl MemoryManager {
             if self.allocations[index] == 0 {
                 self.allocations[index] = pid;
                 self.last_ram_page = index + 1;
-                return Ok(index * PAGE_SIZE + self.ram_start);
+                let page = (index * PAGE_SIZE + self.ram_start) as *mut usize;
+                unsafe { page.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
+                return Ok(page as usize);
             }
         }
         for index in 0..self.last_ram_page {
@@ -226,7 +228,9 @@ impl MemoryManager {
             if self.allocations[index] == 0 {
                 self.allocations[index] = pid;
                 self.last_ram_page = index + 1;
-                return Ok(index * PAGE_SIZE + self.ram_start);
+                let page = (index * PAGE_SIZE + self.ram_start) as *mut usize;
+                unsafe { page.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
+                return Ok(page as usize);
             }
         }
         Err(xous::Error::OutOfMemory)
