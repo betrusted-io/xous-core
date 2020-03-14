@@ -343,6 +343,30 @@ impl MemoryManager {
         }))
     }
 
+    /// Attempt to allocate a single page from the default section.
+    /// Note that this will be backed by a real page.
+    pub fn map_page(&mut self, pid: PID) -> Result<*mut usize, xous::Error> {
+        let virt =
+            self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?;
+
+        // Grab the next available page.  This claims it for this process.
+        let phys = self.alloc_page(pid)?;
+
+        // Actually perform the map.  At this stage, every physical page should be owned by us.
+        if let Err(e) = crate::arch::mem::map_page_inner(
+            self,
+            pid,
+            phys as usize,
+            virt as usize,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        ) {
+            self.release_page(phys as *mut usize, pid).ok();
+            return Err(e);
+        }
+
+        Ok(virt as *mut usize)
+    }
+
     /// Attempt to map the given physical address into the virtual address space
     /// of this process.
     ///
