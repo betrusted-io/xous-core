@@ -10,7 +10,7 @@ pub type MessageSender = usize;
 pub type Connection = usize;
 
 /// Server ID
-pub type SID = usize;
+pub type SID = (usize, usize, usize, usize);
 
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;

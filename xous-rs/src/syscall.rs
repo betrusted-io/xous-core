@@ -1,4 +1,4 @@
-use crate::{CpuID, Error, MemoryAddress, PID};
+use crate::{CpuID, Error, MemoryAddress, PID, SID};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
@@ -419,7 +419,7 @@ pub enum Result {
     MemoryRange(MemoryRange),
     ResumeResult(usize, usize, usize, usize, usize, usize),
     ResumeProcess,
-    ServerID(usize, usize, usize, usize),
+    ServerID(SID),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -476,7 +476,7 @@ pub fn map_memory(
     Err(Error::InternalError)
 }
 
-/// Claim the given interrupt for this process.
+/// Claim a hardware interrupt for this process.
 pub fn claim_interrupt(
     irq_no: usize,
     callback: fn(irq_no: usize, arg: *mut usize),
@@ -489,6 +489,15 @@ pub fn claim_interrupt(
     ))?;
     if let Result::Ok = result {
         return Ok(());
+    }
+    Err(Error::InternalError)
+}
+
+/// Create a new server.  Returns the new server address.
+pub fn create_server() -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServer)?;
+    if let Result::ServerID(sid) = result {
+        return Ok(sid);
     }
     Err(Error::InternalError)
 }
