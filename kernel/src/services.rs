@@ -142,6 +142,9 @@ pub struct InitialProcess {
 /// A big unifying struct containing all of the system state.
 /// This is inherited from the stage 1 bootloader.
 pub struct SystemServices {
+    /// Current PID
+    pid: PID,
+
     /// A table of all processes in the system
     pub processes: [Process; MAX_PROCESS_COUNT],
 
@@ -150,6 +153,7 @@ pub struct SystemServices {
 }
 
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
+    pid: 1 as PID,
     processes: [Process {
         state: ProcessState::Free,
         ppid: 0,
@@ -264,6 +268,11 @@ impl SystemServices {
             "process memory map doesn't match -- current_pid: {}",
             pid
         );
+        assert_eq!(
+            pid, self.pid,
+            "current pid {} doesn't match arch pid: {}",
+            self.pid, pid
+        );
         pid as PID
     }
 
@@ -315,6 +324,7 @@ impl SystemServices {
         // Switch to new process memory space, allowing us to save the context
         // if necessary.
         process.mapping.activate();
+        self.pid = pid;
 
         let context = ProcessContext::current();
 
@@ -347,6 +357,7 @@ impl SystemServices {
         // Save state if the PID has changed
         let context = if pid != previous_pid {
             let context = {
+                self.pid = pid;
                 let new = self.get_process_mut(pid)?;
                 match new.state {
                     ProcessState::Free => return Err(xous::Error::ProcessNotFound),
