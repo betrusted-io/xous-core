@@ -56,33 +56,33 @@ fn main() {
     ))
     .expect("couldn't claim interrupt");
 
-    println!("Allocating a ton of space on the stack...");
-    {
-        let _big_array = [42u8; 131072];
-    }
+    // println!("Allocating a ton of space on the stack...");
+    // {
+    //     let _big_array = [42u8; 131072];
+    // }
 
-    println!("Increasing heap to 131072...");
-    let heap = xous::rsyscall(xous::SysCall::IncreaseHeap(
-        131072,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    ))
-    .expect("couldn't increase heap");
-    if let xous::Result::MemoryRange(range) = heap {
-        println!(
-            "Heap goes from {:08x} - {:08x}",
-            range.base as usize,
-            range.base as usize + range.size
-        );
-        use core::slice;
-        let mem_range = unsafe { slice::from_raw_parts_mut(range.base, range.size) };
-        println!("Filling with bytes...");
-        for word in mem_range.iter_mut() {
-            *word = 42;
-        }
-        println!("Done!");
-    } else {
-        println!("Unexpected return value: {:?}", heap);
-    }
+    // println!("Increasing heap to 131072...");
+    // let heap = xous::rsyscall(xous::SysCall::IncreaseHeap(
+    //     131072,
+    //     xous::MemoryFlags::R | xous::MemoryFlags::W,
+    // ))
+    // .expect("couldn't increase heap");
+    // if let xous::Result::MemoryRange(range) = heap {
+    //     println!(
+    //         "Heap goes from {:08x} - {:08x}",
+    //         range.base as usize,
+    //         range.base as usize + range.size
+    //     );
+    //     use core::slice;
+    //     let mem_range = unsafe { slice::from_raw_parts_mut(range.base, range.size) };
+    //     println!("Filling with bytes...");
+    //     for word in mem_range.iter_mut() {
+    //         *word = 42;
+    //     }
+    //     println!("Done!");
+    // } else {
+    //     println!("Unexpected return value: {:?}", heap);
+    // }
 
     timer::init();
 
