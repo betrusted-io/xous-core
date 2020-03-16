@@ -10,3 +10,13 @@ pub mod syscall;
 
 pub use definitions::*;
 pub use syscall::*;
+
+/// Convert a four-letter string into a 32-bit int.
+#[macro_export]
+macro_rules! make_name {
+    ($fcc:expr) => {{
+        let mut c: [u8; 4] = Default::default();
+        c.copy_from_slice($fcc.as_bytes());
+        usize::from_le_bytes(c)
+    }};
+}

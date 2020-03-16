@@ -222,7 +222,9 @@ pub enum SysCall {
     /// Create a new Server
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
-    /// to this server.
+    /// to this server.  This ID will be unique per process.  You may specify
+    /// an additional `usize` value to make the ID unique.  This value will be
+    /// mixed in with the random value.
     ///
     /// # Returns
     ///
@@ -233,7 +235,7 @@ pub enum SysCall {
     ///
     /// * **OutOfMemory**: The server table was full and a new server couldn't
     ///                    be created.
-    CreateServer,
+    CreateServer(usize /* server name */),
 
     /// This syscall does not exist
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -353,7 +355,7 @@ impl SysCall {
                 0,
             ],
 
-            SysCall::CreateServer => [SysCallNumber::CreateServer as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::CreateServer(a1) => [SysCallNumber::CreateServer as usize, a1, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, a1, a2, a3, a4, a5, a6, a7]
             }
@@ -397,7 +399,7 @@ impl SysCall {
             Some(SysCallNumber::SetMemRegion) => {
                 SysCall::SetMemRegion(a1 as PID, MemoryType::from(a2), a3 as *mut usize, a4)
             }
-            Some(SysCallNumber::CreateServer) => SysCall::CreateServer,
+            Some(SysCallNumber::CreateServer) => SysCall::CreateServer(a1),
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(InvalidSyscall {}),
         })
@@ -494,8 +496,8 @@ pub fn claim_interrupt(
 }
 
 /// Create a new server.  Returns the new server address.
-pub fn create_server() -> core::result::Result<SID, Error> {
-    let result = rsyscall(SysCall::CreateServer)?;
+pub fn create_server(name: usize) -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServer(name))?;
     if let Result::ServerID(sid) = result {
         return Ok(sid);
     }
