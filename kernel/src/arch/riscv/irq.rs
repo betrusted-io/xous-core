@@ -1,12 +1,13 @@
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
-use crate::mem::MemoryManagerHandle;
+use crate::arch::process::ProcessHandle;
+use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
 
 extern "Rust" {
-    fn _xous_syscall_return_result(result: &xous::Result) -> !;
+    fn _xous_syscall_return_result(result: &xous::Result, context: &ProcessContext) -> !;
 }
 
 extern "C" {
@@ -96,23 +97,27 @@ pub extern "C" fn trap_handler(
         // will want to adjust the return value of the current process prior to
         // performing the switch in order to avoid constantly executing the same
         // instruction.
-        crate::arch::ProcessContext::current().sepc += 4;
+        let mut process = ProcessHandle::get();
+        let ctx = process.current_context();
+        ctx.sepc += 4;
         let call = SysCall::from_args(a0, a1, a2, a3, a4, a5, a6, a7).unwrap_or_else(|_| unsafe {
-            _xous_syscall_return_result(&xous::Result::Error(xous::Error::UnhandledSyscall))
+            _xous_syscall_return_result(&xous::Result::Error(xous::Error::UnhandledSyscall), ctx)
         });
 
         let response = crate::syscall::handle(call);
 
         println!("Result: {:?}", response);
+        let mut process = ProcessHandle::get();
 
         // If we're resuming a process that was previously sleeping, restore the context.
         // Otherwise, keep the context the same but pass the return values in 8 return
         // registers.
         if response == xous::Result::ResumeProcess {
-            crate::arch::syscall::resume(current_pid() == 1, ProcessContext::current());
+            crate::arch::syscall::resume(current_pid() == 1, ctx);
         } else {
-            println!("Returning to address {:08x}", ProcessContext::current().sepc);
-            unsafe { _xous_syscall_return_result(&response) };
+            println!("Returning to address {:08x}", ctx.sepc);
+            // crate::arch::syscall::resume(current_pid() == 1, ctx);
+            unsafe { _xous_syscall_return_result(&response, ctx) };
         }
     }
 
@@ -130,7 +135,10 @@ pub extern "C" fn trap_handler(
                 if entry as usize == 0 {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
-                    panic!("error at {:08x}: memory not mapped or reserved for addr {:08x}", pc, addr);
+                    panic!(
+                        "error at {:08x}: memory not mapped or reserved for addr {:08x}",
+                        pc, addr
+                    );
                 }
                 let flags = unsafe { entry.read_volatile() } & 0xf;
 
@@ -148,21 +156,36 @@ pub extern "C" fn trap_handler(
                         (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7) /* A */))
                     };
                     unsafe { flush_mmu() };
-                    crate::arch::syscall::resume(current_pid() == 1, ProcessContext::current());
+
+                    // Zero-out the page
+                    // unsafe { (new_page as *mut usize).write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
+
+                    let mut process = ProcessHandle::get();
+                    crate::arch::syscall::resume(current_pid() == 1, process.current_context());
                 }
             }
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
                 unsafe {
+                    // Restore the process context from the current process from
+                    // before the time that the interrupt was executed.
+                    let mut process = ProcessHandle::get();
+                    process.unbank();
+
                     if let Some(previous_pid) = PREVIOUS_PID.take() {
-                        // println!("Resuming previous pid {}", previous_pid);
+                        // Switch to the previous process' address space.
+                        println!("<<< Resuming previous pid {}", previous_pid);
                         SystemServicesHandle::get()
                             .resume_pid(previous_pid, ProcessState::Ready)
                             .expect("unable to resume previous PID");
+
+                        // Re-enable interrupts now that they're handled
+                        enable_all_irqs();
+
+                        let mut process = ProcessHandle::get();
+                        crate::arch::syscall::resume(current_pid() == 1, process.current_context());
                     }
-                    // Re-enable interrupts now that they're handled
-                    enable_all_irqs();
-                    crate::arch::syscall::resume(current_pid() == 1, ProcessContext::current());
                 }
+                println!("Got an instruction page fault with no previous PID");
             }
             _ => (),
         }
@@ -177,7 +200,10 @@ pub extern "C" fn trap_handler(
                 PREVIOUS_PID = Some(pid);
             }
         }
+        println!(">>> HANDLING IRQ {:08x} (current PID: {})", irqs_pending, pid);
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
-        crate::arch::syscall::resume(current_pid() == 1, ProcessContext::current());
+        let mut process = ProcessHandle::get();
+        println!(">>> returning to pid {}", current_pid());
+        crate::arch::syscall::resume(current_pid() == 1, process.trap_context());
     }
 }

@@ -2,6 +2,7 @@ use crate::arch;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessState, SystemServicesHandle};
+use crate::arch::process::ProcessHandle;
 use xous::*;
 
 // extern "Rust" {
@@ -159,19 +160,14 @@ pub fn handle(call: SysCall) -> xous::Result {
                 return xous::Result::Error(xous::Error::BadAlignment);
             }
             let start = {
-                let mut ss = SystemServicesHandle::get();
-                let process = ss.current_process_mut();
-                if let Err(e) = process {
-                    return xous::Result::Error(e);
-                }
-                let process = process.unwrap();
+                let mut process = ProcessHandle::get();
 
-                if process.mem_heap_size + delta > process.mem_heap_max {
+                if process.inner.mem_heap_size + delta > process.inner.mem_heap_max {
                     return xous::Result::Error(xous::Error::OutOfMemory);
                 }
 
-                let start = process.mem_heap_base + process.mem_heap_size;
-                process.mem_heap_size += delta;
+                let start = process.inner.mem_heap_base + process.inner.mem_heap_size;
+                process.inner.mem_heap_size += delta;
                 start as *mut usize
             };
             let mut mm = MemoryManagerHandle::get();
@@ -183,19 +179,14 @@ pub fn handle(call: SysCall) -> xous::Result {
                 return xous::Result::Error(xous::Error::BadAlignment);
             }
             let start = {
-                let mut ss = SystemServicesHandle::get();
-                let process = ss.current_process_mut();
-                if let Err(e) = process {
-                    return xous::Result::Error(e);
-                }
-                let process = process.unwrap();
+                let mut process = ProcessHandle::get();
 
-                if process.mem_heap_size + delta > process.mem_heap_max {
+                if process.inner.mem_heap_size + delta > process.inner.mem_heap_max {
                     return xous::Result::Error(xous::Error::OutOfMemory);
                 }
 
-                let start = process.mem_heap_base + process.mem_heap_size;
-                process.mem_heap_size -= delta;
+                let start = process.inner.mem_heap_base + process.inner.mem_heap_size;
+                process.inner.mem_heap_size -= delta;
                 start
             };
             let mut mm = MemoryManagerHandle::get();

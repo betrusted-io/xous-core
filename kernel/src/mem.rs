@@ -6,6 +6,7 @@ use core::slice;
 use core::str;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
+use crate::arch::process::ProcessHandle;
 use xous::{MemoryFlags, PID};
 
 #[derive(Debug)]
@@ -206,9 +207,22 @@ impl MemoryManager {
         }
     }
 
+    unsafe fn bzero<T>(&self, mut sbss: *mut T, ebss: *mut T)
+    where
+        T: Copy,
+    {
+        use core::ptr;
+        println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
+        while sbss < ebss {
+            // NOTE(volatile) to prevent this from being transformed into `memclr`
+            ptr::write_volatile(sbss, mem::zeroed());
+            sbss = sbss.offset(1);
+        }
+    }
+
     /// Allocate a single page to the given process.
-    /// Ensures the page is zeroed out prior to handing it over to
-    /// the specified process.
+    /// DOES NOT ZERO THE PAGE!!!
+    /// This function CANNOT zero the page, as it hasn't been mapped yet.
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous::Error> {
         // Go through all RAM pages looking for a free page.
         // Optimization: start from the previous address.
@@ -218,9 +232,8 @@ impl MemoryManager {
             if self.allocations[index] == 0 {
                 self.allocations[index] = pid;
                 self.last_ram_page = index + 1;
-                let page = (index * PAGE_SIZE + self.ram_start) as *mut usize;
-                unsafe { page.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
-                return Ok(page as usize);
+                let page = index * PAGE_SIZE + self.ram_start;
+                return Ok(page);
             }
         }
         for index in 0..self.last_ram_page {
@@ -228,9 +241,8 @@ impl MemoryManager {
             if self.allocations[index] == 0 {
                 self.allocations[index] = pid;
                 self.last_ram_page = index + 1;
-                let page = (index * PAGE_SIZE + self.ram_start) as *mut usize;
-                unsafe { page.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
-                return Ok(page as usize);
+                let page = index * PAGE_SIZE + self.ram_start;
+                return Ok(page);
             }
         }
         Err(xous::Error::OutOfMemory)
@@ -249,27 +261,27 @@ impl MemoryManager {
             return Ok(virt_ptr as usize);
         }
 
-        let mut ss = SystemServicesHandle::get();
-        let process = ss.current_process_mut()?;
+        let mut process = ProcessHandle::get();
 
         let (start, end, initial) = match kind {
             xous::MemoryType::Stack => return Err(xous::Error::BadAddress),
             xous::MemoryType::Heap => {
-                let new_virt = process.mem_heap_base + process.mem_heap_size + PAGE_SIZE;
-                if new_virt + size > process.mem_heap_base + process.mem_heap_max {
+                let new_virt =
+                    process.inner.mem_heap_base + process.inner.mem_heap_size + PAGE_SIZE;
+                if new_virt + size > process.inner.mem_heap_base + process.inner.mem_heap_max {
                     return Err(xous::Error::OutOfMemory);
                 }
                 return Ok(new_virt);
             }
             xous::MemoryType::Default => (
-                process.mem_default_base,
-                process.mem_default_base + 0x10000000,
-                process.mem_default_last,
+                process.inner.mem_default_base,
+                process.inner.mem_default_base + 0x10000000,
+                process.inner.mem_default_last,
             ),
             xous::MemoryType::Messages => (
-                process.mem_message_base,
-                process.mem_message_base + 0x10000000,
-                process.mem_message_last,
+                process.inner.mem_message_base,
+                process.inner.mem_message_base + 0x10000000,
+                process.inner.mem_message_last,
             ),
         };
 
@@ -285,8 +297,8 @@ impl MemoryManager {
             }
             if all_free {
                 match kind {
-                    xous::MemoryType::Default => process.mem_default_last = potential_start,
-                    xous::MemoryType::Messages => process.mem_message_last = potential_start,
+                    xous::MemoryType::Default => process.inner.mem_default_last = potential_start,
+                    xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
                     other => panic!("invalid kind: {:?}", other),
                 }
                 return Ok(potential_start);
@@ -304,8 +316,8 @@ impl MemoryManager {
             }
             if all_free {
                 match kind {
-                    xous::MemoryType::Default => process.mem_default_last = potential_start,
-                    xous::MemoryType::Messages => process.mem_message_last = potential_start,
+                    xous::MemoryType::Default => process.inner.mem_default_last = potential_start,
+                    xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
                     other => panic!("invalid kind: {:?}", other),
                 }
                 return Ok(potential_start);
@@ -368,7 +380,11 @@ impl MemoryManager {
             return Err(e);
         }
 
-        Ok(virt as *mut usize)
+        let virt = virt as *mut usize;
+
+        // Zero-out the page
+        unsafe { virt.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
+        Ok(virt)
     }
 
     /// Attempt to map the given physical address into the virtual address space

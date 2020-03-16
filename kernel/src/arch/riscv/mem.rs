@@ -203,11 +203,7 @@ impl MemoryMapping {
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
-            unsafe {
-                for i in 0..PAGE_SIZE / core::mem::size_of::<usize>() {
-                    *page_addr.add(i) = 0;
-                }
-            }
+            unsafe { page_addr.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
         }
 
         let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
@@ -336,11 +332,7 @@ pub fn map_page_inner(
 
         // Zero-out the new page
         let page_addr = l0pt_virt as *mut usize;
-        unsafe {
-            for i in 0..PAGE_SIZE / core::mem::size_of::<usize>() {
-                *page_addr.add(i) = 0;
-            }
-        }
+        unsafe { page_addr.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
     }
 
     // Ensure the entry hasn't already been mapped.

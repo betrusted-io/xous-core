@@ -1,8 +1,9 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
+use crate::arch::process::ProcessHandle;
 pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
-use crate::mem::{MemoryManagerHandle};
+use crate::mem::MemoryManagerHandle;
 use core::slice;
 use xous::{MemoryFlags, PID, SID};
 
@@ -47,7 +48,9 @@ impl Default for ProcessState {
 
 #[derive(Copy, Clone, Default)]
 pub struct Process {
-    /// The absolute MMU address.  If 0, then this process is free.
+    /// The absolute MMU address.  If 0, then this process is free.  This needs
+    /// to be available so we can switch to this process at any time, so it
+    /// cannot go into the "inner" struct.
     pub mapping: MemoryMapping,
 
     /// Where this process is in terms of lifecycle
@@ -56,7 +59,15 @@ pub struct Process {
     /// The process that created this process, which tells
     /// who is allowed to manipulate this process.
     pub ppid: PID,
+}
 
+/// This is per-process data.  The arch-specific definitions will instantiate
+/// this struct in order to avoid the need to statically-allocate this for
+/// all possible processes.
+/// Note that this data is only available when the current process is active.
+#[repr(C)]
+#[derive(Debug)]
+pub struct ProcessInner {
     /// Default virtual address when MapMemory is called with no `virt`
     pub mem_default_base: usize,
 
@@ -77,6 +88,20 @@ pub struct Process {
 
     /// Maximum size of the heap
     pub mem_heap_max: usize,
+}
+
+impl Default for ProcessInner {
+    fn default() -> Self {
+        ProcessInner {
+            mem_default_base: arch::mem::DEFAULT_BASE,
+            mem_default_last: arch::mem::DEFAULT_BASE,
+            mem_message_base: arch::mem::DEFAULT_MESSAGE_BASE,
+            mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
+            mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
+            mem_heap_size: 0,
+            mem_heap_max: 524288,
+        }
+    }
 }
 
 impl Process {
@@ -162,13 +187,6 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         state: ProcessState::Free,
         ppid: 0,
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        mem_default_base: arch::mem::DEFAULT_BASE,
-        mem_default_last: arch::mem::DEFAULT_BASE,
-        mem_message_base: arch::mem::DEFAULT_MESSAGE_BASE,
-        mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
-        mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
-        mem_heap_size: 0,
-        mem_heap_max: 524288,
     }; MAX_PROCESS_COUNT],
     servers: [Server {
         sid: (0, 0, 0, 0),
@@ -223,6 +241,11 @@ impl SystemServices {
             process.ppid = if pid == 1 { 0 } else { 1 };
             process.state = ProcessState::Setup(init.entrypoint, init.sp, DEFAULT_STACK_SIZE);
         }
+
+        // Set up our handle with a bogus sp and pc.  These will get updated
+        // once a context switch _away_ from the kernel occurs, however we need
+        // to make sure other fields such as "thread number" are all valid.
+        ProcessHandle::get().init(0, 0);
     }
 
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous::Error> {
@@ -331,19 +354,14 @@ impl SystemServices {
         process.mapping.activate();
         self.pid = pid;
 
-        let context = ProcessContext::current();
-
-        // Save previous context (if it's not already saved)
-        let saved = ProcessContext::saved();
-        if !saved.valid() {
-            *saved = *context;
-        }
-
+        let mut process = ProcessHandle::get();
+        let sp = process.current_context().stack_pointer();
+        process.bank();
         arch::syscall::invoke(
-            context,
+            process.trap_context(),
             pid == 1,
             pc as usize,
-            context.get_stack(),
+            sp,
             RETURN_FROM_ISR,
             &[irq_no, arg as usize],
         );
@@ -360,41 +378,39 @@ impl SystemServices {
         let previous_pid = self.current_pid();
 
         // Save state if the PID has changed
-        let context = if pid != previous_pid {
-            let context = {
-                self.pid = pid;
-                let new = self.get_process_mut(pid)?;
-                match new.state {
-                    ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                    _ => (),
+        if pid != previous_pid {
+            self.pid = pid;
+            let new = self.get_process_mut(pid)?;
+            match new.state {
+                ProcessState::Free => return Err(xous::Error::ProcessNotFound),
+                _ => (),
+            }
+
+            // Perform the actual switch to the new memory space
+            new.mapping.activate();
+
+            // Set up the new process, if necessary
+            match new.state {
+                ProcessState::Setup(entrypoint, stack, stack_size) => {
+                    let mut process = ProcessHandle::get();
+                    println!("Initializing new process with stack size of {} bytes", stack_size);
+                    process.init(entrypoint, stack);
+                    // Mark the stack as "unallocated-but-free"
+                    let init_sp = stack & !0xfff;
+                    let mut memory_manager = MemoryManagerHandle::get();
+                    memory_manager
+                        .reserve_range(
+                            (init_sp - stack_size) as *mut usize,
+                            stack_size + 4096,
+                            MemoryFlags::R | MemoryFlags::W,
+                        )
+                        .expect("couldn't reserve stack");
                 }
-
-                new.mapping.activate();
-
-                let context = ProcessContext::current();
-
-                // Set up the new process, if necessary
-                match new.state {
-                    ProcessState::Setup(entrypoint, stack, stack_size) => {
-                        context.init(entrypoint, stack);
-                        // Mark the stack as "unallocated-but-free"
-                        let init_sp = stack & !0xfff;
-                        let mut memory_manager = MemoryManagerHandle::get();
-                        memory_manager
-                            .reserve_range(
-                                (init_sp - stack_size) as *mut usize,
-                                stack_size + 4096,
-                                MemoryFlags::R | MemoryFlags::W,
-                            )
-                            .expect("couldn't reserve stack");
-                    }
-                    ProcessState::Free => panic!("process was suddenly Free"),
-                    ProcessState::Ready | ProcessState::Sleeping => (),
-                    ProcessState::Running => panic!("process was already running"),
-                }
-                new.state = ProcessState::Running;
-                context
-            };
+                ProcessState::Free => panic!("process was suddenly Free"),
+                ProcessState::Ready | ProcessState::Sleeping => (),
+                ProcessState::Running => panic!("process was already running"),
+            }
+            new.state = ProcessState::Running;
 
             // Mark the previous process as ready to run, since we just switched away
             {
@@ -406,17 +422,13 @@ impl SystemServices {
                     .expect("couldn't get previous pid")
                     .state = previous_state;
             }
-            context
-        } else {
-            ProcessContext::current()
-        };
+        }
+
+        let mut process = ProcessHandle::get();
 
         // Restore the previous context, if one exists.
-        let previous = ProcessContext::saved();
-        if previous.valid() {
-            println!("Previous context was valid -- invalidating current context");
-            *context = *previous;
-            previous.invalidate();
+        if process.trap_context().valid() {
+            process.trap_context().invalidate();
         }
 
         Ok(())

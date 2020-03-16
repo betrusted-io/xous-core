@@ -51,6 +51,10 @@ _start:
 _start_trap:
     csrw        sscratch, sp
     li          sp, 0xff801000
+    STORE       x1, 0*REGBYTES(sp)
+    LOAD        x1, 1*REGBYTES(sp)
+    slli        x1, x1, 7
+    add         sp, sp, x1
 
     STORE       x1, 0*REGBYTES(sp)
     // Skip SP for now
@@ -87,6 +91,12 @@ _start_trap:
     // Save SEPC
     csrr        t0, sepc
     STORE       t0, 31*REGBYTES(sp)
+
+    // Save x1, which was used to calculate the offset.  Prior to
+    // calculating, it was stashed at 0xff801000.
+    li          t0, 0xff801000
+    LOAD        t1, 0*REGBYTES(t0)
+    STORE       t1, 0*REGBYTES(sp)
 
     // Finally, save SP
     csrr        t0, sscratch
@@ -156,23 +166,10 @@ _xous_resume_context:
 */
 .global _xous_syscall_return_result
 _xous_syscall_return_result:
-    // Skip past the 4-byte `ecall` instruction
-    csrr        t0, sepc
-    addi        t0, t0, 4
+
+    move        sp, a1
+    LOAD        t0, 31*REGBYTES(sp)
     csrw        sepc, t0
-
-    LOAD        a7, 7*REGBYTES(a0)
-    LOAD        a6, 6*REGBYTES(a0)
-    LOAD        a5, 5*REGBYTES(a0)
-    LOAD        a4, 4*REGBYTES(a0)
-    LOAD        a3, 3*REGBYTES(a0)
-    LOAD        a2, 2*REGBYTES(a0)
-    LOAD        a1, 1*REGBYTES(a0)
-    LOAD        a0, 0*REGBYTES(a0)
-
-    li          sp, 0xff801000
-    LOAD        t0, 1*REGBYTES(sp)
-    csrw        sscratch, t0
 
     LOAD        x1, 0*REGBYTES(sp)
     // Skip SP for now
@@ -183,7 +180,18 @@ _xous_syscall_return_result:
     LOAD        x7, 6*REGBYTES(sp)
     LOAD        x8, 7*REGBYTES(sp)
     LOAD        x9, 8*REGBYTES(sp)
-    // Skip argument registers
+
+    // Load argument registers from the value pointed
+    // to by $a0
+    LOAD        a7, 7*REGBYTES(a0)
+    LOAD        a6, 6*REGBYTES(a0)
+    LOAD        a5, 5*REGBYTES(a0)
+    LOAD        a4, 4*REGBYTES(a0)
+    LOAD        a3, 3*REGBYTES(a0)
+    LOAD        a2, 2*REGBYTES(a0)
+    LOAD        a1, 1*REGBYTES(a0)
+    LOAD        a0, 0*REGBYTES(a0)
+
     LOAD        x18, 17*REGBYTES(sp)
     LOAD        x19, 18*REGBYTES(sp)
     LOAD        x20, 19*REGBYTES(sp)
@@ -199,8 +207,8 @@ _xous_syscall_return_result:
     LOAD        x30, 29*REGBYTES(sp)
     LOAD        x31, 30*REGBYTES(sp)
 
-    // Save SP
-    csrr        t0, sscratch
+    // Restore SP
+    //csrr        t0, sscratch
     LOAD        x2, 1*REGBYTES(sp)
     sret
 
