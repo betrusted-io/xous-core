@@ -1,8 +1,8 @@
 use crate::arch;
+use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessState, SystemServicesHandle};
-use crate::arch::process::ProcessHandle;
 use xous::*;
 
 // extern "Rust" {
@@ -226,6 +226,12 @@ pub fn handle(call: SysCall) -> xous::Result {
             ss.resume_pid(ppid, ProcessState::Sleeping)
                 .map(|_| xous::Result::ResumeProcess)
                 .unwrap_or(xous::Result::Error(xous::Error::ProcessNotFound))
+        }
+        SysCall::CreateServer(name) => {
+            let mut ss = SystemServicesHandle::get();
+            ss.create_server(name)
+                .map(|x| xous::Result::ServerID(x))
+                .unwrap_or_else(|e| xous::Result::Error(e))
         }
         _ => xous::Result::Error(xous::Error::UnhandledSyscall),
     }

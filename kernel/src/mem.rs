@@ -160,6 +160,7 @@ impl MemoryManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn print_ownership(&self) {
         println!("Ownership ({} bytes in all):", self.allocations.len());
 
@@ -204,19 +205,6 @@ impl MemoryManager {
                 }
             }
             offset += region.mem_size as usize / PAGE_SIZE;
-        }
-    }
-
-    unsafe fn bzero<T>(&self, mut sbss: *mut T, ebss: *mut T)
-    where
-        T: Copy,
-    {
-        use core::ptr;
-        println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
-        while sbss < ebss {
-            // NOTE(volatile) to prevent this from being transformed into `memclr`
-            ptr::write_volatile(sbss, mem::zeroed());
-            sbss = sbss.offset(1);
         }
     }
 

@@ -1,7 +1,7 @@
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
-use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::mem::MemoryManagerHandle;
 use crate::services::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
@@ -108,6 +108,7 @@ pub extern "C" fn trap_handler(
 
         println!("Result: {:?}", response);
         let mut process = ProcessHandle::get();
+        let ctx = process.current_context();
 
         // If we're resuming a process that was previously sleeping, restore the context.
         // Otherwise, keep the context the same but pass the return values in 8 return
@@ -173,7 +174,6 @@ pub extern "C" fn trap_handler(
 
                     if let Some(previous_pid) = PREVIOUS_PID.take() {
                         // Switch to the previous process' address space.
-                        println!("<<< Resuming previous pid {}", previous_pid);
                         SystemServicesHandle::get()
                             .resume_pid(previous_pid, ProcessState::Ready)
                             .expect("unable to resume previous PID");
@@ -200,10 +200,8 @@ pub extern "C" fn trap_handler(
                 PREVIOUS_PID = Some(pid);
             }
         }
-        println!(">>> HANDLING IRQ {:08x} (current PID: {})", irqs_pending, pid);
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
         let mut process = ProcessHandle::get();
-        println!(">>> returning to pid {}", current_pid());
         crate::arch::syscall::resume(current_pid() == 1, process.trap_context());
     }
 }

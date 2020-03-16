@@ -304,16 +304,6 @@ impl SystemServices {
         pid as PID
     }
 
-    pub fn current_process(&self) -> Result<&Process, xous::Error> {
-        let pid = self.current_pid();
-        self.get_process(pid)
-    }
-
-    pub fn current_process_mut(&mut self) -> Result<&mut Process, xous::Error> {
-        let pid = self.current_pid();
-        self.get_process_mut(pid)
-    }
-
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
@@ -414,10 +404,10 @@ impl SystemServices {
 
             // Mark the previous process as ready to run, since we just switched away
             {
-                println!(
-                    "Marking previous process {} as {:?}",
-                    previous_pid, previous_state
-                );
+                // println!(
+                //     "Marking previous process {} as {:?}",
+                //     previous_pid, previous_state
+                // );
                 self.get_process_mut(previous_pid)
                     .expect("couldn't get previous pid")
                     .state = previous_state;
@@ -436,7 +426,7 @@ impl SystemServices {
 
     /// Allocate a new server ID for this process and return the address.
     /// If the server table is full, return an error.
-    pub fn create_server(&mut self) -> Result<SID, xous::Error> {
+    pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         for entry in self.servers.iter_mut() {
             if entry.state == ServerState::Free {
                 let pid = self.pid;

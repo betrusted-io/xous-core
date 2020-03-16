@@ -118,13 +118,6 @@ impl ProcessContext {
     }
 }
 
-/// How many people have checked out the handle object.
-/// This should be replaced by an AtomicUsize when we get
-/// multicore support.
-/// For now, we can get away with this since the memory manager
-/// should only be accessed in an IRQ context.
-static mut PROCESS_HANDLE_COUNT: usize = 0;
-
 pub struct ProcessHandle<'a> {
     process: &'a mut Process,
 }
@@ -134,22 +127,9 @@ pub struct ProcessHandle<'a> {
 impl<'a> ProcessHandle<'a> {
     /// Get the singleton Process.
     pub fn get() -> ProcessHandle<'a> {
-        let count = unsafe {
-            PROCESS_HANDLE_COUNT += 1;
-            PROCESS_HANDLE_COUNT - 1
-        };
-        // if count != 0 {
-        //     panic!("Multiple users of ProcessHandle!");
-        // }
         ProcessHandle {
             process: unsafe { &mut *PROCESS },
         }
-    }
-}
-
-impl Drop for ProcessHandle<'_> {
-    fn drop(&mut self) {
-        unsafe { PROCESS_HANDLE_COUNT -= 1 };
     }
 }
 
