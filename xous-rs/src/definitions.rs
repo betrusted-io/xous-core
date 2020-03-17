@@ -12,6 +12,9 @@ pub type Connection = usize;
 /// Server ID
 pub type SID = (usize, usize, usize, usize);
 
+/// Connection ID
+pub type CID = usize;
+
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
@@ -43,30 +46,34 @@ pub struct Context {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct MemoryMessage {
-    id: MessageId,
-    in_buf: Option<MemoryAddress>,
-    in_buf_size: Option<MemorySize>,
-    out_buf: Option<MemoryAddress>,
-    out_buf_size: Option<MemorySize>,
+    pub id: MessageId,
+    pub in_buf: Option<MemoryAddress>,
+    pub in_buf_size: Option<MemorySize>,
+    pub out_buf: Option<MemoryAddress>,
+    pub out_buf_size: Option<MemorySize>,
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct ScalarMessage {
-    id: MessageId,
-    arg1: usize,
-    arg2: usize,
-    arg3: usize,
-    arg4: usize,
+    pub id: MessageId,
+    pub arg1: usize,
+    pub arg2: usize,
+    pub arg3: usize,
+    pub arg4: usize,
 }
 
 #[repr(usize)]
+#[derive(Debug)]
 pub enum Message {
     Memory(MemoryMessage),
     Scalar(ScalarMessage),
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct MessageEnvelope {
     sender: MessageSender,
     message: Message,
