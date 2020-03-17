@@ -1,7 +1,7 @@
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
-use crate::mem::MemoryManagerHandle;
+use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
@@ -153,13 +153,21 @@ pub extern "C" fn trap_handler(
                     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
                     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
                     unsafe {
+                        // Map the page to our process
                         entry.write_volatile((ppn1 << 20) | (ppn0 << 10) |
-                        (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7) /* A */))
-                    };
-                    unsafe { flush_mmu() };
+                        (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7) /* A */));
+                        flush_mmu();
 
-                    // Zero-out the page
-                    // unsafe { (new_page as *mut usize).write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
+                        // Zero-out the page
+                        let virt = addr & !0xfff;
+                        (virt as *mut usize)
+                            .write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
+
+                        // Move the page into userspace
+                        entry.write_volatile((ppn1 << 20) | (ppn0 << 10) |
+                        (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7) /* A */));
+                        flush_mmu();
+                    };
 
                     let mut process = ProcessHandle::get();
                     crate::arch::syscall::resume(current_pid() == 1, process.current_context());

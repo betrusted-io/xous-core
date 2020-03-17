@@ -18,7 +18,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
                     let mut ss = SystemServicesHandle::get();
                     // Disable all other IRQs and redirect into userspace
                     arch::irq::disable_all_irqs();
-                    println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
+                    // println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
                     return ss.make_callback_to(pid, f, irq_no, arg).map(|_| xous::Result::ResumeProcess);
                 } else {
                     // If there is no handler, mask this interrupt
