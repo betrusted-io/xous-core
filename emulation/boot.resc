@@ -10,6 +10,8 @@ mach create
 # Add peripherals that are defined in C#.  You must restart Renode
 # if you modify these files.
 i @peripherals/LiteX_Timer_32.cs
+i @peripherals/memlcd.cs
+i @peripherals/keyboard.cs
 
 # Load the Betrusted Renode Platform file
 machine LoadPlatformDescription @betrusted.repl
@@ -18,6 +20,7 @@ machine StartGdbServer 3333 true
 showAnalyzer uartkernel
 showAnalyzer uart
 showAnalyzer uartlog
+#showAnalyzer memlcd
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset

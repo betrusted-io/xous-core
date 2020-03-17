@@ -17,6 +17,6 @@ macro_rules! make_name {
     ($fcc:expr) => {{
         let mut c: [u8; 4] = Default::default();
         c.copy_from_slice($fcc.as_bytes());
-        usize::from_le_bytes(c)
+        u32::from_le_bytes(c) as usize
     }};
 }

@@ -1,4 +1,4 @@
-use crate::{CpuID, Error, MemoryAddress, PID, SID};
+use crate::{CpuID, Error, MemoryAddress, PID, SID, MessageEnvelope};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
@@ -140,6 +140,9 @@ pub enum SysCall {
     /// This process will now wait for an event such as an IRQ or Message.
     WaitEvent,
 
+    /// This context will now wait for a message with the given server ID
+    WaitMessage(SID),
+
     /// Stop running the given process.
     Suspend(PID, CpuID),
 
@@ -255,6 +258,7 @@ enum SysCallNumber {
     UpdateMemoryFlags = 12,
     SetMemRegion = 13,
     CreateServer = 14,
+    WaitMessage = 15,
     Invalid,
 }
 
@@ -281,6 +285,7 @@ impl SysCall {
             ],
             SysCall::Yield => [SysCallNumber::Yield as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::WaitEvent => [SysCallNumber::WaitEvent as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::WaitMessage(sid) => [SysCallNumber::WaitMessage as usize, sid.0, sid.1, sid.2, sid.3, 0, 0, 0],
             SysCall::Suspend(a1, a2) => [
                 SysCallNumber::Suspend as usize,
                 a1 as usize,
@@ -380,6 +385,7 @@ impl SysCall {
             ),
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
+            Some(SysCallNumber::WaitMessage) => SysCall::WaitMessage((a1, a2, a3, a4)),
             Some(SysCallNumber::Suspend) => SysCall::Suspend(a1 as PID, a2),
             Some(SysCallNumber::ClaimInterrupt) => {
                 SysCall::ClaimInterrupt(a1, a2 as *mut usize, a3 as *mut usize)
@@ -495,13 +501,38 @@ pub fn claim_interrupt(
     Err(Error::InternalError)
 }
 
-/// Create a new server.  Returns the new server address.
+/// Create a new server with the given name.  This enables other processes to
+/// connect to this server to send messages.  The name is a UTF-8 token that
+/// will be mixed with other random data that is unique to each process.
+/// That way, if a process crashes and is restarted, it can keep the same
+/// name.  However, other processes cannot spoof this process.
+///
+/// # Errors
+///
+/// * **ServerExists**: A server has already registered with that name
+/// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server(name: usize) -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer(name))?;
     if let Result::ServerID(sid) = result {
         return Ok(sid);
     }
     Err(Error::InternalError)
+}
+
+/// Suspend the current process until a message is received.  This thread will
+/// block until a message is received.
+///
+/// # Errors
+///
+pub fn receive_message(sid: SID) -> core::result::Result<MessageEnvelope, Error> {
+    rsyscall(SysCall::WaitMessage(sid)).expect("Couldn't call watimessage");
+    Err(Error::UnhandledSyscall)
+}
+
+/// Return execution to the kernel.
+/// This function may return at any time, including immediately
+pub fn yield_slice() {
+    rsyscall(SysCall::Yield).expect("yield returned an error");
 }
 
 pub fn rsyscall(call: SysCall) -> SyscallResult {

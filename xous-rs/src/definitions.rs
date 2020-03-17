@@ -15,7 +15,7 @@ pub type SID = (usize, usize, usize, usize);
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
-#[repr(C)]
+#[repr(usize)]
 #[derive(Debug, PartialEq)]
 pub enum Error {
     NoError = 0,
@@ -60,14 +60,14 @@ pub struct ScalarMessage {
     arg4: usize,
 }
 
-#[allow(dead_code)]
+#[repr(usize)]
 pub enum Message {
     Memory(MemoryMessage),
     Scalar(ScalarMessage),
 }
 
-#[allow(dead_code)]
-pub struct MessageReceived {
+#[repr(C)]
+pub struct MessageEnvelope {
     sender: MessageSender,
     message: Message,
 }
