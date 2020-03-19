@@ -35,6 +35,8 @@ pub enum ProcessState {
     /// This is the current active process
     Running,
 
+    /// This process is waiting for a 
+
     /// This process is waiting for an event, such as
     /// as message or an interrupt
     Sleeping,
@@ -119,8 +121,12 @@ enum ServerState {
     /// This server slot is unallocated
     Free,
 
-    /// This server can receive messages
-    Ready,
+    /// This server can receive messages.
+    /// The `context mask` is a bitfield of contexts that are
+    /// able to handle this message.
+    /// If there are no available contexts, then messages will
+    /// need to be queued.
+    Ready(usize /* context mask */),
 
     /// This server's inbox is full
     Full,
@@ -130,6 +136,7 @@ enum ServerState {
 /// This should be exactly 8 words / 32 bytes, yielding 128
 /// queued messages per server
 #[repr(usize)]
+#[derive(PartialEq)]
 enum QueuedMessage {
     Empty,
     ScalarMessage(
@@ -159,13 +166,30 @@ pub struct Server {
     sid: SID,
 
     /// The process that owns this server
-    pid: PID,
+    pub pid: PID,
 
     /// The current state of this slot
     state: ServerState,
 
+    /// An index into the queue
+    queue_index: usize,
+
     /// Where data will appear
     queue: &'static [QueuedMessage],
+}
+
+impl Server {
+    pub fn take_next_message(&mut self) -> Option<&'static QueuedMessage> {
+        if self.queue[self.queue_index] == QueuedMessage::Empty {
+            return None;
+        }
+        let result = &self.queue[self.queue_index];
+        self.queue_index += 1;
+        if self.queue_index >= self.queue.len() {
+            self.queue_index = 0;
+        }
+        Some(result)
+    }
 }
 
 impl Default for Server {
@@ -174,6 +198,7 @@ impl Default for Server {
             sid: (0, 0, 0, 0),
             pid: 0,
             state: ServerState::Free,
+            queue_index: 0,
             queue: &[],
         }
     }
@@ -219,6 +244,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         sid: (0, 0, 0, 0),
         pid: 0,
         state: ServerState::Free,
+        queue_index: 0,
         queue: &[],
     }; MAX_SERVER_COUNT],
 };
@@ -481,7 +507,7 @@ impl SystemServices {
                     }
                 };
                 println!("Managed to allocate a handle");
-                entry.state = ServerState::Ready;
+                entry.state = ServerState::Ready(0);
                 entry.pid = self.pid;
                 entry.sid = (pid as usize, name as usize, pid as usize, name as usize);
                 println!("Returning SID");
@@ -495,6 +521,16 @@ impl SystemServices {
     /// If the server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
         Err(xous::Error::OutOfMemory)
+    }
+
+    /// Get a server based on a SID
+    pub fn get_server(&mut self, sid: SID) -> Option<&Server> {
+        for server in self.servers.iter_mut() {
+            if server.sid == sid {
+                return Some(server);
+            }
+        }
+        None
     }
 }
 

@@ -53,6 +53,36 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     arch::init();
 }
 
+fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
+    // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
+    // 1 from the PID when we use it as an array index, we automatically
+    // pick the next process in the list.
+    let mut current_pid = last_pid.unwrap_or(0) as usize + 2;
+
+    let system_services = SystemServicesHandle::get();
+    for test_idx in current_pid..system_services.processes.len() {
+        if system_services.processes[test_idx].ppid == 1 {
+            print!("PID {} is owned by PID1... ", test_idx + 1);
+            if system_services.processes[test_idx].runnable() {
+                println!(" and is runnable");
+                return Some((test_idx + 1) as PID);
+            }
+            println!(" and is NOT RUNNABLE");
+        }
+    }
+    for test_idx in 0..current_pid {
+        if system_services.processes[test_idx].ppid == 1 {
+            print!("PID {} is owned by PID1... ", test_idx + 1);
+            if system_services.processes[test_idx].runnable() {
+                println!(" and is runnable");
+                return Some((test_idx + 1) as PID);
+            }
+            println!(" and is NOT RUNNABLE");
+        }
+    }
+    None
+}
+
 #[no_mangle]
 pub extern "C" fn main() {
     // Either map memory using a syscall, or if we're debugging the syscall
@@ -96,25 +126,13 @@ pub extern "C" fn main() {
         }
     }
 
+    let mut pid = None;
     loop {
-        let mut next_pid = None;
-        {
-            arch::irq::disable_all_irqs();
-            {
-                let system_services = SystemServicesHandle::get();
-                for (pid_idx, process) in system_services.processes.iter().enumerate() {
-                    // If this process is owned by the kernel, and if it can be run, run it.
-                    if process.ppid == 1 && process.runnable() {
-                        println!("PID {} is owned by PID 1, and is runnable", pid_idx + 1);
-                        next_pid = Some(pid_idx as PID + 1);
-                        break;
-                    }
-                }
-            }
-            arch::irq::enable_all_irqs();
-        }
+        arch::irq::disable_all_irqs();
+        pid = next_pid_to_run(pid);
+        arch::irq::enable_all_irqs();
 
-        match next_pid {
+        match pid {
             Some(pid) => {
                 println!("Attempting to switch to PID {}", pid);
                 xous::rsyscall(xous::SysCall::SwitchTo(pid, 0))
