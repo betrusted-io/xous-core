@@ -70,7 +70,9 @@ fn main() {
     //     println!("Unexpected return value: {:?}", heap);
     // }
 
+    println!("Starting server...");
     let server_addr = xous::syscall::create_server(xous::make_name!("📜")).expect("couldn't create server");
+    println!("Server listening on address {:?}", server_addr);
 
     loop {
         println!("Waiting for an event...");

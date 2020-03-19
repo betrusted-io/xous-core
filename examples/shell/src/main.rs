@@ -86,8 +86,32 @@ fn main() {
 
     timer::init();
 
+    let mut connection = None;
+    println!("Attempting to connect to server...");
+    while connection.is_none() {
+        if let Ok(cid) = xous::syscall::connect((3, 2626920432, 3, 2626920432)) {
+            connection = Some(cid);
+        } else {
+            xous::syscall::yield_slice();
+        }
+    }
+    let connection = connection.unwrap();
+    println!("Connected: {:?}", connection);
+
+    let mut counter = 0;
     loop {
-        println!("Waiting for an event...");
-        xous::rsyscall(xous::SysCall::WaitEvent).expect("Couldn't call waitevent");
+        println!("Sending a message...");
+        let result = xous::syscall::send_message(
+            connection,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: counter + 4096,
+                arg1: counter,
+                arg2: counter * 2,
+                arg3: !counter,
+                arg4: counter + 1,
+            }),
+        )
+        .expect("couldn't send message");
+        counter += 1;
     }
 }
