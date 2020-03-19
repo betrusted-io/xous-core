@@ -388,20 +388,40 @@ impl SysCall {
                 [SysCallNumber::Connect as usize, sid.0, sid.1, sid.2, sid.3, 0, 0, 0]
             }
             SysCall::SendMessage(a1, ref a2) => match a2 {
-                Message::Memory(mm) => [
+                Message::MutableBorrow(mm) => [
                     SysCallNumber::SendMessage as usize,
                     a1,
                     1,
                     mm.id as usize,
-                    mm.in_buf.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.in_buf_size.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.out_buf.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.out_buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._valid.map(|x| x.get()).unwrap_or(0) as usize,
+                ],
+                Message::ImmutableBorrow(mm) => [
+                    SysCallNumber::SendMessage as usize,
+                    a1,
+                    2,
+                    mm.id as usize,
+                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._valid.map(|x| x.get()).unwrap_or(0) as usize,
+                ],
+                Message::Move(mm) => [
+                    SysCallNumber::SendMessage as usize,
+                    a1,
+                    3,
+                    mm.id as usize,
+                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm._valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
                 Message::Scalar(sc) => [
                     SysCallNumber::SendMessage as usize,
                     a1,
-                    2,
+                    4,
                     sc.id as usize,
                     sc.arg1,
                     sc.arg2,
@@ -458,15 +478,35 @@ impl SysCall {
             Some(SysCallNumber::SendMessage) => match a2 {
                 1 => SysCall::SendMessage(
                     a1,
-                    Message::Memory(MemoryMessage {
+                    Message::MutableBorrow(MemoryMessage {
                         id: a3,
-                        in_buf: MemoryAddress::new(a4),
-                        in_buf_size: MemorySize::new(a5),
-                        out_buf: MemoryAddress::new(a6),
-                        out_buf_size: MemorySize::new(a7),
+                        buf: MemoryAddress::new(a4),
+                        buf_size: MemorySize::new(a5),
+                        _offset: MemoryAddress::new(a6),
+                        _valid: MemorySize::new(a7),
                     }),
                 ),
                 2 => SysCall::SendMessage(
+                    a1,
+                    Message::ImmutableBorrow(MemoryMessage {
+                        id: a3,
+                        buf: MemoryAddress::new(a4),
+                        buf_size: MemorySize::new(a5),
+                        _offset: MemoryAddress::new(a6),
+                        _valid: MemorySize::new(a7),
+                    }),
+                ),
+                3 => SysCall::SendMessage(
+                    a1,
+                    Message::Move(MemoryMessage {
+                        id: a3,
+                        buf: MemoryAddress::new(a4),
+                        buf_size: MemorySize::new(a5),
+                        _offset: MemoryAddress::new(a6),
+                        _valid: MemorySize::new(a7),
+                    }),
+                ),
+                4 => SysCall::SendMessage(
                     a1,
                     Message::Scalar(ScalarMessage {
                         id: a3,
@@ -523,6 +563,7 @@ pub enum Result {
     ResumeResult(usize, usize, usize, usize, usize, usize),
     ResumeProcess,
     ServerID(SID),
+    ConnectionID(CID),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -624,8 +665,9 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
     Err(Error::UnhandledSyscall)
 }
 
-/// Send a message to a server.  This thread will block until the message is responded to.
-/// If the message type is `Memory`, then the memory addresses pointed to will be
+/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// will either block (borrow) or return immediately (move).
+/// If the message type is `borrow`, then the memory addresses pointed to will be
 /// unavailable to this process until this function returns.
 ///
 /// # Errors
@@ -633,7 +675,8 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
-pub fn send_message(server: SID, message: MessageEnvelope) -> core::result::Result<(), Error> {
+pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
     Err(Error::UnhandledSyscall)
 }
 

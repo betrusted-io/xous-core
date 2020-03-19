@@ -47,16 +47,33 @@ pub struct Context {
 
 #[repr(C)]
 #[derive(Debug)]
+/// A struct describing memory that is passed between processes.
+/// The `buf` value will get translated as necessary.
 pub struct MemoryMessage {
+
+    /// A user-assignable message ID.
     pub id: MessageId,
-    pub in_buf: Option<MemoryAddress>,
-    pub in_buf_size: Option<MemorySize>,
-    pub out_buf: Option<MemoryAddress>,
-    pub out_buf_size: Option<MemorySize>,
+
+    /// The offset of the buffer.  This address will get
+    /// transformed when the message is moved between
+    /// processes.
+    pub buf: Option<MemoryAddress>,
+
+    /// The overall size of the buffer.  Must be a multiple
+    /// of PAGE_SIZE.
+    pub buf_size: Option<MemorySize>,
+
+    /// The offset within the buffer where the interesting
+    /// stuff starts.
+    pub _offset: Option<MemorySize>,
+
+    /// How many bytes in the buffer are valid
+    pub _valid: Option<MemorySize>,
 }
 
 #[repr(C)]
 #[derive(Debug)]
+/// A simple scalar message.  This is similar to a `move` message.
 pub struct ScalarMessage {
     pub id: MessageId,
     pub arg1: usize,
@@ -68,7 +85,9 @@ pub struct ScalarMessage {
 #[repr(usize)]
 #[derive(Debug)]
 pub enum Message {
-    Memory(MemoryMessage),
+    MutableBorrow(MemoryMessage),
+    ImmutableBorrow(MemoryMessage),
+    Move(MemoryMessage),
     Scalar(ScalarMessage),
 }
 
