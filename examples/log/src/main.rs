@@ -74,6 +74,7 @@ fn main() {
 
     loop {
         println!("Waiting for an event...");
-        xous::rsyscall(xous::SysCall::WaitEvent).expect("Couldn't call waitevent");
+        let msg = xous::syscall::receive_message(server_addr).expect("couldn't get address");
+        println!("Got message: {:?}", msg);
     }
 }

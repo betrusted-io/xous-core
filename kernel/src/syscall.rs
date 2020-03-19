@@ -3,6 +3,7 @@ use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessState, SystemServicesHandle};
+use core::mem;
 use xous::*;
 
 // extern "Rust" {
@@ -152,8 +153,18 @@ pub fn handle(call: SysCall) -> xous::Result {
             //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
             //     phys as u32, virt as u32, size, req_flags
             // );
-            mm.map_range(phys, virt, size, req_flags)
-                .unwrap_or_else(|e| xous::Result::Error(e))
+            let result = mm.map_range(phys, virt, size, req_flags)
+                .unwrap_or_else(|e| xous::Result::Error(e));
+            if let xous::Result::MemoryRange(ref r) = result {
+                // If we're handing back an address in main RAM, zero it out
+                if phys as usize == 0 || mm.is_main_memory(phys) {
+                    unsafe { r.base.write_bytes(0, r.size / mem::size_of::<usize>()) };
+                }
+                for offset in ((r.base as usize)..(r.base as usize + r.size)).step_by(PAGE_SIZE) {
+                    crate::arch::mem::hand_page_to_user(offset as *mut usize).expect("couldn't hand page to user");
+                }
+            }
+            result
         }
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
@@ -231,6 +242,12 @@ pub fn handle(call: SysCall) -> xous::Result {
             let mut ss = SystemServicesHandle::get();
             ss.create_server(name)
                 .map(|x| xous::Result::ServerID(x))
+                .unwrap_or_else(|e| xous::Result::Error(e))
+        }
+        SysCall::Connect(sid) => {
+            let mut ss = SystemServicesHandle::get();
+            ss.connect_to_server(sid)
+                .map(|x| xous::Result::ConnectionID(x))
                 .unwrap_or_else(|e| xous::Result::Error(e))
         }
         _ => xous::Result::Error(xous::Error::UnhandledSyscall),

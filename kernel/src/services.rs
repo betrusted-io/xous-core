@@ -3,9 +3,9 @@ use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
 pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
-use crate::mem::MemoryManagerHandle;
-use core::slice;
-use xous::{MemoryFlags, PID, SID};
+use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use core::{mem, slice};
+use xous::{MemoryFlags, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -114,6 +114,7 @@ impl Process {
 }
 
 #[derive(Copy, Clone, PartialEq)]
+#[repr(usize)]
 enum ServerState {
     /// This server slot is unallocated
     Free,
@@ -123,6 +124,32 @@ enum ServerState {
 
     /// This server's inbox is full
     Full,
+}
+
+/// Internal representation of a queued message for a server.
+/// This should be exactly 8 words / 32 bytes, yielding 128
+/// queued messages per server
+#[repr(usize)]
+enum QueuedMessage {
+    Empty,
+    ScalarMessage(
+        usize, /* sender */
+        usize, /* response flag */
+        usize, /* id */
+        usize, /* arg1 */
+        usize, /* arg2 */
+        usize, /* arg3 */
+        usize, /* arg4 */
+    ),
+    MemoryMessage(
+        usize, /* sender */
+        usize, /* response flag */
+        usize, /* id */
+        usize, /* in_buf */
+        usize, /* in_buf_size */
+        usize, /* out_buf */
+        usize, /* out_buf_size */
+    ),
 }
 
 /// A pointer to resolve a server ID to a particular process
@@ -138,7 +165,7 @@ pub struct Server {
     state: ServerState,
 
     /// Where data will appear
-    queue: *mut usize,
+    queue: &'static [QueuedMessage],
 }
 
 impl Default for Server {
@@ -147,7 +174,7 @@ impl Default for Server {
             sid: (0, 0, 0, 0),
             pid: 0,
             state: ServerState::Free,
-            queue: 0 as *mut usize,
+            queue: &[],
         }
     }
 }
@@ -192,7 +219,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         sid: (0, 0, 0, 0),
         pid: 0,
         state: ServerState::Free,
-        queue: 0 as *mut usize,
+        queue: &[],
     }; MAX_SERVER_COUNT],
 };
 
@@ -383,7 +410,10 @@ impl SystemServices {
             match new.state {
                 ProcessState::Setup(entrypoint, stack, stack_size) => {
                     let mut process = ProcessHandle::get();
-                    println!("Initializing new process with stack size of {} bytes", stack_size);
+                    println!(
+                        "Initializing new process with stack size of {} bytes",
+                        stack_size
+                    );
                     process.init(entrypoint, stack);
                     // Mark the stack as "unallocated-but-free"
                     let init_sp = stack & !0xfff;
@@ -427,20 +457,43 @@ impl SystemServices {
     /// Allocate a new server ID for this process and return the address.
     /// If the server table is full, return an error.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
+        println!("Looking through server list for free server");
+        println!("Server entries are {} bytes long", mem::size_of::<Server>());
+        assert!(
+            mem::size_of::<QueuedMessage>() == 32,
+            "QueuedMessage was supposed to be 32 bytes, but instead was {} bytes",
+            mem::size_of::<QueuedMessage>()
+        );
+
         for entry in self.servers.iter_mut() {
             if entry.state == ServerState::Free {
                 let pid = self.pid;
+                println!("Found a free slot.  Allocating an entry");
                 // Allocate memory for the new server.
                 entry.queue = {
                     let mut mm = MemoryManagerHandle::get();
-                    mm.map_page(pid)?
+                    let page = mm.map_zeroed_page(pid)?;
+                    unsafe {
+                        slice::from_raw_parts_mut(
+                            page as *mut QueuedMessage,
+                            PAGE_SIZE / mem::size_of::<QueuedMessage>(),
+                        )
+                    }
                 };
+                println!("Managed to allocate a handle");
                 entry.state = ServerState::Ready;
                 entry.pid = self.pid;
-                entry.sid = (pid as usize, pid as usize, pid as usize, pid as usize);
+                entry.sid = (pid as usize, name as usize, pid as usize, name as usize);
+                println!("Returning SID");
                 return Ok(entry.sid);
             }
         }
+        Err(xous::Error::OutOfMemory)
+    }
+
+    /// Allocate a new server ID for this process and return the address.
+    /// If the server table is full, return an error.
+    pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
         Err(xous::Error::OutOfMemory)
     }
 }
