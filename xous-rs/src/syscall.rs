@@ -143,7 +143,9 @@ pub enum SysCall {
     /// This process will now wait for an event such as an IRQ or Message.
     WaitEvent,
 
-    /// This context will now wait for a message with the given server ID
+    /// This context will now wait for a message with the given server ID..
+    /// You can set up a pool by having multiple threads call `WaitMessage`
+    /// with the same SID.
     WaitMessage(SID),
 
     /// Stop running the given process.
@@ -223,7 +225,7 @@ pub enum SysCall {
     /// * **ProcessNotChild**: The given process was not a child process, and
     ///                        therefore couldn't be resumed.
     /// * **ProcessTerminated**: The process has crashed.
-    SwitchTo(PID, usize /* thread ID */),
+    SwitchTo(PID, usize /* context ID */),
 
     /// Create a new Server
     ///
@@ -564,6 +566,7 @@ pub enum Result {
     ResumeProcess,
     ServerID(SID),
     ConnectionID(CID),
+    Message(Message),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -653,6 +656,16 @@ pub fn create_server(name: usize) -> core::result::Result<SID, Error> {
         return Ok(sid);
     }
     Err(Error::InternalError)
+}
+
+/// Connect to a server with the given SID
+pub fn connect(server: SID) -> core::result::Result<CID, Error> {
+    let result = rsyscall(SysCall::Connect(server))?;
+    if let Result::ConnectionID(cid) = result {
+        Ok(cid)
+    } else {
+        Err(Error::InternalError)
+    }
 }
 
 /// Suspend the current process until a message is received.  This thread will

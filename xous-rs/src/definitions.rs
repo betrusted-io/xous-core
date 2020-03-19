@@ -46,7 +46,7 @@ pub struct Context {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 /// A struct describing memory that is passed between processes.
 /// The `buf` value will get translated as necessary.
 pub struct MemoryMessage {
@@ -72,7 +72,7 @@ pub struct MemoryMessage {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 /// A simple scalar message.  This is similar to a `move` message.
 pub struct ScalarMessage {
     pub id: MessageId,
@@ -83,7 +83,7 @@ pub struct ScalarMessage {
 }
 
 #[repr(usize)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Message {
     MutableBorrow(MemoryMessage),
     ImmutableBorrow(MemoryMessage),
