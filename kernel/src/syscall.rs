@@ -244,6 +244,12 @@ pub fn handle(call: SysCall) -> xous::Result {
                 .map(|x| xous::Result::ServerID(x))
                 .unwrap_or_else(|e| xous::Result::Error(e))
         }
+        SysCall::Connect(sid) => {
+            let mut ss = SystemServicesHandle::get();
+            ss.connect_to_server(sid)
+                .map(|x| xous::Result::ConnectionID(x))
+                .unwrap_or_else(|e| xous::Result::Error(e))
+        }
         _ => xous::Result::Error(xous::Error::UnhandledSyscall),
     }
 }

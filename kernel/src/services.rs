@@ -5,7 +5,7 @@ pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use core::{mem, slice};
-use xous::{MemoryFlags, PID, SID};
+use xous::{MemoryFlags, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -488,6 +488,12 @@ impl SystemServices {
                 return Ok(entry.sid);
             }
         }
+        Err(xous::Error::OutOfMemory)
+    }
+
+    /// Allocate a new server ID for this process and return the address.
+    /// If the server table is full, return an error.
+    pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
         Err(xous::Error::OutOfMemory)
     }
 }
