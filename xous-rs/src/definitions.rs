@@ -92,8 +92,8 @@ pub enum Message {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MessageEnvelope {
-    sender: MessageSender,
-    message: Message,
+    pub sender: MessageSender,
+    pub message: Message,
 }

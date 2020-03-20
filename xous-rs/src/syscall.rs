@@ -566,7 +566,7 @@ pub enum Result {
     ResumeProcess,
     ServerID(SID),
     ConnectionID(CID),
-    Message(Message),
+    Message(MessageEnvelope),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
