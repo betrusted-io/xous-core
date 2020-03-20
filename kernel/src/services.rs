@@ -5,7 +5,7 @@ pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use core::{mem, slice};
-use xous::{MemoryFlags, CID, PID, SID};
+use xous::{MemoryAddress, MemoryFlags, MemorySize, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -35,7 +35,7 @@ pub enum ProcessState {
     /// This is the current active process
     Running,
 
-    /// This process is waiting for a 
+    /// This process is waiting for a
 
     /// This process is waiting for an event, such as
     /// as message or an interrupt
@@ -141,21 +141,39 @@ enum QueuedMessage {
     Empty,
     ScalarMessage(
         usize, /* sender */
-        usize, /* response flag */
+        usize, /* unused */
         usize, /* id */
         usize, /* arg1 */
         usize, /* arg2 */
         usize, /* arg3 */
         usize, /* arg4 */
     ),
-    MemoryMessage(
+    MemoryMessageSend(
         usize, /* sender */
-        usize, /* response flag */
+        usize, /* unused */
         usize, /* id */
-        usize, /* in_buf */
-        usize, /* in_buf_size */
-        usize, /* out_buf */
-        usize, /* out_buf_size */
+        usize, /* buf */
+        usize, /* buf_size */
+        usize, /* offset */
+        usize, /* valid */
+    ),
+    MemoryMessageROLend(
+        usize, /* sender */
+        usize, /* unused */
+        usize, /* id */
+        usize, /* buf */
+        usize, /* buf_size */
+        usize, /* offset */
+        usize, /* valid */
+    ),
+    MemoryMessageRWLend(
+        usize, /* sender */
+        usize, /* unused */
+        usize, /* id */
+        usize, /* buf */
+        usize, /* buf_size */
+        usize, /* offset */
+        usize, /* valid */
     ),
 }
 
@@ -179,11 +197,82 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn take_next_message(&mut self) -> Option<&'static QueuedMessage> {
-        if self.queue[self.queue_index] == QueuedMessage::Empty {
-            return None;
-        }
-        let result = &self.queue[self.queue_index];
+    pub fn take_next_message(&mut self) -> Option<xous::MessageEnvelope> {
+        let result = match self.queue[self.queue_index] {
+            QueuedMessage::Empty => return None,
+            QueuedMessage::MemoryMessageROLend(
+                sender,
+                _unused,
+                id,
+                buf,
+                buf_size,
+                offset,
+                valid,
+            ) => xous::MessageEnvelope {
+                sender: sender,
+                message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
+                    id,
+                    buf: MemoryAddress::new(buf),
+                    buf_size: MemorySize::new(buf_size),
+                    _offset: MemorySize::new(offset),
+                    _valid: MemorySize::new(valid),
+                }),
+            },
+            QueuedMessage::MemoryMessageRWLend(
+                sender,
+                _unused,
+                id,
+                buf,
+                buf_size,
+                offset,
+                valid,
+            ) => xous::MessageEnvelope {
+                sender: sender,
+                message: xous::Message::MutableBorrow(xous::MemoryMessage {
+                    id,
+                    buf: MemoryAddress::new(buf),
+                    buf_size: MemorySize::new(buf_size),
+                    _offset: MemorySize::new(offset),
+                    _valid: MemorySize::new(valid),
+                }),
+            },
+            QueuedMessage::MemoryMessageSend(
+                sender,
+                _unused,
+                id,
+                buf,
+                buf_size,
+                offset,
+                valid,
+            ) => xous::MessageEnvelope {
+                sender: sender,
+                message: xous::Message::Move(xous::MemoryMessage {
+                    id,
+                    buf: MemoryAddress::new(buf),
+                    buf_size: MemorySize::new(buf_size),
+                    _offset: MemorySize::new(offset),
+                    _valid: MemorySize::new(valid),
+                }),
+            },
+            QueuedMessage::ScalarMessage(
+                sender,
+                _unused,
+                id,
+                arg1,
+                arg2,
+                arg3,
+                arg4,
+            ) => xous::MessageEnvelope {
+                sender: sender,
+                message: xous::Message::Scalar(xous::ScalarMessage {
+                    id,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                }),
+            },
+        };
         self.queue_index += 1;
         if self.queue_index >= self.queue.len() {
             self.queue_index = 0;
@@ -524,7 +613,7 @@ impl SystemServices {
     }
 
     /// Get a server based on a SID
-    pub fn get_server(&mut self, sid: SID) -> Option<&Server> {
+    pub fn server_mut(&mut self, sid: SID) -> Option<&mut Server> {
         for server in self.servers.iter_mut() {
             if server.sid == sid {
                 return Some(server);

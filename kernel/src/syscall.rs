@@ -232,11 +232,10 @@ pub fn handle(call: SysCall) -> xous::Result {
         SysCall::WaitMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
             // See if there is a pending message.  If so, return immediately.
-            let server = ss.get_server(sid);
-            if server.is_none() {
-                return xous::Result::Error(xous::Error::ServerNotFound);
-            }
-            let server = server.unwrap();
+            let mut server = match ss.server_mut(sid) {
+                None => return xous::Result::Error(xous::Error::ServerNotFound),
+                Some(server) => server,
+            };
 
             // Ensure the server is for this PID
             if server.pid != pid {
@@ -252,7 +251,7 @@ pub fn handle(call: SysCall) -> xous::Result {
             // and mark ourselves as awaiting an event.
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.resume_pid(ppid, ProcessState::WaitEvent)
+            ss.resume_pid(ppid, ProcessState::Sleeping)
                 .map(|_| xous::Result::ResumeProcess)
                 .unwrap_or(xous::Result::Error(xous::Error::ProcessNotFound))
         }
