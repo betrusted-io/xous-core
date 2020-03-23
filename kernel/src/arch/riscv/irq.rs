@@ -104,7 +104,7 @@ pub extern "C" fn trap_handler(
             _xous_syscall_return_result(&xous::Result::Error(xous::Error::UnhandledSyscall), ctx)
         });
 
-        let response = crate::syscall::handle(call);
+        let response = crate::syscall::handle(call).unwrap_or_else(|e| xous::Result::Error(e));
 
         println!("Result: {:?}", response);
         let mut process = ProcessHandle::get();

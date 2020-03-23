@@ -133,7 +133,7 @@ use xous::*;
 //     ) -> Result<XousMessage, xous::Error>;
 // }
 
-pub fn handle(call: SysCall) -> xous::Result {
+pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     let pid = arch::current_pid();
 
     println!("PID{} Syscall: {:?}", pid, call);
@@ -142,19 +142,18 @@ pub fn handle(call: SysCall) -> xous::Result {
             let mut mm = MemoryManagerHandle::get();
             // Don't let the address exceed the user area (unless it's PID 1)
             if pid != 1 && (virt as usize) != 0 && (virt as usize) >= arch::mem::USER_AREA_END {
-                return xous::Result::Error(xous::Error::BadAddress);
+                return Err(xous::Error::BadAddress);
 
             // Don't allow mapping non-page values
             } else if size & (PAGE_SIZE - 1) != 0 {
                 // println!("map: bad alignment of size {:08x}", size);
-                return xous::Result::Error(xous::Error::BadAlignment);
+                return Err(xous::Error::BadAlignment);
             }
             // println!(
             //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
             //     phys as u32, virt as u32, size, req_flags
             // );
-            let result = mm.map_range(phys, virt, size, req_flags)
-                .unwrap_or_else(|e| xous::Result::Error(e));
+            let result = mm.map_range(phys, virt, size, req_flags)?;
             if let xous::Result::MemoryRange(ref r) = result {
                 // If we're handing back an address in main RAM, zero it out
                 if phys as usize == 0 || mm.is_main_memory(phys) {
@@ -164,17 +163,17 @@ pub fn handle(call: SysCall) -> xous::Result {
                     crate::arch::mem::hand_page_to_user(offset as *mut usize).expect("couldn't hand page to user");
                 }
             }
-            result
+            Ok(result)
         }
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
-                return xous::Result::Error(xous::Error::BadAlignment);
+                return Err(xous::Error::BadAlignment);
             }
             let start = {
                 let mut process = ProcessHandle::get();
 
                 if process.inner.mem_heap_size + delta > process.inner.mem_heap_max {
-                    return xous::Result::Error(xous::Error::OutOfMemory);
+                    return Err(xous::Error::OutOfMemory);
                 }
 
                 let start = process.inner.mem_heap_base + process.inner.mem_heap_size;
@@ -183,17 +182,16 @@ pub fn handle(call: SysCall) -> xous::Result {
             };
             let mut mm = MemoryManagerHandle::get();
             mm.reserve_range(start, delta, flags)
-                .unwrap_or_else(|e| xous::Result::Error(e))
         }
         SysCall::DecreaseHeap(delta) => {
             if delta & 0xfff != 0 {
-                return xous::Result::Error(xous::Error::BadAlignment);
+                return Err(xous::Error::BadAlignment);
             }
             let start = {
                 let mut process = ProcessHandle::get();
 
                 if process.inner.mem_heap_size + delta > process.inner.mem_heap_max {
-                    return xous::Result::Error(xous::Error::OutOfMemory);
+                    return Err(xous::Error::OutOfMemory);
                 }
 
                 let start = process.inner.mem_heap_base + process.inner.mem_heap_size;
@@ -205,7 +203,7 @@ pub fn handle(call: SysCall) -> xous::Result {
                 mm.unmap_page(page as *mut usize)
                     .expect("unable to unmap page");
             }
-            xous::Result::Ok
+            Ok(xous::Result::Ok)
         }
         SysCall::SwitchTo(pid, context) => {
             if context as usize != 0 {
@@ -214,37 +212,32 @@ pub fn handle(call: SysCall) -> xous::Result {
             let mut ss = SystemServicesHandle::get();
             ss.resume_pid(pid, ProcessState::Ready)
                 .map(|_| xous::Result::ResumeProcess)
-                .unwrap_or_else(|e| xous::Result::Error(e))
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
                 .map(|_| xous::Result::Ok)
-                .unwrap_or_else(|e| xous::Result::Error(e))
         }
         SysCall::Yield => {
             let mut ss = SystemServicesHandle::get();
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
             ss.resume_pid(ppid, ProcessState::Ready)
-                .map(|_| xous::Result::ResumeProcess)
-                .unwrap_or(xous::Result::Error(xous::Error::ProcessNotFound))
+                .map(|_| Ok(xous::Result::ResumeProcess))
+                .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
         SysCall::WaitMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
             // See if there is a pending message.  If so, return immediately.
-            let mut server = match ss.server_mut(sid) {
-                None => return xous::Result::Error(xous::Error::ServerNotFound),
-                Some(server) => server,
-            };
+            let mut server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
 
             // Ensure the server is for this PID
             if server.pid != pid {
-                return xous::Result::Error(xous::Error::ServerNotFound);
+                return Err(xous::Error::ServerNotFound);
             }
 
             // If there is a pending message, return it immediately.
             if let Some(msg) = server.take_next_message() {
-                return xous::Result::Message(msg);
+                return Ok(xous::Result::Message(msg));
             }
 
             // There is no pending message, so return control to the parent process
@@ -252,8 +245,8 @@ pub fn handle(call: SysCall) -> xous::Result {
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
             ss.resume_pid(ppid, ProcessState::Sleeping)
-                .map(|_| xous::Result::ResumeProcess)
-                .unwrap_or(xous::Result::Error(xous::Error::ProcessNotFound))
+                .map(|_| Ok(xous::Result::ResumeProcess))
+                .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
         SysCall::WaitEvent => {
             let mut ss = SystemServicesHandle::get();
@@ -261,21 +254,24 @@ pub fn handle(call: SysCall) -> xous::Result {
             let ppid = process.ppid;
             assert_ne!(ppid, 0, "no parent process id");
             ss.resume_pid(ppid, ProcessState::Sleeping)
-                .map(|_| xous::Result::ResumeProcess)
-                .unwrap_or(xous::Result::Error(xous::Error::ProcessNotFound))
+                .map(|_| Ok(xous::Result::ResumeProcess))
+                .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
         SysCall::CreateServer(name) => {
             let mut ss = SystemServicesHandle::get();
             ss.create_server(name)
                 .map(|x| xous::Result::ServerID(x))
-                .unwrap_or_else(|e| xous::Result::Error(e))
         }
         SysCall::Connect(sid) => {
             let mut ss = SystemServicesHandle::get();
             ss.connect_to_server(sid)
                 .map(|x| xous::Result::ConnectionID(x))
-                .unwrap_or_else(|e| xous::Result::Error(e))
         }
-        _ => xous::Result::Error(xous::Error::UnhandledSyscall),
+        SysCall::SendMessage(cid, message) => {
+            let mut ss = SystemServicesHandle::get();
+            let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+            Err(xous::Error::UnhandledSyscall)
+        }
+        _ => Err(xous::Error::UnhandledSyscall),
     }
 }

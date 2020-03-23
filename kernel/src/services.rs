@@ -91,8 +91,9 @@ pub struct ProcessInner {
     /// Maximum size of the heap
     pub mem_heap_max: usize,
 
-    /// Which context to return to when `reply_message()` is called
-    pub ctx_reply: [(PID, u8); 30],
+    /// A mapping of connection IDs to servers
+    pub connection_map: [u8 /* connection id */; 32],
+    pub _reserved: [u8; 28],
 }
 
 impl Default for ProcessInner {
@@ -105,7 +106,8 @@ impl Default for ProcessInner {
             mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
             mem_heap_max: 524288,
-            ctx_reply: [(0, 0); 30],
+            connection_map: [0; 32],
+            _reserved: [0; 28],
         }
     }
 }
@@ -613,7 +615,57 @@ impl SystemServices {
     /// Allocate a new server ID for this process and return the address.
     /// If the server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
+        // Check to see if we've already connected to this server.
+        // While doing this, find a free slot in case we haven't
+        // yet connected.
+        let mut slot_idx = None;
+        let mut process = ProcessHandle::get();
+
+        // Look through the connection map for (1) a free slot, and (2) an existing connection
+        for (idx, server_idx) in process.inner.connection_map.iter().enumerate() {
+            // If we find an empty slot, use it
+            if *server_idx == 0 {
+                slot_idx = Some(idx);
+            }
+            // If a connection to this server ID exists already, return it.
+            if self.servers[*server_idx as usize].sid == sid {
+                return Ok(idx as CID + 1);
+            }
+        }
+        let slot_idx = slot_idx.ok_or_else(|| xous::Error::OutOfMemory)?;
+
+        // Look through all servers for one whose SID matches.
+        for (idx, server) in self.servers.iter().enumerate() {
+            if server.sid == sid {
+                process.inner.connection_map[slot_idx] = idx as u8 + 1;
+                return Ok(idx + 1);
+            }
+        }
         Err(xous::Error::OutOfMemory)
+    }
+
+    /// Return a server based on the connection id and the current process
+    pub fn server_from_cid(&self, cid: CID) -> Option<&Server> {
+        if cid == 0 {
+            return None;
+        }
+        let process = ProcessHandle::get();
+        if cid >= process.inner.connection_map.len() {
+            return None;
+        }
+        let server_idx = process.inner.connection_map[cid] as usize;
+        if server_idx == 0 {
+            return None;
+        }
+        let server_idx = server_idx - 1;
+        if server_idx >= self.servers.len() {
+            return None;
+        }
+        if let ServerState::Ready(_) = self.servers[server_idx].state {
+        } else {
+            return None;
+        }
+        Some(&self.servers[server_idx])
     }
 
     /// Get a server based on a SID
