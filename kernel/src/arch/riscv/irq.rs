@@ -197,7 +197,7 @@ pub extern "C" fn trap_handler(
             }
             _ => (),
         }
-        println!("CPU Exception on PID {}: {}", pid, ex);
+        println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
         loop {}
     } else {
         let irqs_pending = sip::read();
