@@ -349,7 +349,7 @@ impl MemoryManager {
 
     /// Attempt to allocate a single page from the default section.
     /// Note that this will be backed by a real page.
-    pub fn map_zeroed_page(&mut self, pid: PID) -> Result<*mut usize, xous::Error> {
+    pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous::Error> {
         let virt =
             self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?;
 
@@ -372,7 +372,9 @@ impl MemoryManager {
 
         // Zero-out the page
         unsafe { virt.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
-        crate::arch::mem::hand_page_to_user(virt)?;
+        if is_user {
+            crate::arch::mem::hand_page_to_user(virt)?;
+        }
         Ok(virt)
     }
 
