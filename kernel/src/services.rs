@@ -591,7 +591,7 @@ impl SystemServices {
                 // Allocate memory for the new server.
                 entry.queue = {
                     let mut mm = MemoryManagerHandle::get();
-                    let page = mm.map_zeroed_page(pid)?;
+                    let page = mm.map_zeroed_page(pid, false)?;
                     unsafe {
                         slice::from_raw_parts_mut(
                             page as *mut QueuedMessage,
