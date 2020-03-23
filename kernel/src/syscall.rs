@@ -225,7 +225,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
-        SysCall::WaitMessage(sid) => {
+        SysCall::ReceiveMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
             // See if there is a pending message.  If so, return immediately.
             let mut server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
@@ -237,7 +237,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // If there is a pending message, return it immediately.
             if let Some(msg) = server.take_next_message() {
-                return Ok(xous::Result::Message(msg));
+                return Ok(xous::Result::Message(msg.0));
             }
 
             // There is no pending message, so return control to the parent process
@@ -270,6 +270,23 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
             let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+
+            // If the server has an available context to receive the message, transfer it right away.
+            if let Some(ctx_number) = server.take_available_context() {
+                // We can pass control on to this context, and add the existing context
+                // to the blocking pool.
+            } else {
+                // There is no server context we can use, so add the message to
+                // the queue.
+                let current_pid = ss.current_pid();
+                let context_nr = ss.get_process(current_pid)?.current_context_nr();
+
+                // Add this message to the queue.  If the queue is full, this
+                // returns an error.
+                server.queue_message(MessageEnvelope { sender: 0, message }, context_nr)?;
+
+                // Park this context.  This is roughly equivalent to a "Yield".
+            }
             Err(xous::Error::UnhandledSyscall)
         }
         _ => Err(xous::Error::UnhandledSyscall),

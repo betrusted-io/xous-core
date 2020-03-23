@@ -92,7 +92,7 @@ pub struct ProcessInner {
     pub mem_heap_max: usize,
 
     /// A mapping of connection IDs to servers
-    pub connection_map: [u8 /* connection id */; 32],
+    pub connection_map: [u8; 32],
     pub _reserved: [u8; 28],
 }
 
@@ -118,6 +118,10 @@ impl Process {
             ProcessState::Setup(_, _, _) | ProcessState::Ready => true,
             _ => false,
         }
+    }
+
+    pub fn current_context_nr(&self) -> usize {
+        ProcessHandle::get().current_context_nr()
     }
 }
 
@@ -147,7 +151,7 @@ enum QueuedMessage {
     Empty,
     ScalarMessage(
         usize, /* sender */
-        usize, /* unused */
+        usize, /* context */
         usize, /* id */
         usize, /* arg1 */
         usize, /* arg2 */
@@ -156,7 +160,7 @@ enum QueuedMessage {
     ),
     MemoryMessageSend(
         usize, /* sender */
-        usize, /* unused */
+        usize, /* context */
         usize, /* id */
         usize, /* buf */
         usize, /* buf_size */
@@ -165,7 +169,7 @@ enum QueuedMessage {
     ),
     MemoryMessageROLend(
         usize, /* sender */
-        usize, /* unused */
+        usize, /* context */
         usize, /* id */
         usize, /* buf */
         usize, /* buf_size */
@@ -174,7 +178,7 @@ enum QueuedMessage {
     ),
     MemoryMessageRWLend(
         usize, /* sender */
-        usize, /* unused */
+        usize, /* context */
         usize, /* id */
         usize, /* buf */
         usize, /* buf_size */
@@ -203,87 +207,132 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn take_next_message(&mut self) -> Option<xous::MessageEnvelope> {
+    /// Remove a message from the server's queue and replace it with
+    /// QueuedMessage::Empty. Advance the queue pointer while we're at it.
+    pub fn take_next_message(&mut self) -> Option<(xous::MessageEnvelope, usize)> {
         let result = match self.queue[self.queue_index] {
             QueuedMessage::Empty => return None,
             QueuedMessage::MemoryMessageROLend(
                 sender,
-                _unused,
+                context,
                 id,
                 buf,
                 buf_size,
                 offset,
                 valid,
-            ) => xous::MessageEnvelope {
-                sender: sender,
-                message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
-                    id,
-                    buf: MemoryAddress::new(buf),
-                    buf_size: MemorySize::new(buf_size),
-                    _offset: MemorySize::new(offset),
-                    _valid: MemorySize::new(valid),
-                }),
-            },
+            ) => (
+                xous::MessageEnvelope {
+                    sender: sender,
+                    message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
+                        id,
+                        buf: MemoryAddress::new(buf),
+                        buf_size: MemorySize::new(buf_size),
+                        _offset: MemorySize::new(offset),
+                        _valid: MemorySize::new(valid),
+                    }),
+                },
+                context,
+            ),
             QueuedMessage::MemoryMessageRWLend(
                 sender,
-                _unused,
+                context,
                 id,
                 buf,
                 buf_size,
                 offset,
                 valid,
-            ) => xous::MessageEnvelope {
-                sender: sender,
-                message: xous::Message::MutableBorrow(xous::MemoryMessage {
-                    id,
-                    buf: MemoryAddress::new(buf),
-                    buf_size: MemorySize::new(buf_size),
-                    _offset: MemorySize::new(offset),
-                    _valid: MemorySize::new(valid),
-                }),
-            },
-            QueuedMessage::MemoryMessageSend(
-                sender,
-                _unused,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => xous::MessageEnvelope {
-                sender: sender,
-                message: xous::Message::Move(xous::MemoryMessage {
-                    id,
-                    buf: MemoryAddress::new(buf),
-                    buf_size: MemorySize::new(buf_size),
-                    _offset: MemorySize::new(offset),
-                    _valid: MemorySize::new(valid),
-                }),
-            },
-            QueuedMessage::ScalarMessage(
-                sender,
-                _unused,
-                id,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-            ) => xous::MessageEnvelope {
-                sender: sender,
-                message: xous::Message::Scalar(xous::ScalarMessage {
-                    id,
-                    arg1,
-                    arg2,
-                    arg3,
-                    arg4,
-                }),
-            },
+            ) => (
+                xous::MessageEnvelope {
+                    sender: sender,
+                    message: xous::Message::MutableBorrow(xous::MemoryMessage {
+                        id,
+                        buf: MemoryAddress::new(buf),
+                        buf_size: MemorySize::new(buf_size),
+                        _offset: MemorySize::new(offset),
+                        _valid: MemorySize::new(valid),
+                    }),
+                },
+                context,
+            ),
+            QueuedMessage::MemoryMessageSend(sender, context, id, buf, buf_size, offset, valid) => {
+                (
+                    xous::MessageEnvelope {
+                        sender: sender,
+                        message: xous::Message::Move(xous::MemoryMessage {
+                            id,
+                            buf: MemoryAddress::new(buf),
+                            buf_size: MemorySize::new(buf_size),
+                            _offset: MemorySize::new(offset),
+                            _valid: MemorySize::new(valid),
+                        }),
+                    },
+                    context,
+                )
+            }
+            QueuedMessage::ScalarMessage(sender, context, id, arg1, arg2, arg3, arg4) => (
+                xous::MessageEnvelope {
+                    sender: sender,
+                    message: xous::Message::Scalar(xous::ScalarMessage {
+                        id,
+                        arg1,
+                        arg2,
+                        arg3,
+                        arg4,
+                    }),
+                },
+                context,
+            ),
         };
+        self.queue[self.queue_index] = QueuedMessage::Empty;
         self.queue_index += 1;
         if self.queue_index >= self.queue.len() {
             self.queue_index = 0;
         }
         Some(result)
+    }
+
+    /// Add the given message to this server's queue.
+    pub fn queue_message(
+        &mut self,
+        envelope: xous::MessageEnvelope,
+        context: usize,
+    ) -> core::result::Result<(), xous::Error> {
+        if self.queue[self.queue_index] != QueuedMessage::Empty {
+            return Err(xous::Error::ServerQueueFull);
+        }
+
+        self.queue_index += 1;
+        if self.queue_index >= self.queue.len() {
+            self.queue_index = 0;
+        }
+        Ok(())
+    }
+
+    /// Return a context ID that is available and blocking.  If no such context ID exists,
+    /// or if this server isn't actually ready to receive packets, return None.
+    pub fn take_available_context(&mut self) -> Option<usize> {
+        let context_index = match self.state {
+            ServerState::Ready(0) => return None,
+            ServerState::Ready(x) => x,
+            _ => return None,
+        };
+
+        let mut test_ctx_mask = 1;
+        let mut ctx_number = 0;
+        loop {
+            // If the context mask matches this context number, remove it
+            // and return the index.
+            if context_index & test_ctx_mask == test_ctx_mask {
+                self.state = ServerState::Ready(context_index & !test_ctx_mask);
+                return Some(ctx_number);
+            }
+            // Advance to the next slot.
+            test_ctx_mask = test_ctx_mask.rotate_left(1);
+            ctx_number = ctx_number + 1;
+            if test_ctx_mask == 1 {
+                panic!("didn't find a free context, even though there should be one");
+            }
+        }
     }
 }
 
@@ -326,6 +375,12 @@ pub struct SystemServices {
 
     /// A table of all servers in the system
     servers: [Server; MAX_SERVER_COUNT],
+
+    /// A log of the currently-active syscall depth
+    syscall_stack: [(usize, usize); 3],
+
+    /// How many entries there are on the syscall stack
+    syscall_depth: usize,
 }
 
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
@@ -342,6 +397,8 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         queue_index: 0,
         queue: &[],
     }; MAX_SERVER_COUNT],
+    syscall_stack: [(0, 0), (0, 0), (0, 0)],
+    syscall_depth: 0,
 };
 
 impl core::fmt::Debug for Process {

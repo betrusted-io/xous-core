@@ -51,6 +51,12 @@ impl Process {
         &mut self.contexts[self.context_nr as usize - 1]
     }
 
+    /// Return the current context number.
+    /// Context numbers are 0-indexed
+    pub fn current_context_nr(&self) -> usize {
+        self.context_nr as usize - 1
+    }
+
     pub fn trap_context(&mut self) -> &mut ProcessContext {
         &mut self.trap_context
     }
