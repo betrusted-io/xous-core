@@ -13,13 +13,12 @@ pub struct Process {
     scratch: usize,
 
     /// The index into the `contexts` list.  This must never be 0.
-    context_nr: usize,
+    context_nr: u16,
 
     /// The previous context number prior to banking
-    banked_context_nr: usize,
+    banked_context_nr: u16,
 
     _hash: [usize; 8],
-    _padding: [usize; 14],
 
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
@@ -49,7 +48,7 @@ pub struct ProcessContext {
 impl Process {
     pub fn current_context(&mut self) -> &mut ProcessContext {
         // println!("current_context({:?}", self);
-        &mut self.contexts[self.context_nr - 1]
+        &mut self.contexts[self.context_nr as usize - 1]
     }
 
     pub fn trap_context(&mut self) -> &mut ProcessContext {

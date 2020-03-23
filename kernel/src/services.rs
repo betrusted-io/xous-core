@@ -90,6 +90,9 @@ pub struct ProcessInner {
 
     /// Maximum size of the heap
     pub mem_heap_max: usize,
+
+    /// Which context to return to when `reply_message()` is called
+    pub ctx_reply: [(PID, u8); 30],
 }
 
 impl Default for ProcessInner {
@@ -102,6 +105,7 @@ impl Default for ProcessInner {
             mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
             mem_heap_max: 524288,
+            ctx_reply: [(0, 0); 30],
         }
     }
 }
