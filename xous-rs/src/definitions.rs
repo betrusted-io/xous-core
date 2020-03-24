@@ -36,7 +36,8 @@ pub enum Error {
     ProcessTerminated = 12,
     Timeout = 13,
     InternalError = 14,
-    UnhandledSyscall = 15,
+    ServerQueueFull = 15,
+    UnhandledSyscall = 16,
 }
 
 #[repr(C)]

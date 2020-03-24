@@ -144,9 +144,9 @@ pub enum SysCall {
     WaitEvent,
 
     /// This context will now wait for a message with the given server ID..
-    /// You can set up a pool by having multiple threads call `WaitMessage`
+    /// You can set up a pool by having multiple threads call `ReceiveMessage`
     /// with the same SID.
-    WaitMessage(SID),
+    ReceiveMessage(SID),
 
     /// Stop running the given process.
     Suspend(PID, CpuID),
@@ -270,7 +270,7 @@ enum SysCallNumber {
     UpdateMemoryFlags = 12,
     SetMemRegion = 13,
     CreateServer = 14,
-    WaitMessage = 15,
+    ReceiveMessage = 15,
     SendMessage = 16,
     Connect = 17,
     Invalid,
@@ -299,8 +299,8 @@ impl SysCall {
             ],
             SysCall::Yield => [SysCallNumber::Yield as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::WaitEvent => [SysCallNumber::WaitEvent as usize, 0, 0, 0, 0, 0, 0, 0],
-            SysCall::WaitMessage(sid) => [
-                SysCallNumber::WaitMessage as usize,
+            SysCall::ReceiveMessage(sid) => [
+                SysCallNumber::ReceiveMessage as usize,
                 sid.0,
                 sid.1,
                 sid.2,
@@ -455,7 +455,7 @@ impl SysCall {
             ),
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
-            Some(SysCallNumber::WaitMessage) => SysCall::WaitMessage((a1, a2, a3, a4)),
+            Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
             Some(SysCallNumber::Suspend) => SysCall::Suspend(a1 as PID, a2),
             Some(SysCallNumber::ClaimInterrupt) => {
                 SysCall::ClaimInterrupt(a1, a2 as *mut usize, a3 as *mut usize)
@@ -674,7 +674,7 @@ pub fn connect(server: SID) -> core::result::Result<CID, Error> {
 /// # Errors
 ///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
-    let result = rsyscall(SysCall::WaitMessage(server)).expect("Couldn't call watimessage");
+    let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call watimessage");
     Err(Error::UnhandledSyscall)
 }
 
