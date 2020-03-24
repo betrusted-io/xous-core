@@ -228,7 +228,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::ReceiveMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
             // See if there is a pending message.  If so, return immediately.
-            let mut server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
+            let server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
 
             // Ensure the server is for this PID
             if server.pid != pid {
@@ -269,10 +269,13 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
-            let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+            let available_contexts = {
+                let mut server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+                server.take_available_context()
+            };
 
             // If the server has an available context to receive the message, transfer it right away.
-            if let Some(ctx_number) = server.take_available_context() {
+            if let Some(ctx_number) = available_contexts {
                 // We can pass control on to this context, and add the existing context
                 // to the blocking pool.
             } else {
@@ -283,6 +286,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.
+                let mut server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
                 server.queue_message(MessageEnvelope { sender: 0, message }, context_nr)?;
 
                 // Park this context.  This is roughly equivalent to a "Yield".

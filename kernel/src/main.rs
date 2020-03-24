@@ -15,9 +15,11 @@ mod arch;
 #[macro_use]
 mod args;
 mod irq;
+mod macros;
 mod mem;
 mod services;
 mod syscall;
+mod server;
 
 use mem::MemoryManagerHandle;
 use services::SystemServicesHandle;
@@ -57,7 +59,7 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
     // pick the next process in the list.
-    let mut current_pid = last_pid.unwrap_or(0) as usize + 1;
+    let current_pid = last_pid.unwrap_or(0) as usize;
 
     let system_services = SystemServicesHandle::get();
     for test_idx in current_pid..system_services.processes.len() {

@@ -3,9 +3,11 @@ use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
 pub use crate::arch::ProcessContext;
 use crate::args::KernelArguments;
+use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::server::Server;
 use core::{mem, slice};
-use xous::{MemoryAddress, MemoryFlags, MemorySize, CID, PID, SID};
+use xous::{ MemoryFlags, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -125,229 +127,6 @@ impl Process {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-#[repr(usize)]
-enum ServerState {
-    /// This server slot is unallocated
-    Free,
-
-    /// This server can receive messages.
-    /// The `context mask` is a bitfield of contexts that are
-    /// able to handle this message.
-    /// If there are no available contexts, then messages will
-    /// need to be queued.
-    Ready(usize /* context mask */),
-
-    /// This server's inbox is full
-    Full,
-}
-
-/// Internal representation of a queued message for a server.
-/// This should be exactly 8 words / 32 bytes, yielding 128
-/// queued messages per server
-#[repr(usize)]
-#[derive(PartialEq)]
-enum QueuedMessage {
-    Empty,
-    ScalarMessage(
-        usize, /* sender */
-        usize, /* context */
-        usize, /* id */
-        usize, /* arg1 */
-        usize, /* arg2 */
-        usize, /* arg3 */
-        usize, /* arg4 */
-    ),
-    MemoryMessageSend(
-        usize, /* sender */
-        usize, /* context */
-        usize, /* id */
-        usize, /* buf */
-        usize, /* buf_size */
-        usize, /* offset */
-        usize, /* valid */
-    ),
-    MemoryMessageROLend(
-        usize, /* sender */
-        usize, /* context */
-        usize, /* id */
-        usize, /* buf */
-        usize, /* buf_size */
-        usize, /* offset */
-        usize, /* valid */
-    ),
-    MemoryMessageRWLend(
-        usize, /* sender */
-        usize, /* context */
-        usize, /* id */
-        usize, /* buf */
-        usize, /* buf_size */
-        usize, /* offset */
-        usize, /* valid */
-    ),
-}
-
-/// A pointer to resolve a server ID to a particular process
-#[derive(Copy, Clone)]
-pub struct Server {
-    /// A randomly-generated ID
-    sid: SID,
-
-    /// The process that owns this server
-    pub pid: PID,
-
-    /// The current state of this slot
-    state: ServerState,
-
-    /// An index into the queue
-    queue_index: usize,
-
-    /// Where data will appear
-    queue: &'static [QueuedMessage],
-}
-
-impl Server {
-    /// Remove a message from the server's queue and replace it with
-    /// QueuedMessage::Empty. Advance the queue pointer while we're at it.
-    pub fn take_next_message(&mut self) -> Option<(xous::MessageEnvelope, usize)> {
-        let result = match self.queue[self.queue_index] {
-            QueuedMessage::Empty => return None,
-            QueuedMessage::MemoryMessageROLend(
-                sender,
-                context,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => (
-                xous::MessageEnvelope {
-                    sender: sender,
-                    message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
-                        id,
-                        buf: MemoryAddress::new(buf),
-                        buf_size: MemorySize::new(buf_size),
-                        _offset: MemorySize::new(offset),
-                        _valid: MemorySize::new(valid),
-                    }),
-                },
-                context,
-            ),
-            QueuedMessage::MemoryMessageRWLend(
-                sender,
-                context,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => (
-                xous::MessageEnvelope {
-                    sender: sender,
-                    message: xous::Message::MutableBorrow(xous::MemoryMessage {
-                        id,
-                        buf: MemoryAddress::new(buf),
-                        buf_size: MemorySize::new(buf_size),
-                        _offset: MemorySize::new(offset),
-                        _valid: MemorySize::new(valid),
-                    }),
-                },
-                context,
-            ),
-            QueuedMessage::MemoryMessageSend(sender, context, id, buf, buf_size, offset, valid) => {
-                (
-                    xous::MessageEnvelope {
-                        sender: sender,
-                        message: xous::Message::Move(xous::MemoryMessage {
-                            id,
-                            buf: MemoryAddress::new(buf),
-                            buf_size: MemorySize::new(buf_size),
-                            _offset: MemorySize::new(offset),
-                            _valid: MemorySize::new(valid),
-                        }),
-                    },
-                    context,
-                )
-            }
-            QueuedMessage::ScalarMessage(sender, context, id, arg1, arg2, arg3, arg4) => (
-                xous::MessageEnvelope {
-                    sender: sender,
-                    message: xous::Message::Scalar(xous::ScalarMessage {
-                        id,
-                        arg1,
-                        arg2,
-                        arg3,
-                        arg4,
-                    }),
-                },
-                context,
-            ),
-        };
-        self.queue[self.queue_index] = QueuedMessage::Empty;
-        self.queue_index += 1;
-        if self.queue_index >= self.queue.len() {
-            self.queue_index = 0;
-        }
-        Some(result)
-    }
-
-    /// Add the given message to this server's queue.
-    pub fn queue_message(
-        &mut self,
-        envelope: xous::MessageEnvelope,
-        context: usize,
-    ) -> core::result::Result<(), xous::Error> {
-        if self.queue[self.queue_index] != QueuedMessage::Empty {
-            return Err(xous::Error::ServerQueueFull);
-        }
-
-        self.queue_index += 1;
-        if self.queue_index >= self.queue.len() {
-            self.queue_index = 0;
-        }
-        Ok(())
-    }
-
-    /// Return a context ID that is available and blocking.  If no such context ID exists,
-    /// or if this server isn't actually ready to receive packets, return None.
-    pub fn take_available_context(&mut self) -> Option<usize> {
-        let context_index = match self.state {
-            ServerState::Ready(0) => return None,
-            ServerState::Ready(x) => x,
-            _ => return None,
-        };
-
-        let mut test_ctx_mask = 1;
-        let mut ctx_number = 0;
-        loop {
-            // If the context mask matches this context number, remove it
-            // and return the index.
-            if context_index & test_ctx_mask == test_ctx_mask {
-                self.state = ServerState::Ready(context_index & !test_ctx_mask);
-                return Some(ctx_number);
-            }
-            // Advance to the next slot.
-            test_ctx_mask = test_ctx_mask.rotate_left(1);
-            ctx_number = ctx_number + 1;
-            if test_ctx_mask == 1 {
-                panic!("didn't find a free context, even though there should be one");
-            }
-        }
-    }
-}
-
-impl Default for Server {
-    fn default() -> Self {
-        Server {
-            sid: (0, 0, 0, 0),
-            pid: 0,
-            state: ServerState::Free,
-            queue_index: 0,
-            queue: &[],
-        }
-    }
-}
-
 #[repr(C)]
 /// The stage1 bootloader sets up some initial processes.  These are reported
 /// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
@@ -374,7 +153,7 @@ pub struct SystemServices {
     pub processes: [Process; MAX_PROCESS_COUNT],
 
     /// A table of all servers in the system
-    servers: [Server; MAX_SERVER_COUNT],
+    servers: [Option<Server>; MAX_SERVER_COUNT],
 
     /// A log of the currently-active syscall depth
     syscall_stack: [(usize, usize); 3],
@@ -390,13 +169,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: 0,
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
     }; MAX_PROCESS_COUNT],
-    servers: [Server {
-        sid: (0, 0, 0, 0),
-        pid: 0,
-        state: ServerState::Free,
-        queue_index: 0,
-        queue: &[],
-    }; MAX_SERVER_COUNT],
+    servers: filled_array![None; 32], // Note we can't use MAX_SERVER_COUNT here because of how Rust's tokenization works
     syscall_stack: [(0, 0), (0, 0), (0, 0)],
     syscall_depth: 0,
 };
@@ -637,33 +410,22 @@ impl SystemServices {
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
         println!("Server entries are {} bytes long", mem::size_of::<Server>());
-        assert!(
-            mem::size_of::<QueuedMessage>() == 32,
-            "QueuedMessage was supposed to be 32 bytes, but instead was {} bytes",
-            mem::size_of::<QueuedMessage>()
-        );
 
         for entry in self.servers.iter_mut() {
-            if entry.state == ServerState::Free {
-                let pid = self.pid;
+            if entry == &None {
                 println!("Found a free slot.  Allocating an entry");
-                // Allocate memory for the new server.
-                entry.queue = {
+                let pid = self.pid;
+                let sid = (pid as usize, name as usize, pid as usize, name as usize);
+                let (addr, size) = {
                     let mut mm = MemoryManagerHandle::get();
-                    let page = mm.map_zeroed_page(pid, false)?;
-                    unsafe {
-                        slice::from_raw_parts_mut(
-                            page as *mut QueuedMessage,
-                            PAGE_SIZE / mem::size_of::<QueuedMessage>(),
-                        )
-                    }
+                    (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
                 };
-                println!("Managed to allocate a handle");
-                entry.state = ServerState::Ready(0);
-                entry.pid = self.pid;
-                entry.sid = (pid as usize, name as usize, pid as usize, name as usize);
-                println!("Returning SID");
-                return Ok(entry.sid);
+                Server::init(entry, pid, sid, addr, size).or_else(|x| {
+                    let mut mm = MemoryManagerHandle::get();
+                    mm.unmap_page(addr);
+                    Err(x)
+                })?;
+                return Ok(sid);
             }
         }
         Err(xous::Error::OutOfMemory)
@@ -685,24 +447,28 @@ impl SystemServices {
                 slot_idx = Some(idx);
             }
             // If a connection to this server ID exists already, return it.
-            if self.servers[*server_idx as usize].sid == sid {
-                return Ok(idx as CID + 1);
+            if let Some(allocated_server) = &self.servers[*server_idx as usize] {
+                if allocated_server.sid == sid {
+                    return Ok(idx as CID + 1);
+                }
             }
         }
         let slot_idx = slot_idx.ok_or_else(|| xous::Error::OutOfMemory)?;
 
         // Look through all servers for one whose SID matches.
         for (idx, server) in self.servers.iter().enumerate() {
-            if server.sid == sid {
-                process.inner.connection_map[slot_idx] = idx as u8 + 1;
-                return Ok(idx + 1);
+            if let Some(allocated_server) = server {
+                if allocated_server.sid == sid {
+                    process.inner.connection_map[slot_idx] = idx as u8 + 1;
+                    return Ok(idx + 1);
+                }
             }
         }
         Err(xous::Error::OutOfMemory)
     }
 
     /// Return a server based on the connection id and the current process
-    pub fn server_from_cid(&self, cid: CID) -> Option<&Server> {
+    pub fn server_from_cid(&mut self, cid: CID) -> Option<&mut Server> {
         if cid == 0 {
             return None;
         }
@@ -718,18 +484,17 @@ impl SystemServices {
         if server_idx >= self.servers.len() {
             return None;
         }
-        if let ServerState::Ready(_) = self.servers[server_idx].state {
-        } else {
-            return None;
-        }
-        Some(&self.servers[server_idx])
+
+        self.servers[server_idx].as_mut()
     }
 
     /// Get a server based on a SID
     pub fn server_mut(&mut self, sid: SID) -> Option<&mut Server> {
         for server in self.servers.iter_mut() {
-            if server.sid == sid {
-                return Some(server);
+            if let Some(active_server) = server {
+                if active_server.sid == sid {
+                    return server.as_mut();
+                }
             }
         }
         None
