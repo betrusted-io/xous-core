@@ -51,10 +51,10 @@ _start:
 _start_trap:
     csrw        sscratch, sp
     li          sp, 0xff801000
-    STORE       x1, 0*REGBYTES(sp)
-    LOAD        x1, 1*REGBYTES(sp)
-    slli        x1, x1, 7
-    add         sp, sp, x1
+    STORE       x1, 0*REGBYTES(sp)  // Store x1 in the scratch field
+    lh          x1, 1*REGBYTES(sp)  // Load current context number
+    slli        x1, x1, 7           // Multiply current context number by 32
+    add         sp, sp, x1          // Set $sp to 0xff801000 + (current_context * 32)
 
     STORE       x1, 0*REGBYTES(sp)
     // Skip SP for now
