@@ -2,7 +2,7 @@ use crate::arch;
 use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::services::{ProcessState, SystemServicesHandle};
+use crate::services::{Process, ProcessState, SystemServicesHandle};
 use core::mem;
 use xous::*;
 
@@ -160,7 +160,8 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     unsafe { r.base.write_bytes(0, r.size / mem::size_of::<usize>()) };
                 }
                 for offset in ((r.base as usize)..(r.base as usize + r.size)).step_by(PAGE_SIZE) {
-                    crate::arch::mem::hand_page_to_user(offset as *mut usize).expect("couldn't hand page to user");
+                    crate::arch::mem::hand_page_to_user(offset as *mut usize)
+                        .expect("couldn't hand page to user");
                 }
             }
             Ok(result)
@@ -214,8 +215,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .map(|_| xous::Result::ResumeProcess)
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
-            interrupt_claim(no, pid as definitions::PID, callback, arg)
-                .map(|_| xous::Result::Ok)
+            interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
         }
         SysCall::Yield => {
             let mut ss = SystemServicesHandle::get();
@@ -242,6 +242,9 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // There is no pending message, so return control to the parent process
             // and mark ourselves as awaiting an event.
+            let context_nr = Process::current_context_nr();
+            server.park_context(context_nr);
+
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
             ss.resume_pid(ppid, ProcessState::Sleeping)
@@ -259,8 +262,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::CreateServer(name) => {
             let mut ss = SystemServicesHandle::get();
-            ss.create_server(name)
-                .map(|x| xous::Result::ServerID(x))
+            ss.create_server(name).map(|x| xous::Result::ServerID(x))
         }
         SysCall::Connect(sid) => {
             let mut ss = SystemServicesHandle::get();
@@ -276,13 +278,20 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // If the server has an available context to receive the message, transfer it right away.
             if let Some(ctx_number) = available_contexts {
-                // We can pass control on to this context, and add the existing context
-                // to the blocking pool.
+                println!("There are contexts available to handle this message");
+
+                // Determine whether the call is blocking.  If so, switch to the
+                // server context right away.
+                let blocking = match message {
+                    Message::MutableBorrow(_) | Message::ImmutableBorrow(_) => true,
+                    Message::Scalar(_) | Message::Move(_) => false,
+                };
+
             } else {
+                println!("No contexts available to handle this.  Queueing message and parking this context.");
                 // There is no server context we can use, so add the message to
                 // the queue.
-                let current_pid = ss.current_pid();
-                let context_nr = ss.get_process(current_pid)?.current_context_nr();
+                let context_nr = Process::current_context_nr();
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.

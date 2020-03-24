@@ -122,7 +122,7 @@ impl Process {
         }
     }
 
-    pub fn current_context_nr(&self) -> usize {
+    pub fn current_context_nr() -> usize {
         ProcessHandle::get().current_context_nr()
     }
 }
@@ -470,21 +470,22 @@ impl SystemServices {
     /// Return a server based on the connection id and the current process
     pub fn server_from_cid(&mut self, cid: CID) -> Option<&mut Server> {
         if cid == 0 {
+            println!("CID is 0, returning");
             return None;
         }
+        let cid = cid - 1;
         let process = ProcessHandle::get();
         if cid >= process.inner.connection_map.len() {
+            println!("CID {} > connection map len", cid);
             return None;
         }
         let server_idx = process.inner.connection_map[cid] as usize;
-        if server_idx == 0 {
-            return None;
-        }
-        let server_idx = server_idx - 1;
         if server_idx >= self.servers.len() {
+            println!("CID {} and server_idx >= {}", cid, server_idx);
             return None;
         }
 
+        println!("Returning self.servers[{}]", server_idx);
         self.servers[server_idx].as_mut()
     }
 

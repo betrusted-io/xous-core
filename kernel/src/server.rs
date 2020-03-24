@@ -230,4 +230,8 @@ impl Server {
             }
         }
     }
+
+    pub fn park_context(&mut self, context: usize) {
+        self.ready_contexts |= 1 << context;
+    }
 }
