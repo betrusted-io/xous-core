@@ -124,26 +124,6 @@ pub extern "C" fn main() {
         }
     }
 
-    let child_pids = {
-        let system_services = SystemServicesHandle::get();
-        let mut child_count = 0;
-        for process in system_services.processes {
-            if process.ppid == 1 {
-                child_count += 1;
-            }
-        }
-
-        let mut child_pids = [0; child_count];
-        let mut idx = 0;
-        for (process_idx, process) in system_services.processes.enumerate() {
-            if process.ppid == 1 {
-                child_pids[idx] = process_idx;
-                idx += 1;
-            }
-        }
-        child_pids
-    };
-
     let mut pid = None;
     loop {
         arch::irq::disable_all_irqs();
