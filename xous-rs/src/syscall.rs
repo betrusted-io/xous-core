@@ -58,20 +58,20 @@ impl From<usize> for MemoryType {
 
 #[derive(Debug)]
 pub enum SysCall {
-    /// Allocates pages of memory, equal to a total of `size`
-    /// bytes.  A physical address may be specified, which can be
-    /// used to allocate regions such as memory-mapped I/O.
+    /// Allocates pages of memory, equal to a total of `size` bytes.  A physical
+    /// address may be specified, which can be used to allocate regions such as
+    /// memory-mapped I/O.
     ///
-    /// If a virtual address is specified, then the returned
-    /// pages are located at that address.  Otherwise, they
-    /// are located at the Default offset.
+    /// If a virtual address is specified, then the returned pages are located
+    /// at that address.  Otherwise, they are located at the Default offset.
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned,
-    ///                     or the size isn't a multiple of the page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's
-    ///                    memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't
+    ///                     page-aligned, or the size isn't a multiple of the
+    ///                     page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
+    ///                    the system's memory size has been exceeded.
     MapMemory(
         *mut usize,  /* phys */
         *mut usize,  /* virt */
@@ -79,15 +79,17 @@ pub enum SysCall {
         MemoryFlags, /* flags */
     ),
 
-    /// Sets the offset and size of a given memory region.  This call may only be made
-    /// by processes that have not yet started, or processes that have a PPID of 1.
-    /// Care must be taken to ensure this region doesn't run into other regions.
-    /// Additionally, the base address must avoid the kernel regions.
+    /// Sets the offset and size of a given memory region.  This call may only
+    /// be made by processes that have not yet started, or processes that have a
+    /// PPID of 1. Care must be taken to ensure this region doesn't run into
+    /// other regions. Additionally, the base address must avoid the kernel
+    /// regions.
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned,
-    ///                     or the size isn't a multiple of the page width.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't
+    ///                     page-aligned, or the size isn't a multiple of the
+    ///                     page width.
     /// * **BadAddress**: The address conflicts with the kernel
     SetMemRegion(
         PID,        /* pid */
@@ -96,40 +98,51 @@ pub enum SysCall {
         usize,      /* region size */
     ),
 
-    /// Add the given number of bytes to the heap.  The number of bytes
-    /// must be divisible by the page size.  The newly-allocated pages
-    /// will have the specified flags.  To get the current heap base,
-    /// call this with a size of `0`.
+    /// Add the given number of bytes to the heap.  The number of bytes must be
+    /// divisible by the page size.  The newly-allocated pages will have the
+    /// specified flags.  To get the current heap base, call this with a size of
+    /// `0`.
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new size of the heap */)
+    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new
+    ///   size of the heap */)
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned,
-    ///                     or the size isn't a multiple of the page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's
-    ///                    memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't
+    ///                     page-aligned, or the size isn't a multiple of the
+    ///                     page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
+    ///                    the system's memory size has been exceeded.
     IncreaseHeap(usize /* number of bytes to add */, MemoryFlags),
 
     /// Remove the given number of bytes from the heap.
     ///
     /// # Returns
     ///
-    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new size of the heap */)
+    /// * **MemoryRange(*mut usize /* The base of the heap */, usize /* the new
+    ///   size of the heap */)
     ///
     /// # Errors
     ///
-    /// * **BadAlignment**: Either the physical or virtual addresses aren't page-aligned,
-    ///                     or the size isn't a multiple of the page width.
-    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or the system's
-    ///                    memory size has been exceeded.
+    /// * **BadAlignment**: Either the physical or virtual addresses aren't
+    ///                     page-aligned, or the size isn't a multiple of the
+    ///                     page width.
+    /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
+    ///                    the system's memory size has been exceeded.
     DecreaseHeap(usize /* desired heap size */),
 
-    /// Set the specified flags on the virtual address range.
-    /// This can be used to REMOVE flags on a memory region, for example
-    /// to mark it as no-execute after writing program data.
+    /// Set the specified flags on the virtual address range. This can be used
+    /// to REMOVE flags on a memory region, for example to mark it as no-execute
+    /// after writing program data.
+    ///
+    /// # Errors
+    ///
+    /// * **ProcessNotChild**: The given PID is not a child of the current
+    ///                        process.
+    /// * **MemoryInUse**: The given PID has already been started, and it is not
+    ///                    legal to modify memory flags anymore.
     UpdateMemoryFlags(
         *mut usize,  /* virt */
         usize,       /* number of pages */
@@ -143,21 +156,29 @@ pub enum SysCall {
     /// This process will now wait for an event such as an IRQ or Message.
     WaitEvent,
 
-    /// This context will now wait for a message with the given server ID..
-    /// You can set up a pool by having multiple threads call `ReceiveMessage`
-    /// with the same SID.
+    /// This context will now wait for a message with the given server ID. You
+    /// can set up a pool by having multiple threads call `ReceiveMessage` with
+    /// the same SID.
     ReceiveMessage(SID),
 
-    /// Stop running the given process.
-    Suspend(PID, CpuID),
-
-    /// Claims an interrupt and unmasks it immediately.  The provided function will
-    /// be called from within an interrupt context, but using the ordinary privilege level of
-    /// the process.
+    /// Stop running the given process and return control to the parent. This
+    /// will force a Yield on the process currently running on the target CPU.
+    /// This can be run during an Interrupt context.
     ///
     /// # Errors
     ///
-    /// * **InterruptNotFound**: The specified interrupt isn't valid on this system
+    /// * **ProcessNotChild**: The given PID is not a child of the current
+    ///   process
+    ReturnToParentI(PID, CpuID),
+
+    /// Claims an interrupt and unmasks it immediately.  The provided function
+    /// will be called from within an interrupt context, but using the ordinary
+    /// privilege level of the process.
+    ///
+    /// # Errors
+    ///
+    /// * **InterruptNotFound**: The specified interrupt isn't valid on this
+    ///   system
     /// * **InterruptInUse**: The specified interrupt has already been claimed
     ClaimInterrupt(
         usize,      /* IRQ number */
@@ -170,19 +191,16 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    /// * **InterruptNotFound**: The specified interrupt doesn't exist, or isn't assigned
-    ///                          to this process.
+    /// * **InterruptNotFound**: The specified interrupt doesn't exist, or isn't
+    ///                          assigned to this process.
     FreeInterrupt(usize /* IRQ number */),
 
-    /// Resumes a process using the given context.  A parent could use
-    /// this function to implement multi-threading inside a child process, or
-    /// to create a task switcher.
+    /// Resumes a process using the given context.  A parent could use this
+    /// function to implement multi-threading inside a child process, or to
+    /// create a task switcher.
     ///
-    /// To resume a process exactly where it left off, set `stack_pointer` to `None`.
+    /// To resume a process exactly where it left off, set `context_id` to `0`.
     /// This would be done in a very simple system that has no threads.
-    ///
-    /// By default, at most three context switches can be made before the quantum
-    /// expires.  To enable more, pass `additional_contexts`.
     ///
     /// If no more contexts are available when one is required, then the child
     /// automatically relinquishes its quantum.
@@ -190,34 +208,32 @@ pub enum SysCall {
     /// # Returns
     ///
     /// When this function returns, it provides a list of the processes and
-    /// stack pointers that are ready to be run.  Three can fit as return values,
-    /// and additional context switches will be supplied in the slice of context
-    /// switches, if one is provided.
+    /// contexts that are ready to be run.  Three can fit as return values.
     ///
     /// # Examples
     ///
     /// If a process called `yield()`, or if its quantum expired normally, then
-    /// a single context is returned: The target thread, and its stack pointer.
+    /// a single pair is returned: (pid, context).
     ///
     /// If the child process called `client_send()` and ended up blocking due to
-    /// the server not being ready, then this would return no context switches.
-    /// This thread or process should not be scheduled to run.
+    /// the server not being ready, then this would return no pairs. This thread
+    /// or process should not be scheduled to run.
     ///
     /// If the child called `client_send()` and the server was ready, then the
     /// server process would be run immediately.  If the child process' quantum
-    /// expired while the server was running, then this function would return
-    /// a single context containing the PID of the server, and the stack pointer.
+    /// expired while the server was running, then this function would return a
+    /// single pair containing the PID of the server, and the context number.
     ///
     /// If the child called `client_send()` and the server was ready, then the
     /// server process would be run immediately.  If the server then finishes,
     /// execution flow is returned to the child process.  If the quantum then
-    /// expires, this would return two contexts: the server's PID and its stack
-    /// pointer when it called `client_reply()`, and the child's PID with its
-    /// current stack pointer.
+    /// expires, this would return two pairs: the server's PID and its context
+    /// when it called `client_reply()`, and the child's PID with its current
+    /// context.
     ///
     /// If the server in turn called another server, and both servers ended up
     /// returning to the child before the quantum expired, then there would be
-    /// three contexts on the stack.
+    /// three pairs returned.
     ///
     /// # Errors
     ///
@@ -230,23 +246,28 @@ pub enum SysCall {
     /// Create a new Server
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
-    /// to this server.  This ID will be unique per process.  You may specify
-    /// an additional `usize` value to make the ID unique.  This value will be
+    /// to this server.  This ID will be unique per process.  You may specify an
+    /// additional `usize` value to make the ID unique.  This value will be
     /// mixed in with the random value.
     ///
     /// # Returns
     ///
-    /// The ServerId can be assembled to form a 128-bit server ID in native
-    /// byte order.
+    /// The ServerId can be assembled to form a 128-bit server ID in native byte
+    /// order.
     ///
     /// # Errors
     ///
     /// * **OutOfMemory**: The server table was full and a new server couldn't
     ///                    be created.
-    CreateServer(usize /* server name */),
+    /// * **ServerExists**: The server hash is already in use.
+    CreateServer(usize /* server hash */),
 
     /// Connect to a server.   This turns a 128-bit Serever ID into a 32-bit
     /// Connection ID.
+    ///
+    /// # Errors
+    ///
+    /// * **ServerNotFound**: The server could not be found.
     Connect(SID /* server id */),
 
     /// Send a message to a server
@@ -260,7 +281,7 @@ pub enum SysCall {
 enum SysCallNumber {
     MapMemory = 2,
     Yield = 3,
-    Suspend = 4,
+    ReturnToParentI = 4,
     ClaimInterrupt = 5,
     FreeInterrupt = 6,
     SwitchTo = 7,
@@ -309,8 +330,8 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::Suspend(a1, a2) => [
-                SysCallNumber::Suspend as usize,
+            SysCall::ReturnToParentI(a1, a2) => [
+                SysCallNumber::ReturnToParentI as usize,
                 a1 as usize,
                 a2 as usize,
                 0,
@@ -385,10 +406,17 @@ impl SysCall {
 
             SysCall::CreateServer(a1) => {
                 [SysCallNumber::CreateServer as usize, a1, 0, 0, 0, 0, 0, 0]
-            },
-            SysCall::Connect(sid) => {
-                [SysCallNumber::Connect as usize, sid.0, sid.1, sid.2, sid.3, 0, 0, 0]
             }
+            SysCall::Connect(sid) => [
+                SysCallNumber::Connect as usize,
+                sid.0,
+                sid.1,
+                sid.2,
+                sid.3,
+                0,
+                0,
+                0,
+            ],
             SysCall::SendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) => [
                     SysCallNumber::SendMessage as usize,
@@ -456,7 +484,7 @@ impl SysCall {
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
-            Some(SysCallNumber::Suspend) => SysCall::Suspend(a1 as PID, a2),
+            Some(SysCallNumber::ReturnToParentI) => SysCall::ReturnToParentI(a1 as PID, a2),
             Some(SysCallNumber::ClaimInterrupt) => {
                 SysCall::ClaimInterrupt(a1, a2 as *mut usize, a3 as *mut usize)
             }
@@ -562,7 +590,12 @@ pub enum Result {
     Error(Error),
     MemoryAddress(*mut u8),
     MemoryRange(MemoryRange),
-    ResumeResult(usize, usize, usize, usize, usize, usize),
+    ReadyContexts(
+        usize, /* count */
+        usize, /* pid0 */ usize, /* context0 */
+        usize, /* pid1 */ usize, /* context1 */
+        usize, /* pid2 */ usize, /* context2 */
+    ),
     ResumeProcess,
     ServerID(SID),
     ConnectionID(CID),
@@ -689,7 +722,8 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
 pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
+    let result =
+        rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
     Err(Error::UnhandledSyscall)
 }
 
