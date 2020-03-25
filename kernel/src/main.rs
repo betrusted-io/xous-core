@@ -17,9 +17,9 @@ mod args;
 mod irq;
 mod macros;
 mod mem;
+mod server;
 mod services;
 mod syscall;
-mod server;
 
 use mem::MemoryManagerHandle;
 use services::SystemServicesHandle;
@@ -110,12 +110,8 @@ pub extern "C" fn main() {
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
         println!("Claiming IRQ 3 via syscall...");
-        xous::rsyscall(xous::SysCall::ClaimInterrupt(
-            3,
-            debug::irq as *mut usize,
-            0 as *mut usize,
-        ))
-        .expect("Couldn't claim interrupt 3");
+        xous::claim_interrupt(3, debug::irq, 0 as *mut usize)
+            .expect("Couldn't claim interrupt 3");
         print!("}} ");
     }
 
@@ -128,6 +124,26 @@ pub extern "C" fn main() {
         }
     }
 
+    let child_pids = {
+        let system_services = SystemServicesHandle::get();
+        let mut child_count = 0;
+        for process in system_services.processes {
+            if process.ppid == 1 {
+                child_count += 1;
+            }
+        }
+
+        let mut child_pids = [0; child_count];
+        let mut idx = 0;
+        for (process_idx, process) in system_services.processes.enumerate() {
+            if process.ppid == 1 {
+                child_pids[idx] = process_idx;
+                idx += 1;
+            }
+        }
+        child_pids
+    };
+
     let mut pid = None;
     loop {
         arch::irq::disable_all_irqs();
@@ -137,8 +153,7 @@ pub extern "C" fn main() {
         match pid {
             Some(pid) => {
                 println!("Attempting to switch to PID {}", pid);
-                xous::rsyscall(xous::SysCall::SwitchTo(pid, 0))
-                    .expect("couldn't switch to pid");
+                xous::rsyscall(xous::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
                 ()
             }
             None => {

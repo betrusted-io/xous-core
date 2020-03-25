@@ -83,7 +83,7 @@ impl Uart {
 }
 
 #[cfg(all(not(test), feature = "debug-print"))]
-pub fn irq(_irq_number: usize, _arg: usize) {
+pub fn irq(_irq_number: usize, _arg: *mut usize) {
     println!(
         "Interrupt {}: Key pressed: {}",
         _irq_number,

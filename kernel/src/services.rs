@@ -169,7 +169,9 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: 0,
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
     }; MAX_PROCESS_COUNT],
-    servers: filled_array![None; 32], // Note we can't use MAX_SERVER_COUNT here because of how Rust's tokenization works
+    // Note we can't use MAX_SERVER_COUNT here because of how Rust's
+    // macro tokenization works
+    servers: filled_array![None; 32],
     syscall_stack: [(0, 0), (0, 0), (0, 0)],
     syscall_depth: 0,
 };
@@ -185,9 +187,9 @@ impl core::fmt::Debug for Process {
 }
 
 impl SystemServices {
-    /// Create a new "System Services" object based on the arguments from the kernel.
-    /// These arguments decide where the memory spaces are located, as well as where
-    /// the stack and program counter should initially go.
+    /// Create a new "System Services" object based on the arguments from the
+    /// kernel. These arguments decide where the memory spaces are located, as
+    /// well as where the stack and program counter should initially go.
     pub fn init(&mut self, base: *const u32, args: &KernelArguments) {
         // Look through the kernel arguments and create a new process for each.
         let init_offsets = {
@@ -200,9 +202,9 @@ impl SystemServices {
             unsafe { slice::from_raw_parts(base as *const InitialProcess, init_count) }
         };
 
-        // Copy over the initial process list.  The pid is encoded in the SATP value
-        // from the bootloader.  For each process, translate it from a raw KernelArguments
-        // value to a SystemServices Process value.
+        // Copy over the initial process list.  The pid is encoded in the SATP
+        // value from the bootloader.  For each process, translate it from a raw
+        // KernelArguments value to a SystemServices Process value.
         for init in init_offsets.iter() {
             let pid = (init.satp >> 22) & ((1 << 9) - 1);
             let ref mut process = self.processes[(pid - 1) as usize];
@@ -293,8 +295,8 @@ impl SystemServices {
         irq_no: usize,
         arg: *mut usize,
     ) -> Result<(), xous::Error> {
-        // Get the current process (which was just interrupted) and mark
-        // it as "ready to run".
+        // Get the current process (which was just interrupted) and mark it as
+        // "ready to run".
         {
             let current_pid = self.current_pid();
             let mut current = self
@@ -308,7 +310,8 @@ impl SystemServices {
             current.state = ProcessState::Ready;
         }
 
-        // Get the new process, and ensure that it is in a state where it's fit to run.
+        // Get the new process, and ensure that it is in a state where it's fit
+        // to run.
         let mut process = self.get_process_mut(pid)?;
         match process.state {
             ProcessState::Ready | ProcessState::Running | ProcessState::Sleeping => (),
@@ -336,8 +339,8 @@ impl SystemServices {
         Ok(())
     }
 
-    /// Resume the given process, picking up exactly where it left off.
-    /// If the process is in the Setup state, set it up and then resume.
+    /// Resume the given process, picking up exactly where it left off. If the
+    /// process is in the Setup state, set it up and then resume.
     pub fn resume_pid(
         &mut self,
         pid: PID,
@@ -383,7 +386,8 @@ impl SystemServices {
             }
             new.state = ProcessState::Running;
 
-            // Mark the previous process as ready to run, since we just switched away
+            // Mark the previous process as ready to run, since we just switched
+            // away
             {
                 // println!(
                 //     "Marking previous process {} as {:?}",
@@ -405,8 +409,8 @@ impl SystemServices {
         Ok(())
     }
 
-    /// Allocate a new server ID for this process and return the address.
-    /// If the server table is full, return an error.
+    /// Allocate a new server ID for this process and return the address. If the
+    /// server table is full, return an error.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
         println!("Server entries are {} bytes long", mem::size_of::<Server>());
@@ -431,8 +435,8 @@ impl SystemServices {
         Err(xous::Error::OutOfMemory)
     }
 
-    /// Allocate a new server ID for this process and return the address.
-    /// If the server table is full, return an error.
+    /// Allocate a new server ID for this process and return the address. If the
+    /// server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
         // Check to see if we've already connected to this server.
         // While doing this, find a free slot in case we haven't
@@ -440,7 +444,8 @@ impl SystemServices {
         let mut slot_idx = None;
         let mut process = ProcessHandle::get();
 
-        // Look through the connection map for (1) a free slot, and (2) an existing connection
+        // Look through the connection map for (1) a free slot, and (2) an
+        // existing connection
         for (idx, server_idx) in process.inner.connection_map.iter().enumerate() {
             // If we find an empty slot, use it
             if *server_idx == 0 {
@@ -502,19 +507,18 @@ impl SystemServices {
     }
 }
 
-/// How many people have checked out the handle object.
-/// This should be replaced by an AtomicUsize when we get
-/// multicore support.
-/// For now, we can get away with this since the memory manager
-/// should only be accessed in an IRQ context.
+/// How many people have checked out the handle object. This should be replaced
+/// by an AtomicUsize when we get multicore support. For now, we can get away
+/// with this since the memory manager should only be accessed in an IRQ
+/// context.
 static mut SS_HANDLE_COUNT: usize = 0;
 
 pub struct SystemServicesHandle<'a> {
     manager: &'a mut SystemServices,
 }
 
-/// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-/// to the Memory Manager should only be made during interrupt contexts.
+/// Wraps the MemoryManager in a safe mutex.  Because of this, accesses to the
+/// Memory Manager should only be made during interrupt contexts.
 impl<'a> SystemServicesHandle<'a> {
     /// Get the singleton memory manager.
     pub fn get() -> SystemServicesHandle<'a> {
