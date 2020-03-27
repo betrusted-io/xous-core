@@ -15,6 +15,9 @@ pub type SID = (usize, usize, usize, usize);
 /// Connection ID
 pub type CID = usize;
 
+/// Context ID
+pub type CtxID = usize;
+
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
@@ -37,7 +40,8 @@ pub enum Error {
     Timeout = 13,
     InternalError = 14,
     ServerQueueFull = 15,
-    UnhandledSyscall = 16,
+    ContextNotAvailable = 16,
+    UnhandledSyscall = 17,
 }
 
 #[repr(C)]
