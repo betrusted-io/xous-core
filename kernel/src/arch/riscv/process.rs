@@ -5,30 +5,24 @@ use crate::services::ProcessInner;
 
 // use sha3::{Digest, Shake128};
 
-
 #[repr(C)]
 #[derive(Debug)]
 pub struct Process {
     /// Used by the interrupt handler to calculate offsets
     scratch: usize,
 
-    /// The index into the `contexts` list.  This must never be 0.
-    context_nr: u16,
-
-    /// The previous context number prior to banking
-    banked_context_nr: u16,
+    /// The index into the `contexts` list.  This must never be 0. The interrupt
+    /// handler writes to this field, so it must not be moved.
+    context_nr: usize,
 
     _hash: [usize; 8],
 
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
-    /// The interrupt handler will save the current process to this Context
-    /// when the trap handler is entered.
-    contexts: [ProcessContext; 30],
-
-    /// When a trap is handled, e.g. an IRQ, construct a new process.
-    trap_context: ProcessContext,
+    /// The interrupt handler will save the current process to this Context when
+    /// the trap handler is entered.
+    contexts: [ProcessContext; 31],
 }
 
 #[repr(C)]
@@ -38,61 +32,58 @@ pub struct ProcessContext {
     /// Storage for all RISC-V registers, minus $zero
     pub registers: [usize; 31],
 
-    /// The return address.  Note that if this context was created
-    /// because of an `ecall` instruction, you will need to add `4`
-    /// to this before returning, to prevent that instruction from
-    /// getting executed again.
+    /// The return address.  Note that if this context was created because of an
+    /// `ecall` instruction, you will need to add `4` to this before returning,
+    /// to prevent that instruction from getting executed again.
     pub sepc: usize,
 }
 
 impl Process {
     pub fn current_context(&mut self) -> &mut ProcessContext {
-        // println!("current_context({:?}", self);
-        &mut self.contexts[self.context_nr as usize - 1]
+        assert!(self.context_nr != 0, "context number was 0");
+        &mut self.contexts[self.context_nr - 1]
     }
 
-    /// Return the current context number.
-    /// Context numbers are 0-indexed
+    /// Return the current context number. Context numbers are 0-indexed.
     pub fn current_context_nr(&self) -> usize {
-        self.context_nr as usize - 1
+        assert!(self.context_nr != 0, "context number was 0");
+        self.context_nr
     }
 
-    pub fn trap_context(&mut self) -> &mut ProcessContext {
-        &mut self.trap_context
+    /// Set the current context number.
+    pub fn set_context_nr(&mut self, context: usize) {
+        assert!(
+            context > 0 && context <= self.contexts.len(),
+            "attempt to switch to an invalid context {}",
+            context
+        );
+        self.context_nr = context;
     }
 
-    /// Save the current context into a banked value, so we can handle
-    /// an interrupt.
-    pub fn bank(&mut self) {
-        if self.banked_context_nr == 0 {
-            self.banked_context_nr = self.context_nr;
-            self.context_nr = 31;  // Points to `trap_context`
-        }
-    }
-
-    /// Restore a banked context number and remove the previous bank.
-    /// Used to resume after handling an IRQ.
-    pub fn unbank(&mut self) {
-        if self.banked_context_nr != 0 {
-            self.context_nr = self.banked_context_nr;
-            self.banked_context_nr = 0;
-        }
+    pub fn context(&mut self, context_nr: usize) -> &mut ProcessContext {
+        assert!(
+            context_nr > 0 && context_nr <= self.contexts.len(),
+            "attempt to retrieve an invalid context {}",
+            context_nr
+        );
+        &mut self.contexts[context_nr - 1]
     }
 
     /// Initialize this process context with the given entrypoint and stack
     /// addresses.
-    pub fn init(&mut self, entrypoint: usize, stack: usize) {
+    pub fn init(&mut self, entrypoint: usize, stack: usize, context: usize) {
         assert!(
             mem::size_of::<Process>() == PAGE_SIZE,
             "Process size is {}, not PAGE_SIZE ({})",
             mem::size_of::<Process>(),
             PAGE_SIZE
         );
-        self.context_nr = 1;
+        // By convention, context 0 is the trap context.
+        // Therefore, context 1 is the first default context.
+        self.context_nr = context;
         for context in self.contexts.iter_mut() {
             *context = Default::default();
         }
-        self.trap_context = Default::default();
 
         let mut context = self.current_context();
 

@@ -2,7 +2,7 @@ use crate::arch;
 use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::services::{Process, ProcessState, SystemServicesHandle};
+use crate::services::SystemServicesHandle;
 use core::mem;
 use xous::*;
 
@@ -207,11 +207,8 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             Ok(xous::Result::Ok)
         }
         SysCall::SwitchTo(pid, context) => {
-            if context as usize != 0 {
-                panic!("specifying a context page is not yet supported");
-            }
             let mut ss = SystemServicesHandle::get();
-            ss.resume_pid(pid, ProcessState::Ready)
+            ss.activate_process_context(pid, context, true)
                 .map(|_| xous::Result::ResumeProcess)
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
@@ -219,14 +216,15 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::Yield => {
             let mut ss = SystemServicesHandle::get();
-            let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
+            let ppid = ss.get_process(pid).expect("can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.resume_pid(ppid, ProcessState::Ready)
+            ss.activate_process_context(ppid, 0, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
         SysCall::ReceiveMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
+            let context_nr = ss.current_context_nr();
             // See if there is a pending message.  If so, return immediately.
             let server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
 
@@ -242,12 +240,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // There is no pending message, so return control to the parent process
             // and mark ourselves as awaiting an event.
-            let context_nr = Process::current_context_nr();
             server.park_context(context_nr);
 
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.resume_pid(ppid, ProcessState::Sleeping)
+            ss.activate_process_context(ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -256,7 +253,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.resume_pid(ppid, ProcessState::Sleeping)
+            ss.activate_process_context(ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -272,7 +269,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
             let available_contexts = {
-                let mut server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+                let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
                 server.take_available_context()
             };
 
@@ -286,16 +283,15 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     Message::MutableBorrow(_) | Message::ImmutableBorrow(_) => true,
                     Message::Scalar(_) | Message::Move(_) => false,
                 };
-
             } else {
                 println!("No contexts available to handle this.  Queueing message and parking this context.");
                 // There is no server context we can use, so add the message to
                 // the queue.
-                let context_nr = Process::current_context_nr();
+                let context_nr = ss.current_context_nr();
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.
-                let mut server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+                let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
                 server.queue_message(MessageEnvelope { sender: 0, message }, context_nr)?;
 
                 // Park this context.  This is roughly equivalent to a "Yield".

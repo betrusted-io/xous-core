@@ -35,11 +35,11 @@ pub fn resume(supervisor: bool, context: &ProcessContext) -> ! {
     // Return to the appropriate CPU mode
     set_supervisor(supervisor);
 
-    // println!(
-    //     "Switching to PID {}, SP: {:08x}, PC: {:08x}",
-    //     crate::arch::current_pid(),
-    //     context.registers[1],
-    //     context.sepc,
-    // );
+    println!(
+        "Switching to PID {}, SP: {:08x}, PC: {:08x}",
+        crate::arch::current_pid(),
+        context.registers[1],
+        context.sepc,
+    );
     unsafe { _xous_resume_context(context.registers.as_ptr()) };
 }

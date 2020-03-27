@@ -64,9 +64,8 @@ pub struct Server {
     /// Where data will appear
     queue: &'static mut [QueuedMessage],
 
-    /// The `context mask` is a bitfield of contexts that are
-    /// able to handle this message.
-    /// If there are no available contexts, then messages will
+    /// The `context mask` is a bitfield of contexts that are able to handle
+    /// this message. If there are no available contexts, then messages will
     /// need to be queued.
     ready_contexts: usize,
 }

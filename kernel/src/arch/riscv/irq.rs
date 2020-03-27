@@ -2,7 +2,7 @@ use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::services::{ProcessContext, ProcessState, SystemServicesHandle, RETURN_FROM_ISR};
+use crate::services::{ProcessContext, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID};
 
@@ -34,7 +34,7 @@ pub fn disable_irq(irq_no: usize) {
     sim::write(sim::read() & !(1 << irq_no));
 }
 
-static mut PREVIOUS_PID: Option<PID> = None;
+static mut PREVIOUS_PAIR: Option<(PID, usize)> = None;
 
 // fn map_page_and_return(pc: usize, addr: usize, pid: PID, flags: MemoryFlags) {
 //     assert!(
@@ -106,18 +106,18 @@ pub extern "C" fn trap_handler(
 
         let response = crate::syscall::handle(call).unwrap_or_else(|e| xous::Result::Error(e));
 
+
         println!("Result: {:?}", response);
         let mut process = ProcessHandle::get();
         let ctx = process.current_context();
 
-        // If we're resuming a process that was previously sleeping, restore the context.
-        // Otherwise, keep the context the same but pass the return values in 8 return
-        // registers.
+        // If we're resuming a process that was previously sleeping, restore the
+        // context. Otherwise, keep the context the same but pass the return
+        // values in 8 return registers.
         if response == xous::Result::ResumeProcess {
             crate::arch::syscall::resume(current_pid() == 1, ctx);
         } else {
             println!("Returning to address {:08x}", ctx.sepc);
-            // crate::arch::syscall::resume(current_pid() == 1, ctx);
             unsafe { _xous_syscall_return_result(&response, ctx) };
         }
     }
@@ -174,26 +174,26 @@ pub extern "C" fn trap_handler(
                 }
             }
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
-                unsafe {
-                    // Restore the process context from the current process from
-                    // before the time that the interrupt was executed.
-                    let mut process = ProcessHandle::get();
-                    process.unbank();
+                // If we hit this address, then an ISR has just returned.  Since
+                // we're in an interrupt context, it is safe to access this
+                // global variable.
+                let (previous_pid, previous_context) = unsafe {
+                    PREVIOUS_PAIR.expect("got an instruction page fault with no previous PID")
+                };
+                println!("Resuming previous pair of ({}, {})", previous_pid, previous_context);
 
-                    if let Some(previous_pid) = PREVIOUS_PID.take() {
-                        // Switch to the previous process' address space.
-                        SystemServicesHandle::get()
-                            .resume_pid(previous_pid, ProcessState::Ready)
-                            .expect("unable to resume previous PID");
-
-                        // Re-enable interrupts now that they're handled
-                        enable_all_irqs();
-
-                        let mut process = ProcessHandle::get();
-                        crate::arch::syscall::resume(current_pid() == 1, process.current_context());
-                    }
+                // Switch to the previous process' address space.
+                {
+                    let mut ss = SystemServicesHandle::get();
+                    ss.activate_process_context(previous_pid, previous_context, true)
+                        .expect("unable to resume previous PID");
                 }
-                println!("Got an instruction page fault with no previous PID");
+
+                // Re-enable interrupts now that they're handled
+                enable_all_irqs();
+
+                let mut process = ProcessHandle::get();
+                crate::arch::syscall::resume(current_pid() == 1, process.current_context());
             }
             _ => (),
         }
@@ -204,12 +204,17 @@ pub extern "C" fn trap_handler(
         // Safe to access globals since interrupts are disabled
         // when this function runs.
         unsafe {
-            if PREVIOUS_PID.is_none() {
-                PREVIOUS_PID = Some(pid);
+            if PREVIOUS_PAIR.is_none() {
+                let context_nr = SystemServicesHandle::get().current_context_nr();
+                PREVIOUS_PAIR = Some((pid, context_nr));
+                println!("Setting previous pair to ({}, {})", pid, context_nr);
+            }
+            else {
+                println!("Previous pair is not None");
             }
         }
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
         let mut process = ProcessHandle::get();
-        crate::arch::syscall::resume(current_pid() == 1, process.trap_context());
+        crate::arch::syscall::resume(current_pid() == 1, process.current_context());
     }
 }

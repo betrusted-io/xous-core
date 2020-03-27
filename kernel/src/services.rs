@@ -7,7 +7,7 @@ use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 use core::{mem, slice};
-use xous::{ MemoryFlags, CID, PID, SID};
+use xous::{MemoryFlags, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -18,29 +18,32 @@ pub use crate::arch::mem::DEFAULT_STACK_TOP;
 /// to return from an ISR.
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
+pub const INITIAL_CONTEXT: usize = 2;
+pub const IRQ_CONTEXT: usize = 1;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ProcessState {
     /// This is an unallocated, free process
     Free,
 
-    /// This is a brand-new process that hasn't been run
-    /// yet, and needs its stack and entrypoint set up.
+    /// This is a brand-new process that hasn't been run yet, and needs its
+    /// stack and entrypoint set up.
     Setup(
         usize, /* entrypoint */
         usize, /* stack */
         usize, /* stack size */
     ),
 
-    /// This process is able to be run
-    Ready,
+    /// This process is able to be run.  The context bitmask describes contexts
+    /// that are ready.
+    Ready(usize /* context bitmask */),
 
-    /// This is the current active process
-    Running,
+    /// This is the current active process.  The context bitmask describes
+    /// contexts that are ready, excluding the currently-executing context.
+    Running(usize /* context bitmask */),
 
-    /// This process is waiting for a
-
-    /// This process is waiting for an event, such as
-    /// as message or an interrupt
+    /// This process is waiting for an event, such as as message or an
+    /// interrupt.  There are no contexts that can be run.
     Sleeping,
 }
 
@@ -60,9 +63,16 @@ pub struct Process {
     /// Where this process is in terms of lifecycle
     state: ProcessState,
 
-    /// The process that created this process, which tells
-    /// who is allowed to manipulate this process.
+    /// The process that created this process, which tells who is allowed to
+    /// manipulate this process.
     pub ppid: PID,
+
+    /// The current context (i.e. thread)
+    current_context: u8,
+
+    /// The context number that was active before this process was switched
+    /// away.
+    previous_context: u8,
 }
 
 /// This is per-process data.  The arch-specific definitions will instantiate
@@ -93,7 +103,7 @@ pub struct ProcessInner {
     /// Maximum size of the heap
     pub mem_heap_max: usize,
 
-    /// A mapping of connection IDs to servers
+    /// A mapping of connection IDs to server indexes
     pub connection_map: [u8; 32],
     pub _reserved: [u8; 28],
 }
@@ -117,13 +127,13 @@ impl Default for ProcessInner {
 impl Process {
     pub fn runnable(&self) -> bool {
         match self.state {
-            ProcessState::Setup(_, _, _) | ProcessState::Ready => true,
+            ProcessState::Setup(_, _, _) | ProcessState::Ready(_) => true,
             _ => false,
         }
     }
 
-    pub fn current_context_nr() -> usize {
-        ProcessHandle::get().current_context_nr()
+    pub fn current_context_nr(&self) -> usize {
+        self.current_context as usize
     }
 }
 
@@ -168,6 +178,8 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         state: ProcessState::Free,
         ppid: 0,
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
+        current_context: 0,
+        previous_context: INITIAL_CONTEXT as u8,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -218,14 +230,20 @@ impl SystemServices {
             //     pid - 1
             // );
             unsafe { process.mapping.from_raw(init.satp) };
-            process.ppid = if pid == 1 { 0 } else { 1 };
-            process.state = ProcessState::Setup(init.entrypoint, init.sp, DEFAULT_STACK_SIZE);
+            if pid == 1 {
+                process.ppid = 0;
+                process.state = ProcessState::Running(0);
+            } else {
+                process.ppid = 1;
+                process.state = ProcessState::Setup(init.entrypoint, init.sp, DEFAULT_STACK_SIZE);
+            }
         }
 
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ProcessHandle::get().init(0, 0);
+        ProcessHandle::get().init(0, 0, INITIAL_CONTEXT);
+        self.processes[0].current_context = INITIAL_CONTEXT as u8;
     }
 
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous::Error> {
@@ -266,6 +284,10 @@ impl SystemServices {
         Ok(&mut self.processes[pid_idx])
     }
 
+    pub fn current_context_nr(&self) -> usize {
+        self.processes[self.pid as usize - 1].current_context as usize
+    }
+
     pub fn current_pid(&self) -> PID {
         let pid = arch::current_pid();
         assert_ne!(pid, 0, "no current process");
@@ -296,40 +318,52 @@ impl SystemServices {
         arg: *mut usize,
     ) -> Result<(), xous::Error> {
         // Get the current process (which was just interrupted) and mark it as
-        // "ready to run".
+        // "ready to run".  If this function is called when the current process
+        // isn't running, that means the system has gotten into an invalid
+        // state.
         {
             let current_pid = self.current_pid();
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
-            assert_eq!(
-                current.state,
-                ProcessState::Running,
-                "current process was not running"
-            );
-            current.state = ProcessState::Ready;
+            current.state = match current.state {
+                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_context)),
+                y => panic!("current process was {:?}, not 'Running(_)'", y),
+            };
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
-        // to run.
-        let mut process = self.get_process_mut(pid)?;
-        match process.state {
-            ProcessState::Ready | ProcessState::Running | ProcessState::Sleeping => (),
-            ProcessState::Free => panic!("process was not allocated"),
-            ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
+        // to run.  Again, if the new process isn't fit to run, then the system
+        // is in a very bad state.
+        {
+            let mut process = self.get_process_mut(pid)?;
+            let available_threads = match process.state {
+                ProcessState::Ready(x) | ProcessState::Running(x) => x,
+                ProcessState::Sleeping => 0,
+                ProcessState::Free => panic!("process was not allocated"),
+                ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
+            };
+            process.state = ProcessState::Running(available_threads);
+            process.current_context = IRQ_CONTEXT as u8;
+            process.mapping.activate();
         }
-        process.state = ProcessState::Running;
 
         // Switch to new process memory space, allowing us to save the context
         // if necessary.
-        process.mapping.activate();
         self.pid = pid;
 
-        let mut process = ProcessHandle::get();
-        let sp = process.current_context().stack_pointer();
-        process.bank();
+        // Invoke the syscall, but use the current stack pointer.  When this
+        // function returns, it will jump to the RETURN_FROM_ISR address,
+        // causing an instruction fault and exiting the interrupt.
+        let mut arch_process = ProcessHandle::get();
+        let sp = arch_process.current_context().stack_pointer();
+
+        // Activate the current context
+        arch_process.set_context_nr(IRQ_CONTEXT);
+
+        // Construct the new frame
         arch::syscall::invoke(
-            process.trap_context(),
+            arch_process.current_context(),
             pid == 1,
             pc as usize,
             sp,
@@ -341,34 +375,54 @@ impl SystemServices {
 
     /// Resume the given process, picking up exactly where it left off. If the
     /// process is in the Setup state, set it up and then resume.
-    pub fn resume_pid(
+    pub fn activate_process_context(
         &mut self,
-        pid: PID,
-        previous_state: ProcessState,
+        new_pid: PID,
+        mut new_context: usize,
+        can_resume: bool,
     ) -> Result<(), xous::Error> {
         let previous_pid = self.current_pid();
+        let previous_context = self.current_context_nr();
 
-        // Save state if the PID has changed
-        if pid != previous_pid {
-            self.pid = pid;
-            let new = self.get_process_mut(pid)?;
+        // Save state if the PID has changed.  This will activate the new memory
+        // space.
+        if new_pid != previous_pid {
+            let new = self.get_process_mut(new_pid)?;
+
+            // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                _ => (),
+                ProcessState::Setup(_, _, _) => new_context = INITIAL_CONTEXT,
+                ProcessState::Running(x) | ProcessState::Ready(x) => {
+                    if new_context == 0 {
+                        new_context = new.current_context as usize;
+                    }
+                    if x & (1 << new_context) == 0 {
+                        println!(
+                            "context is {:?}, which is not valid for new context {}",
+                            new.state, new_context
+                        );
+                        return Err(xous::Error::ProcessNotFound);
+                    }
+                }
+                ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
             }
 
-            // Perform the actual switch to the new memory space
+            // Perform the actual switch to the new memory space.  From this
+            // point onward, we will need to activate the previous memory space
+            // if we encounter an error.
             new.mapping.activate();
 
-            // Set up the new process, if necessary
-            match new.state {
+            // Set up the new process, if necessary.  Remove the new context from
+            // the list of ready contexts.
+            new.state = match new.state {
                 ProcessState::Setup(entrypoint, stack, stack_size) => {
                     let mut process = ProcessHandle::get();
                     println!(
                         "Initializing new process with stack size of {} bytes",
                         stack_size
                     );
-                    process.init(entrypoint, stack);
+                    process.init(entrypoint, stack, INITIAL_CONTEXT);
                     // Mark the stack as "unallocated-but-free"
                     let init_sp = stack & !0xfff;
                     let mut memory_manager = MemoryManagerHandle::get();
@@ -379,32 +433,78 @@ impl SystemServices {
                             MemoryFlags::R | MemoryFlags::W,
                         )
                         .expect("couldn't reserve stack");
+                    ProcessState::Running(0)
                 }
                 ProcessState::Free => panic!("process was suddenly Free"),
-                ProcessState::Ready | ProcessState::Sleeping => (),
-                ProcessState::Running => panic!("process was already running"),
-            }
-            new.state = ProcessState::Running;
+                ProcessState::Ready(x) | ProcessState::Running(x) => {
+                    ProcessState::Running(x & !(1 << new_context))
+                }
+                ProcessState::Sleeping => ProcessState::Running(0),
+            };
 
             // Mark the previous process as ready to run, since we just switched
             // away
-            {
-                // println!(
-                //     "Marking previous process {} as {:?}",
-                //     previous_pid, previous_state
-                // );
-                self.get_process_mut(previous_pid)
-                    .expect("couldn't get previous pid")
-                    .state = previous_state;
+            let previous = self
+                .get_process_mut(previous_pid)
+                .expect("couldn't get previous pid");
+            previous.state = match previous.state {
+                ProcessState::Running(x) if x == 1 << previous_context => {
+                    if can_resume {
+                        ProcessState::Ready(x | (1 << previous_context))
+                    } else {
+                        ProcessState::Sleeping
+                    }
+                }
+                ProcessState::Running(x) => {
+                    if can_resume {
+                        ProcessState::Ready(x | (1 << previous_context))
+                    } else {
+                        ProcessState::Ready(x)
+                    }
+                }
+                other => panic!(
+                    "previous process PID {} was in an invalid state (not Running): {:?}",
+                    previous_pid, other
+                ),
+            };
+            println!(
+                "Set previous process PID {} state to {:?} (with can_resume = {})",
+                previous_pid, previous.state, can_resume
+            );
+        } else {
+            if self.current_context_nr() == new_context {
+                if !can_resume {
+                    panic!("tried to switch to our own context without resume");
+                }
+                return Ok(());
             }
+            let new = self.get_process_mut(new_pid)?;
+            new.state = match new.state {
+                ProcessState::Running(x) if (x & 1 << new_context) == 0 => {
+                    return Err(xous::Error::ProcessNotFound)
+                }
+                ProcessState::Running(x) => {
+                    if can_resume {
+                        ProcessState::Running((x | (1 << previous_context)) & !(1 << new_context))
+                    } else {
+                        ProcessState::Running(x | (1 << previous_context))
+                    }
+                }
+                other => panic!(
+                    "PID {} invalid process state (not Running): {:?}",
+                    previous_pid, other
+                ),
+            };
         }
+        self.pid = new_pid;
 
         let mut process = ProcessHandle::get();
 
         // Restore the previous context, if one exists.
-        if process.trap_context().valid() {
-            process.trap_context().invalidate();
-        }
+        process.set_context_nr(new_context);
+        self.processes[self.pid as usize - 1].previous_context =
+            self.processes[self.pid as usize - 1].current_context;
+        self.processes[self.pid as usize - 1].current_context = new_context as u8;
 
         Ok(())
     }

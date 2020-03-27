@@ -243,6 +243,9 @@ pub enum SysCall {
     /// * **ProcessTerminated**: The process has crashed.
     SwitchTo(PID, usize /* context ID */),
 
+    /// Get a list of contexts that can be run in the given PID.
+    ReadyContexts(PID),
+
     /// Create a new Server
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
@@ -273,6 +276,13 @@ pub enum SysCall {
     /// Send a message to a server
     SendMessage(CID, Message),
 
+    /// Spawn a new thread
+    SpawnThread(
+        *mut usize, /* entrypoint */
+        *mut usize, /* stack pointer */
+        *mut usize, /* argument */
+    ),
+
     /// This syscall does not exist
     Invalid(usize, usize, usize, usize, usize, usize, usize),
 }
@@ -285,6 +295,7 @@ enum SysCallNumber {
     ClaimInterrupt = 5,
     FreeInterrupt = 6,
     SwitchTo = 7,
+    ReadyContexts = 8,
     WaitEvent = 9,
     IncreaseHeap = 10,
     DecreaseHeap = 11,
@@ -294,6 +305,7 @@ enum SysCallNumber {
     ReceiveMessage = 15,
     SendMessage = 16,
     Connect = 17,
+    SpawnThread = 18,
     Invalid,
 }
 
@@ -363,6 +375,9 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::ReadyContexts(a1) => {
+                [SysCallNumber::ReadyContexts as usize, a1 as usize, 0, 0, 0, 0, 0, 0]
+            }
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
                 a1 as usize,
@@ -459,6 +474,9 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
+            SysCall::SpawnThread(a1, a2, a3) => {
+                [SysCallNumber::SpawnThread as usize, a1 as usize, a2 as usize, a3 as usize, 0, 0, 0, 0]
+            }
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, a1, a2, a3, a4, a5, a6, a7]
             }
@@ -490,6 +508,7 @@ impl SysCall {
             }
             Some(SysCallNumber::FreeInterrupt) => SysCall::FreeInterrupt(a1),
             Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(a1 as PID, a2 as usize),
+            Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(a1 as u8),
             Some(SysCallNumber::IncreaseHeap) => SysCall::IncreaseHeap(
                 a1 as usize,
                 MemoryFlags::from_bits(a2).ok_or(InvalidSyscall {})?,
@@ -548,29 +567,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-
-            // SysCall::SendMessage(a1, ref a2) => match a2 {
-            //     Message::Memory(mm) => [
-            //         SysCallNumber::SendMessage as usize,
-            //         a1,
-            //         1,
-            //         mm.id as usize,
-            //         mm.in_buf.map(|x| x.get()).unwrap_or(0) as usize,
-            //         mm.in_buf_size.map(|x| x.get()).unwrap_or(0) as usize,
-            //         mm.out_buf.map(|x| x.get()).unwrap_or(0) as usize,
-            //         mm.out_buf_size.map(|x| x.get()).unwrap_or(0) as usize,
-            //     ],
-            //     Message::Scalar(sc) => [
-            //         SysCallNumber::SendMessage as usize,
-            //         a1,
-            //         2,
-            //         sc.id as usize,
-            //         sc.arg1,
-            //         sc.arg2,
-            //         sc.arg3,
-            //         sc.arg4,
-            //     ],
-            // },
+            Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize),
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(InvalidSyscall {}),
         })
@@ -592,9 +589,12 @@ pub enum Result {
     MemoryRange(MemoryRange),
     ReadyContexts(
         usize, /* count */
-        usize, /* pid0 */ usize, /* context0 */
-        usize, /* pid1 */ usize, /* context1 */
-        usize, /* pid2 */ usize, /* context2 */
+        usize,
+        /* pid0 */ usize, /* context0 */
+        usize,
+        /* pid1 */ usize, /* context1 */
+        usize,
+        /* pid2 */ usize, /* context2 */
     ),
     ResumeProcess,
     ServerID(SID),
