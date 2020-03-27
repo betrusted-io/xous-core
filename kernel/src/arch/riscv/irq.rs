@@ -177,7 +177,7 @@ pub extern "C" fn trap_handler(
                 // we're in an interrupt context, it is safe to access this
                 // global variable.
                 let (previous_pid, previous_context) = unsafe {
-                    PREVIOUS_PAIR.expect("got an instruction page fault with no previous PID")
+                    PREVIOUS_PAIR.take().expect("got an instruction page fault with no previous PID")
                 };
                 println!(
                     "ISR: Resuming previous pair of ({}, {})",
