@@ -328,6 +328,7 @@ impl SystemServices {
                 ProcessState::Running(x) => ProcessState::Ready(x),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
+            current.current_context = current.previous_context;
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
@@ -393,6 +394,7 @@ impl SystemServices {
                 ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
             };
             process.state = ProcessState::Running(available_threads);
+            process.previous_context = process.current_context;
             process.current_context = IRQ_CONTEXT as u8;
             process.mapping.activate();
         }
@@ -593,8 +595,6 @@ impl SystemServices {
 
         // Restore the previous context, if one exists.
         process.set_context_nr(new_context);
-        self.processes[self.pid as usize - 1].previous_context =
-            self.processes[self.pid as usize - 1].current_context;
         self.processes[self.pid as usize - 1].current_context = new_context as u8;
         let ctx = process.current_context();
         println!(
