@@ -455,10 +455,10 @@ impl SystemServices {
                         new.state
                     );
                     if new_context == 0 {
-                        println!(
-                            "PID {}: Looking for a valid context in the mask {:08b}",
-                            new_pid, x
-                        );
+                        // print!(
+                        //     "PID {}: Looking for a valid context in the mask {:08b}, curent context {} ({:08b})",
+                        //     new_pid, x, new.current_context, new.current_context
+                        // );
                         new_context = new.current_context as usize;
                         while x & (1 << new_context) == 0 {
                             new_context += 1;
@@ -471,6 +471,7 @@ impl SystemServices {
                                 return Err(xous::Error::ProcessNotFound);
                             }
                         }
+                        // println!(" -- picked context {}", new_context);
                     } else if x & (1 << new_context) == 0 {
                         println!(
                             "context is {:?}, which is not valid for new context {}",

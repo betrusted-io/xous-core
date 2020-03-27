@@ -111,8 +111,6 @@ impl Process {
         context.sepc = entrypoint;
         context.registers[1] = stack;
 
-        println!("Initialized context {} with entrypoint of {:08x}", self.current_context_nr(), entrypoint);
-
         self.inner = Default::default();
     }
 }

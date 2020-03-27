@@ -136,7 +136,7 @@ use xous::*;
 pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     let pid = arch::current_pid();
 
-    println!("PID{} Syscall: {:?}", pid, call);
+    // println!("PID{} Syscall: {:?}", pid, call);
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
@@ -209,7 +209,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SwitchTo(pid, context) => {
             let mut ss = SystemServicesHandle::get();
             ss.activate_process_context(pid, context, true, false)
-                .map(|ctx| { println!("switchto ({}, {})", pid, ctx); xous::Result::ResumeProcess })
+                .map(|ctx| {
+                    // println!("switchto ({}, {})", pid, ctx);
+                    xous::Result::ResumeProcess
+                })
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
@@ -257,14 +260,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
-        SysCall::SpawnThread(
-            entrypoint,
-            stack_pointer,
-            argument ,
-        ) => {
+        SysCall::SpawnThread(entrypoint, stack_pointer, argument) => {
             let mut ss = SystemServicesHandle::get();
-            ss.spawn_thread(entrypoint, stack_pointer, argument).map(|ctx| xous::Result::ThreadID(ctx))
-        },
+            ss.spawn_thread(entrypoint, stack_pointer, argument)
+                .map(|ctx| xous::Result::ThreadID(ctx))
+        }
         SysCall::CreateServer(name) => {
             let mut ss = SystemServicesHandle::get();
             ss.create_server(name).map(|x| xous::Result::ServerID(x))

@@ -106,7 +106,7 @@ pub extern "C" fn trap_handler(
 
         let response = crate::syscall::handle(call).unwrap_or_else(|e| xous::Result::Error(e));
 
-        println!("Result: {:?}", response);
+        // println!("Result: {:?}", response);
         let mut process = ProcessHandle::get();
         let ctx = process.current_context();
 
