@@ -317,10 +317,8 @@ impl SystemServices {
         pid: PID,
         context: CtxID,
     ) -> Result<(), xous::Error> {
-        // Get the current process (which was just interrupted) and mark it as
-        // "ready to run".  If this function is called when the current process
-        // isn't running, that means the system has gotten into an invalid
-        // state.
+        // Get the current process (which was the interrupt handler) and mark it
+        // as Ready.  Note that the new PID may very well be the same PID.
         {
             let current_pid = self.current_pid();
             let mut current = self
@@ -337,9 +335,13 @@ impl SystemServices {
         // is in a very bad state.
         {
             let mut process = self.get_process_mut(pid)?;
+            // Ensure the new context is available to be run
             let available_contexts = match process.state {
                 ProcessState::Ready(x) if x & 1 << context != 0 => x & !(1 << context),
-                other => panic!("process was in an invalid state"),
+                other => panic!(
+                    "process was in an invalid state {:?} -- ctxid {} not available to run",
+                    other, context
+                ),
             };
             process.state = ProcessState::Running(available_contexts);
             process.current_context = context as u8;
