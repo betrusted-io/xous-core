@@ -1,5 +1,5 @@
 use crate::{
-    CpuID, Error, MemoryAddress, MemoryMessage, MemorySize, Message, MessageEnvelope,
+    CpuID, CtxID, Error, MemoryAddress, MemoryMessage, MemorySize, Message, MessageEnvelope,
     ScalarMessage, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
@@ -375,9 +375,16 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::ReadyContexts(a1) => {
-                [SysCallNumber::ReadyContexts as usize, a1 as usize, 0, 0, 0, 0, 0, 0]
-            }
+            SysCall::ReadyContexts(a1) => [
+                SysCallNumber::ReadyContexts as usize,
+                a1 as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
                 a1 as usize,
@@ -474,9 +481,16 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::SpawnThread(a1, a2, a3) => {
-                [SysCallNumber::SpawnThread as usize, a1 as usize, a2 as usize, a3 as usize, 0, 0, 0, 0]
-            }
+            SysCall::SpawnThread(a1, a2, a3) => [
+                SysCallNumber::SpawnThread as usize,
+                a1 as usize,
+                a2 as usize,
+                a3 as usize,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
                 [SysCallNumber::Invalid as usize, a1, a2, a3, a4, a5, a6, a7]
             }
@@ -567,7 +581,9 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize),
+            Some(SysCallNumber::SpawnThread) => {
+                SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
+            }
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(InvalidSyscall {}),
         })
@@ -600,6 +616,7 @@ pub enum Result {
     ServerID(SID),
     ConnectionID(CID),
     Message(MessageEnvelope),
+    ThreadID(CtxID),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -727,10 +744,15 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<(
     Err(Error::UnhandledSyscall)
 }
 
-/// Return execution to the kernel.
-/// This function may return at any time, including immediately
+/// Return execution to the kernel. This function may return at any time,
+/// including immediately
 pub fn yield_slice() {
-    rsyscall(SysCall::Yield).expect("yield returned an error");
+    rsyscall(SysCall::Yield).expect("yield_slice returned an error");
+}
+
+/// Return execution to the kernel and wait for a message or an interrupt.
+pub fn wait_event() {
+    rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
 
 pub fn rsyscall(call: SysCall) -> SyscallResult {
