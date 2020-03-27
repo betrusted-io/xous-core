@@ -325,6 +325,7 @@ impl SystemServices {
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
             current.state = match current.state {
+                ProcessState::Running(0) => ProcessState::Sleeping,
                 ProcessState::Running(x) => ProcessState::Ready(x),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
