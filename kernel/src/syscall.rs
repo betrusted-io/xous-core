@@ -208,8 +208,8 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::SwitchTo(pid, context) => {
             let mut ss = SystemServicesHandle::get();
-            ss.activate_process_context(pid, context, true)
-                .map(|_| xous::Result::ResumeProcess)
+            ss.activate_process_context(pid, context, true, false)
+                .map(|ctx| { println!("switchto ({}, {})", pid, ctx); xous::Result::ResumeProcess })
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
@@ -218,7 +218,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let mut ss = SystemServicesHandle::get();
             let ppid = ss.get_process(pid).expect("can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.activate_process_context(ppid, 0, true)
+            ss.activate_process_context(ppid, 0, true, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -244,7 +244,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.activate_process_context(ppid, 0, false)
+            ss.activate_process_context(ppid, 0, false, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -253,10 +253,18 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
             assert_ne!(ppid, 0, "no parent process id");
-            ss.activate_process_context(ppid, 0, false)
+            ss.activate_process_context(ppid, 0, false, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
+        SysCall::SpawnThread(
+            entrypoint,
+            stack_pointer,
+            argument ,
+        ) => {
+            let mut ss = SystemServicesHandle::get();
+            ss.spawn_thread(entrypoint, stack_pointer, argument).map(|ctx| xous::Result::ThreadID(ctx))
+        },
         SysCall::CreateServer(name) => {
             let mut ss = SystemServicesHandle::get();
             ss.create_server(name).map(|x| xous::Result::ServerID(x))

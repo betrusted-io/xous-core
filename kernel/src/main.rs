@@ -64,22 +64,22 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     let system_services = SystemServicesHandle::get();
     for test_idx in current_pid..system_services.processes.len() {
         if system_services.processes[test_idx].ppid == 1 {
-            print!("PID {} is owned by PID1... ", test_idx + 1);
+            // print!("PID {} is owned by PID1... ", test_idx + 1);
             if system_services.processes[test_idx].runnable() {
-                println!(" and is runnable");
+                // println!(" and is runnable");
                 return Some((test_idx + 1) as PID);
             }
-            println!(" and is NOT RUNNABLE");
+            // println!(" and is NOT RUNNABLE");
         }
     }
     for test_idx in 0..current_pid {
         if system_services.processes[test_idx].ppid == 1 {
-            print!("PID {} is owned by PID1... ", test_idx + 1);
+            // print!("PID {} is owned by PID1... ", test_idx + 1);
             if system_services.processes[test_idx].runnable() {
-                println!(" and is runnable");
+                // println!(" and is runnable");
                 return Some((test_idx + 1) as PID);
             }
-            println!(" and is NOT RUNNABLE");
+            // println!(" and is NOT RUNNABLE");
         }
     }
     None
@@ -132,7 +132,7 @@ pub extern "C" fn main() {
 
         match pid {
             Some(pid) => {
-                println!("Attempting to switch to PID {}", pid);
+                // println!("Attempting to switch to PID {}", pid);
                 xous::rsyscall(xous::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
                 ()
             }

@@ -7,16 +7,18 @@ use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 use core::{mem, slice};
-use xous::{MemoryFlags, CID, PID, SID};
+use xous::{CtxID, MemoryFlags, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
 const DEFAULT_STACK_SIZE: usize = 131072;
 pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
-/// This is the address a program will jump to in order
-/// to return from an ISR.
+/// This is the address a program will jump to in order to return from an ISR.
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
+
+/// This is the address a thread will return to when it exits.
+pub const EXIT_THREAD: usize = 0xff80_3000;
 
 pub const INITIAL_CONTEXT: usize = 2;
 pub const IRQ_CONTEXT: usize = 1;
@@ -310,6 +312,51 @@ impl SystemServices {
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
     /// 3. Run the new process, returning to an illegal instruction
+    pub fn finish_callback_and_resume(
+        &mut self,
+        pid: PID,
+        context: CtxID,
+    ) -> Result<(), xous::Error> {
+        // Get the current process (which was just interrupted) and mark it as
+        // "ready to run".  If this function is called when the current process
+        // isn't running, that means the system has gotten into an invalid
+        // state.
+        {
+            let current_pid = self.current_pid();
+            let mut current = self
+                .get_process_mut(current_pid)
+                .expect("couldn't get current PID");
+            current.state = match current.state {
+                ProcessState::Running(x) => ProcessState::Ready(x),
+                y => panic!("current process was {:?}, not 'Running(_)'", y),
+            };
+        }
+
+        // Get the new process, and ensure that it is in a state where it's fit
+        // to run.  Again, if the new process isn't fit to run, then the system
+        // is in a very bad state.
+        {
+            let mut process = self.get_process_mut(pid)?;
+            let available_contexts = match process.state {
+                ProcessState::Ready(x) if x & 1 << context != 0 => x & !(1 << context),
+                other => panic!("process was in an invalid state"),
+            };
+            process.state = ProcessState::Running(available_contexts);
+            process.current_context = context as u8;
+            process.mapping.activate();
+
+            // Activate the current context
+            let mut arch_process = ProcessHandle::get();
+            arch_process.set_context_nr(context);
+        }
+        self.pid = pid;
+        Ok(())
+    }
+
+    /// Create a stack frame in the specified process and jump to it.
+    /// 1. Pause the current process and switch to the new one
+    /// 2. Save the process state, if it hasn't already been saved
+    /// 3. Run the new process, returning to an illegal instruction
     pub fn make_callback_to(
         &mut self,
         pid: PID,
@@ -380,7 +427,8 @@ impl SystemServices {
         new_pid: PID,
         mut new_context: usize,
         can_resume: bool,
-    ) -> Result<(), xous::Error> {
+        advance_context: bool,
+    ) -> Result<CtxID, xous::Error> {
         let previous_pid = self.current_pid();
         let previous_context = self.current_context_nr();
 
@@ -394,10 +442,32 @@ impl SystemServices {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
                 ProcessState::Setup(_, _, _) => new_context = INITIAL_CONTEXT,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
+                    // If no new context is specified, take the previous
+                    // context.  If that is not runnable, do a round-robin
+                    // search for the next available context.
+                    assert!(
+                        x != 0,
+                        "process was {:?} but had no free contexts",
+                        new.state
+                    );
                     if new_context == 0 {
+                        println!(
+                            "PID {}: Looking for a valid context in the mask {:08b}",
+                            new_pid, x
+                        );
                         new_context = new.current_context as usize;
-                    }
-                    if x & (1 << new_context) == 0 {
+                        while x & (1 << new_context) == 0 {
+                            new_context += 1;
+                            if new_context > arch::process::MAX_CONTEXT {
+                                new_context = 0;
+                            }
+                            // If we've looped around, return an error.
+                            if new_context == new.current_context as usize {
+                                println!("Looked through all contexts and couldn't find one that was ready");
+                                return Err(xous::Error::ProcessNotFound);
+                            }
+                        }
+                    } else if x & (1 << new_context) == 0 {
                         println!(
                             "context is {:?}, which is not valid for new context {}",
                             new.state, new_context
@@ -448,13 +518,20 @@ impl SystemServices {
                 .get_process_mut(previous_pid)
                 .expect("couldn't get previous pid");
             previous.state = match previous.state {
-                ProcessState::Running(x) if x == 1 << previous_context => {
+                // If the previous process had exactly one thread that can be
+                // run, then the Running thread list will be 0.  In that case,
+                // we will either need to Sleep this process, or mark it as
+                // being Ready to run.
+                ProcessState::Running(x) if x == 0 => {
                     if can_resume {
-                        ProcessState::Ready(x | (1 << previous_context))
+                        ProcessState::Ready(1 << previous_context)
                     } else {
                         ProcessState::Sleeping
                     }
                 }
+                // Otherwise, there are additional threads that can be run.
+                // Convert the previous process into "Ready", and include the
+                // current context number only if `can_resume` is `true`.
                 ProcessState::Running(x) => {
                     if can_resume {
                         ProcessState::Ready(x | (1 << previous_context))
@@ -467,16 +544,22 @@ impl SystemServices {
                     previous_pid, other
                 ),
             };
-            println!(
-                "Set previous process PID {} state to {:?} (with can_resume = {})",
-                previous_pid, previous.state, can_resume
-            );
+            if advance_context {
+                previous.current_context += 1;
+                if previous.current_context as CtxID > arch::process::MAX_CONTEXT {
+                    previous.current_context = 0;
+                }
+            }
+        // println!(
+        //     "Set previous process PID {} state to {:?} (with can_resume = {})",
+        //     previous_pid, previous.state, can_resume
+        // );
         } else {
             if self.current_context_nr() == new_context {
                 if !can_resume {
                     panic!("tried to switch to our own context without resume");
                 }
-                return Ok(());
+                return Ok(new_context);
             }
             let new = self.get_process_mut(new_pid)?;
             new.state = match new.state {
@@ -495,6 +578,12 @@ impl SystemServices {
                     previous_pid, other
                 ),
             };
+            if advance_context {
+                new.current_context += 1;
+                if new.current_context as CtxID > arch::process::MAX_CONTEXT {
+                    new.current_context = 0;
+                }
+            }
         }
         self.pid = new_pid;
 
@@ -505,8 +594,50 @@ impl SystemServices {
         self.processes[self.pid as usize - 1].previous_context =
             self.processes[self.pid as usize - 1].current_context;
         self.processes[self.pid as usize - 1].current_context = new_context as u8;
+        let ctx = process.current_context();
+        println!(
+            "Switched to PID {}, context {}, with sepc: {:08x}",
+            new_pid, new_context, ctx.sepc
+        );
 
-        Ok(())
+        Ok(new_context)
+    }
+
+    pub fn spawn_thread(
+        &mut self,
+        entrypoint: *mut usize,
+        stack_pointer: *mut usize,
+        arg: *mut usize,
+    ) -> Result<CtxID, xous::Error> {
+        let mut process = ProcessHandle::get();
+        let new_context_nr = process
+            .find_free_context_nr()
+            .ok_or(xous::Error::ContextNotAvailable)?;
+
+        // Create the new context and set it to run in the new address space.
+        let context = process.context(new_context_nr);
+        arch::syscall::invoke(
+            context,
+            self.pid == 1,
+            entrypoint as usize,
+            stack_pointer as usize,
+            EXIT_THREAD,
+            &[arg as usize],
+        );
+
+        // Queue the thread to run
+        let mut process = self
+            .get_process_mut(self.current_pid())
+            .expect("couldn't get current process");
+        process.state = match process.state {
+            ProcessState::Running(x) => ProcessState::Running(x | (1 << new_context_nr)),
+            other => panic!(
+                "error spawning thread: process was in an invalid state {:?}",
+                other
+            ),
+        };
+
+        Ok(new_context_nr)
     }
 
     /// Allocate a new server ID for this process and return the address. If the

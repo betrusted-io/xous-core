@@ -1,9 +1,9 @@
 use core::mem;
 static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
+pub const MAX_CONTEXT: CtxID = 31;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-
-// use sha3::{Digest, Shake128};
+use xous::CtxID;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct Process {
 
     /// The index into the `contexts` list.  This must never be 0. The interrupt
     /// handler writes to this field, so it must not be moved.
-    context_nr: usize,
+    context_nr: CtxID,
 
     _hash: [usize; 8],
 
@@ -22,7 +22,7 @@ pub struct Process {
 
     /// The interrupt handler will save the current process to this Context when
     /// the trap handler is entered.
-    contexts: [ProcessContext; 31],
+    contexts: [ProcessContext; MAX_CONTEXT],
 }
 
 #[repr(C)]
@@ -34,7 +34,8 @@ pub struct ProcessContext {
 
     /// The return address.  Note that if this context was created because of an
     /// `ecall` instruction, you will need to add `4` to this before returning,
-    /// to prevent that instruction from getting executed again.
+    /// to prevent that instruction from getting executed again. If this is 0,
+    /// then this context is not valid.
     pub sepc: usize,
 }
 
@@ -45,13 +46,13 @@ impl Process {
     }
 
     /// Return the current context number. Context numbers are 0-indexed.
-    pub fn current_context_nr(&self) -> usize {
+    pub fn current_context_nr(&self) -> CtxID {
         assert!(self.context_nr != 0, "context number was 0");
         self.context_nr
     }
 
     /// Set the current context number.
-    pub fn set_context_nr(&mut self, context: usize) {
+    pub fn set_context_nr(&mut self, context: CtxID) {
         assert!(
             context > 0 && context <= self.contexts.len(),
             "attempt to switch to an invalid context {}",
@@ -60,13 +61,22 @@ impl Process {
         self.context_nr = context;
     }
 
-    pub fn context(&mut self, context_nr: usize) -> &mut ProcessContext {
+    pub fn context(&mut self, context_nr: CtxID) -> &mut ProcessContext {
         assert!(
             context_nr > 0 && context_nr <= self.contexts.len(),
             "attempt to retrieve an invalid context {}",
             context_nr
         );
         &mut self.contexts[context_nr - 1]
+    }
+
+    pub fn find_free_context_nr(&self) -> Option<CtxID> {
+        for (index, context) in self.contexts.iter().enumerate() {
+            if index != 0 && context.sepc == 0 {
+                return Some(index as CtxID + 1);
+            }
+        }
+        None
     }
 
     /// Initialize this process context with the given entrypoint and stack
@@ -78,8 +88,18 @@ impl Process {
             mem::size_of::<Process>(),
             PAGE_SIZE
         );
-        // By convention, context 0 is the trap context.
-        // Therefore, context 1 is the first default context.
+        assert!(
+            context + 1 < self.contexts.len(),
+            "tried to init a context that's out of range"
+        );
+        assert!(context != 1, "tried to init using the irq context");
+        assert!(context != 0, "tried to init using a context of 0");
+        assert!(
+            context == 2,
+            "tried to init using a context that wasn't 2. This probably isn't what you want."
+        );
+        // By convention, context 0 is the trap context. Therefore, context 1 is
+        // the first default context.
         self.context_nr = context;
         for context in self.contexts.iter_mut() {
             *context = Default::default();
@@ -90,6 +110,8 @@ impl Process {
         context.registers = Default::default();
         context.sepc = entrypoint;
         context.registers[1] = stack;
+
+        println!("Initialized context {} with entrypoint of {:08x}", self.current_context_nr(), entrypoint);
 
         self.inner = Default::default();
     }
