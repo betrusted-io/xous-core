@@ -185,12 +185,21 @@ impl Server {
     /// Add the given message to this server's queue.
     pub fn queue_message(
         &mut self,
-        envelope: xous::MessageEnvelope,
         context: usize,
+        envelope: xous::MessageEnvelope,
     ) -> core::result::Result<(), xous::Error> {
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous::Error::ServerQueueFull);
         }
+
+        self.queue[self.queue_head] = match envelope.message {
+            xous::Message::Scalar(msg) => QueuedMessage::ScalarMessage(
+                envelope.sender, context, msg.id, msg.arg1, msg.arg2, msg.arg3, msg.arg4,
+            ),
+            xous::Message::Move(msg) => unimplemented!(),
+            xous::Message::MutableBorrow(msg) => unimplemented!(),
+            xous::Message::ImmutableBorrow(msg) => unimplemented!(),
+        };
 
         self.queue_head += 1;
         if self.queue_head >= self.queue.len() {

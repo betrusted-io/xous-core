@@ -136,7 +136,7 @@ use xous::*;
 pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     let pid = arch::current_pid();
 
-    // println!("PID{} Syscall: {:?}", pid, call);
+    println!("PID{} Syscall: {:?}", pid, call);
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
@@ -276,35 +276,73 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
-            let available_contexts = {
-                let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
-                server.take_available_context()
+            let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+            let (server_pid, available_context) = {
+                let server = ss
+                    .server_from_sidx(sidx)
+                    .ok_or(xous::Error::ServerNotFound)?;
+                (server.pid, server.take_available_context())
             };
 
-            // If the server has an available context to receive the message, transfer it right away.
-            if let Some(ctx_number) = available_contexts {
-                println!("There are contexts available to handle this message");
+            // Determine whether the call is blocking.  If so, switch to the
+            // server context right away.
+            let blocking = match message {
+                Message::MutableBorrow(_) | Message::ImmutableBorrow(_) => true,
+                Message::Scalar(_) | Message::Move(_) => false,
+            };
 
-                // Determine whether the call is blocking.  If so, switch to the
-                // server context right away.
-                let blocking = match message {
-                    Message::MutableBorrow(_) | Message::ImmutableBorrow(_) => true,
-                    Message::Scalar(_) | Message::Move(_) => false,
-                };
+            let envelope = MessageEnvelope {
+                sender: pid as usize,
+                message,
+            };
+
+            // If the server has an available context to receive the message,
+            // transfer it right away.
+            if let Some(ctx_number) = available_context {
+                println!(
+                    "There are contexts available to handle this message.  Marking PID {} as Ready",
+                    server_pid
+                );
+                ss.ready_context(server_pid, ctx_number)?;
+                if blocking {
+                    println!("Activating Server context and switching away from Client");
+                    ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
+                        .map(|_| Ok(xous::Result::Message(envelope)))
+                        .unwrap_or(Err(xous::Error::ProcessNotFound))
+                } else {
+                    println!("Setting the return value of the Server and returning to Client");
+                    ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                        .map(|_| xous::Result::Ok)
+                }
             } else {
-                println!("No contexts available to handle this.  Queueing message and parking this context.");
+                println!("No contexts available to handle this.  Queueing message.");
                 // There is no server context we can use, so add the message to
                 // the queue.
                 let context_nr = ss.current_context_nr();
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.
-                let server = ss.server_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
-                server.queue_message(MessageEnvelope { sender: 0, message }, context_nr)?;
+                let server = ss
+                    .server_from_sidx(sidx)
+                    .ok_or(xous::Error::ServerNotFound)?;
+                println!("Adding to queue");
+                ss.queue_server_message(sidx, context_nr, envelope)?;
+                println!("Done adding to queue");
 
-                // Park this context.  This is roughly equivalent to a "Yield".
+                // Park this context if it's blocking.  This is roughly
+                // equivalent to a "Yield".
+                if blocking {
+                    println!("Returning to parent");
+                    let process = ss.get_process(pid).expect("Can't get current process");
+                    let ppid = process.ppid;
+                    ss.activate_process_context(ppid, 0, !blocking, blocking)
+                        .map(|_| Ok(xous::Result::ResumeProcess))
+                        .unwrap_or(Err(xous::Error::ProcessNotFound))
+                } else {
+                    println!("Returning to Client with Ok result");
+                    Ok(xous::Result::Ok)
+                }
             }
-            Err(xous::Error::UnhandledSyscall)
         }
         _ => Err(xous::Error::UnhandledSyscall),
     }

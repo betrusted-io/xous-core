@@ -2,11 +2,12 @@ const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000;
 const TIMER_BASE: usize = 0xF000_3000;
 
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
-    println!("Timer tick");
+    println!(">>> Timer tick");
     let ptr = TIMER_BASE as *mut usize;
 
     // acknowledge the timer
     unsafe { ptr.add(6).write_volatile(1) };
+    println!("<<< Returning from timer_tick()");
 }
 
 pub fn init() {

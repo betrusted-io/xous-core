@@ -7,7 +7,7 @@ use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 use core::{mem, slice};
-use xous::{CtxID, MemoryFlags, CID, PID, SID};
+use xous::{CtxID, MemoryFlags, MessageEnvelope, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -381,6 +381,7 @@ impl SystemServices {
                 ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_context)),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
+            println!("Making PID {} state {:?}", current_pid, current.state);
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
@@ -425,12 +426,51 @@ impl SystemServices {
         Ok(())
     }
 
+    /// Mark the specified context as ready to run
+    pub fn ready_context(&mut self, pid: PID, context: CtxID) -> Result<(), xous::Error> {
+        let process = self.get_process_mut(pid)?;
+        process.state = match process.state {
+            ProcessState::Running(x) if x & (1 << context) == 0 => {
+                ProcessState::Running(x | (1 << context))
+            }
+            ProcessState::Ready(x) if x & (1 << context) == 0 => {
+                ProcessState::Ready(x | (1 << context))
+            }
+            ProcessState::Sleeping => ProcessState::Ready(1 << context),
+            other => panic!(
+                "PID {} was not in a state to wake a context: {:?}",
+                pid, other
+            ),
+        };
+        Ok(())
+    }
+
+    pub fn set_context_result(
+        &mut self,
+        pid: PID,
+        context: CtxID,
+        result: xous::Result,
+    ) -> Result<(), xous::Error> {
+        let current_pid = self.current_pid();
+        {
+            let target_process = self.get_process(pid)?;
+            target_process.mapping.activate();
+            let mut arch_process = ProcessHandle::get();
+            arch_process.set_context_result(context, result);
+        }
+        let current_process = self
+            .get_process(current_pid)
+            .expect("couldn't switch back after setting context result");
+        current_process.mapping.activate();
+        Ok(())
+    }
+
     /// Resume the given process, picking up exactly where it left off. If the
     /// process is in the Setup state, set it up and then resume.
     pub fn activate_process_context(
         &mut self,
         new_pid: PID,
-        mut new_context: usize,
+        mut new_context: CtxID,
         can_resume: bool,
         advance_context: bool,
     ) -> Result<CtxID, xous::Error> {
@@ -472,7 +512,7 @@ impl SystemServices {
                                 return Err(xous::Error::ProcessNotFound);
                             }
                         }
-                        // println!(" -- picked context {}", new_context);
+                    // println!(" -- picked context {}", new_context);
                     } else if x & (1 << new_context) == 0 {
                         println!(
                             "context is {:?}, which is not valid for new context {}",
@@ -709,6 +749,19 @@ impl SystemServices {
 
     /// Return a server based on the connection id and the current process
     pub fn server_from_cid(&mut self, cid: CID) -> Option<&mut Server> {
+        self.servers[self.sidx_from_cid(cid)?].as_mut()
+    }
+
+    /// Return a server based on the connection id and the current process
+    pub fn server_from_sidx(&mut self, sidx: usize) -> Option<&mut Server> {
+        if sidx > self.servers.len() {
+            None
+        } else {
+            self.servers[sidx].as_mut()
+        }
+    }
+
+    pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
         if cid == 0 {
             println!("CID is 0, returning");
             return None;
@@ -722,11 +775,38 @@ impl SystemServices {
         let server_idx = process.inner.connection_map[cid] as usize;
         if server_idx >= self.servers.len() {
             println!("CID {} and server_idx >= {}", cid, server_idx);
-            return None;
+            None
+        } else {
+            Some(server_idx)
         }
+    }
 
-        println!("Returning self.servers[{}]", server_idx);
-        self.servers[server_idx].as_mut()
+    pub fn queue_server_message(
+        &mut self,
+        sidx: usize,
+        context: usize,
+        envelope: MessageEnvelope,
+    ) -> Result<(), xous::Error> {
+        let current_pid = self.current_pid();
+        let result = {
+            let server_pid = self
+                .server_from_sidx(sidx)
+                .ok_or(xous::Error::ServerNotFound)?
+                .pid;
+            {
+                let server_process = self.get_process(server_pid)?;
+                server_process.mapping.activate();
+            }
+            let server = self
+                .server_from_sidx(sidx)
+                .expect("couldn't re-discover server index");
+            server.queue_message(context, envelope)
+        };
+        let current_process = self
+            .get_process(current_pid)
+            .expect("couldn't restore previous process");
+        current_process.mapping.activate();
+        result
     }
 
     /// Get a server based on a SID

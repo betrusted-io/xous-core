@@ -4,6 +4,7 @@ pub const MAX_CONTEXT: CtxID = 31;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous::CtxID;
+use xous;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -77,6 +78,14 @@ impl Process {
             }
         }
         None
+    }
+
+    pub fn set_context_result(&mut self, context_nr: CtxID, result: xous::Result) {
+        let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
+        let context = self.context(context_nr);
+        for (idx, reg) in vals.iter().enumerate() {
+            context.registers[9 + idx] = *reg;
+        }
     }
 
     /// Initialize this process context with the given entrypoint and stack

@@ -22,6 +22,8 @@ showAnalyzer uart
 showAnalyzer uartlog
 #showAnalyzer memlcd
 
+logLevel -1 kbd
+
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """

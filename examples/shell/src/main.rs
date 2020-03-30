@@ -25,6 +25,14 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
     println!("");
 }
 
+fn print_and_yield(index: *mut usize) -> ! {
+    let num = index as usize;
+    loop {
+        println!("THREAD {}", num);
+        xous::syscall::yield_slice();
+    }
+}
+
 #[no_mangle]
 fn main() {
     let uart = xous::syscall::map_memory(
@@ -86,6 +94,19 @@ fn main() {
 
     timer::init();
 
+    // for i in 1usize..5 {
+    //     xous::rsyscall(xous::SysCall::SpawnThread(
+    //         print_and_yield as *mut usize,
+    //         (0x8000_0000 - 32768 - i * 4096) as *mut usize,
+    //         i as *mut usize,
+    //     )).expect("couldn't spawn thread");
+    // }
+    // loop {
+    //     println!("main thread waiting...");
+    //     xous::syscall::wait_event();
+    //     println!("MAIN THREAD WOKE UP");
+    // }
+
     let mut connection = None;
     println!("Attempting to connect to server...");
     while connection.is_none() {
@@ -100,7 +121,7 @@ fn main() {
 
     let mut counter = 0;
     loop {
-        println!("Sending a message...");
+        println!("Sending a scalar message with id {}...", counter + 4096);
         let result = xous::syscall::send_message(
             connection,
             xous::Message::Scalar(xous::ScalarMessage {
@@ -113,5 +134,8 @@ fn main() {
         )
         .expect("couldn't send message");
         counter += 1;
+        if counter & 2 == 0 {
+            xous::syscall::yield_slice();
+        }
     }
 }

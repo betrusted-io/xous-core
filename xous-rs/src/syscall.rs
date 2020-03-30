@@ -668,9 +668,12 @@ pub fn map_memory(
         flags,
     ))?;
     if let Result::MemoryRange(range) = result {
-        return Ok(range);
+        Ok(range)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
     }
-    Err(Error::InternalError)
 }
 
 /// Claim a hardware interrupt for this process.
@@ -685,9 +688,12 @@ pub fn claim_interrupt(
         arg as *mut usize,
     ))?;
     if let Result::Ok = result {
-        return Ok(());
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
     }
-    Err(Error::InternalError)
 }
 
 /// Create a new server with the given name.  This enables other processes to
@@ -703,9 +709,12 @@ pub fn claim_interrupt(
 pub fn create_server(name: usize) -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer(name))?;
     if let Result::ServerID(sid) = result {
-        return Ok(sid);
+        Ok(sid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
     }
-    Err(Error::InternalError)
 }
 
 /// Connect to a server with the given SID
@@ -713,6 +722,8 @@ pub fn connect(server: SID) -> core::result::Result<CID, Error> {
     let result = rsyscall(SysCall::Connect(server))?;
     if let Result::ConnectionID(cid) = result {
         Ok(cid)
+    } else if let Result::Error(e) = result {
+        Err(e)
     } else {
         Err(Error::InternalError)
     }
@@ -725,7 +736,13 @@ pub fn connect(server: SID) -> core::result::Result<CID, Error> {
 ///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
     let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call watimessage");
-    Err(Error::UnhandledSyscall)
+    if let Result::Message(envelope) = result {
+        Ok(envelope)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
 }
 
 /// Send a message to a server.  Depending on the mesage type (move or borrow), it
@@ -741,7 +758,13 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
     let result =
         rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
-    Err(Error::UnhandledSyscall)
+    if result == Result::Ok {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        panic!("Unexpected return value: {:?}", result);
+    }
 }
 
 /// Return execution to the kernel. This function may return at any time,
