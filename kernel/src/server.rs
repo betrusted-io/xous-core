@@ -1,10 +1,9 @@
 pub use crate::arch::ProcessContext;
 use core::{mem, slice};
-use xous::{MemoryAddress, MemorySize, PID, SID};
+use xous::{CtxID, MemoryAddress, MemorySize, PID, SID};
 
-/// Internal representation of a queued message for a server.
-/// This should be exactly 8 words / 32 bytes, yielding 128
-/// queued messages per server
+/// Internal representation of a queued message for a server. This should be
+/// exactly 8 words / 32 bytes, yielding 128 queued messages per server
 #[repr(usize)]
 #[derive(PartialEq)]
 enum QueuedMessage {
@@ -67,7 +66,7 @@ pub struct Server {
     /// The `context mask` is a bitfield of contexts that are able to handle
     /// this message. If there are no available contexts, then messages will
     /// need to be queued.
-    ready_contexts: usize,
+    ready_contexts: CtxID,
 }
 
 impl Server {
@@ -101,8 +100,8 @@ impl Server {
     }
     /// Remove a message from the server's queue and replace it with
     /// QueuedMessage::Empty. Advance the queue pointer while we're at it.
-    pub fn take_next_message(&mut self) -> Option<(xous::MessageEnvelope, usize)> {
-        let result = match self.queue[self.queue_head] {
+    pub fn take_next_message(&mut self) -> Option<(xous::MessageEnvelope, CtxID)> {
+        let result = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::MemoryMessageROLend(
                 sender,
@@ -175,10 +174,10 @@ impl Server {
                 context,
             ),
         };
-        self.queue[self.queue_head] = QueuedMessage::Empty;
-        self.queue_head += 1;
-        if self.queue_head >= self.queue.len() {
-            self.queue_head = 0;
+        self.queue[self.queue_tail] = QueuedMessage::Empty;
+        self.queue_tail += 1;
+        if self.queue_tail >= self.queue.len() {
+            self.queue_tail = 0;
         }
         Some(result)
     }
@@ -206,9 +205,10 @@ impl Server {
     //     mem::size_of::<QueuedMessage>()
     // );
 
-    /// Return a context ID that is available and blocking.  If no such context ID exists,
-    /// or if this server isn't actually ready to receive packets, return None.
-    pub fn take_available_context(&mut self) -> Option<usize> {
+    /// Return a context ID that is available and blocking.  If no such context
+    /// ID exists, or if this server isn't actually ready to receive packets,
+    /// return None.
+    pub fn take_available_context(&mut self) -> Option<CtxID> {
         if self.ready_contexts == 0 {
             return None;
         }
@@ -230,7 +230,8 @@ impl Server {
         }
     }
 
-    pub fn park_context(&mut self, context: usize) {
+    /// Add the given context to the list of ready and waiting contexts.
+    pub fn park_context(&mut self, context: CtxID) {
         self.ready_contexts |= 1 << context;
     }
 }
