@@ -1,5 +1,4 @@
 use crate::args::KernelArguments;
-use crate::services::SystemServicesHandle;
 use core::fmt;
 use core::mem;
 use core::slice;

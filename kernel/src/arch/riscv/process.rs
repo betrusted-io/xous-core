@@ -46,12 +46,6 @@ impl Process {
         &mut self.contexts[self.context_nr - 1]
     }
 
-    /// Return the current context number. Context numbers are 0-indexed.
-    pub fn current_context_nr(&self) -> CtxID {
-        assert!(self.context_nr != 0, "context number was 0");
-        self.context_nr
-    }
-
     /// Set the current context number.
     pub fn set_context_nr(&mut self, context: CtxID) {
         assert!(
@@ -125,18 +119,6 @@ impl Process {
 }
 
 impl ProcessContext {
-    /// Determine whether a process context is valid.
-    /// Contexts are valid when they have a place to return to --
-    /// i.e. `SEPC` is nonzero
-    pub fn valid(&self) -> bool {
-        self.sepc != 0
-    }
-
-    /// Invalidate a context by removing its return address
-    pub fn invalidate(&mut self) {
-        self.sepc = 0;
-    }
-
     /// The current stack pointer for this context
     pub fn stack_pointer(&self) -> usize {
         self.registers[1]

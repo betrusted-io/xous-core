@@ -211,8 +211,8 @@ impl Server {
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
-            xous::Message::MutableBorrow(msg) => unimplemented!(),
-            xous::Message::ImmutableBorrow(msg) => unimplemented!(),
+            xous::Message::MutableBorrow(_msg) => unimplemented!(),
+            xous::Message::ImmutableBorrow(_msg) => unimplemented!(),
         };
 
         self.queue_head += 1;

@@ -3,7 +3,7 @@ use core::fmt;
 use riscv::register::satp;
 use xous::{MemoryFlags, PID};
 
-pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
+// pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
 pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
 pub const DEFAULT_BASE: usize = 0x6000_0000;

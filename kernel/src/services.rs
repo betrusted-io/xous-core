@@ -12,7 +12,7 @@ use xous::{CtxID, MemoryFlags, MemoryType, MessageEnvelope, CID, PID, SID};
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
 const DEFAULT_STACK_SIZE: usize = 131072;
-pub use crate::arch::mem::DEFAULT_STACK_TOP;
+// pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
 /// This is the address a program will jump to in order to return from an ISR.
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
@@ -133,10 +133,6 @@ impl Process {
             _ => false,
         }
     }
-
-    pub fn current_context_nr(&self) -> usize {
-        self.current_context as usize
-    }
 }
 
 #[repr(C)]
@@ -168,10 +164,10 @@ pub struct SystemServices {
     servers: [Option<Server>; MAX_SERVER_COUNT],
 
     /// A log of the currently-active syscall depth
-    syscall_stack: [(usize, usize); 3],
+    _syscall_stack: [(usize, usize); 3],
 
     /// How many entries there are on the syscall stack
-    syscall_depth: usize,
+    _syscall_depth: usize,
 }
 
 static mut SYSTEM_SERVICES: SystemServices = SystemServices {
@@ -186,8 +182,8 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
     servers: filled_array![None; 32],
-    syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    syscall_depth: 0,
+    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
+    _syscall_depth: 0,
 };
 
 impl core::fmt::Debug for Process {
@@ -670,7 +666,7 @@ impl SystemServices {
         dest_pid: PID,
         len: usize,
         writable: bool,
-        borrow: bool,
+        _borrow: bool,
     ) -> Result<usize, xous::Error> {
         let current_pid = self.current_pid();
         let phys = {
@@ -792,7 +788,7 @@ impl SystemServices {
                 };
                 Server::init(entry, pid, sid, addr, size).or_else(|x| {
                     let mut mm = MemoryManagerHandle::get();
-                    mm.unmap_page(addr);
+                    mm.unmap_page(addr)?;
                     Err(x)
                 })?;
                 return Ok(sid);
@@ -836,11 +832,6 @@ impl SystemServices {
             }
         }
         Err(xous::Error::OutOfMemory)
-    }
-
-    /// Return a server based on the connection id and the current process
-    pub fn server_from_cid(&mut self, cid: CID) -> Option<&mut Server> {
-        self.servers[self.sidx_from_cid(cid)?].as_mut()
     }
 
     /// Return a server based on the connection id and the current process
