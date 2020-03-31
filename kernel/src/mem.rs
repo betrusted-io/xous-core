@@ -208,8 +208,7 @@ impl MemoryManager {
         }
     }
 
-    /// Allocate a single page to the given process.
-    /// DOES NOT ZERO THE PAGE!!!
+    /// Allocate a single page to the given process. DOES NOT ZERO THE PAGE!!!
     /// This function CANNOT zero the page, as it hasn't been mapped yet.
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous::Error> {
         // Go through all RAM pages looking for a free page.
@@ -275,7 +274,7 @@ impl MemoryManager {
 
         // Look for a sequence of `size` pages that are free.
         for potential_start in (initial..end - size).step_by(PAGE_SIZE) {
-            println!("    Checking {:08x}...", potential_start);
+            // println!("    Checking {:08x}...", potential_start);
             let mut all_free = true;
             for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
                 if !crate::arch::mem::address_available(check_page) {
@@ -294,7 +293,7 @@ impl MemoryManager {
         }
 
         for potential_start in (start..initial).step_by(PAGE_SIZE) {
-            println!("    Checking {:08x}...", potential_start);
+            // println!("    Checking {:08x}...", potential_start);
             let mut all_free = true;
             for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
                 if !crate::arch::mem::address_available(check_page) {
@@ -323,7 +322,7 @@ impl MemoryManager {
         virt_ptr: *mut usize,
         size: usize,
         flags: MemoryFlags,
-    ) -> Result<xous::Result, xous::Error> {
+    ) -> Result<xous::MemoryRange, xous::Error> {
         // If no address was specified, pick the next address that fits
         // in the "default" range
         let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)?;
@@ -341,10 +340,10 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        Ok(xous::Result::MemoryRange(xous::MemoryRange {
+        Ok(xous::MemoryRange {
             base: virt_ptr as *mut u8,
             size,
-        }))
+        })
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -394,14 +393,12 @@ impl MemoryManager {
         phys_ptr: *mut usize,
         virt_ptr: *mut usize,
         size: usize,
+        pid: u8,
         flags: MemoryFlags,
-    ) -> Result<xous::Result, xous::Error> {
+        kind: xous::MemoryType,
+    ) -> Result<xous::MemoryRange, xous::Error> {
         let phys = phys_ptr as usize;
-        let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)?;
-        let pid = {
-            let ss = SystemServicesHandle::get();
-            ss.current_pid()
-        };
+        let virt = self.find_virtual_address(virt_ptr, size, kind)?;
 
         // If no physical address is specified, give the user the next available pages
         if phys == 0 {
@@ -437,48 +434,11 @@ impl MemoryManager {
             }
         }
 
-        Ok(xous::Result::MemoryRange(xous::MemoryRange {
+        Ok(xous::MemoryRange {
             base: virt as *mut u8,
             size,
-        }))
+        })
     }
-
-    // /// Map a range of physical addresses into the current memory space.
-    // pub fn map_range(&mut self, phys: *mut usize, virt: *mut usize, size: usize, flags: MemoryFlags) -> xous::Result {
-    //     // If a physical address range was requested, verify that it is valid
-    //     if phys as usize != 0 {
-
-    //     }
-    //     let virt = if virt as usize == 0 {
-    //         // No virt address was
-    //     }
-    //     for offset in (0..size).step_by(4096) {
-    //         if let xous::Result::Error(e) = crate::arch::mem::
-    //             map_page_inner(
-    //                 ((phys as usize) + offset) as usize,
-    //                 ((virt as usize) + offset) as usize,
-    //                 req_flags,
-    //             )
-    //             .map(|x| xous::Result::MemoryAddress(x.get() as *mut usize))
-    //             .unwrap_or_else(|e| xous::Result::Error(e))
-    //         {
-    //             result = xous::Result::Error(e);
-    //             break;
-    //         }
-    //         last_mapped = offset;
-    //     }
-    //     if result != xous::Result::Ok {
-    //         for offset in (0..last_mapped).step_by(4096) {
-    //             mm.unmap_page(
-    //                 ((phys as usize) + offset) as *mut usize,
-    //                 ((virt as usize) + offset) as *mut usize,
-    //                 req_flags,
-    //             )
-    //             .expect("couldn't unmap page");
-    //         }
-    //     }
-    //     result
-    // }
 
     /// Attempt to map the given physical address into the virtual address space
     /// of this process.
@@ -486,7 +446,7 @@ impl MemoryManager {
     /// # Errors
     ///
     /// * MemoryInUse - The specified page is already mapped
-    pub fn unmap_page(&mut self, virt: *mut usize) -> Result<(), xous::Error> {
+    pub fn unmap_page(&mut self, virt: *mut usize) -> Result<usize, xous::Error> {
         let pid = crate::arch::current_pid();
         let phys = crate::arch::mem::virt_to_phys(virt as usize)?;
         self.release_page(phys as *mut usize, pid)?;

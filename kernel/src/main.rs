@@ -104,14 +104,15 @@ pub extern "C" fn main() {
                 0xF0002000 as *mut usize,
                 ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut usize,
                 4096,
+                1,
                 MemoryFlags::R | MemoryFlags::W,
+                MemoryType::Default,
             )
             .expect("unable to map serial port");
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
         println!("Claiming IRQ 3 via syscall...");
-        xous::claim_interrupt(3, debug::irq, 0 as *mut usize)
-            .expect("Couldn't claim interrupt 3");
+        xous::claim_interrupt(3, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 3");
         print!("}} ");
     }
 

@@ -7,6 +7,9 @@ mod start;
 
 mod timer;
 
+mod logstr;
+
+use core::fmt::Write;
 use core::panic::PanicInfo;
 
 #[panic_handler]
@@ -25,13 +28,13 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
     println!("");
 }
 
-fn print_and_yield(index: *mut usize) -> ! {
-    let num = index as usize;
-    loop {
-        println!("THREAD {}", num);
-        xous::syscall::yield_slice();
-    }
-}
+// fn print_and_yield(index: *mut usize) -> ! {
+//     let num = index as usize;
+//     loop {
+//         println!("THREAD {}", num);
+//         xous::syscall::yield_slice();
+//     }
+// }
 
 #[no_mangle]
 fn main() {
@@ -122,7 +125,7 @@ fn main() {
     let mut counter = 0;
     loop {
         println!("Sending a scalar message with id {}...", counter + 4096);
-        let result = xous::syscall::send_message(
+        xous::syscall::send_message(
             connection,
             xous::Message::Scalar(xous::ScalarMessage {
                 id: counter + 4096,
@@ -132,10 +135,22 @@ fn main() {
                 arg4: counter + 1,
             }),
         )
-        .expect("couldn't send message");
+        .expect("couldn't send scalar message");
         counter += 1;
         if counter & 2 == 0 {
             xous::syscall::yield_slice();
         }
+
+        let mut ls = logstr::LogStr::new();
+        write!(ls, "Hello, Server!  Loop number: {}", counter).expect("couldn't send hello message");
+
+        xous::syscall::send_message(
+            connection,
+            xous::Message::Move(
+                ls.into_memory_message(0)
+                    .expect("couldn't form memory message"),
+            ),
+        )
+        .expect("couldn't send memory message");
     }
 }

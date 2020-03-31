@@ -70,10 +70,10 @@ pub struct MemoryMessage {
 
     /// The offset within the buffer where the interesting
     /// stuff starts.
-    pub _offset: Option<MemorySize>,
+    pub offset: Option<MemorySize>,
 
     /// How many bytes in the buffer are valid
-    pub _valid: Option<MemorySize>,
+    pub valid: Option<MemorySize>,
 }
 
 #[repr(C)]

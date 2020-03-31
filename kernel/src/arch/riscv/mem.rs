@@ -97,21 +97,6 @@ impl MemoryMapping {
         satp::write(self.satp);
     }
 
-    // /// Get the flags for a given address, or `0` if none is set.
-    // pub fn flags_for_address(&self, addr: usize) -> usize {
-    //     let vpn1 = (addr >> 22) & ((1 << 10) - 1);
-    //     let vpn0 = (addr >> 12) & ((1 << 10) - 1);
-
-    //     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    //     let l0_pt = l1_pt.entries[vpn1];
-    //     if l0_pt & 1 == 0 {
-    //         return 0;
-    //     }
-    //     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    //     let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
-    //     l0_pt.entries[vpn0]
-    // }
-
     pub fn print_map(&self) {
         println!("Memory Maps:");
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
@@ -385,13 +370,17 @@ pub fn map_page_inner(
     Ok(())
 }
 
-/// Ummap the given page from the specified process table.  Never
-/// allocate a new page.
+/// Ummap the given page from the specified process table.  Never allocate a new
+/// page.
+///
+/// # Returns
+///
+/// The physical address for the page that was just unmapped
 ///
 /// # Errors
 ///
 /// * BadAddress - Address was not already mapped.
-pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<(), xous::Error> {
+pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous::Error> {
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
     let vpo = (virt >> 0) & ((1 << 12) - 1);
@@ -419,10 +408,11 @@ pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<(), xous
     if l0_pt.entries[vpn0] & 1 == 0 {
         return Err(xous::Error::BadAddress);
     }
+    let phys = (l0_pt.entries[vpn0] >> 10) << 12;
     l0_pt.entries[vpn0] = 0;
     unsafe { flush_mmu() };
 
-    Ok(())
+    Ok(phys)
 }
 
 pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
@@ -448,7 +438,7 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
     if l0_pt.entries[vpn0] & 1 == 0 {
         return Err(xous::Error::BadAddress);
     }
-    Ok(l0_pt.entries[vpn0])
+    Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }
 
 /// Determine whether a virtual address has been mapped

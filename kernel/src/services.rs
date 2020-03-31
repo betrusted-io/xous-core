@@ -7,7 +7,7 @@ use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 use core::{mem, slice};
-use xous::{CtxID, MemoryFlags, MessageEnvelope, CID, PID, SID};
+use xous::{CtxID, MemoryFlags, MemoryType, MessageEnvelope, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -645,6 +645,97 @@ impl SystemServices {
         );
 
         Ok(new_context)
+    }
+
+    /// Move memory from one process to another.
+    ///
+    /// During this process, memory is deallocated from the first process, then
+    /// we switch contexts and look for a free slot in the second process. After
+    /// that, we switch back to the first process and return.
+    ///
+    /// If no free slot can be found, memory is re-attached to the first
+    /// process.  By following this break-then-make approach, we avoid getting
+    /// into a situation where memory may appear in two different processes at
+    /// once.
+    ///
+    /// The given memory range is guaranteed to be unavailable in this process
+    /// after this function returns.
+    ///
+    /// # Returns
+    ///
+    /// Returns the virtual address of the memory region in the target process.
+    pub fn send_memory(
+        &mut self,
+        src_virt: *mut usize,
+        dest_pid: PID,
+        len: usize,
+        writable: bool,
+        borrow: bool,
+    ) -> Result<usize, xous::Error> {
+        let current_pid = self.current_pid();
+        let phys = {
+            let mut error = None;
+            let mut mm = MemoryManagerHandle::get();
+
+            // Unmap each address from the current memory space.  If we
+            // encounter an error, continue unmapping.
+            let phys = mm.unmap_page(src_virt).unwrap_or_else(|e| {
+                error = Some(e);
+                0
+            });
+            for addr in
+                ((src_virt as usize + PAGE_SIZE)..((src_virt as usize) + len)).step_by(PAGE_SIZE)
+            {
+                if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                    error = Some(e)
+                }
+            }
+            if let Some(e) = error {
+                return Err(e);
+            }
+            phys
+        };
+
+        // Switch to the target process, so we can manipulate its page tables.
+        // From this point forward we can't use the `?` operator, since it would
+        // leave us in the incorrect memory space.
+        self.get_process(dest_pid)?.mapping.activate();
+
+        let mut mm = MemoryManagerHandle::get();
+        let mut flags = MemoryFlags::R;
+        if writable {
+            flags |= MemoryFlags::W;
+        }
+        let result = mm.map_range(
+            phys as *mut usize,
+            0 as *mut usize,
+            len,
+            dest_pid,
+            flags,
+            MemoryType::Messages,
+        );
+        if let Ok(ref range) = result {
+            for offset in
+                ((range.base as usize)..(range.base as usize + range.size)).step_by(PAGE_SIZE)
+            {
+                println!("Handing page to user");
+                crate::arch::mem::hand_page_to_user(offset as *mut usize)
+                    .expect("couldn't hand page to user");
+            }
+        }
+
+        // Finally, switch back to the original process.
+        self.get_process(current_pid)
+            .expect("couldn't find previous process")
+            .mapping
+            .activate();
+        println!(
+            "send_memory: Sent phys {:08x} from {:08x} to {:08x}",
+            phys,
+            src_virt as usize,
+            result.as_ref().unwrap().base as usize
+        );
+        result.map(|virt| virt.base as usize)
     }
 
     pub fn spawn_thread(

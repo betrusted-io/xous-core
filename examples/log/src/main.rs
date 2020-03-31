@@ -3,9 +3,11 @@
 
 #[macro_use]
 mod debug;
+mod log_string;
 mod start;
 
 use core::panic::PanicInfo;
+use log_string::LogString;
 
 #[panic_handler]
 fn handle_panic(arg: &PanicInfo) -> ! {
@@ -71,12 +73,23 @@ fn main() {
     // }
 
     println!("Starting server...");
-    let server_addr = xous::syscall::create_server(xous::make_name!("📜")).expect("couldn't create server");
+    let server_addr =
+        xous::syscall::create_server(xous::make_name!("📜")).expect("couldn't create server");
     println!("Server listening on address {:?}", server_addr);
 
     loop {
-        println!("Waiting for an event...");
-        let msg = xous::syscall::receive_message(server_addr).expect("couldn't get address");
-        println!("Got message: {:?}", msg);
+        // println!("Waiting for an event...");
+        let envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
+        // println!("Got message envelope: {:?}", envelope);
+        match envelope.message {
+            xous::Message::Scalar(msg) => {
+                println!("Scalar message from {}: {:?}", envelope.sender, msg)
+            }
+            xous::Message::Move(msg) => {
+                let log_entry = LogString::from_message(msg);
+                println!("Log message from {}: {}", envelope.sender, log_entry);
+            }
+            _ => unimplemented!(),
+        }
     }
 }

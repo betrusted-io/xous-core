@@ -153,18 +153,34 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
             //     phys as u32, virt as u32, size, req_flags
             // );
-            let result = mm.map_range(phys, virt, size, req_flags)?;
-            if let xous::Result::MemoryRange(ref r) = result {
-                // If we're handing back an address in main RAM, zero it out
-                if phys as usize == 0 || mm.is_main_memory(phys) {
-                    unsafe { r.base.write_bytes(0, r.size / mem::size_of::<usize>()) };
+            let range = mm.map_range(phys, virt, size, pid, req_flags, MemoryType::Default)?;
+
+            // If we're handing back an address in main RAM, zero it out. If
+            // phys is 0, then the page will be lazily allocated, so we
+            // don't need to do this.
+            if phys as usize != 0 {
+                if mm.is_main_memory(phys) {
+                    println!(
+                        "Going to zero out {} bytes @ {:08x}",
+                        range.size, range.base as usize
+                    );
+                    unsafe {
+                        range
+                            .base
+                            .write_bytes(0, range.size / mem::size_of::<usize>())
+                    };
+                    println!("Done zeroing out");
                 }
-                for offset in ((r.base as usize)..(r.base as usize + r.size)).step_by(PAGE_SIZE) {
+                for offset in
+                    ((range.base as usize)..(range.base as usize + range.size)).step_by(PAGE_SIZE)
+                {
+                    println!("Handing page to user");
                     crate::arch::mem::hand_page_to_user(offset as *mut usize)
                         .expect("couldn't hand page to user");
                 }
             }
-            Ok(result)
+
+            Ok(xous::Result::MemoryRange(range))
         }
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
@@ -182,7 +198,9 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 start as *mut usize
             };
             let mut mm = MemoryManagerHandle::get();
-            mm.reserve_range(start, delta, flags)
+            Ok(xous::Result::MemoryRange(
+                mm.reserve_range(start, delta, flags)?,
+            ))
         }
         SysCall::DecreaseHeap(delta) => {
             if delta & 0xfff != 0 {
@@ -277,18 +295,46 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
             let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
-            let (server_pid, available_context) = {
-                let server = ss
-                    .server_from_sidx(sidx)
-                    .ok_or(xous::Error::ServerNotFound)?;
-                (server.pid, server.take_available_context())
-            };
 
-            // Determine whether the call is blocking.  If so, switch to the
-            // server context right away.
-            let blocking = match message {
-                Message::MutableBorrow(_) | Message::ImmutableBorrow(_) => true,
-                Message::Scalar(_) | Message::Move(_) => false,
+            let server_pid = ss
+                .server_from_sidx(sidx)
+                .expect("server couldn't be located")
+                .pid;
+
+            // Translate memory messages from the client process to the server
+            // process. Additionally, determine whether the call is blocking.
+            // If so, switch to the server context right away.
+            let (message, blocking) = match message {
+                Message::Scalar(_) => (message, false),
+                Message::Move(msg) => {
+                    let new_virt = if let Some(virt) = msg.buf {
+                        if msg.buf_size.is_none() {
+                            return Err(xous::Error::BadAddress);
+                        }
+                        let len = msg.buf_size.unwrap().get();
+                        MemoryAddress::new(ss.send_memory(
+                            virt.get() as *mut usize,
+                            server_pid,
+                            len,
+                            true,
+                            false,
+                        )?)
+                    } else {
+                        None
+                    };
+                    (
+                        Message::Move(MemoryMessage {
+                            id: msg.id,
+                            buf: new_virt,
+                            buf_size: msg.buf_size,
+                            offset: msg.offset,
+                            valid: msg.valid,
+                        }),
+                        false,
+                    )
+                }
+                Message::MutableBorrow(_) => unimplemented!(),
+                Message::ImmutableBorrow(_) => unimplemented!(),
             };
 
             let envelope = MessageEnvelope {
@@ -298,7 +344,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // If the server has an available context to receive the message,
             // transfer it right away.
-            if let Some(ctx_number) = available_context {
+            if let Some(ctx_number) = ss
+                .server_from_sidx(sidx)
+                .expect("server couldn't be located")
+                .take_available_context()
+            {
                 println!(
                     "There are contexts available to handle this message.  Marking PID {} as Ready",
                     server_pid
@@ -325,9 +375,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 let server = ss
                     .server_from_sidx(sidx)
                     .ok_or(xous::Error::ServerNotFound)?;
-                println!("Adding to queue");
                 ss.queue_server_message(sidx, context_nr, envelope)?;
-                println!("Done adding to queue");
 
                 // Park this context if it's blocking.  This is roughly
                 // equivalent to a "Yield".
