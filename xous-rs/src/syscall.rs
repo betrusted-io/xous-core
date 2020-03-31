@@ -79,6 +79,12 @@ pub enum SysCall {
         MemoryFlags, /* flags */
     ),
 
+    /// Release the memory back to the operating system.
+    ///
+    /// # Errors
+    ///
+    UnmapMemory(*mut usize /* virt */, usize /* region size */),
+
     /// Sets the offset and size of a given memory region.  This call may only
     /// be made by processes that have not yet started, or processes that have a
     /// PPID of 1. Care must be taken to ensure this region doesn't run into
@@ -306,6 +312,7 @@ enum SysCallNumber {
     SendMessage = 16,
     Connect = 17,
     SpawnThread = 18,
+    UnmapMemory = 19,
     Invalid,
 }
 
@@ -326,6 +333,16 @@ impl SysCall {
                 a2 as usize,
                 a3,
                 a4.bits(),
+                0,
+                0,
+                0,
+            ],
+            SysCall::UnmapMemory(a1, a2) => [
+                SysCallNumber::UnmapMemory as usize,
+                a1 as usize,
+                a2,
+                0,
+                0,
                 0,
                 0,
                 0,
@@ -513,6 +530,7 @@ impl SysCall {
                 a3,
                 MemoryFlags::from_bits(a4).ok_or(InvalidSyscall {})?,
             ),
+            Some(SysCallNumber::UnmapMemory) => SysCall::UnmapMemory(a1 as *mut usize, a2),
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
@@ -669,6 +687,19 @@ pub fn map_memory(
     ))?;
     if let Result::MemoryRange(range) = result {
         Ok(range)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn unmap_memory(virt: MemoryAddress, size: usize) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::UnmapMemory(virt.get() as *mut usize, size))?;
+    if let Result::Ok = result {
+        Ok(())
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
