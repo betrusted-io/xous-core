@@ -182,6 +182,22 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             Ok(xous::Result::MemoryRange(range))
         }
+        SysCall::UnmapMemory(virt, size) => {
+            let mut mm = MemoryManagerHandle::get();
+            let mut result = Ok(xous::Result::Ok);
+            let virt = virt as usize;
+            if virt & 0xfff != 0 {
+                return Err(xous::Error::BadAlignment);
+            }
+            for addr in (virt..(virt+size)).step_by(PAGE_SIZE) {
+                if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                    if result.is_ok() {
+                        result = Err(e);
+                    }
+                }
+            }
+            result
+        }
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
                 return Err(xous::Error::BadAlignment);
@@ -227,8 +243,8 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SwitchTo(pid, context) => {
             let mut ss = SystemServicesHandle::get();
             ss.activate_process_context(pid, context, true, false)
-                .map(|ctx| {
-                    // println!("switchto ({}, {})", pid, ctx);
+                .map(|_ctx| {
+                    // println!("switchto ({}, {})", pid, _ctx);
                     xous::Result::ResumeProcess
                 })
         }
@@ -372,9 +388,9 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.
-                let server = ss
-                    .server_from_sidx(sidx)
-                    .ok_or(xous::Error::ServerNotFound)?;
+                // let server = ss
+                //     .server_from_sidx(sidx)
+                //     .ok_or(xous::Error::ServerNotFound)?;
                 ss.queue_server_message(sidx, context_nr, envelope)?;
 
                 // Park this context if it's blocking.  This is roughly
