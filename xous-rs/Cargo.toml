@@ -12,3 +12,8 @@ num-derive = "0.3.0"
 [dependencies.num-traits]
 version = "0.2"
 default-features = false
+
+[features]
+# If this is set, then the "Drop" feature of MemoryMessage structs
+# will not be implemented.  This should only be set by the kernel.
+forget-memory-messages = []

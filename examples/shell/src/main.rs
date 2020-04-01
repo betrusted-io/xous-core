@@ -45,8 +45,8 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map uart");
-    unsafe { debug::DEFAULT_UART_ADDR = uart.base as *mut usize };
-    println!("Mapped UART @ {:08x}", uart.base as usize);
+    unsafe { debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() };
+    println!("Mapped UART @ {:08x}", uart.addr.get() );
 
     xous::syscall::map_memory(
         xous::MemoryAddress::new(0xf0002000),

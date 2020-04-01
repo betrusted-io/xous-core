@@ -1,6 +1,6 @@
 use crate::{
-    CpuID, CtxID, Error, MemoryAddress, MemoryMessage, MemorySize, Message, MessageEnvelope,
-    ScalarMessage, CID, PID, SID,
+    CpuID, CtxID, Error, MemoryAddress, MemoryMessage, MemoryRange, MemorySize, Message,
+    MessageEnvelope, ScalarMessage, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -316,9 +316,6 @@ enum SysCallNumber {
     Invalid,
 }
 
-#[derive(Debug)]
-pub struct InvalidSyscall {}
-
 impl SysCall {
     pub fn as_args(&self) -> [usize; 8] {
         use core::mem;
@@ -462,8 +459,8 @@ impl SysCall {
                     a1,
                     1,
                     mm.id as usize,
-                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
@@ -472,8 +469,8 @@ impl SysCall {
                     a1,
                     2,
                     mm.id as usize,
-                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
@@ -482,8 +479,8 @@ impl SysCall {
                     a1,
                     3,
                     mm.id as usize,
-                    mm.buf.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
@@ -522,13 +519,13 @@ impl SysCall {
         a5: usize,
         a6: usize,
         a7: usize,
-    ) -> core::result::Result<Self, InvalidSyscall> {
+    ) -> core::result::Result<Self, Error> {
         Ok(match FromPrimitive::from_usize(a0) {
             Some(SysCallNumber::MapMemory) => SysCall::MapMemory(
                 a1 as *mut usize,
                 a2 as *mut usize,
                 a3,
-                MemoryFlags::from_bits(a4).ok_or(InvalidSyscall {})?,
+                MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
             Some(SysCallNumber::UnmapMemory) => SysCall::UnmapMemory(a1 as *mut usize, a2),
             Some(SysCallNumber::Yield) => SysCall::Yield,
@@ -543,13 +540,13 @@ impl SysCall {
             Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(a1 as u8),
             Some(SysCallNumber::IncreaseHeap) => SysCall::IncreaseHeap(
                 a1 as usize,
-                MemoryFlags::from_bits(a2).ok_or(InvalidSyscall {})?,
+                MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
             ),
             Some(SysCallNumber::DecreaseHeap) => SysCall::DecreaseHeap(a1 as usize),
             Some(SysCallNumber::UpdateMemoryFlags) => SysCall::UpdateMemoryFlags(
                 a1 as *mut usize,
                 a2 as usize,
-                MemoryFlags::from_bits(a3).ok_or(InvalidSyscall {})?,
+                MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
             Some(SysCallNumber::SetMemRegion) => {
                 SysCall::SetMemRegion(a1 as PID, MemoryType::from(a2), a3 as *mut usize, a4)
@@ -561,8 +558,7 @@ impl SysCall {
                     a1,
                     Message::MutableBorrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryAddress::new(a4),
-                        buf_size: MemorySize::new(a5),
+                        buf: MemoryRange::new(a4, a5),
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -571,8 +567,7 @@ impl SysCall {
                     a1,
                     Message::ImmutableBorrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryAddress::new(a4),
-                        buf_size: MemorySize::new(a5),
+                        buf: MemoryRange::new(a4, a5),
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -581,8 +576,7 @@ impl SysCall {
                     a1,
                     Message::Move(MemoryMessage {
                         id: a3,
-                        buf: MemoryAddress::new(a4),
-                        buf_size: MemorySize::new(a5),
+                        buf: MemoryRange::new(a4, a5),
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -603,15 +597,9 @@ impl SysCall {
                 SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
             }
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
-            None => return Err(InvalidSyscall {}),
+            None => return Err(Error::InvalidSyscall),
         })
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct MemoryRange {
-    pub base: *mut u8,
-    pub size: usize,
 }
 
 #[repr(C)]
@@ -696,8 +684,8 @@ pub fn map_memory(
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn unmap_memory(virt: MemoryAddress, size: usize) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::UnmapMemory(virt.get() as *mut usize, size))?;
+pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::UnmapMemory(virt.get() as *mut usize, size.get()))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {

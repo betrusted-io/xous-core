@@ -712,7 +712,7 @@ impl SystemServices {
         );
         if let Ok(ref range) = result {
             for offset in
-                ((range.base as usize)..(range.base as usize + range.size)).step_by(PAGE_SIZE)
+                (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
             {
                 println!("Handing page to user");
                 crate::arch::mem::hand_page_to_user(offset as *mut usize)
@@ -729,9 +729,9 @@ impl SystemServices {
             "send_memory: Sent phys {:08x} from {:08x} to {:08x}",
             phys,
             src_virt as usize,
-            result.as_ref().unwrap().base as usize
+            result.as_ref().unwrap().addr.get()
         );
-        result.map(|virt| virt.base as usize)
+        result.map(|virt| virt.addr.get())
     }
 
     pub fn spawn_thread(

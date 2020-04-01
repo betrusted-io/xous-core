@@ -6,7 +6,7 @@ use core::str;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::ProcessHandle;
-use xous::{MemoryFlags, PID};
+use xous::{MemoryFlags, MemoryRange, PID};
 
 #[derive(Debug)]
 enum ClaimOrRelease {
@@ -339,10 +339,7 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        Ok(xous::MemoryRange {
-            base: virt_ptr as *mut u8,
-            size,
-        })
+        Ok(xous::MemoryRange::new(virt_ptr as usize, size))
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -433,10 +430,7 @@ impl MemoryManager {
             }
         }
 
-        Ok(xous::MemoryRange {
-            base: virt as *mut u8,
-            size,
-        })
+        Ok(MemoryRange::new(virt, size))
     }
 
     /// Attempt to map the given physical address into the virtual address space

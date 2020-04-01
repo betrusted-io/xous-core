@@ -1,6 +1,6 @@
 pub use crate::arch::ProcessContext;
 use core::{mem, slice};
-use xous::{CtxID, MemoryAddress, MemorySize, PID, SID};
+use xous::{CtxID, MemoryRange, MemorySize, PID, SID};
 
 /// Internal representation of a queued message for a server. This should be
 /// exactly 8 words / 32 bytes, yielding 128 queued messages per server
@@ -116,8 +116,7 @@ impl Server {
                     sender: sender,
                     message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryAddress::new(buf),
-                        buf_size: MemorySize::new(buf_size),
+                        buf: MemoryRange::new(buf, buf_size),
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -137,8 +136,7 @@ impl Server {
                     sender: sender,
                     message: xous::Message::MutableBorrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryAddress::new(buf),
-                        buf_size: MemorySize::new(buf_size),
+                        buf: MemoryRange::new(buf, buf_size),
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -151,8 +149,7 @@ impl Server {
                         sender: sender,
                         message: xous::Message::Move(xous::MemoryMessage {
                             id,
-                            buf: MemoryAddress::new(buf),
-                            buf_size: MemorySize::new(buf_size),
+                            buf: MemoryRange::new(buf, buf_size),
                             offset: MemorySize::new(offset),
                             valid: MemorySize::new(valid),
                         }),
@@ -206,8 +203,8 @@ impl Server {
                 envelope.sender,
                 context,
                 msg.id,
-                msg.buf.map(|x| x.get()).unwrap_or(0) as usize,
-                msg.buf_size.map(|x| x.get()).unwrap_or(0) as usize,
+                msg.buf.addr.get(),
+                msg.buf.size.get(),
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),

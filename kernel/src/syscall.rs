@@ -162,17 +162,18 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 if mm.is_main_memory(phys) {
                     println!(
                         "Going to zero out {} bytes @ {:08x}",
-                        range.size, range.base as usize
+                        range.size.get(),
+                        range.addr.get()
                     );
                     unsafe {
                         range
-                            .base
-                            .write_bytes(0, range.size / mem::size_of::<usize>())
+                            .as_mut_ptr()
+                            .write_bytes(0, range.size.get() / mem::size_of::<usize>())
                     };
                     println!("Done zeroing out");
                 }
                 for offset in
-                    ((range.base as usize)..(range.base as usize + range.size)).step_by(PAGE_SIZE)
+                    (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
                 {
                     println!("Handing page to user");
                     crate::arch::mem::hand_page_to_user(offset as *mut usize)
@@ -189,7 +190,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             if virt & 0xfff != 0 {
                 return Err(xous::Error::BadAlignment);
             }
-            for addr in (virt..(virt+size)).step_by(PAGE_SIZE) {
+            for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
                 if let Err(e) = mm.unmap_page(addr as *mut usize) {
                     if result.is_ok() {
                         result = Err(e);
@@ -323,26 +324,17 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let (message, blocking) = match message {
                 Message::Scalar(_) => (message, false),
                 Message::Move(msg) => {
-                    let new_virt = if let Some(virt) = msg.buf {
-                        if msg.buf_size.is_none() {
-                            return Err(xous::Error::BadAddress);
-                        }
-                        let len = msg.buf_size.unwrap().get();
-                        MemoryAddress::new(ss.send_memory(
-                            virt.get() as *mut usize,
+                    let new_virt = ss.send_memory(
+                            msg.buf.as_mut_ptr(),
                             server_pid,
-                            len,
+                            msg.buf.len(),
                             true,
                             false,
-                        )?)
-                    } else {
-                        None
-                    };
+                        )?;
                     (
                         Message::Move(MemoryMessage {
                             id: msg.id,
-                            buf: new_virt,
-                            buf_size: msg.buf_size,
+                            buf: MemoryRange::new(new_virt, msg.buf.len()),
                             offset: msg.offset,
                             valid: msg.valid,
                         }),

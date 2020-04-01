@@ -21,6 +21,12 @@ pub type CtxID = usize;
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
+#[derive(Debug, PartialEq)]
+pub struct MemoryRange {
+    pub addr: MemoryAddress,
+    pub size: MemorySize,
+}
+
 #[repr(usize)]
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -42,6 +48,7 @@ pub enum Error {
     ServerQueueFull = 15,
     ContextNotAvailable = 16,
     UnhandledSyscall = 17,
+    InvalidSyscall = 18,
 }
 
 #[repr(C)]
@@ -55,25 +62,31 @@ pub struct Context {
 /// A struct describing memory that is passed between processes.
 /// The `buf` value will get translated as necessary.
 pub struct MemoryMessage {
-
     /// A user-assignable message ID.
     pub id: MessageId,
 
-    /// The offset of the buffer.  This address will get
-    /// transformed when the message is moved between
-    /// processes.
-    pub buf: Option<MemoryAddress>,
+    /// The offset of the buffer.  This address will get transformed when the
+    /// message is moved between processes.
+    pub buf: MemoryRange,
 
-    /// The overall size of the buffer.  Must be a multiple
-    /// of PAGE_SIZE.
-    pub buf_size: Option<MemorySize>,
-
-    /// The offset within the buffer where the interesting
-    /// stuff starts.
+    /// The offset within the buffer where the interesting stuff starts.
     pub offset: Option<MemorySize>,
 
     /// How many bytes in the buffer are valid
     pub valid: Option<MemorySize>,
+}
+
+#[cfg(not(feature = "forget-memory-messages"))]
+impl Drop for MessageEnvelope {
+    fn drop(&mut self) {
+        match &self.message {
+            Message::MutableBorrow(msg) | Message::ImmutableBorrow(msg) | Message::Move(msg) => {
+                crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
+                    .expect("couldn't free memory message");
+            }
+            Message::Scalar(_) => (),
+        }
+    }
 }
 
 #[repr(C)]
@@ -101,4 +114,29 @@ pub enum Message {
 pub struct MessageEnvelope {
     pub sender: MessageSender,
     pub message: Message,
+}
+
+impl MemoryRange {
+    pub fn new(addr: usize, size: usize) -> MemoryRange {
+        assert!(
+            addr != 0,
+            "tried to construct a memory range with a null pointer"
+        );
+        MemoryRange {
+            addr: MemoryAddress::new(addr).unwrap(),
+            size: MemorySize::new(size).unwrap(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.size.get()
+    }
+
+    pub fn as_ptr(&self) -> *const usize {
+        self.addr.get() as *const usize
+    }
+
+    pub fn as_mut_ptr(&self) -> *mut usize {
+        self.addr.get() as *mut usize
+    }
 }

@@ -34,8 +34,8 @@ fn main() {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map serial port");
-    unsafe { debug::DEFAULT_UART_ADDR = uart.base as *mut usize };
-    println!("Mapped UART @ {:08x}", uart.base as usize);
+    unsafe { debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() };
+    println!("Mapped UART @ {:08x}", uart.addr.get());
 
     println!("Process: map success!");
     debug::DEFAULT.enable_rx();
@@ -81,7 +81,7 @@ fn main() {
         // println!("Waiting for an event...");
         let envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
         // println!("Got message envelope: {:?}", envelope);
-        match envelope.message {
+        match &envelope.message {
             xous::Message::Scalar(msg) => {
                 println!("Scalar message from {}: {:?}", envelope.sender, msg)
             }

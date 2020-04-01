@@ -18,13 +18,13 @@ impl<'a> LogStr<'a> {
         )
         .expect("couldn't allocate memory");
 
-        let raw_slice = unsafe { slice::from_raw_parts_mut(mem.base, 4096) };
+        let raw_slice = unsafe { slice::from_raw_parts_mut(mem.as_ptr() as *mut u8, 4096) };
 
         LogStr {
             raw_slice,
             len: 0,
             string: unsafe {
-                core::str::from_utf8_unchecked(slice::from_raw_parts(mem.base, 0))
+                core::str::from_utf8_unchecked(slice::from_raw_parts(mem.as_ptr() as *mut u8, 0))
             },
         }
     }
@@ -32,8 +32,7 @@ impl<'a> LogStr<'a> {
     pub fn into_memory_message(self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
         Ok(xous::MemoryMessage {
             id: id,
-            buf: xous::MemoryAddress::new(self.raw_slice.as_ptr() as usize),
-            buf_size: xous::MemorySize::new(self.raw_slice.len()),
+            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
             offset: None,
             valid: xous::MemorySize::new(self.len),
         })
