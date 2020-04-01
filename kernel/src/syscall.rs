@@ -311,6 +311,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         }
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
+            let context_nr = ss.current_context_nr();
             let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
 
             let server_pid = ss
@@ -342,11 +343,29 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     )
                 }
                 Message::MutableBorrow(_) => unimplemented!(),
-                Message::ImmutableBorrow(_) => unimplemented!(),
+                Message::ImmutableBorrow(msg) => {
+                    let new_virt = ss.send_memory(
+                            msg.buf.as_mut_ptr(),
+                            server_pid,
+                            msg.buf.len(),
+                            false,
+                            true,
+                        )?;
+                    (
+                        Message::ImmutableBorrow(MemoryMessage {
+                            id: msg.id,
+                            buf: MemoryRange::new(new_virt, msg.buf.len()),
+                            offset: msg.offset,
+                            valid: msg.valid,
+                        }),
+                        true,
+                    )
+                }
+,
             };
 
             let envelope = MessageEnvelope {
-                sender: pid as usize,
+                sender: (((pid as usize) << 16) & 0xffff0000) | ((context_nr << 0) & 0xffff),
                 message,
             };
 

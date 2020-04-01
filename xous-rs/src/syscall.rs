@@ -1,6 +1,6 @@
 use crate::{
     CpuID, CtxID, Error, MemoryAddress, MemoryMessage, MemoryRange, MemorySize, Message,
-    MessageEnvelope, ScalarMessage, CID, PID, SID,
+    MessageEnvelope, MessageSender, ScalarMessage, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -282,6 +282,9 @@ pub enum SysCall {
     /// Send a message to a server
     SendMessage(CID, Message),
 
+    /// Return a Borrowed memory region to a sender
+    ReturnMemory(MessageSender, MemoryRange),
+
     /// Spawn a new thread
     SpawnThread(
         *mut usize, /* entrypoint */
@@ -313,6 +316,7 @@ enum SysCallNumber {
     Connect = 17,
     SpawnThread = 18,
     UnmapMemory = 19,
+    ReturnMemory = 20,
     Invalid,
 }
 
@@ -323,12 +327,12 @@ impl SysCall {
             mem::size_of::<SysCall>() == mem::size_of::<usize>() * 8,
             "SysCall is not the expected size"
         );
-        match *self {
+        match self {
             SysCall::MapMemory(a1, a2, a3, a4) => [
                 SysCallNumber::MapMemory as usize,
-                a1 as usize,
-                a2 as usize,
-                a3,
+                *a1 as usize,
+                *a2 as usize,
+                *a3,
                 a4.bits(),
                 0,
                 0,
@@ -336,8 +340,8 @@ impl SysCall {
             ],
             SysCall::UnmapMemory(a1, a2) => [
                 SysCallNumber::UnmapMemory as usize,
-                a1 as usize,
-                a2,
+                *a1 as usize,
+                *a2,
                 0,
                 0,
                 0,
@@ -358,8 +362,8 @@ impl SysCall {
             ],
             SysCall::ReturnToParentI(a1, a2) => [
                 SysCallNumber::ReturnToParentI as usize,
-                a1 as usize,
-                a2 as usize,
+                *a1 as usize,
+                *a2 as usize,
                 0,
                 0,
                 0,
@@ -368,21 +372,21 @@ impl SysCall {
             ],
             SysCall::ClaimInterrupt(a1, a2, a3) => [
                 SysCallNumber::ClaimInterrupt as usize,
-                a1,
-                a2 as usize,
-                a3 as usize,
+                *a1,
+                *a2 as usize,
+                *a3 as usize,
                 0,
                 0,
                 0,
                 0,
             ],
             SysCall::FreeInterrupt(a1) => {
-                [SysCallNumber::FreeInterrupt as usize, a1, 0, 0, 0, 0, 0, 0]
+                [SysCallNumber::FreeInterrupt as usize, *a1, 0, 0, 0, 0, 0, 0]
             }
             SysCall::SwitchTo(a1, a2) => [
                 SysCallNumber::SwitchTo as usize,
-                a1 as usize,
-                a2 as usize,
+                *a1 as usize,
+                *a2 as usize,
                 0,
                 0,
                 0,
@@ -391,7 +395,7 @@ impl SysCall {
             ],
             SysCall::ReadyContexts(a1) => [
                 SysCallNumber::ReadyContexts as usize,
-                a1 as usize,
+                *a1 as usize,
                 0,
                 0,
                 0,
@@ -401,7 +405,7 @@ impl SysCall {
             ],
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
-                a1 as usize,
+                *a1 as usize,
                 a2.bits(),
                 0,
                 0,
@@ -411,7 +415,7 @@ impl SysCall {
             ],
             SysCall::DecreaseHeap(a1) => [
                 SysCallNumber::DecreaseHeap as usize,
-                a1 as usize,
+                *a1 as usize,
                 0,
                 0,
                 0,
@@ -421,8 +425,8 @@ impl SysCall {
             ],
             SysCall::UpdateMemoryFlags(a1, a2, a3) => [
                 SysCallNumber::UpdateMemoryFlags as usize,
-                a1 as usize,
-                a2 as usize,
+                *a1 as usize,
+                *a2 as usize,
                 a3.bits(),
                 0,
                 0,
@@ -431,17 +435,17 @@ impl SysCall {
             ],
             SysCall::SetMemRegion(a1, a2, a3, a4) => [
                 SysCallNumber::SetMemRegion as usize,
-                a1 as usize,
-                a2 as usize,
-                a3 as usize,
-                a4,
+                *a1 as usize,
+                *a2 as usize,
+                *a3 as usize,
+                *a4,
                 0,
                 0,
                 0,
             ],
 
             SysCall::CreateServer(a1) => {
-                [SysCallNumber::CreateServer as usize, a1, 0, 0, 0, 0, 0, 0]
+                [SysCallNumber::CreateServer as usize, *a1, 0, 0, 0, 0, 0, 0]
             }
             SysCall::Connect(sid) => [
                 SysCallNumber::Connect as usize,
@@ -456,7 +460,7 @@ impl SysCall {
             SysCall::SendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) => [
                     SysCallNumber::SendMessage as usize,
-                    a1,
+                    *a1,
                     1,
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
@@ -466,7 +470,7 @@ impl SysCall {
                 ],
                 Message::ImmutableBorrow(mm) => [
                     SysCallNumber::SendMessage as usize,
-                    a1,
+                    *a1,
                     2,
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
@@ -476,7 +480,7 @@ impl SysCall {
                 ],
                 Message::Move(mm) => [
                     SysCallNumber::SendMessage as usize,
-                    a1,
+                    *a1,
                     3,
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
@@ -486,7 +490,7 @@ impl SysCall {
                 ],
                 Message::Scalar(sc) => [
                     SysCallNumber::SendMessage as usize,
-                    a1,
+                    *a1,
                     4,
                     sc.id as usize,
                     sc.arg1,
@@ -495,19 +499,28 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
+            SysCall::ReturnMemory(a1, a2) => [SysCallNumber::ReturnMemory as usize,
+            *a1, a2.addr.get(), a2.addr.get(), 0, 0, 0, 0],
             SysCall::SpawnThread(a1, a2, a3) => [
                 SysCallNumber::SpawnThread as usize,
-                a1 as usize,
-                a2 as usize,
-                a3 as usize,
+                *a1 as usize,
+                *a2 as usize,
+                *a3 as usize,
                 0,
                 0,
                 0,
                 0,
             ],
-            SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => {
-                [SysCallNumber::Invalid as usize, a1, a2, a3, a4, a5, a6, a7]
-            }
+            SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
+                SysCallNumber::Invalid as usize,
+                *a1,
+                *a2,
+                *a3,
+                *a4,
+                *a5,
+                *a6,
+                *a7,
+            ],
         }
     }
     pub fn from_args(
@@ -593,6 +606,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
+            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)),
             Some(SysCallNumber::SpawnThread) => {
                 SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
             }
@@ -686,6 +700,19 @@ pub fn map_memory(
 /// The `size` field must be page-aligned.
 pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::UnmapMemory(virt.get() as *mut usize, size.get()))?;
+    if let Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn return_memory(sender: MessageSender, range: MemoryRange) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, range))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {

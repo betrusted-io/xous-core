@@ -21,7 +21,7 @@ pub type CtxID = usize;
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct MemoryRange {
     pub addr: MemoryAddress,
     pub size: MemorySize,
@@ -76,19 +76,6 @@ pub struct MemoryMessage {
     pub valid: Option<MemorySize>,
 }
 
-#[cfg(not(feature = "forget-memory-messages"))]
-impl Drop for MessageEnvelope {
-    fn drop(&mut self) {
-        match &self.message {
-            Message::MutableBorrow(msg) | Message::ImmutableBorrow(msg) | Message::Move(msg) => {
-                crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
-                    .expect("couldn't free memory message");
-            }
-            Message::Scalar(_) => (),
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 /// A simple scalar message.  This is similar to a `move` message.
@@ -114,6 +101,25 @@ pub enum Message {
 pub struct MessageEnvelope {
     pub sender: MessageSender,
     pub message: Message,
+}
+
+#[cfg(not(feature = "forget-memory-messages"))]
+/// When a MessageEnvelope goes out of scope, return the memory.  It must either
+/// go to the kernel (in the case of a Move), or back to the borrowed process
+/// (in the case of a Borrow).  Ignore Scalar messages.
+impl Drop for MessageEnvelope {
+    fn drop(&mut self) {
+        match &self.message {
+            Message::MutableBorrow(msg) | Message::ImmutableBorrow(msg) => {
+                crate::syscall::return_memory(self.sender, msg.buf).expect("couldn't return memory");
+            }
+            Message::Move(msg) => {
+                crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
+                    .expect("couldn't free memory message");
+            }
+            Message::Scalar(_) => (),
+        }
+    }
 }
 
 impl MemoryRange {

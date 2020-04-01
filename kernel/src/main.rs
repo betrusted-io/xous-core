@@ -32,7 +32,9 @@ use core::panic::PanicInfo;
 fn handle_panic(_arg: &PanicInfo) -> ! {
     println!("PANIC in PID {}!", crate::arch::current_pid());
     println!("Details: {:?}", _arg);
-    loop {}
+    loop {
+        arch::wfi();
+    }
 }
 
 #[no_mangle]
