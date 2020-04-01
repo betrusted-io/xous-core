@@ -2,6 +2,7 @@ use crate::arch;
 use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::server::SenderID;
 use crate::services::SystemServicesHandle;
 use core::mem;
 use xous::*;
@@ -264,7 +265,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let mut ss = SystemServicesHandle::get();
             let context_nr = ss.current_context_nr();
             // See if there is a pending message.  If so, return immediately.
-            let server = ss.server_mut(sid).ok_or(xous::Error::ServerNotFound)?;
+            let sidx = ss.server_sidx(sid).ok_or(xous::Error::ServerNotFound)?;
+            let server = ss
+                .server_from_sidx(sidx)
+                .ok_or(xous::Error::ServerNotFound)?;
+            server.print_queue();
 
             // Ensure the server is for this PID
             if server.pid != pid {
@@ -272,12 +277,16 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             }
 
             // If there is a pending message, return it immediately.
-            if let Some(msg) = server.take_next_message() {
-                return Ok(xous::Result::Message(msg.0));
+            if let Some(msg) = server.take_next_message(sidx) {
+                println!("PID {} had a message ready -- returning it", pid);
+                return Ok(xous::Result::Message(msg));
             }
 
-            // There is no pending message, so return control to the parent process
-            // and mark ourselves as awaiting an event.
+            // There is no pending message, so return control to the parent
+            // process and mark ourselves as awaiting an event.  When a message
+            // arrives, our return value will already be set to the
+            // MessageEnvelope of the incoming message.
+            println!("PID {} did not have any waiting messages -- parking context", pid);
             server.park_context(context_nr);
 
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
@@ -309,6 +318,51 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             ss.connect_to_server(sid)
                 .map(|x| xous::Result::ConnectionID(x))
         }
+        SysCall::ReturnMemory(sender) => {
+            let mut ss = SystemServicesHandle::get();
+            let sender = SenderID::from_usize(sender)?;
+
+            let server = ss
+                .server_from_sidx(sender.sidx)
+                .ok_or(xous::Error::ServerNotFound)?;
+            if server.pid != pid {
+                return Err(xous::Error::ServerNotFound);
+            }
+            let result = server.take_waiting_message(sender.tidx)?;
+            let (client_pid, client_ctx, server_addr, client_addr, len) = match result {
+                Some(s) => s,
+                None => {
+                    println!("Tried to return memory to client, but address was bad.  Assuming this is not memory that needs to be returned.");
+                    return Ok(xous::Result::Ok);
+                }
+            };
+            println!(
+                "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+                len,
+                server_addr.get(),
+                pid,
+                client_addr.get(),
+                client_pid,
+                client_ctx
+            );
+
+            // Return the memory to the other process
+            // XXX This should keep the same previous write permissions as it used to have!
+            ss.send_memory(
+                server_addr.get() as *mut usize,
+                client_pid,
+                client_addr.get() as *mut usize,
+                len.get(),
+                true,
+                false,
+            )?;
+
+            // Unblock the client context to allow it to continue.
+            println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
+            ss.ready_context(client_pid, client_ctx)?;
+            ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
+            Ok(xous::Result::Ok)
+        }
         SysCall::SendMessage(cid, message) => {
             let mut ss = SystemServicesHandle::get();
             let context_nr = ss.current_context_nr();
@@ -319,19 +373,29 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .expect("server couldn't be located")
                 .pid;
 
+            // Remember the address the message came from, in case we need to
+            // return it after the borrow is through.
+            let client_address = match &message {
+                Message::Scalar(_) => None,
+                Message::Move(msg)
+                | Message::MutableBorrow(msg)
+                | Message::ImmutableBorrow(msg) => Some(msg.buf.addr),
+            };
+
             // Translate memory messages from the client process to the server
-            // process. Additionally, determine whether the call is blocking.
-            // If so, switch to the server context right away.
+            // process. Additionally, determine whether the call is blocking. If
+            // so, switch to the server context right away.
             let (message, blocking) = match message {
                 Message::Scalar(_) => (message, false),
                 Message::Move(msg) => {
                     let new_virt = ss.send_memory(
-                            msg.buf.as_mut_ptr(),
-                            server_pid,
-                            msg.buf.len(),
-                            true,
-                            false,
-                        )?;
+                        msg.buf.as_mut_ptr(),
+                        server_pid,
+                        0 as *mut usize,
+                        msg.buf.len(),
+                        true,
+                        false,
+                    )?;
                     (
                         Message::Move(MemoryMessage {
                             id: msg.id,
@@ -345,12 +409,13 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 Message::MutableBorrow(_) => unimplemented!(),
                 Message::ImmutableBorrow(msg) => {
                     let new_virt = ss.send_memory(
-                            msg.buf.as_mut_ptr(),
-                            server_pid,
-                            msg.buf.len(),
-                            false,
-                            true,
-                        )?;
+                        msg.buf.as_mut_ptr(),
+                        server_pid,
+                        0 as *mut usize,
+                        msg.buf.len(),
+                        false,
+                        true,
+                    )?;
                     (
                         Message::ImmutableBorrow(MemoryMessage {
                             id: msg.id,
@@ -361,12 +426,6 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                         true,
                     )
                 }
-,
-            };
-
-            let envelope = MessageEnvelope {
-                sender: (((pid as usize) << 16) & 0xffff0000) | ((context_nr << 0) & 0xffff),
-                message,
             };
 
             // If the server has an available context to receive the message,
@@ -380,6 +439,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     "There are contexts available to handle this message.  Marking PID {} as Ready",
                     server_pid
                 );
+                let sender =
+                    ss.remember_server_message(sidx, pid, context_nr, &message, client_address)?;
+                let envelope = MessageEnvelope { sender, message };
+
                 ss.ready_context(server_pid, ctx_number)?;
                 if blocking {
                     println!("Activating Server context and switching away from Client");
@@ -399,10 +462,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
                 // Add this message to the queue.  If the queue is full, this
                 // returns an error.
-                // let server = ss
-                //     .server_from_sidx(sidx)
-                //     .ok_or(xous::Error::ServerNotFound)?;
-                ss.queue_server_message(sidx, context_nr, envelope)?;
+                ss.queue_server_message(sidx, pid, context_nr, message, client_address)?;
 
                 // Park this context if it's blocking.  This is roughly
                 // equivalent to a "Yield".

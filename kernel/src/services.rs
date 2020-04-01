@@ -6,8 +6,8 @@ use crate::args::KernelArguments;
 use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
-use core::{mem, slice};
-use xous::{CtxID, MemoryFlags, MemoryType, MessageEnvelope, CID, PID, SID};
+use core::slice;
+use xous::{CtxID, MemoryAddress, MemoryFlags, MemoryType, Message, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -634,10 +634,10 @@ impl SystemServices {
         // Restore the previous context, if one exists.
         process.set_context_nr(new_context);
         self.processes[self.pid as usize - 1].current_context = new_context as u8;
-        let ctx = process.current_context();
+        let _ctx = process.current_context();
         println!(
             "Switched to PID {}, context {}, with sepc: {:08x}",
-            new_pid, new_context, ctx.sepc
+            new_pid, new_context, _ctx.sepc
         );
 
         Ok(new_context)
@@ -664,6 +664,7 @@ impl SystemServices {
         &mut self,
         src_virt: *mut usize,
         dest_pid: PID,
+        dest_virt: *mut usize,
         len: usize,
         writable: bool,
         _borrow: bool,
@@ -704,7 +705,7 @@ impl SystemServices {
         }
         let result = mm.map_range(
             phys as *mut usize,
-            0 as *mut usize,
+            dest_virt,
             len,
             dest_pid,
             flags,
@@ -775,7 +776,7 @@ impl SystemServices {
     /// server table is full, return an error.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
-        println!("Server entries are {} bytes long", mem::size_of::<Server>());
+        println!("Server entries are {} bytes long", core::mem::size_of::<Server>());
 
         for entry in self.servers.iter_mut() {
             if entry == &None {
@@ -863,12 +864,16 @@ impl SystemServices {
         }
     }
 
+    /// Switch to the server's memory space and add the message to its server
+    /// queue
     pub fn queue_server_message(
         &mut self,
         sidx: usize,
-        context: usize,
-        envelope: MessageEnvelope,
-    ) -> Result<(), xous::Error> {
+        pid: PID,
+        context: CtxID,
+        message: Message,
+        original_address: Option<MemoryAddress>,
+    ) -> Result<usize, xous::Error> {
         let current_pid = self.current_pid();
         let result = {
             let server_pid = self
@@ -882,7 +887,9 @@ impl SystemServices {
             let server = self
                 .server_from_sidx(sidx)
                 .expect("couldn't re-discover server index");
-            server.queue_message(context, envelope)
+            let result = server.queue_message(pid, context, message, original_address);
+            server.print_queue();
+            result
         };
         let current_process = self
             .get_process(current_pid)
@@ -891,18 +898,51 @@ impl SystemServices {
         result
     }
 
-    /// Get a server based on a SID
-    pub fn server_mut(&mut self, sid: SID) -> Option<&mut Server> {
-        for server in self.servers.iter_mut() {
+    /// Switch to the server's address space and add a "remember this address"
+    /// entry to its server queue
+    pub fn remember_server_message(
+        &mut self,
+        sidx: usize,
+        pid: PID,
+        context: CtxID,
+        message: &Message,
+        client_address: Option<MemoryAddress>,
+    ) -> Result<usize, xous::Error> {
+        let current_pid = self.current_pid();
+        let result = {
+            let server_pid = self
+                .server_from_sidx(sidx)
+                .ok_or(xous::Error::ServerNotFound)?
+                .pid;
+            {
+                let server_process = self.get_process(server_pid)?;
+                server_process.mapping.activate();
+            }
+            let server = self
+                .server_from_sidx(sidx)
+                .expect("couldn't re-discover server index");
+            let result = server.queue_address(pid, context, message, client_address);
+            server.print_queue();
+            result
+        };
+        let current_process = self
+            .get_process(current_pid)
+            .expect("couldn't restore previous process");
+        current_process.mapping.activate();
+        result
+    }
+
+    /// Get a server index based on a SID
+    pub fn server_sidx(&mut self, sid: SID) -> Option<usize> {
+        for (idx, server) in self.servers.iter_mut().enumerate() {
             if let Some(active_server) = server {
                 if active_server.sid == sid {
-                    return server.as_mut();
+                    return Some(idx);
                 }
             }
         }
         None
-    }
-}
+    }}
 
 /// How many people have checked out the handle object. This should be replaced
 /// by an AtomicUsize when we get multicore support. For now, we can get away

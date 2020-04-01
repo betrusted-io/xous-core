@@ -283,7 +283,7 @@ pub enum SysCall {
     SendMessage(CID, Message),
 
     /// Return a Borrowed memory region to a sender
-    ReturnMemory(MessageSender, MemoryRange),
+    ReturnMemory(MessageSender),
 
     /// Spawn a new thread
     SpawnThread(
@@ -499,8 +499,8 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(a1, a2) => [SysCallNumber::ReturnMemory as usize,
-            *a1, a2.addr.get(), a2.addr.get(), 0, 0, 0, 0],
+            SysCall::ReturnMemory(a1) => [SysCallNumber::ReturnMemory as usize,
+            *a1, 0, 0, 0, 0, 0, 0],
             SysCall::SpawnThread(a1, a2, a3) => [
                 SysCallNumber::SpawnThread as usize,
                 *a1 as usize,
@@ -606,7 +606,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)),
+            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1),
             Some(SysCallNumber::SpawnThread) => {
                 SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
             }
@@ -711,8 +711,8 @@ pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Resu
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_memory(sender: MessageSender, range: MemoryRange) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender, range))?;
+pub fn return_memory(sender: MessageSender) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {

@@ -109,15 +109,10 @@ pub struct MessageEnvelope {
 /// (in the case of a Borrow).  Ignore Scalar messages.
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
-        match &self.message {
-            Message::MutableBorrow(msg) | Message::ImmutableBorrow(msg) => {
-                crate::syscall::return_memory(self.sender, msg.buf).expect("couldn't return memory");
-            }
-            Message::Move(msg) => {
-                crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
+        crate::syscall::return_memory(self.sender).expect("couldn't return memory");
+        if let Message::Move(msg) = &self.message {
+            crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
                     .expect("couldn't free memory message");
-            }
-            Message::Scalar(_) => (),
         }
     }
 }
