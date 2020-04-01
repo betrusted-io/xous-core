@@ -16,6 +16,7 @@ use core::panic::PanicInfo;
 fn handle_panic(arg: &PanicInfo) -> ! {
     println!("PANIC!");
     println!("Details: {:?}", arg);
+    xous::syscall::wait_event();
     loop {}
 }
 
@@ -123,6 +124,7 @@ fn main() {
     println!("Connected: {:?}", connection);
 
     let mut counter = 0;
+    let mut ls = logstr::LogStr::new();
     loop {
         println!("Sending a scalar message with id {}...", counter + 4096);
         xous::syscall::send_message(
@@ -141,13 +143,14 @@ fn main() {
             xous::syscall::yield_slice();
         }
 
-        let mut ls = logstr::LogStr::new();
-        write!(ls, "Hello, Server!  Loop number: {}", counter).expect("couldn't send hello message");
+        ls.clear();
+        write!(ls, "Hello, Server!  This memory is borrowed from another process.  Loop number: {}", counter).expect("couldn't send hello message");
 
+        println!("Sending a mutable borrow message");
         xous::syscall::send_message(
             connection,
-            xous::Message::Move(
-                ls.into_memory_message(0)
+            xous::Message::ImmutableBorrow(
+                ls.as_memory_message(0)
                     .expect("couldn't form memory message"),
             ),
         )

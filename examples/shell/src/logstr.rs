@@ -30,12 +30,26 @@ impl<'a> LogStr<'a> {
     }
 
     pub fn into_memory_message(self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
+        // XXX This should forget the memory allocated, as it will be sent to the other process
         Ok(xous::MemoryMessage {
             id: id,
             buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
             offset: None,
             valid: xous::MemorySize::new(self.len),
         })
+    }
+
+    pub fn as_memory_message(&self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
+        Ok(xous::MemoryMessage {
+            id: id,
+            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
+            offset: None,
+            valid: xous::MemorySize::new(self.len),
+        })
+    }
+
+    pub fn clear(&mut self) {
+        self.len = 0;
     }
 }
 

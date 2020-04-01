@@ -13,6 +13,7 @@ use log_string::LogString;
 fn handle_panic(arg: &PanicInfo) -> ! {
     println!("PANIC!");
     println!("Details: {:?}", arg);
+    xous::syscall::wait_event();
     loop {}
 }
 
@@ -87,7 +88,11 @@ fn main() {
             }
             xous::Message::Move(msg) => {
                 let log_entry = LogString::from_message(msg);
-                println!("Log message from {}: {}", envelope.sender, log_entry);
+                println!("Moved log  message from {}: {}", envelope.sender, log_entry);
+            }
+            xous::Message::ImmutableBorrow(msg) => {
+                let log_entry = LogString::from_message(msg);
+                println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
             }
             _ => unimplemented!(),
         }
