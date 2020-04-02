@@ -130,21 +130,20 @@ pub extern "C" fn trap_handler(
         match ex {
             RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
                 println!("Fault {} @ {:08x}, addr {:08x}", ex, pc, addr);
-                let mapping = MemoryMapping::current();
-                let entry = mapping.pagetable_entry(addr);
-                if entry as usize == 0 {
+                let entry = crate::arch::mem::pagetable_entry(addr).unwrap_or_else(|x| {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
                     panic!(
                         "error at {:08x}: memory not mapped or reserved for addr {:08x}",
                         pc, addr
                     );
-                }
-                let flags = unsafe { entry.read_volatile() } & 0xf;
+                });
+                let flags = *entry & 0x1ff;
 
-                // If the flags are nonzero, but the "Valid" bit is not 1, then this is
-                // a reserved page.  Allocate a real page to back it and resume execution.
-                if flags & 1 == 0 && flags != 0 {
+                // If the flags are nonzero, but the "Valid" bit is not 1 and
+                // the page isn't shared, then this is a reserved page. Allocate
+                // a real page to back it and resume execution.
+                if flags & 1 == 0 && flags != 0 && flags & (1 << 8) == 0 {
                     let new_page = {
                         let mut mm = MemoryManagerHandle::get();
                         mm.alloc_page(pid).expect("Couldn't allocate new page")
@@ -153,8 +152,9 @@ pub extern "C" fn trap_handler(
                     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
                     unsafe {
                         // Map the page to our process
-                        entry.write_volatile((ppn1 << 20) | (ppn0 << 10) |
-                        (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7) /* A */));
+                        *entry = (ppn1 << 20)
+                            | (ppn0 << 10)
+                            | (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7)/* A */);
                         flush_mmu();
 
                         // Zero-out the page
@@ -163,8 +163,9 @@ pub extern "C" fn trap_handler(
                             .write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
 
                         // Move the page into userspace
-                        entry.write_volatile((ppn1 << 20) | (ppn0 << 10) |
-                        (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7) /* A */));
+                        *entry = (ppn1 << 20)
+                            | (ppn0 << 10)
+                            | (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7)/* A */);
                         flush_mmu();
                     };
 
@@ -177,7 +178,9 @@ pub extern "C" fn trap_handler(
                 // we're in an interrupt context, it is safe to access this
                 // global variable.
                 let (previous_pid, previous_context) = unsafe {
-                    PREVIOUS_PAIR.take().expect("got an instruction page fault with no previous PID")
+                    PREVIOUS_PAIR
+                        .take()
+                        .expect("got an instruction page fault with no previous PID")
                 };
                 println!(
                     "ISR: Resuming previous pair of ({}, {})",

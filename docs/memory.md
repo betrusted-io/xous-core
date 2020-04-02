@@ -46,7 +46,6 @@ assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 
 | Address    | Description
 | ---------- | -----------
-     0x10000
 | 0x00100000 | Default entrypoint for riscv64-unknown-elf-ld (as shown by `riscv64-unknown-elf-ld --verbose`)
 | 0x80000000 | Process stack top
 | 0xff000000 | End of memory available to processes
@@ -151,3 +150,29 @@ struct PageAllocations {
 Each process requires its own page table.  The kernel will be mapped to
 a fixed offset in each process, in order to save some RAM and make
 context switches easier.
+
+## RISC-V `RSW` and `V` Page Table Entry Fields
+
+The RISC-V Page Table Entry specification reserves two bits in a field
+called `RSW`.  Additionally, it states that if `V` is `0`, then the
+entry is invalid and all other entries are `don't care`.  In particular,
+the `RSW` fields are for use by the kernel for its own purposes.  Xous
+uses these to keep track of borrowed memory and pre-allocating pages.
+
+For the purposes of Xous, `PTE[8]` shall have the bit name `S`, and
+`PTE[9]` shall have the bit name `W`.
+
+| W[9] | S[8] | X[3] | W[2] | R[1] | V[0] | Meaning               |
+| ---- | ---- | ---- | ---- | ---- | ---- | --------------------- |
+|  0   |  0   |  0   |  0   |  0   |  0   | Page is unallocated |
+|  0   |  0   |  0   |  1   |  0   |  0   | _Invalid_ |
+|  0   |  0   |  1   |  1   |  0   |  0   | _Invalid_ |
+|  0   |  0   |  0   |  0   |  0   |  1   | _Invalid_ |
+|  0   |  0   |  0   |  1   |  0   |  1   | _Invalid_ |
+|  0   |  0   |  1   |  1   |  0   |  1   | _Invalid_ |
+|  0   |  0   | _x_  | _x_  | _x_  |  0   | Page is on-demand allocated, with permissions according to _RWX_ |
+|  0   |  0   | _x_  | _x_  | _x_  |  1   | Page is allocated and valid, with permissions according to _RWX_ |
+| _x_  |  1   | _x_  |  0   | _x_  |  1   | Page is immutably shared |
+| _x_  |  1   |  0   |  0   | _x_  |  0   | Page is mutably shared (and is therefore unavailable) |
+
+The `W[9]` bit indicates whether the page was writable prior to the borrow.

@@ -82,11 +82,11 @@ fn main() {
     // if let xous::Result::MemoryRange(range) = heap {
     //     println!(
     //         "Heap goes from {:08x} - {:08x}",
-    //         range.base as usize,
-    //         range.base as usize + range.size
+    //         range.addr.get(),
+    //         range.addr.get() + range.size.get()
     //     );
     //     use core::slice;
-    //     let mem_range = unsafe { slice::from_raw_parts_mut(range.base, range.size) };
+    //     let mem_range = unsafe { slice::from_raw_parts_mut(range.as_mut_ptr() as *mut u8, range.len()) };
     //     println!("Filling with bytes...");
     //     for word in mem_range.iter_mut() {
     //         *word = 42;

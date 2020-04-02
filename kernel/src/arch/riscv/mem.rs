@@ -139,21 +139,6 @@ impl MemoryMapping {
         println!("End of map");
     }
 
-    /// Get the pagetable entry for a given address, or `0` if none is set.
-    pub fn pagetable_entry(&self, addr: usize) -> *mut usize {
-        let vpn1 = (addr >> 22) & ((1 << 10) - 1);
-        let vpn0 = (addr >> 12) & ((1 << 10) - 1);
-
-        let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-        let l1_pte = l1_pt.entries[vpn1];
-        if l1_pte & 1 == 0 {
-            return 0 as *mut usize;
-        }
-        let l0_pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-        let entry = (l0_pt_virt + vpn0 * 4) as *mut usize;
-        entry
-    }
-
     pub fn reserve_address(
         &mut self,
         mm: &mut MemoryManager,
@@ -370,6 +355,26 @@ pub fn map_page_inner(
     Ok(())
 }
 
+/// Get the pagetable entry for a given address, or `Err()` if the address is invalid
+pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous::Error> {
+    if addr & 3 != 0 {
+        return Err(xous::Error::BadAlignment);
+    }
+    let vpn1 = (addr >> 22) & ((1 << 10) - 1);
+    let vpn0 = (addr >> 12) & ((1 << 10) - 1);
+    assert!(vpn1 < 1024);
+    assert!(vpn0 < 1024);
+
+    let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let l1_pte = l1_pt.entries[vpn1];
+    if l1_pte & 1 == 0 {
+        return Err(xous::Error::BadAddress);
+    }
+    let l0_pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let entry = unsafe { &mut (*((l0_pt_virt + vpn0 * 4) as *mut usize)) };
+    Ok(entry)
+}
+
 /// Ummap the given page from the specified process table.  Never allocate a new
 /// page.
 ///
@@ -381,38 +386,43 @@ pub fn map_page_inner(
 ///
 /// * BadAddress - Address was not already mapped.
 pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous::Error> {
-    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
-    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = (virt >> 0) & ((1 << 12) - 1);
-
-    assert!(vpn1 < 1024);
-    assert!(vpn0 < 1024);
-    assert!(vpo < 4096);
-
-    // The root (l1) pagetable is defined to be mapped into our virtual
-    // address space at this address.
-    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let ref mut l1_pt = l1_pt.entries;
-
-    // Subsequent pagetables are defined as being mapped starting at
-    // offset 0x0020_0004, so 4 must be added to the ppn1 value.
-    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
-
-    // If the level 1 pagetable doesn't exist, then this address isn't valid.
-    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
-        return Err(xous::Error::BadAddress);
-    }
+    let mut entry = pagetable_entry(virt)?;
 
     // Ensure the entry hasn't already been mapped.
-    if l0_pt.entries[vpn0] & 1 == 0 {
+    if *entry & 1 == 0 {
         return Err(xous::Error::BadAddress);
     }
-    let phys = (l0_pt.entries[vpn0] >> 10) << 12;
-    l0_pt.entries[vpn0] = 0;
+    let phys = (*entry >> 10) << 12;
+    *entry = 0;
     unsafe { flush_mmu() };
 
     Ok(phys)
+}
+
+/// Mark the given virtual address as being lent.  If `writable`, clear the
+/// `valid` bit so that this process can't accidentally write to this page while
+/// it is lent.
+///
+/// This uses the `RWS` fields to keep track of the following pieces of information:
+///
+/// * **PTE[8]**: This is set to `1` indicating the page is lent
+/// * **PTE[9]**: This is `1` if the page was previously writable
+///
+/// # Returns
+///
+/// # Errors
+///
+/// * BadAddress - Address was not already mapped.
+pub fn lend_page_inner(
+    _mm: &mut MemoryManager,
+    virt: usize,
+    writable: bool,
+) -> Result<(), xous::Error> {
+    let mut entry = pagetable_entry(virt)?;
+    *entry = 0;
+    unsafe { flush_mmu() };
+
+    Ok(())
 }
 
 pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
