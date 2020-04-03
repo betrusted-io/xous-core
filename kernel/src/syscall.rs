@@ -413,7 +413,24 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                         false,
                     )
                 }
-                Message::MutableBorrow(_) => unimplemented!(),
+                Message::MutableBorrow(msg) => {
+                    let new_virt = ss.lend_memory(
+                        msg.buf.as_mut_ptr(),
+                        server_pid,
+                        0 as *mut usize,
+                        msg.buf.len(),
+                        true,
+                    )?;
+                    (
+                        Message::MutableBorrow(MemoryMessage {
+                            id: msg.id,
+                            buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                            offset: msg.offset,
+                            valid: msg.valid,
+                        }),
+                        true,
+                    )
+                }
                 Message::ImmutableBorrow(msg) => {
                     let new_virt = ss.lend_memory(
                         msg.buf.as_mut_ptr(),
