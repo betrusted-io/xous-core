@@ -27,7 +27,6 @@ pub struct MemoryRange {
     pub size: MemorySize,
 }
 
-
 bitflags! {
     /// Flags to be passed to the MapMemory struct.
     /// Note that it is an error to have memory be
@@ -135,10 +134,17 @@ pub struct MessageEnvelope {
 /// (in the case of a Borrow).  Ignore Scalar messages.
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
-        crate::syscall::return_memory(self.sender).expect("couldn't return memory");
+        let (arg1, arg2) = match &self.message {
+            Message::ImmutableBorrow(x) | Message::MutableBorrow(x) => (
+                x.valid.map(|x| x.get()).unwrap_or(0),
+                x.offset.map(|x| x.get()).unwrap_or(0),
+            ),
+            _ => (0, 0),
+        };
+        crate::syscall::return_memory(self.sender, arg1, arg2).expect("couldn't return memory");
         if let Message::Move(msg) = &self.message {
             crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
-                    .expect("couldn't free memory message");
+                .expect("couldn't free memory message");
         }
     }
 }

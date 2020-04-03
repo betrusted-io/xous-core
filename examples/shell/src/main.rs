@@ -147,13 +147,15 @@ fn main() {
         write!(ls, "Hello, Server!  This memory is borrowed from another process.  Loop number: {}", counter).expect("couldn't send hello message");
 
         println!("Sending a mutable borrow message");
-        xous::syscall::send_message(
+        let response = xous::syscall::send_message(
             connection,
-            xous::Message::ImmutableBorrow(
+            xous::Message::MutableBorrow(
                 ls.as_memory_message(0)
                     .expect("couldn't form memory message"),
             ),
         )
         .expect("couldn't send memory message");
+        unsafe { ls.set_len(response.0)};
+        println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
     }
 }

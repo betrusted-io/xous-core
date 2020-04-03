@@ -29,6 +29,7 @@ impl<'a> LogStr<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn into_memory_message(self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
         // XXX This should forget the memory allocated, as it will be sent to the other process
         Ok(xous::MemoryMessage {
@@ -51,6 +52,11 @@ impl<'a> LogStr<'a> {
     pub fn clear(&mut self) {
         self.len = 0;
     }
+
+    pub unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
+        self.string = core::str::from_utf8_unchecked(slice::from_raw_parts(self.raw_slice.as_ptr(), self.len));
+    }
 }
 
 impl<'a> Write for LogStr<'a> {
@@ -61,5 +67,11 @@ impl<'a> Write for LogStr<'a> {
         }
         self.string = unsafe { core::str::from_utf8_unchecked(slice::from_raw_parts(self.raw_slice.as_ptr(), self.len)) };
         Ok(())
+    }
+}
+
+impl<'a> core::fmt::Display for LogStr<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.string)
     }
 }

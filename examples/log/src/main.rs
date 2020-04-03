@@ -7,6 +7,7 @@ mod log_string;
 mod start;
 
 use core::panic::PanicInfo;
+use core::fmt::Write;
 use log_string::LogString;
 
 #[panic_handler]
@@ -80,9 +81,9 @@ fn main() {
 
     loop {
         // println!("Waiting for an event...");
-        let envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
+        let mut envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
         // println!("Got message envelope: {:?}", envelope);
-        match &envelope.message {
+        match &mut envelope.message {
             xous::Message::Scalar(msg) => {
                 println!("Scalar message from {}: {:?}", envelope.sender, msg)
             }
@@ -94,7 +95,11 @@ fn main() {
                 let log_entry = LogString::from_message(msg);
                 println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
             }
-            _ => unimplemented!(),
+            xous::Message::MutableBorrow(msg) => {
+                let mut log_entry = LogString::from_message(msg);
+                println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
+                writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
+            }
         }
     }
 }

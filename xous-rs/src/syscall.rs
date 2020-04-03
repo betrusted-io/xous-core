@@ -1,6 +1,6 @@
 use crate::{
-    CpuID, CtxID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message,
-    MessageEnvelope, MessageSender, ScalarMessage, CID, PID, SID,
+    CpuID, CtxID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
+    Message, MessageEnvelope, MessageSender, ScalarMessage, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -259,7 +259,7 @@ pub enum SysCall {
     SendMessage(CID, Message),
 
     /// Return a Borrowed memory region to a sender
-    ReturnMemory(MessageSender),
+    ReturnMemory(MessageSender, usize /* arg1 */, usize /* arg2 */),
 
     /// Spawn a new thread
     SpawnThread(
@@ -475,8 +475,16 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(a1) => [SysCallNumber::ReturnMemory as usize,
-            *a1, 0, 0, 0, 0, 0, 0],
+            SysCall::ReturnMemory(a1, a2, a3) => [
+                SysCallNumber::ReturnMemory as usize,
+                *a1,
+                *a2,
+                *a3,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::SpawnThread(a1, a2, a3) => [
                 SysCallNumber::SpawnThread as usize,
                 *a1 as usize,
@@ -582,7 +590,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1),
+            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, a2, a3),
             Some(SysCallNumber::SpawnThread) => {
                 SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
             }
@@ -613,6 +621,7 @@ pub enum Result {
     ConnectionID(CID),
     Message(MessageEnvelope),
     ThreadID(CtxID),
+    MessageResult(usize, usize),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -687,8 +696,12 @@ pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Resu
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_memory(sender: MessageSender) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender))?;
+pub fn return_memory(
+    sender: MessageSender,
+    arg1: usize,
+    arg2: usize,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, arg1, arg2))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -777,11 +790,11 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
-pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
+pub fn send_message(connection: CID, message: Message) -> core::result::Result<(usize, usize), Error> {
     let result =
         rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
-    if result == Result::Ok {
-        Ok(())
+    if let Result::MessageResult(arg1, arg2) = result {
+        Ok((arg1, arg2))
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
