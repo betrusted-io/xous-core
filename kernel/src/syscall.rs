@@ -321,7 +321,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             ss.connect_to_server(sid)
                 .map(|x| xous::Result::ConnectionID(x))
         }
-        SysCall::ReturnMemory(sender) => {
+        SysCall::ReturnMemory(sender, arg1, arg2) => {
             let mut ss = SystemServicesHandle::get();
             let sender = SenderID::from_usize(sender)?;
 
@@ -369,7 +369,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // Unblock the client context to allow it to continue.
             println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
             ss.ready_context(client_pid, client_ctx)?;
-            ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
+            ss.set_context_result(client_pid, client_ctx, xous::Result::MessageResult(arg1, arg2))?;
             Ok(xous::Result::Ok)
         }
         SysCall::SendMessage(cid, message) => {
@@ -458,7 +458,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 } else {
                     println!("Setting the return value of the Server and returning to Client");
                     ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
-                        .map(|_| xous::Result::Ok)
+                        .map(|_| xous::Result::MessageResult(0, 0))
                 }
             } else {
                 println!("No contexts available to handle this.  Queueing message.");
