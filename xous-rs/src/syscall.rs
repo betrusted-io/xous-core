@@ -829,17 +829,16 @@ pub fn rsyscall(call: SysCall) -> SyscallResult {
 }
 
 /// This is dangerous, but fast.
-pub fn dangerous_syscall(call: SysCall) -> SyscallResult {
+pub unsafe fn dangerous_syscall(call: SysCall) -> SyscallResult {
     use core::mem::{transmute, MaybeUninit};
-    let mut ret = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut ret = MaybeUninit::uninit().assume_init();
     let presto =
-        unsafe { transmute::<_, (usize, usize, usize, usize, usize, usize, usize, usize)>(call) };
-    unsafe {
+        transmute::<_, (usize, usize, usize, usize, usize, usize, usize, usize)>(call);
         _xous_syscall_rust(
             presto.0, presto.1, presto.2, presto.3, presto.4, presto.5, presto.6, presto.7,
             &mut ret,
         )
-    };
+    ;
     match ret {
         Result::Error(e) => Err(e),
         other => Ok(other),
