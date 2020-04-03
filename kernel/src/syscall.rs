@@ -2,7 +2,7 @@ use crate::arch;
 use crate::arch::process::ProcessHandle;
 use crate::irq::interrupt_claim;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::server::SenderID;
+use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServicesHandle;
 use core::mem;
 use xous::*;
@@ -286,7 +286,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // process and mark ourselves as awaiting an event.  When a message
             // arrives, our return value will already be set to the
             // MessageEnvelope of the incoming message.
-            println!("PID {} did not have any waiting messages -- parking context", pid);
+            println!(
+                "PID {} did not have any waiting messages -- parking context",
+                pid
+            );
             server.park_context(context_nr);
 
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
@@ -330,10 +333,19 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             }
             let result = server.take_waiting_message(sender.tidx)?;
             let (client_pid, client_ctx, server_addr, client_addr, len) = match result {
-                Some(s) => s,
-                None => {
-                    println!("Tried to return memory to client, but address was bad.  Assuming this is not memory that needs to be returned.");
+                WaitingMessage::BorrowedMemory(
+                    client_pid,
+                    client_ctx,
+                    server_addr,
+                    client_addr,
+                    len,
+                ) => (client_pid, client_ctx, server_addr, client_addr, len),
+                WaitingMessage::MovedMemory => {
                     return Ok(xous::Result::Ok);
+                }
+                WaitingMessage::None => {
+                    println!("WARNING: Tried to wait on a message that didn't exist");
+                    return Err(xous::Error::ProcessNotFound);
                 }
             };
             println!(
@@ -346,15 +358,12 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 client_ctx
             );
 
-            // Return the memory to the other process
-            // XXX This should keep the same previous write permissions as it used to have!
-            ss.send_memory(
+            // Return the memory to the calling process
+            ss.return_memory(
                 server_addr.get() as *mut usize,
                 client_pid,
                 client_addr.get() as *mut usize,
                 len.get(),
-                true,
-                false,
             )?;
 
             // Unblock the client context to allow it to continue.
@@ -393,13 +402,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                         server_pid,
                         0 as *mut usize,
                         msg.buf.len(),
-                        true,
-                        false,
                     )?;
                     (
                         Message::Move(MemoryMessage {
                             id: msg.id,
-                            buf: MemoryRange::new(new_virt, msg.buf.len()),
+                            buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
                             offset: msg.offset,
                             valid: msg.valid,
                         }),
@@ -408,18 +415,17 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 }
                 Message::MutableBorrow(_) => unimplemented!(),
                 Message::ImmutableBorrow(msg) => {
-                    let new_virt = ss.send_memory(
+                    let new_virt = ss.lend_memory(
                         msg.buf.as_mut_ptr(),
                         server_pid,
                         0 as *mut usize,
                         msg.buf.len(),
                         false,
-                        true,
                     )?;
                     (
                         Message::ImmutableBorrow(MemoryMessage {
                             id: msg.id,
-                            buf: MemoryRange::new(new_virt, msg.buf.len()),
+                            buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
                             offset: msg.offset,
                             valid: msg.valid,
                         }),

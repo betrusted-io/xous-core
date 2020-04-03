@@ -6,7 +6,7 @@ use crate::args::KernelArguments;
 use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
-use core::slice;
+use core::{mem, slice};
 use xous::{CtxID, MemoryAddress, MemoryFlags, MemoryType, Message, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
@@ -660,79 +660,198 @@ impl SystemServices {
     /// # Returns
     ///
     /// Returns the virtual address of the memory region in the target process.
+    ///
+    /// # Errors
+    ///
     pub fn send_memory(
         &mut self,
         src_virt: *mut usize,
         dest_pid: PID,
         dest_virt: *mut usize,
         len: usize,
-        writable: bool,
-        _borrow: bool,
-    ) -> Result<usize, xous::Error> {
-        let current_pid = self.current_pid();
-        let phys = {
-            let mut error = None;
-            let mut mm = MemoryManagerHandle::get();
+    ) -> Result<*mut usize, xous::Error> {
+        if len == 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if len & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if src_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if dest_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
 
-            // Unmap each address from the current memory space.  If we
-            // encounter an error, continue unmapping.
-            let phys = mm.unmap_page(src_virt).unwrap_or_else(|e| {
+        let current_pid = self.current_pid();
+        /// XXX THIS SHOULD UNMAP THESE PAGES ON ERROR
+        let src_mapping = self.get_process(current_pid)?.mapping;
+        let dest_mapping = self.get_process(dest_pid)?.mapping;
+        let mut mm = MemoryManagerHandle::get();
+
+        // Locate an address to fit the new memory.
+        dest_mapping.activate();
+        let dest_virt = mm
+            .find_virtual_address(dest_virt, len, MemoryType::Messages)
+            .or_else(|e| {
+                src_mapping.activate();
+                /// XXX THIS SHOULD UNMAP THESE PAGES ON ERROR
+                Err(e)
+            })?;
+        src_mapping.activate();
+
+        let mut error = None;
+
+        // Lend each subsequent page.
+        for offset in
+            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+        {
+            mm.move_page(
+                &src_mapping,
+                src_virt.wrapping_add(offset),
+                dest_pid,
+                &dest_mapping,
+                dest_virt.wrapping_add(offset),
+            )
+            .unwrap_or_else(|e| error = Some(e));
+        }
+        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+    }
+
+    /// Lend memory from one process to another.
+    ///
+    /// During this process, memory is marked as `Shared` in the source process.
+    /// If the share is Mutable, then this memory is unmapped from the source
+    /// process.  If the share is immutable, then memory is marked as
+    /// not-writable in the source process.
+    ///
+    /// If no free slot can be found, memory is re-attached to the first
+    /// process.  By following this break-then-make approach, we avoid getting
+    /// into a situation where memory may appear in two different processes at
+    /// once.
+    ///
+    /// If the share is mutable and the memory is already shared, then an error
+    /// is returned.
+    ///
+    /// # Returns
+    ///
+    /// Returns the virtual address of the memory region in the target process.
+    ///
+    /// # Errors
+    ///
+    /// * **ShareViolation**: Tried to mutably share a region that was already shared
+    pub fn lend_memory(
+        &mut self,
+        src_virt: *mut usize,
+        dest_pid: PID,
+        dest_virt: *mut usize,
+        len: usize,
+        mutable: bool,
+    ) -> Result<*mut usize, xous::Error> {
+        if len == 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if len & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if src_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if dest_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+
+        let current_pid = self.current_pid();
+        let src_mapping = self.get_process(current_pid)?.mapping;
+        let dest_mapping = self.get_process(dest_pid)?.mapping;
+        let mut mm = MemoryManagerHandle::get();
+
+        // Locate an address to fit the new memory.
+        dest_mapping.activate();
+        let dest_virt = mm
+            .find_virtual_address(dest_virt, len, MemoryType::Messages)
+            .or_else(|e| {
+                src_mapping.activate();
+                Err(e)
+            })?;
+        src_mapping.activate();
+
+        let mut error = None;
+
+        // Lend each subsequent page.
+        for offset in
+            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+        {
+            mm.lend_page(
+                &src_mapping,
+                src_virt.wrapping_add(offset),
+                dest_pid,
+                &dest_mapping,
+                dest_virt.wrapping_add(offset),
+                mutable,
+            )
+            .unwrap_or_else(|e| {
                 error = Some(e);
                 0
             });
-            for addr in
-                ((src_virt as usize + PAGE_SIZE)..((src_virt as usize) + len)).step_by(PAGE_SIZE)
-            {
-                if let Err(e) = mm.unmap_page(addr as *mut usize) {
-                    error = Some(e)
-                }
-            }
-            if let Some(e) = error {
-                return Err(e);
-            }
-            phys
-        };
+        }
+        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+    }
 
-        // Switch to the target process, so we can manipulate its page tables.
-        // From this point forward we can't use the `?` operator, since it would
-        // leave us in the incorrect memory space.
-        self.get_process(dest_pid)?.mapping.activate();
+    /// Return memory from one process back to another
+    ///
+    /// During this process, memory is unmapped from the source process.
+    ///
+    /// # Returns
+    ///
+    /// Returns the virtual address of the memory region in the target process.
+    ///
+    /// # Errors
+    ///
+    /// * **ShareViolation**: Tried to mutably share a region that was already shared
+    pub fn return_memory(
+        &mut self,
+        src_virt: *mut usize,
+        dest_pid: PID,
+        dest_virt: *mut usize,
+        len: usize,
+    ) -> Result<*mut usize, xous::Error> {
+        if len == 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if len & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if src_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
+        if dest_virt as usize & 0xfff != 0 {
+            return Err(xous::Error::BadAddress);
+        }
 
+        let current_pid = self.current_pid();
+        let src_mapping = self.get_process(current_pid)?.mapping;
+        let dest_mapping = self.get_process(dest_pid)?.mapping;
         let mut mm = MemoryManagerHandle::get();
-        let mut flags = MemoryFlags::R;
-        if writable {
-            flags |= MemoryFlags::W;
-        }
-        let result = mm.map_range(
-            phys as *mut usize,
-            dest_virt,
-            len,
-            dest_pid,
-            flags,
-            MemoryType::Messages,
-        );
-        if let Ok(ref range) = result {
-            for offset in
-                (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
-            {
-                println!("Handing page to user");
-                crate::arch::mem::hand_page_to_user(offset as *mut usize)
-                    .expect("couldn't hand page to user");
-            }
-        }
+        let mut error = None;
 
-        // Finally, switch back to the original process.
-        self.get_process(current_pid)
-            .expect("couldn't find previous process")
-            .mapping
-            .activate();
-        println!(
-            "send_memory: Sent phys {:08x} from {:08x} to {:08x}",
-            phys,
-            src_virt as usize,
-            result.as_ref().unwrap().addr.get()
-        );
-        result.map(|virt| virt.addr.get())
+        // Lend each subsequent page.
+        for offset in
+            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+        {
+            mm.unlend_page(
+                &src_mapping,
+                src_virt.wrapping_add(offset),
+                dest_pid,
+                &dest_mapping,
+                dest_virt.wrapping_add(offset),
+            )
+            .unwrap_or_else(|e| {
+                error = Some(e);
+                0
+            });
+        }
+        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
     }
 
     pub fn spawn_thread(
@@ -776,7 +895,10 @@ impl SystemServices {
     /// server table is full, return an error.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
-        println!("Server entries are {} bytes long", core::mem::size_of::<Server>());
+        println!(
+            "Server entries are {} bytes long",
+            core::mem::size_of::<Server>()
+        );
 
         for entry in self.servers.iter_mut() {
             if entry == &None {
@@ -942,7 +1064,8 @@ impl SystemServices {
             }
         }
         None
-    }}
+    }
+}
 
 /// How many people have checked out the handle object. This should be replaced
 /// by an AtomicUsize when we get multicore support. For now, we can get away

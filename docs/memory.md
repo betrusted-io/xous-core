@@ -160,9 +160,9 @@ the `RSW` fields are for use by the kernel for its own purposes.  Xous
 uses these to keep track of borrowed memory and pre-allocating pages.
 
 For the purposes of Xous, `PTE[8]` shall have the bit name `S`, and
-`PTE[9]` shall have the bit name `W`.
+`PTE[9]` shall have the bit name `P`.
 
-| W[9] | S[8] | X[3] | W[2] | R[1] | V[0] | Meaning               |
+| P[9] | S[8] | X[3] | W[2] | R[1] | V[0] | Meaning               |
 | ---- | ---- | ---- | ---- | ---- | ---- | --------------------- |
 |  0   |  0   |  0   |  0   |  0   |  0   | Page is unallocated |
 |  0   |  0   |  0   |  1   |  0   |  0   | _Invalid_ |
@@ -175,4 +175,4 @@ For the purposes of Xous, `PTE[8]` shall have the bit name `S`, and
 | _x_  |  1   | _x_  |  0   | _x_  |  1   | Page is immutably shared |
 | _x_  |  1   |  0   |  0   | _x_  |  0   | Page is mutably shared (and is therefore unavailable) |
 
-The `W[9]` bit indicates whether the page was writable prior to the borrow.
+The `P[9]` bit indicates whether the page was writable prior to the borrow.

@@ -27,6 +27,31 @@ pub struct MemoryRange {
     pub size: MemorySize,
 }
 
+
+bitflags! {
+    /// Flags to be passed to the MapMemory struct.
+    /// Note that it is an error to have memory be
+    /// writable and not readable.
+    pub struct MemoryFlags: usize {
+        /// Free this memory
+        const FREE      = 0b00000000;
+
+        /// Immediately allocate this memory.  Otherwise it will
+        /// be demand-paged.  This is implicitly set when `phys`
+        /// is not 0.
+        const RESERVE   = 0b00000001;
+
+        /// Allow the CPU to read from this page.
+        const R         = 0b00000010;
+
+        /// Allow the CPU to write to this page.
+        const W         = 0b00000100;
+
+        /// Allow the CPU to execute from this page.
+        const X         = 0b00001000;
+    }
+}
+
 #[repr(usize)]
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -49,6 +74,7 @@ pub enum Error {
     ContextNotAvailable = 16,
     UnhandledSyscall = 17,
     InvalidSyscall = 18,
+    ShareViolation = 19,
 }
 
 #[repr(C)]

@@ -1,6 +1,6 @@
 pub use crate::arch::ProcessContext;
 use core::{mem, slice};
-use xous::{CtxID, MemoryAddress, MemoryRange, MemorySize, PID, SID, Message};
+use xous::{CtxID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
 pub struct SenderID {
     pub sidx: usize,
@@ -14,6 +14,12 @@ impl SenderID {
             tidx: src & 0xffff,
         })
     }
+}
+
+pub enum WaitingMessage {
+    None,
+    BorrowedMemory(PID, CtxID, MemoryAddress, MemoryAddress, MemorySize),
+    MovedMemory,
 }
 
 /// Internal representation of a queued message for a server. This should be
@@ -138,10 +144,7 @@ impl Server {
     /// and return the pair.  Advance the tail.  Note that the `idx` could be
     /// somewhere other than the tail, but as long as it points to a valid
     /// message that's waiting a response, that's acceptable.
-    pub fn take_waiting_message(
-        &mut self,
-        idx: usize,
-    ) -> Result<Option<(PID, CtxID, MemoryAddress, MemoryAddress, MemorySize)>, xous::Error> {
+    pub fn take_waiting_message(&mut self, idx: usize) -> Result<WaitingMessage, xous::Error> {
         if idx > self.queue.len() {
             return Err(xous::Error::BadAddress);
         }
@@ -149,7 +152,7 @@ impl Server {
             QueuedMessage::WaitingResponse(pid_ctx, server_addr, client_addr, len) => {
                 (pid_ctx, server_addr, client_addr, len)
             }
-            _ => return Err(xous::Error::BadAddress),
+            _ => return Ok(WaitingMessage::None),
         };
         self.queue[idx] = QueuedMessage::Empty;
         self.queue_tail += 1;
@@ -161,11 +164,18 @@ impl Server {
         let ctx = (pid_ctx & 0xffff) as CtxID;
         let server_addr = match MemoryAddress::new(server_addr) {
             Some(o) => o,
-            None => return Ok(None)
+            None => return Ok(WaitingMessage::MovedMemory),
         };
-        let client_addr = MemoryAddress::new(client_addr).expect("client memory address was 0, but server address was not");
+        let client_addr = MemoryAddress::new(client_addr)
+            .expect("client memory address was 0, but server address was not");
         let len = MemorySize::new(len).expect("memory length was 0, but address was not None");
-        Ok(Some((pid, ctx, server_addr, client_addr, len)))
+        Ok(WaitingMessage::BorrowedMemory(
+            pid,
+            ctx,
+            server_addr,
+            client_addr,
+            len,
+        ))
     }
 
     /// Remove a message from the server's queue and replace it with

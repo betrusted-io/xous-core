@@ -19,15 +19,17 @@ extern "C" {
 
 bitflags! {
     pub struct MMUFlags: usize {
-        const NONE      = 0b00000000;
-        const VALID     = 0b00000001;
-        const R         = 0b00000010;
-        const W         = 0b00000100;
-        const X         = 0b00001000;
-        const USER      = 0b00010000;
-        const GLOBAL    = 0b00100000;
-        const A         = 0b01000000;
-        const D         = 0b10000000;
+        const NONE      = 0b00_0000_0000;
+        const VALID     = 0b00_0000_0001;
+        const R         = 0b00_0000_0010;
+        const W         = 0b00_0000_0100;
+        const X         = 0b00_0000_1000;
+        const USER      = 0b00_0001_0000;
+        const GLOBAL    = 0b00_0010_0000;
+        const A         = 0b00_0100_0000;
+        const D         = 0b00_1000_0000;
+        const S         = 0b01_0000_0000; // Shared page
+        const P         = 0b10_0000_0000; // Previously writable
     }
 }
 
@@ -59,6 +61,21 @@ fn translate_flags(req_flags: MemoryFlags) -> MMUFlags {
     }
     if req_flags & xous::MemoryFlags::X == xous::MemoryFlags::X {
         flags |= MMUFlags::X;
+    }
+    flags
+}
+
+fn untranslate_flags(req_flags: usize) -> MemoryFlags {
+    let req_flags = MMUFlags::from_bits_truncate(req_flags);
+    let mut flags = xous::MemoryFlags::FREE;
+    if req_flags & MMUFlags::R == MMUFlags::R {
+        flags |= xous::MemoryFlags::R;
+    }
+    if req_flags & MMUFlags::W == MMUFlags::W {
+        flags |= xous::MemoryFlags::W;
+    }
+    if req_flags & MMUFlags::X == MMUFlags::X {
+        flags |= xous::MemoryFlags::X;
     }
     flags
 }
@@ -169,6 +186,7 @@ impl MemoryMapping {
                 l0pt_phys,
                 l0pt_virt,
                 MemoryFlags::W | MemoryFlags::R,
+                false,
             )?;
 
             // Zero-out the new page
@@ -285,6 +303,7 @@ pub fn map_page_inner(
     phys: usize,
     virt: usize,
     req_flags: MemoryFlags,
+    map_user: bool,
 ) -> Result<(), xous::Error> {
     let ppn1 = (phys >> 22) & ((1 << 12) - 1);
     let ppn0 = (phys >> 12) & ((1 << 10) - 1);
@@ -294,14 +313,12 @@ pub fn map_page_inner(
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
     let vpo = (virt >> 0) & ((1 << 12) - 1);
 
-    let flags = translate_flags(req_flags);
-    // // The kernel runs in Supervisor mode, and therefore always needs
-    // // exclusive access to this memory.
-    // // Additionally, any address below the user area must be accessible
-    // // by the kernel.
-    // if pid != 1 && virt < USER_AREA_END {
-    //     flags |= MMUFlags::USER;
-    // }
+    let flags = translate_flags(req_flags)
+        | if map_user {
+            MMUFlags::USER
+        } else {
+            MMUFlags::NONE
+        };
 
     assert!(ppn1 < 4096);
     assert!(ppn0 < 1024);
@@ -337,6 +354,7 @@ pub fn map_page_inner(
             l0pt_phys,
             l0pt_virt,
             MemoryFlags::W | MemoryFlags::R,
+            false,
         )?;
 
         // Zero-out the new page
@@ -346,7 +364,7 @@ pub fn map_page_inner(
 
     // Ensure the entry hasn't already been mapped.
     if l0_pt.entries[vpn0 as usize] & 1 != 0 {
-        // println!("Page {:08x} already allocated!", virt);
+        panic!("Page {:08x} already allocated!", virt);
     }
     l0_pt.entries[vpn0 as usize] =
         (ppn1 << 20) | (ppn0 << 10) | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits();
@@ -386,7 +404,7 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous::Error> {
 ///
 /// * BadAddress - Address was not already mapped.
 pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous::Error> {
-    let mut entry = pagetable_entry(virt)?;
+    let entry = pagetable_entry(virt)?;
 
     // Ensure the entry hasn't already been mapped.
     if *entry & 1 == 0 {
@@ -397,6 +415,35 @@ pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, x
     unsafe { flush_mmu() };
 
     Ok(phys)
+}
+
+/// Move a page from one address space to another.
+pub fn move_page_inner(
+    mm: &mut MemoryManager,
+    src_space: &MemoryMapping,
+    src_addr: *mut usize,
+    dest_pid: PID,
+    dest_space: &MemoryMapping,
+    dest_addr: *mut usize,
+) -> Result<(), xous::Error> {
+    let entry = pagetable_entry(src_addr as usize)?;
+    if *entry & MMUFlags::VALID.bits() == 0 {
+        return Err(xous::Error::BadAddress);
+    }
+    let previous_entry = *entry;
+    // Invalidate the old entry
+    *entry = 0;
+    unsafe { flush_mmu() };
+
+    dest_space.activate();
+    let phys = previous_entry >> 10 << 12;
+    let flags = untranslate_flags(previous_entry);
+
+    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid != 1);
+
+    // Switch back to the original address space and return
+    src_space.activate();
+    result
 }
 
 /// Mark the given virtual address as being lent.  If `writable`, clear the
@@ -412,17 +459,118 @@ pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, x
 ///
 /// # Errors
 ///
-/// * BadAddress - Address was not already mapped.
+/// * **BadAlignment**: The page isn't 4096-bytes aligned
+/// * **BadAddress**: The page isn't allocated
 pub fn lend_page_inner(
-    _mm: &mut MemoryManager,
-    virt: usize,
-    writable: bool,
-) -> Result<(), xous::Error> {
-    let mut entry = pagetable_entry(virt)?;
-    *entry = 0;
+    mm: &mut MemoryManager,
+    src_space: &MemoryMapping,
+    src_addr: *mut usize,
+    dest_pid: PID,
+    dest_space: &MemoryMapping,
+    dest_addr: *mut usize,
+    mutable: bool,
+) -> Result<usize, xous::Error> {
+    let entry = pagetable_entry(src_addr as usize)?;
+    let phys = (*entry >> 10) << 12;
+
+    let result = if mutable {
+        // If we try to share a page that's already mutable, that's a sharing
+        // violation.
+        if *entry & MMUFlags::S.bits() != 0 {
+            return Err(xous::Error::ShareViolation);
+        }
+
+        // If the page should be writable in the other process, ensure it's
+        // unavailable here.  Set the "Shared" bit and clear the "VALID" bit.
+        // Keep all other bits the same.
+        *entry = (*entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
+        unsafe { flush_mmu() };
+
+        dest_space.activate();
+        map_page_inner(
+            mm,
+            dest_pid,
+            phys,
+            dest_addr as usize,
+            MemoryFlags::R | MemoryFlags::W,
+            dest_pid != 1,
+        )
+    } else {
+        // Page is immutably shared.  Mark the page as read-only in this
+        // process.
+        let previous_flag = if *entry & MMUFlags::W.bits() != 0 {
+            MMUFlags::P
+        } else {
+            MMUFlags::NONE
+        };
+        println!("Clearing `W` bit from mapping of page {:08x}", phys);
+
+        // If the current entry is writable, clear that bit and set the "P" flag
+        *entry = (*entry & !(MMUFlags::W.bits())) | (previous_flag | MMUFlags::S).bits();
+        println!(
+            "Additionally, mapping {:08x} into PID {:08x} @ {:08x}",
+            phys, dest_pid, dest_addr as usize
+        );
+        unsafe { flush_mmu() };
+
+        dest_space.activate();
+        map_page_inner(
+            mm,
+            dest_pid,
+            phys,
+            dest_addr as usize,
+            MemoryFlags::R,
+            dest_pid != 1,
+        )
+    };
     unsafe { flush_mmu() };
 
-    Ok(())
+    src_space.activate();
+    result.map(|_| phys)
+}
+
+pub fn return_page_inner(
+    mm: &mut MemoryManager,
+    src_space: &MemoryMapping,
+    src_addr: *mut usize,
+    dest_pid: PID,
+    dest_space: &MemoryMapping,
+    dest_addr: *mut usize,
+) -> Result<usize, xous::Error> {
+    let src_entry = pagetable_entry(src_addr as usize)?;
+    let phys = (*src_entry >> 10) << 12;
+
+    if *src_entry & MMUFlags::VALID.bits() == 0 {
+        return Err(xous::Error::ShareViolation);
+    }
+
+    *src_entry = 0;
+    unsafe { flush_mmu() };
+
+    dest_space.activate();
+    let dest_entry =
+        pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
+    if *dest_entry & MMUFlags::S.bits() == 0 {
+        panic!("page wasn't shared in destination space");
+    }
+
+    if *dest_entry & MMUFlags::VALID.bits() == 0 {
+        // This page was mutably borrowed.
+        *dest_entry = *dest_entry & !(MMUFlags::S).bits() | MMUFlags::VALID.bits();
+    } else {
+        // This page was immutably borrowed, and as such had its "W" flag
+        // clobbered.
+        let previous_flag = if *dest_entry & MMUFlags::P.bits() != 0 {
+            MMUFlags::W
+        } else {
+            MMUFlags::NONE
+        };
+        *dest_entry = *dest_entry & !(MMUFlags::S | MMUFlags::P).bits() | previous_flag.bits();
+    }
+    unsafe { flush_mmu() };
+
+    src_space.activate();
+    Ok(0)
 }
 
 pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {

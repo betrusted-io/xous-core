@@ -236,15 +236,15 @@ impl MemoryManager {
 
     /// Find a virtual address in the current process that is big enough
     /// to fit `size` bytes.
-    fn find_virtual_address(
+    pub fn find_virtual_address(
         &mut self,
         virt_ptr: *mut usize,
         size: usize,
         kind: xous::MemoryType,
-    ) -> Result<usize, xous::Error> {
+    ) -> Result<*mut usize, xous::Error> {
         // If we were supplied a perfectly good address, return that.
         if virt_ptr as usize != 0 {
-            return Ok(virt_ptr as usize);
+            return Ok(virt_ptr);
         }
 
         let mut process = ProcessHandle::get();
@@ -257,7 +257,7 @@ impl MemoryManager {
                 if new_virt + size > process.inner.mem_heap_base + process.inner.mem_heap_max {
                     return Err(xous::Error::OutOfMemory);
                 }
-                return Ok(new_virt);
+                return Ok(new_virt as *mut usize);
             }
             xous::MemoryType::Default => (
                 process.inner.mem_default_base,
@@ -287,7 +287,7 @@ impl MemoryManager {
                     xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
                     other => panic!("invalid kind: {:?}", other),
                 }
-                return Ok(potential_start);
+                return Ok(potential_start as *mut usize);
             }
         }
 
@@ -306,7 +306,7 @@ impl MemoryManager {
                     xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
                     other => panic!("invalid kind: {:?}", other),
                 }
-                return Ok(potential_start);
+                return Ok(potential_start as *mut usize);
             }
         }
 
@@ -324,7 +324,7 @@ impl MemoryManager {
     ) -> Result<xous::MemoryRange, xous::Error> {
         // If no address was specified, pick the next address that fits
         // in the "default" range
-        let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)?;
+        let virt = self.find_virtual_address(virt_ptr, size, xous::MemoryType::Default)? as usize;
 
         if virt & 0xfff != 0 {
             return Err(xous::Error::BadAlignment);
@@ -346,7 +346,8 @@ impl MemoryManager {
     /// Note that this will be backed by a real page.
     pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous::Error> {
         let virt =
-            self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?;
+            self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?
+                as usize;
 
         // Grab the next available page.  This claims it for this process.
         let phys = self.alloc_page(pid)?;
@@ -358,6 +359,7 @@ impl MemoryManager {
             phys as usize,
             virt as usize,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
+            false,
         ) {
             self.release_page(phys as *mut usize, pid).ok();
             return Err(e);
@@ -370,7 +372,10 @@ impl MemoryManager {
         if is_user {
             crate::arch::mem::hand_page_to_user(virt)?;
         }
-        println!("Mapped {:08x} -> {:08x} (user? {})", phys as usize, virt as usize, is_user);
+        println!(
+            "Mapped {:08x} -> {:08x} (user? {})",
+            phys as usize, virt as usize, is_user
+        );
         Ok(virt)
     }
 
@@ -398,7 +403,7 @@ impl MemoryManager {
 
         // If no physical address is specified, give the user the next available pages
         if phys == 0 {
-            return self.reserve_range(virt as *mut usize, size, flags);
+            return self.reserve_range(virt, size, flags);
         }
 
         // 1. Attempt to claim all physical pages in the range
@@ -420,9 +425,10 @@ impl MemoryManager {
                 offset + phys as usize,
                 offset + virt as usize,
                 flags,
+                false,
             ) {
                 for unmap_offset in (0..offset).step_by(PAGE_SIZE) {
-                    crate::arch::mem::unmap_page_inner(self, unmap_offset + virt).ok();
+                    crate::arch::mem::unmap_page_inner(self, unmap_offset + virt as usize).ok();
                     self.release_page((unmap_offset + phys) as *mut usize, pid)
                         .ok();
                 }
@@ -430,7 +436,7 @@ impl MemoryManager {
             }
         }
 
-        Ok(MemoryRange::new(virt, size))
+        Ok(MemoryRange::new(virt as usize, size))
     }
 
     /// Attempt to map the given physical address into the virtual address space
@@ -446,6 +452,73 @@ impl MemoryManager {
         crate::arch::mem::unmap_page_inner(self, virt as usize)
     }
 
+    /// Move a page from one process into another, keeping its permissions.
+    pub fn move_page(
+        &mut self,
+        src_mapping: &MemoryMapping,
+        src_addr: *mut usize,
+        dest_pid: PID,
+        dest_mapping: &MemoryMapping,
+        dest_addr: *mut usize,
+    ) -> Result<(), xous::Error> {
+        crate::arch::mem::move_page_inner(
+            self,
+            &src_mapping,
+            src_addr,
+            dest_pid,
+            &dest_mapping,
+            dest_addr,
+        )
+    }
+
+    /// Mark the page in the current process as being lent.  If the borrow is
+    /// read-only, then additionally remove the "write" bit on it.  If the page
+    /// is writable, then remove it from the current process until the borrow is
+    /// returned.
+    pub fn lend_page(
+        &mut self,
+        src_mapping: &MemoryMapping,
+        src_addr: *mut usize,
+        dest_pid: PID,
+        dest_mapping: &MemoryMapping,
+        dest_addr: *mut usize,
+        mutable: bool,
+    ) -> Result<usize, xous::Error> {
+        // If this page is to be writable, detach it from this process.
+        // Otherwise, mark it as read-only to prevent a process from modifying
+        // the page while it's borrowed.
+        crate::arch::mem::lend_page_inner(
+            self,
+            &src_mapping,
+            src_addr,
+            dest_pid,
+            &dest_mapping,
+            dest_addr,
+            mutable,
+        )
+    }
+
+    /// Return the range from `src_mapping` back to `dest_mapping`
+    pub fn unlend_page(
+        &mut self,
+        src_mapping: &MemoryMapping,
+        src_addr: *mut usize,
+        dest_pid: PID,
+        dest_mapping: &MemoryMapping,
+        dest_addr: *mut usize,
+    ) -> Result<usize, xous::Error> {
+        // If this page is to be writable, detach it from this process.
+        // Otherwise, mark it as read-only to prevent a process from modifying
+        // the page while it's borrowed.
+        crate::arch::mem::return_page_inner(
+            self,
+            &src_mapping,
+            src_addr,
+            dest_pid,
+            &dest_mapping,
+            dest_addr,
+        )
+    }
     fn claim_or_release(
         &mut self,
         addr: *mut usize,
