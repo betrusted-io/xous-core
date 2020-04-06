@@ -79,27 +79,33 @@ fn main() {
         xous::syscall::create_server(xous::make_name!("📜")).expect("couldn't create server");
     println!("Server listening on address {:?}", server_addr);
 
+    let mut counter = 0;
     loop {
-        // println!("Waiting for an event...");
-        let mut envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
-        // println!("Got message envelope: {:?}", envelope);
-        match &mut envelope.message {
-            xous::Message::Scalar(msg) => {
-                println!("Scalar message from {}: {:?}", envelope.sender, msg)
-            }
-            xous::Message::Move(msg) => {
-                let log_entry = LogString::from_message(msg);
-                println!("Moved log  message from {}: {}", envelope.sender, log_entry);
-            }
-            xous::Message::ImmutableBorrow(msg) => {
-                let log_entry = LogString::from_message(msg);
-                println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
-            }
-            xous::Message::MutableBorrow(msg) => {
-                let mut log_entry = LogString::from_message(msg);
-                println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
-                writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
-            }
+        if counter & 0xfff == 0 {
+            println!("Counter tick: {}", counter);
         }
+        counter += 1;
+        // // println!("Waiting for an event...");
+        // let mut envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
+        // // println!("Got message envelope: {:?}", envelope);
+        // match &mut envelope.message {
+        //     xous::Message::Scalar(msg) => {
+        //         println!("Scalar message from {}: {:?}", envelope.sender, msg)
+        //     }
+        //     xous::Message::Move(msg) => {
+        //         let log_entry = LogString::from_message(msg);
+        //         println!("Moved log  message from {}: {}", envelope.sender, log_entry);
+        //     }
+        //     xous::Message::ImmutableBorrow(msg) => {
+        //         let log_entry = LogString::from_message(msg);
+        //         println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
+        //     }
+        //     xous::Message::MutableBorrow(msg) => {
+        //         let mut log_entry = LogString::from_message(msg);
+        //         println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
+        //         writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
+        //     }
+        // }
+
     }
 }

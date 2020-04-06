@@ -1036,7 +1036,7 @@ impl SystemServices {
                 .server_from_sidx(sidx)
                 .expect("couldn't re-discover server index");
             let result = server.queue_message(pid, context, message, original_address);
-            server.print_queue();
+            // server.print_queue();
             result
         };
         let current_process = self
@@ -1070,7 +1070,7 @@ impl SystemServices {
                 .server_from_sidx(sidx)
                 .expect("couldn't re-discover server index");
             let result = server.queue_address(pid, context, message, client_address);
-            server.print_queue();
+            // server.print_queue();
             result
         };
         let current_process = self

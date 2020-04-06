@@ -126,36 +126,39 @@ fn main() {
     let mut counter = 0;
     let mut ls = logstr::LogStr::new();
     loop {
-        println!("Sending a scalar message with id {}...", counter + 4096);
-        xous::syscall::send_message(
-            connection,
-            xous::Message::Scalar(xous::ScalarMessage {
-                id: counter + 4096,
-                arg1: counter,
-                arg2: counter * 2,
-                arg3: !counter,
-                arg4: counter + 1,
-            }),
-        )
-        .expect("couldn't send scalar message");
-        counter += 1;
-        if counter & 2 == 0 {
-            xous::syscall::yield_slice();
+        // println!("Sending a scalar message with id {}...", counter + 4096);
+        // xous::syscall::send_message(
+        //     connection,
+        //     xous::Message::Scalar(xous::ScalarMessage {
+        //         id: counter + 4096,
+        //         arg1: counter,
+        //         arg2: counter * 2,
+        //         arg3: !counter,
+        //         arg4: counter + 1,
+        //     }),
+        // )
+        // .expect("couldn't send scalar message");
+        if counter & 0xfff == 0 {
+            println!("Loop {}", counter);
         }
+        counter += 1;
+        // if counter & 2 == 0 {
+        //     xous::syscall::yield_slice();
+        // }
 
-        ls.clear();
-        write!(ls, "Hello, Server!  This memory is borrowed from another process.  Loop number: {}", counter).expect("couldn't send hello message");
+        // ls.clear();
+        // write!(ls, "Hello, Server!  This memory is borrowed from another process.  Loop number: {}", counter).expect("couldn't send hello message");
 
-        println!("Sending a mutable borrow message");
-        let response = xous::syscall::send_message(
-            connection,
-            xous::Message::MutableBorrow(
-                ls.as_memory_message(0)
-                    .expect("couldn't form memory message"),
-            ),
-        )
-        .expect("couldn't send memory message");
-        unsafe { ls.set_len(response.0)};
-        println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
+        // println!("Sending a mutable borrow message");
+        // let response = xous::syscall::send_message(
+        //     connection,
+        //     xous::Message::MutableBorrow(
+        //         ls.as_memory_message(0)
+        //             .expect("couldn't form memory message"),
+        //     ),
+        // )
+        // .expect("couldn't send memory message");
+        // unsafe { ls.set_len(response.0)};
+        // println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
     }
 }

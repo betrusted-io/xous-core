@@ -5,6 +5,8 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!(">>> Timer tick");
     let ptr = TIMER_BASE as *mut usize;
 
+    xous::rsyscall(xous::SysCall::ReturnToParentI(0, 0)).expect("couldn't return to parent");
+
     // acknowledge the timer
     unsafe { ptr.add(6).write_volatile(1) };
     println!("<<< Returning from timer_tick()");
@@ -27,7 +29,7 @@ pub fn init() {
     ))
     .expect("timer: couldn't claim interrupt");
 
-    let ms = 1000; // tick every 1000 ms
+    let ms = 10; // tick every 10 ms
     en(false);
     load(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
     reload(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
@@ -56,8 +58,7 @@ pub fn en(en: bool) {
     let ptr = TIMER_BASE as *mut usize;
     if en {
         unsafe { ptr.add(2).write_volatile(1) };
-    }
-    else {
+    } else {
         unsafe { ptr.add(2).write_volatile(0) };
     }
 }

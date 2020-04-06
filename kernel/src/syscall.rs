@@ -7,6 +7,9 @@ use crate::services::SystemServicesHandle;
 use core::mem;
 use xous::*;
 
+/// This is the context that called SwitchTo
+static mut SWITCHTO_CALLER: Option<(PID, CtxID)> = None;
+
 pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     let pid = arch::current_pid();
 
@@ -44,12 +47,12 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                             .as_mut_ptr()
                             .write_bytes(0, range.size.get() / mem::size_of::<usize>())
                     };
-                    println!("Done zeroing out");
+                    // println!("Done zeroing out");
                 }
                 for offset in
                     (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
                 {
-                    println!("Handing page to user");
+                    // println!("Handing page to user");
                     crate::arch::mem::hand_page_to_user(offset as *mut usize)
                         .expect("couldn't hand page to user");
                 }
@@ -115,9 +118,17 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             }
             Ok(xous::Result::Ok)
         }
-        SysCall::SwitchTo(pid, context) => {
+        SysCall::SwitchTo(new_pid, new_context) => {
             let mut ss = SystemServicesHandle::get();
-            ss.activate_process_context(pid, context, true, false)
+            let context_nr = ss.current_context_nr();
+            unsafe {
+                assert!(
+                    SWITCHTO_CALLER.is_none(),
+                    "SWITCHTO_CALLER was not None, indicating SwitchTo was called twice"
+                );
+                SWITCHTO_CALLER = Some((pid, context_nr));
+            }
+            ss.activate_process_context(new_pid, new_context, true, false)
                 .map(|_ctx| {
                     // println!("switchto ({}, {})", pid, _ctx);
                     xous::Result::ResumeProcess
@@ -127,12 +138,26 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
         }
         SysCall::Yield => {
+            let (parent_pid, parent_ctx) = unsafe { SWITCHTO_CALLER.take().expect("yielded when no parent context was present") };
             let mut ss = SystemServicesHandle::get();
-            let ppid = ss.get_process(pid).expect("can't get current process").ppid;
-            assert_ne!(ppid, 0, "no parent process id");
-            ss.activate_process_context(ppid, 0, true, true)
+            // let ppid = ss.get_process(pid).expect("can't get current process").ppid;
+            // assert_ne!(ppid, 0, "no parent process id");
+            ss.activate_process_context(parent_pid, parent_ctx, true, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
+        }
+        SysCall::ReturnToParentI(_pid, _cpuid) => {
+            let mut ss = SystemServicesHandle::get();
+            unsafe {
+                let (current_pid, current_ctx) = crate::arch::irq::take_isr_return_pair().expect("couldn't get the isr return pair");
+                // ss.ready_context(current_pid, current_ctx).unwrap();
+                let (parent_pid, parent_ctx) =
+                SWITCHTO_CALLER
+                    .take()
+                    .expect("ReturnToParentI called with no existing parent present");
+                crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx);
+            };
+            Ok(xous::Result::ResumeProcess)
         }
         SysCall::ReceiveMessage(sid) => {
             let mut ss = SystemServicesHandle::get();
@@ -142,7 +167,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let server = ss
                 .server_from_sidx(sidx)
                 .ok_or(xous::Error::ServerNotFound)?;
-            server.print_queue();
+            // server.print_queue();
 
             // Ensure the server is for this PID
             if server.pid != pid {
@@ -151,7 +176,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
 
             // If there is a pending message, return it immediately.
             if let Some(msg) = server.take_next_message(sidx) {
-                println!("PID {} had a message ready -- returning it", pid);
+                // println!("PID {} had a message ready -- returning it", pid);
                 return Ok(xous::Result::Message(msg));
             }
 
@@ -159,11 +184,12 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // process and mark ourselves as awaiting an event.  When a message
             // arrives, our return value will already be set to the
             // MessageEnvelope of the incoming message.
-            println!(
-                "PID {} did not have any waiting messages -- parking context",
-                pid
-            );
+            // println!(
+            //     "PID {} did not have any waiting messages -- parking context",
+            //     pid
+            // );
             server.park_context(context_nr);
+            unsafe { SWITCHTO_CALLER = None };
 
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             assert_ne!(ppid, 0, "no parent process id");
@@ -175,6 +201,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             let mut ss = SystemServicesHandle::get();
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
+            unsafe { SWITCHTO_CALLER = None };
             assert_ne!(ppid, 0, "no parent process id");
             ss.activate_process_context(ppid, 0, false, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
@@ -221,15 +248,15 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     return Err(xous::Error::ProcessNotFound);
                 }
             };
-            println!(
-                "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
-                len,
-                server_addr.get(),
-                pid,
-                client_addr.get(),
-                client_pid,
-                client_ctx
-            );
+            // println!(
+            //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+            //     len,
+            //     server_addr.get(),
+            //     pid,
+            //     client_addr.get(),
+            //     client_pid,
+            //     client_ctx
+            // );
 
             // Return the memory to the calling process
             ss.return_memory(
@@ -240,7 +267,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             )?;
 
             // Unblock the client context to allow it to continue.
-            println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
+            // println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
             ss.ready_context(client_pid, client_ctx)?;
             ss.set_context_result(
                 client_pid,
@@ -335,10 +362,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .expect("server couldn't be located")
                 .take_available_context()
             {
-                println!(
-                    "There are contexts available to handle this message.  Marking PID {} as Ready",
-                    server_pid
-                );
+                // println!(
+                //     "There are contexts available to handle this message.  Marking PID {} as Ready",
+                //     server_pid
+                // );
                 let sender = ss
                     .remember_server_message(sidx, pid, context_nr, &message, client_address)
                     .or_else(|e| {
@@ -357,17 +384,17 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 })?;
 
                 if blocking {
-                    println!("Activating Server context and switching away from Client");
+                    // println!("Activating Server context and switching away from Client");
                     ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
                         .map(|_| Ok(xous::Result::Message(envelope)))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
                 } else {
-                    println!("Setting the return value of the Server and returning to Client");
+                    // println!("Setting the return value of the Server and returning to Client");
                     ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
                         .map(|_| xous::Result::MessageResult(0, 0))
                 }
             } else {
-                println!("No contexts available to handle this.  Queueing message.");
+                // println!("No contexts available to handle this.  Queueing message.");
                 // There is no server context we can use, so add the message to
                 // the queue.
                 let context_nr = ss.current_context_nr();
@@ -379,14 +406,15 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 // Park this context if it's blocking.  This is roughly
                 // equivalent to a "Yield".
                 if blocking {
-                    println!("Returning to parent");
+                    // println!("Returning to parent");
                     let process = ss.get_process(pid).expect("Can't get current process");
                     let ppid = process.ppid;
+                    unsafe { SWITCHTO_CALLER = None };
                     ss.activate_process_context(ppid, 0, !blocking, blocking)
                         .map(|_| Ok(xous::Result::ResumeProcess))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
                 } else {
-                    println!("Returning to Client with Ok result");
+                    // println!("Returning to Client with Ok result");
                     Ok(xous::Result::Ok)
                 }
             }

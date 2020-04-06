@@ -4,7 +4,7 @@ use crate::arch::process::ProcessHandle;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{ProcessContext, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
-use xous::{SysCall, PID};
+use xous::{SysCall, PID, CtxID};
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous::Result, context: &ProcessContext) -> !;
@@ -34,40 +34,21 @@ pub fn disable_irq(irq_no: usize) {
     sim::write(sim::read() & !(1 << irq_no));
 }
 
-static mut PREVIOUS_PAIR: Option<(PID, usize)> = None;
+static mut PREVIOUS_PAIR: Option<(PID, CtxID)> = None;
 
-// fn map_page_and_return(pc: usize, addr: usize, pid: PID, flags: MemoryFlags) {
-//     assert!(
-//         pid > 1,
-//         "kernel store page fault (pc: {:08x}  target: {:08x})",
-//         pc,
-//         addr
-//     );
+pub unsafe fn set_isr_return_pair(pid: PID, ctx: CtxID) {
+    PREVIOUS_PAIR = Some((pid, ctx));
+}
 
-//     {
-//         let mut mm = MemoryManagerHandle::get();
-//         let new_page = mm.alloc_page(pid).expect("Couldn't allocate new page");
-//         println!(
-//             "Allocating new physical page {:08x} @ {:08x}",
-//             new_page,
-//             (addr & !4095)
-//         );
-//         mm.map_range(
-//             new_page as *mut usize,
-//             (addr & !4095) as *mut usize,
-//             4096,
-//             flags,
-//         )
-//         .expect("Couldn't map new stack");
-//     }
-//     crate::arch::syscall::resume(current_pid() == 1, ProcessContext::current());
-// }
+pub unsafe fn take_isr_return_pair() -> Option<(PID, CtxID)> {
+    PREVIOUS_PAIR.take()
+}
 
 /// Trap entry point rust (_start_trap_rust)
 ///
-/// scause is read to determine the cause of the trap. The top bit indicates
-/// if it's an interrupt or an exception. The result is converted to an element
-/// of the Interrupt or Exception enum and passed to handle_interrupt or
+/// scause is read to determine the cause of the trap. The top bit indicates if
+/// it's an interrupt or an exception. The result is converted to an element of
+/// the Interrupt or Exception enum and passed to handle_interrupt or
 /// handle_exception.
 #[export_name = "_start_trap_rust"]
 pub extern "C" fn trap_handler(
@@ -82,8 +63,8 @@ pub extern "C" fn trap_handler(
 ) -> ! {
     let sc = scause::read();
 
-    // If we were previously in Supervisor mode and we've just tried to write
-    // to invalid memory, then we likely blew out the stack.
+    // If we were previously in Supervisor mode and we've just tried to write to
+    // invalid memory, then we likely blew out the stack.
     if cfg!(target_arch = "riscv32")
         && sstatus::read().spp() == sstatus::SPP::Supervisor
         && sc.bits() == 0xf
@@ -116,7 +97,7 @@ pub extern "C" fn trap_handler(
         if response == xous::Result::ResumeProcess {
             crate::arch::syscall::resume(current_pid() == 1, ctx);
         } else {
-            println!("Returning to address {:08x}", ctx.sepc);
+            // println!("Returning to address {:08x}", ctx.sepc);
             unsafe { _xous_syscall_return_result(&response, ctx) };
         }
     }
@@ -202,6 +183,7 @@ pub extern "C" fn trap_handler(
             _ => (),
         }
         println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
+        MemoryMapping::current().print_map();
         loop {}
     } else {
         let irqs_pending = sip::read();
