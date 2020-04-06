@@ -200,6 +200,7 @@ impl MiniElf {
     /// The process will have been already loaded in stage 1.  This simply assigns
     /// memory maps as necessary.
     pub fn load(&self, allocator: &mut BootConfig, load_offset: usize, pid: XousPid) -> usize {
+        println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
         let mut allocated_bytes = 0;
 
         let mut page_addr: usize = 0;
@@ -291,6 +292,7 @@ impl MiniElf {
 
             // Part 3: Copy the final residual partial page
             if bytes_to_copy > 0 {
+                let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocated_bytes += PAGE_SIZE;
                 top -= PAGE_SIZE;
@@ -632,6 +634,8 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                     // Zero out the page, if necessary.
                     unsafe { bzero(top, top.add(section.virt as usize & (PAGE_SIZE - 1))) };
+                } else {
+                    println!("Reusing existing page @ {:08x}", this_page);
                 }
 
                 // Part 1: Copy the first chunk over.
