@@ -3,8 +3,12 @@ use lazy_static::lazy_static;
 use crate::BootConfig;
 use std::sync::Mutex;
 
-fn get_args_bin() -> &'static [u8] {
-    include_bytes!("../test/args.bin")
+fn get_args_bin(idx: usize) -> &'static [u8] {
+    match idx {
+        0 => include_bytes!("../test/args-default.bin"),
+        1 => include_bytes!("../test/args-span-page.bin"),
+        _ => panic!("unrecognized args index"),
+    }
 }
 
 const REGION_COUNT: usize = 8;
@@ -57,7 +61,7 @@ struct TestEnvironment {
 }
 
 impl TestEnvironment {
-    pub fn new() -> TestEnvironment {
+    pub fn new(idx: usize) -> TestEnvironment {
         use crate::args::KernelArguments;
 
         // Create a fake memory block into which the bootloader will write
@@ -67,7 +71,7 @@ impl TestEnvironment {
         //     *mem = random();
         // }
 
-        let args = get_args_bin();
+        let args = get_args_bin(idx);
         let ka = KernelArguments::new(args.as_ptr() as *const usize);
         let mut cfg = BootConfig {
             args: ka,
@@ -98,13 +102,13 @@ impl TestEnvironment {
 
 #[test]
 fn copy_processes() {
-    let mut env = TestEnvironment::new();
+    let mut env = TestEnvironment::new(0);
     crate::copy_processes(&mut env.cfg);
 }
 
 #[test]
 fn allocate_regions() {
-    let mut env = TestEnvironment::new();
+    let mut env = TestEnvironment::new(0);
     crate::copy_processes(&mut env.cfg);
 
     // The first region is defined as being "main RAM", which will be used
@@ -120,7 +124,7 @@ fn allocate_regions() {
 #[test]
 fn parse_args_bin() {
     use crate::args::KernelArguments;
-    let args = get_args_bin();
+    let args = get_args_bin(0);
     let ka = KernelArguments::new(args.as_ptr() as *const usize);
 
     let mut ka_iter = ka.iter();
@@ -152,7 +156,7 @@ fn read_initial_config() {
     use crate::args::KernelArguments;
     use crate::BootConfig;
 
-    let args = get_args_bin();
+    let args = get_args_bin(0);
     let ka = KernelArguments::new(args.as_ptr() as *const usize);
     let mut cfg = BootConfig {
         args: ka,
@@ -304,7 +308,7 @@ fn verify_program(cfg: &BootConfig, pid: usize, arg: &crate::args::KernelArgumen
 
 #[test]
 fn full_boot() {
-    let mut env = TestEnvironment::new();
+    let mut env = TestEnvironment::new(0);
 
     println!("Running phase_1");
     crate::phase_1(&mut env.cfg);
@@ -312,6 +316,7 @@ fn full_boot() {
     crate::phase_2(&mut env.cfg);
     println!("Done with phases");
 
+    println!("Examining memory layout");
     let mut xkrn_inspected = false;
     let mut init_index = 0;
     for arg in env.cfg.args.iter() {
@@ -319,9 +324,39 @@ fn full_boot() {
             verify_kernel(&env.cfg, 0, &arg);
             assert!(xkrn_inspected == false, "multiple kernels found");
             xkrn_inspected = true;
+            println!("Kernel PASS");
         } else if arg.name == make_type!("IniE") {
             init_index += 1;
             verify_program(&env.cfg, init_index, &arg);
+            println!("PID {} PASS", init_index + 1);
+        }
+    }
+    assert_eq!(xkrn_inspected, true, "didn't see kernel in output list");
+}
+
+#[test]
+fn spanning_section() {
+    let mut env = TestEnvironment::new(1);
+
+    println!("Running phase_1");
+    crate::phase_1(&mut env.cfg);
+    println!("Running phase_2");
+    crate::phase_2(&mut env.cfg);
+    println!("Done with phases");
+
+    println!("Examining memory layout");
+    let mut xkrn_inspected = false;
+    let mut init_index = 0;
+    for arg in env.cfg.args.iter() {
+        if arg.name == make_type!("XKrn") {
+            verify_kernel(&env.cfg, 0, &arg);
+            assert!(xkrn_inspected == false, "multiple kernels found");
+            xkrn_inspected = true;
+            println!("Kernel PASS");
+        } else if arg.name == make_type!("IniE") {
+            init_index += 1;
+            verify_program(&env.cfg, init_index, &arg);
+            println!("PID {} PASS", init_index + 1);
         }
     }
     assert_eq!(xkrn_inspected, true, "didn't see kernel in output list");
@@ -329,7 +364,7 @@ fn full_boot() {
 
 #[test]
 fn tracker_sane() {
-    let mut env = TestEnvironment::new();
+    let mut env = TestEnvironment::new(0);
 
     crate::phase_1(&mut env.cfg);
     crate::phase_2(&mut env.cfg);
