@@ -529,11 +529,12 @@ pub fn lend_page_inner(
     result.map(|_| phys)
 }
 
+/// Return a page from `src_space` back to `dest_space`.
 pub fn return_page_inner(
-    mm: &mut MemoryManager,
+    _mm: &mut MemoryManager,
     src_space: &MemoryMapping,
     src_addr: *mut usize,
-    dest_pid: PID,
+    _dest_pid: PID,
     dest_space: &MemoryMapping,
     dest_addr: *mut usize,
 ) -> Result<usize, xous::Error> {
@@ -570,7 +571,7 @@ pub fn return_page_inner(
     unsafe { flush_mmu() };
 
     src_space.activate();
-    Ok(0)
+    Ok(phys)
 }
 
 pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {

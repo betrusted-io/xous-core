@@ -663,6 +663,15 @@ impl SystemServices {
     ///
     /// # Errors
     ///
+    /// * **ShareViolation**: Tried to mutably share a region that was already
+    ///   shared
+    /// * **BadAddress**: The provided address was not valid
+    /// * **BadAlignment**: The provided address or length was not page-aligned
+    ///
+    /// # Panics
+    ///
+    /// If the memory should have been able to go into the destination process
+    /// but failed, then the system panics.
     pub fn send_memory(
         &mut self,
         src_virt: *mut usize,
@@ -684,7 +693,6 @@ impl SystemServices {
         }
 
         let current_pid = self.current_pid();
-        /// XXX THIS SHOULD UNMAP THESE PAGES ON ERROR
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         let mut mm = MemoryManagerHandle::get();
@@ -695,7 +703,6 @@ impl SystemServices {
             .find_virtual_address(dest_virt, len, MemoryType::Messages)
             .or_else(|e| {
                 src_mapping.activate();
-                /// XXX THIS SHOULD UNMAP THESE PAGES ON ERROR
                 Err(e)
             })?;
         src_mapping.activate();
@@ -715,7 +722,7 @@ impl SystemServices {
             )
             .unwrap_or_else(|e| error = Some(e));
         }
-        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+        error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to send: {:?}", e))
     }
 
     /// Lend memory from one process to another.
@@ -739,7 +746,10 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **ShareViolation**: Tried to mutably share a region that was already shared
+    /// * **ShareViolation**: Tried to mutably share a region that was already
+    ///   shared
+    /// * **BadAddress**: The provided address was not valid
+    /// * **BadAlignment**: The provided address or length was not page-aligned
     pub fn lend_memory(
         &mut self,
         src_virt: *mut usize,
@@ -752,13 +762,13 @@ impl SystemServices {
             return Err(xous::Error::BadAddress);
         }
         if len & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous::Error::BadAlignment);
         }
         if src_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous::Error::BadAlignment);
         }
         if dest_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous::Error::BadAlignment);
         }
 
         let current_pid = self.current_pid();
@@ -795,7 +805,7 @@ impl SystemServices {
                 0
             });
         }
-        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+        error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to lend: {:?}", e))
     }
 
     /// Return memory from one process back to another
@@ -854,6 +864,17 @@ impl SystemServices {
         error.map_or_else(|| Ok(dest_virt), |e| Err(e))
     }
 
+    /// Create a new thread in the current process.  Execution begins at
+    /// `entrypoint`, with the stack pointer set to `stack_pointer`.  A single
+    /// argument will be passed to the new function.
+    ///
+    /// The return address of this thread will be `EXIT_THREAD`, which the
+    /// kernel can trap on to indicate a thread exited.
+    ///
+    /// # Errors
+    ///
+    /// * **ContextNotAvailable**: The process has used all of its context
+    ///   slots.
     pub fn spawn_thread(
         &mut self,
         entrypoint: *mut usize,
@@ -893,6 +914,11 @@ impl SystemServices {
 
     /// Allocate a new server ID for this process and return the address. If the
     /// server table is full, return an error.
+    ///
+    /// # Errors
+    ///
+    /// * **OutOfMemory**: A new page could not be assigned to store the server
+    ///   queue.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
         println!(

@@ -173,3 +173,37 @@ impl MemoryRange {
         self.addr.get() as *mut usize
     }
 }
+
+
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub enum Result {
+    Ok,
+    Error(Error),
+    MemoryAddress(*mut u8),
+    MemoryRange(MemoryRange),
+    ReadyContexts(
+        usize, /* count */
+        usize,
+        /* pid0 */ usize, /* context0 */
+        usize,
+        /* pid1 */ usize, /* context1 */
+        usize,
+        /* pid2 */ usize, /* context2 */
+    ),
+    ResumeProcess,
+    ServerID(SID),
+    ConnectionID(CID),
+    Message(MessageEnvelope),
+    ThreadID(CtxID),
+    MessageResult(usize, usize),
+    UnknownResult(usize, usize, usize, usize, usize, usize, usize),
+}
+
+impl From<Error> for Result {
+    fn from(e: Error) -> Self {
+        Result::Error(e)
+    }
+}
+
+pub type SyscallResult = core::result::Result<Result, Error>;

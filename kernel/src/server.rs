@@ -399,6 +399,20 @@ impl Server {
         }
     }
 
+    /// Return an available context to the blocking list.  This is part of the
+    /// error condition when a message cannot be handled but the context has
+    /// already been claimed.
+    ///
+    /// # Panics
+    ///
+    /// If the context cannot be returned because it is already blocking.
+    pub fn return_available_context(&mut self, ctx_number: CtxID) {
+        if self.ready_contexts & 1 << ctx_number != 0 {
+            panic!("tried to return context {}, but it was already blocking", ctx_number);
+        }
+        self.ready_contexts |= 1 << ctx_number;
+    }
+
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_context(&mut self, context: CtxID) {
         self.ready_contexts |= 1 << context;

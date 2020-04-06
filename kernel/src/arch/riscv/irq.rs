@@ -134,8 +134,8 @@ pub extern "C" fn trap_handler(
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
                     panic!(
-                        "error at {:08x}: memory not mapped or reserved for addr {:08x}",
-                        pc, addr
+                        "error {:?} at {:08x}: memory not mapped or reserved for addr {:08x}",
+                        x, pc, addr
                     );
                 });
                 let flags = *entry & 0x1ff;

@@ -369,7 +369,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // Unblock the client context to allow it to continue.
             println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
             ss.ready_context(client_pid, client_ctx)?;
-            ss.set_context_result(client_pid, client_ctx, xous::Result::MessageResult(arg1, arg2))?;
+            ss.set_context_result(
+                client_pid,
+                client_ctx,
+                xous::Result::MessageResult(arg1, arg2),
+            )?;
             Ok(xous::Result::Ok)
         }
         SysCall::SendMessage(cid, message) => {
@@ -462,11 +466,24 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     "There are contexts available to handle this message.  Marking PID {} as Ready",
                     server_pid
                 );
-                let sender =
-                    ss.remember_server_message(sidx, pid, context_nr, &message, client_address)?;
+                let sender = ss
+                    .remember_server_message(sidx, pid, context_nr, &message, client_address)
+                    .or_else(|e| {
+                        ss.server_from_sidx(sidx)
+                            .expect("server couldn't be located")
+                            .return_available_context(context_nr);
+                        Err(e)
+                    })?;
                 let envelope = MessageEnvelope { sender, message };
 
-                ss.ready_context(server_pid, ctx_number)?;
+                ss.ready_context(server_pid, ctx_number)
+                .or_else(|e| {
+                    ss.server_from_sidx(sidx)
+                        .expect("server couldn't be located")
+                        .return_available_context(context_nr);
+                    Err(e)
+                })?;
+
                 if blocking {
                     println!("Activating Server context and switching away from Client");
                     ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)

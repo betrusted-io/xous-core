@@ -1,6 +1,6 @@
 use crate::{
-    CpuID, CtxID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
-    Message, MessageEnvelope, MessageSender, ScalarMessage, CID, PID, SID,
+    CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
+    Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SyscallResult, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -600,39 +600,6 @@ impl SysCall {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, PartialEq)]
-pub enum Result {
-    Ok,
-    Error(Error),
-    MemoryAddress(*mut u8),
-    MemoryRange(MemoryRange),
-    ReadyContexts(
-        usize, /* count */
-        usize,
-        /* pid0 */ usize, /* context0 */
-        usize,
-        /* pid1 */ usize, /* context1 */
-        usize,
-        /* pid2 */ usize, /* context2 */
-    ),
-    ResumeProcess,
-    ServerID(SID),
-    ConnectionID(CID),
-    Message(MessageEnvelope),
-    ThreadID(CtxID),
-    MessageResult(usize, usize),
-    UnknownResult(usize, usize, usize, usize, usize, usize, usize),
-}
-
-impl From<Error> for Result {
-    fn from(e: Error) -> Self {
-        Result::Error(e)
-    }
-}
-
-pub type SyscallResult = core::result::Result<Result, Error>;
-
 extern "Rust" {
     fn _xous_syscall_rust(
         nr: usize,
@@ -790,7 +757,10 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
-pub fn send_message(connection: CID, message: Message) -> core::result::Result<(usize, usize), Error> {
+pub fn send_message(
+    connection: CID,
+    message: Message,
+) -> core::result::Result<(usize, usize), Error> {
     let result =
         rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
     if let Result::MessageResult(arg1, arg2) = result {
@@ -832,13 +802,10 @@ pub fn rsyscall(call: SysCall) -> SyscallResult {
 pub unsafe fn dangerous_syscall(call: SysCall) -> SyscallResult {
     use core::mem::{transmute, MaybeUninit};
     let mut ret = MaybeUninit::uninit().assume_init();
-    let presto =
-        transmute::<_, (usize, usize, usize, usize, usize, usize, usize, usize)>(call);
-        _xous_syscall_rust(
-            presto.0, presto.1, presto.2, presto.3, presto.4, presto.5, presto.6, presto.7,
-            &mut ret,
-        )
-    ;
+    let presto = transmute::<_, (usize, usize, usize, usize, usize, usize, usize, usize)>(call);
+    _xous_syscall_rust(
+        presto.0, presto.1, presto.2, presto.3, presto.4, presto.5, presto.6, presto.7, &mut ret,
+    );
     match ret {
         Result::Error(e) => Err(e),
         other => Ok(other),
