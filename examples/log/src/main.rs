@@ -24,13 +24,13 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
     while let Some(c) = debug::DEFAULT.getc() {
         print!("0x{:02x}", c);
     }
-    println!("");
+    println!();
 }
 
 #[no_mangle]
 fn main() {
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(0xf0004000),
+        xous::MemoryAddress::new(0xf000_4000),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,

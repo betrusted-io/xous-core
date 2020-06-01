@@ -33,9 +33,7 @@ impl Uart {
         unsafe {
             let base = DEFAULT_UART_ADDR;
             // Wait until TXFULL is `0`
-            while base.add(1).read_volatile() != 0 {
-                ()
-            }
+            while base.add(1).read_volatile() != 0 {}
             base.add(0).write_volatile(c as usize)
         };
     }

@@ -1,6 +1,5 @@
 use core::fmt;
 use core::slice;
-use xous;
 
 pub struct LogString<'a> {
     raw_slice: &'a mut [u8],

@@ -26,7 +26,7 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
     while let Some(c) = debug::DEFAULT.getc() {
         print!("0x{:02x}", c);
     }
-    println!("");
+    println!();
 }
 
 // fn print_and_yield(index: *mut usize) -> ! {
@@ -40,7 +40,7 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
 #[no_mangle]
 fn main() {
     let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(0xf0001000),
+        xous::MemoryAddress::new(0xf000_1000),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -50,7 +50,7 @@ fn main() {
     println!("Mapped UART @ {:08x}", uart.addr.get() );
 
     xous::syscall::map_memory(
-        xous::MemoryAddress::new(0xf0002000),
+        xous::MemoryAddress::new(0xf000_2000),
         None,
         4096,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -114,7 +114,7 @@ fn main() {
     let mut connection = None;
     println!("Attempting to connect to server...");
     while connection.is_none() {
-        if let Ok(cid) = xous::syscall::connect((3, 2626920432, 3, 2626920432)) {
+        if let Ok(cid) = xous::syscall::connect((3, 2_626_920_432, 3, 2_626_920_432)) {
             connection = Some(cid);
         } else {
             xous::syscall::yield_slice();

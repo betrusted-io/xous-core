@@ -33,21 +33,21 @@ bitflags! {
     /// writable and not readable.
     pub struct MemoryFlags: usize {
         /// Free this memory
-        const FREE      = 0b00000000;
+        const FREE      = 0b0000_0000;
 
         /// Immediately allocate this memory.  Otherwise it will
         /// be demand-paged.  This is implicitly set when `phys`
         /// is not 0.
-        const RESERVE   = 0b00000001;
+        const RESERVE   = 0b0000_0001;
 
         /// Allow the CPU to read from this page.
-        const R         = 0b00000010;
+        const R         = 0b0000_0010;
 
         /// Allow the CPU to write to this page.
-        const W         = 0b00000100;
+        const W         = 0b0000_0100;
 
         /// Allow the CPU to execute from this page.
-        const X         = 0b00001000;
+        const X         = 0b0000_1000;
     }
 }
 
@@ -163,6 +163,10 @@ impl MemoryRange {
 
     pub fn len(&self) -> usize {
         self.size.get()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.size.get() > 0
     }
 
     pub fn as_ptr(&self) -> *const usize {

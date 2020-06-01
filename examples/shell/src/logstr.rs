@@ -1,6 +1,5 @@
 use core::fmt::{Error, Write};
 use core::slice;
-use xous;
 
 pub struct LogStr<'a> {
     raw_slice: &'a mut [u8],
@@ -33,7 +32,7 @@ impl<'a> LogStr<'a> {
     pub fn into_memory_message(self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
         // XXX This should forget the memory allocated, as it will be sent to the other process
         Ok(xous::MemoryMessage {
-            id: id,
+            id,
             buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
             offset: None,
             valid: xous::MemorySize::new(self.len),
@@ -42,7 +41,7 @@ impl<'a> LogStr<'a> {
 
     pub fn as_memory_message(&self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
         Ok(xous::MemoryMessage {
-            id: id,
+            id,
             buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
             offset: None,
             valid: xous::MemorySize::new(self.len),
