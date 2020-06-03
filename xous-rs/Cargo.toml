@@ -17,3 +17,9 @@ default-features = false
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
+
+[target.'cfg(windows)'.dependencies]
+lazy_static = "1.4"
+
+[target.'cfg(unix)'.dependencies]
+lazy_static = "1.4"

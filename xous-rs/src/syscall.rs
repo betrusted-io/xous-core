@@ -1,36 +1,9 @@
 use crate::{
-    CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize,
+    CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, MemoryType,
     Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SyscallResult, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-
-/// Which memory region the operation should affect.
-#[derive(Debug, Copy, Clone)]
-pub enum MemoryType {
-    /// The address where addresses go when no `virt` is specified.
-    Default = 1,
-
-    /// Addresses will begin here when `IncreaseHeap` is called.
-    Heap = 2,
-
-    /// When messages are passed to a process, they will go here.
-    Messages = 3,
-
-    /// Unlike other memory types, this defines the "end" of the region.
-    Stack = 4,
-}
-
-impl From<usize> for MemoryType {
-    fn from(arg: usize) -> Self {
-        match arg {
-            2 => MemoryType::Heap,
-            3 => MemoryType::Messages,
-            4 => MemoryType::Stack,
-            _ => MemoryType::Default,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum SysCall {
@@ -603,17 +576,17 @@ impl SysCall {
 }
 
 extern "Rust" {
-    fn _xous_syscall_rust(
-        nr: usize,
-        a1: usize,
-        a2: usize,
-        a3: usize,
-        a4: usize,
-        a5: usize,
-        a6: usize,
-        a7: usize,
-        ret: &mut Result,
-    );
+    // fn _xous_syscall_rust(
+    //     nr: usize,
+    //     a1: usize,
+    //     a2: usize,
+    //     a3: usize,
+    //     a4: usize,
+    //     a5: usize,
+    //     a6: usize,
+    //     a7: usize,
+    //     ret: &mut Result,
+    // );
     fn _xous_syscall(
         nr: usize,
         a1: usize,

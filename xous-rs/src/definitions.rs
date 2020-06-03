@@ -74,6 +74,36 @@ pub enum Error {
     UnhandledSyscall = 17,
     InvalidSyscall = 18,
     ShareViolation = 19,
+    UnknownError = 20,
+}
+
+impl Error {
+    pub fn from_usize(arg: usize) -> Self {
+        use crate::Error::*;
+        match arg {
+            0 => NoError,
+            1 => BadAlignment,
+            2 => BadAddress,
+            3 => OutOfMemory,
+            4 => MemoryInUse,
+            5 => InterruptNotFound,
+            6 => InterruptInUse,
+            7 => InvalidString,
+            8 => ServerExists,
+            9 => ServerNotFound,
+            10 => ProcessNotFound,
+            11 => ProcessNotChild,
+            12 => ProcessTerminated,
+            13 => Timeout,
+            14 => InternalError,
+            15 => ServerQueueFull,
+            16 => ContextNotAvailable,
+            17 => UnhandledSyscall,
+            18 => InvalidSyscall,
+            19 => ShareViolation,
+            _ => UnknownError,
+        }
+    }
 }
 
 #[repr(C)]
@@ -95,10 +125,39 @@ pub struct MemoryMessage {
     pub buf: MemoryRange,
 
     /// The offset within the buffer where the interesting stuff starts.
-    pub offset: Option<MemorySize>,
+    pub offset: Option<MemoryAddress>,
 
     /// How many bytes in the buffer are valid
     pub valid: Option<MemorySize>,
+}
+
+impl MemoryMessage {
+    pub fn from_usize(
+        id: usize,
+        addr: usize,
+        size: usize,
+        offset: usize,
+        valid: usize,
+    ) -> Option<MemoryMessage> {
+        let addr = match MemoryAddress::new(addr) {
+            None => return None,
+            Some(s) => s,
+        };
+        let size = match MemorySize::new(size) {
+            None => return None,
+            Some(s) => s,
+        };
+        let buf = MemoryRange { addr, size };
+        let offset = MemoryAddress::new(offset);
+        let valid = MemorySize::new(valid);
+
+        Some(MemoryMessage {
+            id,
+            buf,
+            offset,
+            valid,
+        })
+    }
 }
 
 #[repr(C)]
@@ -110,6 +169,24 @@ pub struct ScalarMessage {
     pub arg2: usize,
     pub arg3: usize,
     pub arg4: usize,
+}
+
+impl ScalarMessage {
+    pub fn from_usize(
+        id: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+    ) -> ScalarMessage {
+        ScalarMessage {
+            id,
+            arg1,
+            arg2,
+            arg3,
+            arg4,
+        }
+    }
 }
 
 #[repr(usize)]
@@ -178,6 +255,32 @@ impl MemoryRange {
     }
 }
 
+/// Which memory region the operation should affect.
+#[derive(Debug, Copy, Clone)]
+pub enum MemoryType {
+    /// The address where addresses go when no `virt` is specified.
+    Default = 1,
+
+    /// Addresses will begin here when `IncreaseHeap` is called.
+    Heap = 2,
+
+    /// When messages are passed to a process, they will go here.
+    Messages = 3,
+
+    /// Unlike other memory types, this defines the "end" of the region.
+    Stack = 4,
+}
+
+impl From<usize> for MemoryType {
+    fn from(arg: usize) -> Self {
+        match arg {
+            2 => MemoryType::Heap,
+            3 => MemoryType::Messages,
+            4 => MemoryType::Stack,
+            _ => MemoryType::Default,
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, PartialEq)]
@@ -202,6 +305,57 @@ pub enum Result {
     ThreadID(CtxID),
     MessageResult(usize, usize),
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
+}
+
+impl Result {
+    pub fn from_args(src: [usize; 8]) -> Self {
+        match src[0] {
+            0 => Result::Ok,
+            1 => Result::Error(Error::from_usize(src[1])),
+            2 => Result::MemoryAddress(src[1] as *mut u8),
+            3 => {
+                let addr = match MemoryAddress::new(src[1]) {
+                    None => return Result::Error(Error::InternalError),
+                    Some(s) => s,
+                };
+                let size = match MemorySize::new(src[2]) {
+                    None => return Result::Error(Error::InternalError),
+                    Some(s) => s,
+                };
+
+                Result::MemoryRange(MemoryRange { addr, size })
+            }
+            4 => Result::ReadyContexts(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
+            5 => Result::ResumeProcess,
+            6 => Result::ServerID((src[1], src[2], src[3], src[4])),
+            7 => Result::ConnectionID(src[1] as CID),
+            8 => {
+                let sender = src[1];
+                let message = match src[2] {
+                    0 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
+                        None => return Result::Error(Error::InternalError),
+                        Some(s) => Message::MutableBorrow(s),
+                    },
+                    1 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
+                        None => return Result::Error(Error::InternalError),
+                        Some(s) => Message::ImmutableBorrow(s),
+                    },
+                    2 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
+                        None => return Result::Error(Error::InternalError),
+                        Some(s) => Message::Move(s),
+                    },
+                    3 => Message::Scalar(ScalarMessage::from_usize(
+                        src[3], src[4], src[5], src[6], src[7],
+                    )),
+                    _ => return Result::Error(Error::InternalError),
+                };
+                Result::Message(MessageEnvelope { sender, message })
+            }
+            9 => Result::ThreadID(src[1] as CtxID),
+            10 => Result::MessageResult(src[1], src[2]),
+            _ => Result::UnknownResult(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
+        }
+    }
 }
 
 impl From<Error> for Result {

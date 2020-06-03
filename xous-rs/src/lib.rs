@@ -1,9 +1,19 @@
-#![no_std]
+#![cfg_attr(not(any(windows,unix)), no_std)]
 
 #[macro_use]
 extern crate bitflags;
 extern crate num_derive;
 extern crate num_traits;
+
+#[cfg(not(any(windows,unix)))]
+pub mod native;
+#[cfg(not(any(windows,unix)))]
+pub use native::*;
+
+#[cfg(any(windows,unix))]
+pub mod hosted;
+#[cfg(any(windows,unix))]
+pub use hosted::*;
 
 pub mod definitions;
 pub mod syscall;
