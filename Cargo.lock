@@ -245,6 +245,7 @@ name = "kernel"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "lazy_static",
  "riscv",
  "sha3",
  "xous",
@@ -615,6 +616,7 @@ name = "xous"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "lazy_static",
  "num-derive",
  "num-traits",
 ]
