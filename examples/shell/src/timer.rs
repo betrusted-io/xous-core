@@ -1,3 +1,5 @@
+use xous::{MemorySize, MemoryAddress};
+
 const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000;
 const TIMER_BASE: usize = 0xF000_3000;
 
@@ -15,17 +17,17 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
 pub fn init() {
     println!("Allocating timer...");
     xous::rsyscall(xous::SysCall::MapMemory(
-        TIMER_BASE as *mut usize,
-        TIMER_BASE as *mut usize,
-        4096,
+        MemoryAddress::new(TIMER_BASE),
+        MemoryAddress::new(TIMER_BASE),
+        MemorySize::new(4096).unwrap(),
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ))
     .expect("timer: couldn't map timer");
 
     xous::rsyscall(xous::SysCall::ClaimInterrupt(
         1,
-        timer_tick as *mut usize,
-        core::ptr::null_mut::<usize>(),
+        MemoryAddress::new(timer_tick as *mut usize as usize).unwrap(),
+        None,
     ))
     .expect("timer: couldn't claim interrupt");
 
