@@ -22,17 +22,20 @@ pub enum SysCall {
     /// * **OutOfMemory**: A contiguous chunk of memory couldn't be found, or
     ///                    the system's memory size has been exceeded.
     MapMemory(
-        *mut usize,  /* phys */
-        *mut usize,  /* virt */
-        usize,       /* region size */
-        MemoryFlags, /* flags */
+        Option<MemoryAddress>, /* phys */
+        Option<MemoryAddress>, /* virt */
+        MemorySize,            /* region size */
+        MemoryFlags,           /* flags */
     ),
 
     /// Release the memory back to the operating system.
     ///
     /// # Errors
     ///
-    UnmapMemory(*mut usize /* virt */, usize /* region size */),
+    UnmapMemory(
+        MemoryAddress, /* virt */
+        MemorySize,    /* region size */
+    ),
 
     /// Sets the offset and size of a given memory region.  This call may only
     /// be made by processes that have not yet started, or processes that have a
@@ -47,10 +50,10 @@ pub enum SysCall {
     ///                     page width.
     /// * **BadAddress**: The address conflicts with the kernel
     SetMemRegion(
-        PID,        /* pid */
-        MemoryType, /* region type */
-        *mut usize, /* region address */
-        usize,      /* region size */
+        PID,           /* pid */
+        MemoryType,    /* region type */
+        MemoryAddress, /* region address */
+        usize,         /* region size */
     ),
 
     /// Add the given number of bytes to the heap.  The number of bytes must be
@@ -99,9 +102,9 @@ pub enum SysCall {
     /// * **MemoryInUse**: The given PID has already been started, and it is not
     ///                    legal to modify memory flags anymore.
     UpdateMemoryFlags(
-        *mut usize,  /* virt */
-        usize,       /* number of pages */
-        MemoryFlags, /* new flags */
+        MemoryAddress, /* virt */
+        usize,         /* number of pages */
+        MemoryFlags,   /* new flags */
     ),
 
     /// Pauses execution of the current thread and returns execution to the parent
@@ -136,9 +139,9 @@ pub enum SysCall {
     ///   system
     /// * **InterruptInUse**: The specified interrupt has already been claimed
     ClaimInterrupt(
-        usize,      /* IRQ number */
-        *mut usize, /* function pointer */
-        *mut usize, /* argument */
+        usize,         /* IRQ number */
+        MemoryAddress, /* function pointer */
+        Option<MemoryAddress>, /* argument */
     ),
 
     /// Returns the interrupt back to the operating system and masks it again.
@@ -236,12 +239,13 @@ pub enum SysCall {
 
     /// Spawn a new thread
     SpawnThread(
-        *mut usize, /* entrypoint */
-        *mut usize, /* stack pointer */
-        *mut usize, /* argument */
+        MemoryAddress,         /* entrypoint */
+        MemoryAddress,         /* stack pointer */
+        Option<MemoryAddress>, /* argument */
     ),
 
-    /// This syscall does not exist
+    /// This syscall does not exist. It captures all possible
+    /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -270,6 +274,8 @@ enum SysCallNumber {
 }
 
 impl SysCall {
+    /// Convert the SysCall into an array of eight `usize` elements,
+    /// suitable for passing to the kernel.
     pub fn as_args(&self) -> [usize; 8] {
         use core::mem;
         assert!(
@@ -279,9 +285,9 @@ impl SysCall {
         match self {
             SysCall::MapMemory(a1, a2, a3, a4) => [
                 SysCallNumber::MapMemory as usize,
-                *a1 as usize,
-                *a2 as usize,
-                *a3,
+                a1.map(|x| x.get()).unwrap_or_default(),
+                a2.map(|x| x.get()).unwrap_or_default(),
+                a3.get(),
                 a4.bits(),
                 0,
                 0,
@@ -289,8 +295,8 @@ impl SysCall {
             ],
             SysCall::UnmapMemory(a1, a2) => [
                 SysCallNumber::UnmapMemory as usize,
-                *a1 as usize,
-                *a2,
+                a1.get(),
+                a2.get(),
                 0,
                 0,
                 0,
@@ -322,8 +328,8 @@ impl SysCall {
             SysCall::ClaimInterrupt(a1, a2, a3) => [
                 SysCallNumber::ClaimInterrupt as usize,
                 *a1,
-                *a2 as usize,
-                *a3 as usize,
+                a2.get(),
+                a3.map(|x| x.get()).unwrap_or_default(),
                 0,
                 0,
                 0,
@@ -374,7 +380,7 @@ impl SysCall {
             ],
             SysCall::UpdateMemoryFlags(a1, a2, a3) => [
                 SysCallNumber::UpdateMemoryFlags as usize,
-                *a1 as usize,
+                a1.get(),
                 *a2 as usize,
                 a3.bits(),
                 0,
@@ -386,7 +392,7 @@ impl SysCall {
                 SysCallNumber::SetMemRegion as usize,
                 *a1 as usize,
                 *a2 as usize,
-                *a3 as usize,
+                a3.get(),
                 *a4,
                 0,
                 0,
@@ -460,9 +466,9 @@ impl SysCall {
             ],
             SysCall::SpawnThread(a1, a2, a3) => [
                 SysCallNumber::SpawnThread as usize,
-                *a1 as usize,
-                *a2 as usize,
-                *a3 as usize,
+                a1.get(),
+                a2.get(),
+                a3.map(|x| x.get()).unwrap_or_default(),
                 0,
                 0,
                 0,
@@ -494,19 +500,24 @@ impl SysCall {
     ) -> core::result::Result<Self, Error> {
         Ok(match FromPrimitive::from_usize(a0) {
             Some(SysCallNumber::MapMemory) => SysCall::MapMemory(
-                a1 as *mut usize,
-                a2 as *mut usize,
-                a3,
+                MemoryAddress::new(a1),
+                MemoryAddress::new(a2),
+                MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
-            Some(SysCallNumber::UnmapMemory) => SysCall::UnmapMemory(a1 as *mut usize, a2),
+            Some(SysCallNumber::UnmapMemory) => SysCall::UnmapMemory(
+                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
+                MemorySize::new(a2).ok_or(Error::InvalidSyscall)?,
+            ),
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
             Some(SysCallNumber::ReturnToParentI) => SysCall::ReturnToParentI(a1 as PID, a2),
-            Some(SysCallNumber::ClaimInterrupt) => {
-                SysCall::ClaimInterrupt(a1, a2 as *mut usize, a3 as *mut usize)
-            }
+            Some(SysCallNumber::ClaimInterrupt) => SysCall::ClaimInterrupt(
+                a1,
+                MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
+                MemoryAddress::new(a3),
+            ),
             Some(SysCallNumber::FreeInterrupt) => SysCall::FreeInterrupt(a1),
             Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(a1 as PID, a2 as usize),
             Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(a1 as u8),
@@ -516,13 +527,16 @@ impl SysCall {
             ),
             Some(SysCallNumber::DecreaseHeap) => SysCall::DecreaseHeap(a1 as usize),
             Some(SysCallNumber::UpdateMemoryFlags) => SysCall::UpdateMemoryFlags(
-                a1 as *mut usize,
+                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 a2 as usize,
                 MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
-            Some(SysCallNumber::SetMemRegion) => {
-                SysCall::SetMemRegion(a1 as PID, MemoryType::from(a2), a3 as *mut usize, a4)
-            }
+            Some(SysCallNumber::SetMemRegion) => SysCall::SetMemRegion(
+                a1 as PID,
+                MemoryType::from(a2),
+                MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
+                a4,
+            ),
             Some(SysCallNumber::CreateServer) => SysCall::CreateServer(a1),
             Some(SysCallNumber::Connect) => SysCall::Connect((a1, a2, a3, a4)),
             Some(SysCallNumber::SendMessage) => match a2 {
@@ -566,9 +580,11 @@ impl SysCall {
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
             Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, a2, a3),
-            Some(SysCallNumber::SpawnThread) => {
-                SysCall::SpawnThread(a1 as *mut usize, a2 as *mut usize, a3 as *mut usize)
-            }
+            Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(
+                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
+                MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
+                MemoryAddress::new(a3),
+            ),
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(Error::InvalidSyscall),
         })
@@ -609,9 +625,9 @@ pub fn map_memory(
     flags: MemoryFlags,
 ) -> core::result::Result<MemoryRange, Error> {
     let result = rsyscall(SysCall::MapMemory(
-        phys.map(|x| x.get()).unwrap_or(0) as *mut usize,
-        virt.map(|x| x.get()).unwrap_or(0) as *mut usize,
-        size,
+        phys,
+        virt,
+        MemorySize::new(size).ok_or(Error::InvalidSyscall)?,
         flags,
     ))?;
     if let Result::MemoryRange(range) = result {
@@ -626,7 +642,7 @@ pub fn map_memory(
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
 pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::UnmapMemory(virt.get() as *mut usize, size.get()))?;
+    let result = rsyscall(SysCall::UnmapMemory(virt, size))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -661,8 +677,8 @@ pub fn claim_interrupt(
 ) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ClaimInterrupt(
         irq_no,
-        callback as *mut usize,
-        arg as *mut usize,
+        MemoryAddress::new(callback as *mut usize as usize).ok_or(Error::InvalidSyscall)?,
+        MemoryAddress::new(arg as *mut usize as usize),
     ))?;
     if let Result::Ok = result {
         Ok(())

@@ -287,7 +287,7 @@ impl From<usize> for MemoryType {
 pub enum Result {
     Ok,
     Error(Error),
-    MemoryAddress(*mut u8),
+    MemoryAddress(MemoryAddress),
     MemoryRange(MemoryRange),
     ReadyContexts(
         usize, /* count */
@@ -312,7 +312,10 @@ impl Result {
         match src[0] {
             0 => Result::Ok,
             1 => Result::Error(Error::from_usize(src[1])),
-            2 => Result::MemoryAddress(src[1] as *mut u8),
+            2 => match MemoryAddress::new(src[1]) {
+                None => Result::Error(Error::InternalError),
+                Some(s) => Result::MemoryAddress(s),
+            }
             3 => {
                 let addr = match MemoryAddress::new(src[1]) {
                     None => return Result::Error(Error::InternalError),
