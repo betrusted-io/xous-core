@@ -25,7 +25,7 @@ pub fn init() {
     xous::rsyscall(xous::SysCall::ClaimInterrupt(
         1,
         timer_tick as *mut usize,
-        0 as *mut usize,
+        core::ptr::null_mut::<usize>(),
     ))
     .expect("timer: couldn't claim interrupt");
 

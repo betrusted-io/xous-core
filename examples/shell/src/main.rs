@@ -1,33 +1,18 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(baremetal, no_main)]
+#![cfg_attr(baremetal, no_std)]
 
+#[cfg(baremetal)]
 #[macro_use]
 mod debug;
-mod start;
+
+#[cfg(baremetal)]
+mod baremetal;
 
 mod timer;
-
 mod logstr;
 
+#[cfg(baremetal)]
 use core::fmt::Write;
-use core::panic::PanicInfo;
-
-#[panic_handler]
-fn handle_panic(arg: &PanicInfo) -> ! {
-    println!("PANIC!");
-    println!("Details: {:?}", arg);
-    xous::syscall::wait_event();
-    loop {}
-}
-
-fn handle_irq(irq_no: usize, arg: *mut usize) {
-    print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
-
-    while let Some(c) = debug::DEFAULT.getc() {
-        print!("0x{:02x}", c);
-    }
-    println!();
-}
 
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
@@ -37,37 +22,8 @@ fn handle_irq(irq_no: usize, arg: *mut usize) {
 //     }
 // }
 
-#[no_mangle]
+#[cfg_attr(baremetal, no_mangle)]
 fn main() {
-    let uart = xous::syscall::map_memory(
-        xous::MemoryAddress::new(0xf000_1000),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map uart");
-    unsafe { debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() };
-    println!("Mapped UART @ {:08x}", uart.addr.get() );
-
-    xous::syscall::map_memory(
-        xous::MemoryAddress::new(0xf000_2000),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .map(|_| println!("!!!WARNING: managed to steal kernel's memory"))
-    .ok();
-    println!("Process: map success!");
-
-    debug::DEFAULT.enable_rx();
-    println!("Allocating IRQ...");
-    xous::rsyscall(xous::SysCall::ClaimInterrupt(
-        2,
-        handle_irq as *mut usize,
-        0 as *mut usize,
-    ))
-    .expect("couldn't claim interrupt");
-
     // println!("Allocating a ton of space on the stack...");
     // {
     //     let _big_array = [42u8; 131072];
@@ -96,6 +52,7 @@ fn main() {
     //     println!("Unexpected return value: {:?}", heap);
     // }
 
+    println!("Starting to initialize the timer");
     timer::init();
 
     // for i in 1usize..5 {
@@ -123,22 +80,22 @@ fn main() {
     let connection = connection.unwrap();
     println!("Connected: {:?}", connection);
 
-    let mut counter = 0;
-    let mut ls = logstr::LogStr::new();
+    let mut counter: usize = 0;
+    // let ls = logstr::LogStr::new();
     loop {
-        // println!("Sending a scalar message with id {}...", counter + 4096);
-        // xous::syscall::send_message(
-        //     connection,
-        //     xous::Message::Scalar(xous::ScalarMessage {
-        //         id: counter + 4096,
-        //         arg1: counter,
-        //         arg2: counter * 2,
-        //         arg3: !counter,
-        //         arg4: counter + 1,
-        //     }),
-        // )
-        // .expect("couldn't send scalar message");
-        if counter & 0xfff == 0 {
+        println!("Sending a scalar message with id {}...", counter + 4096);
+        xous::syscall::send_message(
+            connection,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: counter + 4096,
+                arg1: counter,
+                arg2: counter * 2,
+                arg3: !counter,
+                arg4: counter + 1,
+            }),
+        )
+        .expect("couldn't send scalar message");
+        if counter.trailing_zeros() >= 12 {
             println!("Loop {}", counter);
         }
         counter += 1;
