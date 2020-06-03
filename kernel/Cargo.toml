@@ -7,12 +7,20 @@ description = "Core kernel for Xous, including task switching and memory managem
 
 [dependencies]
 bitflags = "1.2.1"
-riscv = "0.5.6"
 xous = { path = "../xous-rs", features = ["forget-memory-messages"] }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+riscv = "0.5.6"
 
 [dependencies.sha3]
 default-features = false
 version = "0.8.2"
+
+[target.'cfg(windows)'.dependencies]
+lazy_static = "1.4"
+
+[target.'cfg(unix)'.dependencies]
+lazy_static = "1.4"
 
 [features]
 debug-print = []

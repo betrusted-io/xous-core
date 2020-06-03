@@ -50,7 +50,7 @@ pub mod syscall {
 
 pub mod mem {
     use crate::mem::MemoryManager;
-    use xous::{MemoryFlags, XousError, PID};
+    use xous::{MemoryFlags, Error, PID};
     #[derive(Copy, Clone, Default, PartialEq)]
     pub struct MemoryMapping {}
     impl MemoryMapping {

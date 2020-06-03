@@ -1,9 +1,11 @@
-#![cfg_attr(not(test), no_main)]
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(baremetal, no_main)]
+#![cfg_attr(baremetal, no_std)]
 
+#[cfg(baremetal)]
 #[macro_use]
 extern crate bitflags;
 
+#[cfg(baremetal)]
 #[macro_use]
 mod debug;
 
@@ -21,27 +23,28 @@ mod server;
 mod services;
 mod syscall;
 
-use mem::MemoryManagerHandle;
 use services::SystemServicesHandle;
 use xous::*;
 
-#[cfg(not(test))]
+#[cfg(baremetal)]
 use core::panic::PanicInfo;
-#[cfg(not(test))]
+#[cfg(baremetal)]
 #[panic_handler]
 fn handle_panic(_arg: &PanicInfo) -> ! {
     println!("PANIC in PID {}!", crate::arch::current_pid());
     println!("Details: {:?}", _arg);
     loop {
-        arch::wfi();
+        arch::idle();
     }
 }
 
+#[cfg(baremetal)]
 #[no_mangle]
 pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
     unsafe { args::KernelArguments::init(arg_offset) };
     let args = args::KernelArguments::get();
     {
+        use mem::MemoryManagerHandle;
         let mut memory_manager = MemoryManagerHandle::get();
         memory_manager
             .init(rpt_offset, &args)
@@ -61,7 +64,7 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
     // pick the next process in the list.
-    let current_pid = last_pid.unwrap_or(0) as usize;
+    let current_pid = last_pid.unwrap_or_default() as usize;
 
     let system_services = SystemServicesHandle::get();
     for test_idx in current_pid..system_services.processes.len() {
@@ -87,19 +90,14 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     None
 }
 
-#[no_mangle]
-pub extern "C" fn main() {
+#[cfg_attr(baremetal, no_mangle)]
+fn main() {
+    println!("Hello, world!");
     // Either map memory using a syscall, or if we're debugging the syscall
     // handler then directly map it.
-    #[cfg(feature = "debug-print")]
+    #[cfg(all(feature = "debug-print", baremetal))]
     {
-        // xous::rsyscall(xous::SysCall::MapMemory(
-        //     0xF0002000 as *mut usize,
-        //     debug::SUPERVISOR_UART.base,
-        //     4096,
-        //     xous::MemoryFlags::R | xous::MemoryFlags::W,
-        // ))
-        // .unwrap();
+        use mem::MemoryManagerHandle;
         let mut memory_manager = MemoryManagerHandle::get();
         memory_manager
             .map_range(
@@ -118,7 +116,7 @@ pub extern "C" fn main() {
         print!("}} ");
     }
 
-    #[cfg(feature = "debug-print")]
+    #[cfg(all(feature = "debug-print", baremetal))]
     {
         let args = args::KernelArguments::get();
         println!("Kernel arguments:");
@@ -127,11 +125,15 @@ pub extern "C" fn main() {
         }
     }
 
+    // Start performing round-robin on all child processes.
+    // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
     loop {
+        // print!("Determining next PID to run...");
         arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);
         arch::irq::enable_all_irqs();
+        // println!(" {:?}", pid);
 
         match pid {
             Some(pid) => {
@@ -141,7 +143,7 @@ pub extern "C" fn main() {
             }
             None => {
                 println!("No runnable tasks found.  Zzz...");
-                arch::wfi();
+                arch::idle();
             }
         }
     }

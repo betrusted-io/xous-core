@@ -21,6 +21,6 @@ pub fn init() {
     }
 }
 
-pub fn wfi() {
+pub fn idle() {
     unsafe { riscv::asm::wfi() };
 }

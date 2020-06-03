@@ -1,8 +1,8 @@
-use xous::PID;
-use crate::services::SystemServicesHandle;
 use crate::arch;
+use crate::services::SystemServicesHandle;
+use xous::{MemoryAddress, PID};
 
-static mut IRQ_HANDLERS: [Option<(PID, *mut usize, *mut usize)>; 32] = [None; 32];
+static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
 
 pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
     // Unsafe is required here because we're accessing a static
@@ -19,7 +19,15 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
                     // Disable all other IRQs and redirect into userspace
                     arch::irq::disable_all_irqs();
                     // println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
-                    return ss.make_callback_to(pid, f, irq_no, arg).map(|_| xous::Result::ResumeProcess);
+                    return ss
+                        .make_callback_to(
+                            pid,
+                            f.get() as *mut usize,
+                            irq_no,
+                            arg.map(|x| x.get() as *mut usize)
+                                .unwrap_or(core::ptr::null_mut::<usize>()),
+                        )
+                        .map(|_| xous::Result::ResumeProcess);
                 } else {
                     // If there is no handler, mask this interrupt
                     // to prevent an IRQ storm.  This is considered
@@ -33,7 +41,12 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
     Ok(xous::Result::ResumeProcess)
 }
 
-pub fn interrupt_claim(irq: usize, pid: PID, f: *mut usize, arg: *mut usize) -> Result<(), xous::Error> {
+pub fn interrupt_claim(
+    irq: usize,
+    pid: PID,
+    f: MemoryAddress,
+    arg: Option<MemoryAddress>,
+) -> Result<(), xous::Error> {
     // Unsafe is required since we're accessing a static mut array.
     // However, we disable interrupts to prevent contention on this array.
     unsafe {

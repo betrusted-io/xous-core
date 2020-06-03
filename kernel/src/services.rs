@@ -1,7 +1,8 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
-pub use crate::arch::ProcessContext;
+pub use crate::arch::process::ProcessContext;
+
 use crate::args::KernelArguments;
 use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
@@ -877,9 +878,9 @@ impl SystemServices {
     ///   slots.
     pub fn spawn_thread(
         &mut self,
-        entrypoint: *mut usize,
-        stack_pointer: *mut usize,
-        arg: *mut usize,
+        entrypoint: MemoryAddress,
+        stack_pointer: MemoryAddress,
+        arg: Option<MemoryAddress>,
     ) -> Result<CtxID, xous::Error> {
         let mut process = ProcessHandle::get();
         let new_context_nr = process
@@ -891,10 +892,10 @@ impl SystemServices {
         arch::syscall::invoke(
             context,
             self.pid == 1,
-            entrypoint as usize,
-            stack_pointer as usize,
+            entrypoint.get() as usize,
+            stack_pointer.get() as usize,
             EXIT_THREAD,
-            &[arg as usize],
+            &[arg.map(|x| x.get()).unwrap_or_default() as usize],
         );
 
         // Queue the thread to run

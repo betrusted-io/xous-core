@@ -17,12 +17,19 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
+            let phys_ptr = phys
+                .map(|x| x.get() as *mut usize)
+                .unwrap_or(core::ptr::null_mut::<usize>());
+            let virt_ptr = virt
+                .map(|x| x.get() as *mut usize)
+                .unwrap_or(core::ptr::null_mut::<usize>());
+
             // Don't let the address exceed the user area (unless it's PID 1)
-            if pid != 1 && (virt as usize) != 0 && (virt as usize) >= arch::mem::USER_AREA_END {
+            if pid != 1 && virt.map(|x| x.get() >= arch::mem::USER_AREA_END).unwrap_or(false) {
                 return Err(xous::Error::BadAddress);
 
             // Don't allow mapping non-page values
-            } else if size & (PAGE_SIZE - 1) != 0 {
+            } else if size.get() & (PAGE_SIZE - 1) != 0 {
                 // println!("map: bad alignment of size {:08x}", size);
                 return Err(xous::Error::BadAlignment);
             }
@@ -30,13 +37,20 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
             //     phys as u32, virt as u32, size, req_flags
             // );
-            let range = mm.map_range(phys, virt, size, pid, req_flags, MemoryType::Default)?;
+            let range = mm.map_range(
+                phys_ptr,
+                virt_ptr,
+                size.get(),
+                pid,
+                req_flags,
+                MemoryType::Default,
+            )?;
 
             // If we're handing back an address in main RAM, zero it out. If
             // phys is 0, then the page will be lazily allocated, so we
             // don't need to do this.
-            if phys as usize != 0 {
-                if mm.is_main_memory(phys) {
+            if phys.is_some() {
+                if mm.is_main_memory(phys_ptr) {
                     println!(
                         "Going to zero out {} bytes @ {:08x}",
                         range.size.get(),
@@ -63,7 +77,8 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::UnmapMemory(virt, size) => {
             let mut mm = MemoryManagerHandle::get();
             let mut result = Ok(xous::Result::Ok);
-            let virt = virt as usize;
+            let virt = virt.get();
+            let size = size.get();
             if virt & 0xfff != 0 {
                 return Err(xous::Error::BadAlignment);
             }
@@ -138,7 +153,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
         }
         SysCall::Yield => {
-            let (parent_pid, parent_ctx) = unsafe { SWITCHTO_CALLER.take().expect("yielded when no parent context was present") };
+            let (parent_pid, parent_ctx) = unsafe {
+                SWITCHTO_CALLER
+                    .take()
+                    .expect("yielded when no parent context was present")
+            };
             let mut ss = SystemServicesHandle::get();
             // let ppid = ss.get_process(pid).expect("can't get current process").ppid;
             // assert_ne!(ppid, 0, "no parent process id");
@@ -149,10 +168,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::ReturnToParentI(_pid, _cpuid) => {
             let mut ss = SystemServicesHandle::get();
             unsafe {
-                let (current_pid, current_ctx) = crate::arch::irq::take_isr_return_pair().expect("couldn't get the isr return pair");
+                let (current_pid, current_ctx) = crate::arch::irq::take_isr_return_pair()
+                    .expect("couldn't get the isr return pair");
                 // ss.ready_context(current_pid, current_ctx).unwrap();
-                let (parent_pid, parent_ctx) =
-                SWITCHTO_CALLER
+                let (parent_pid, parent_ctx) = SWITCHTO_CALLER
                     .take()
                     .expect("ReturnToParentI called with no existing parent present");
                 crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx);
