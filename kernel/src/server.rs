@@ -130,15 +130,15 @@ impl Server {
         Ok(())
     }
 
-    pub fn print_queue(&self) {
-        println!("    Q Queue Head: {}", self.queue_head);
-        println!("    Q Queue Tail: {}", self.queue_tail);
-        for (_idx, _entry) in self.queue.iter().enumerate() {
-            if _entry != &QueuedMessage::Empty {
-                println!("    Q  entry[{}]: {:?}", _idx, _entry);
-            }
-        }
-    }
+    // pub fn print_queue(&self) {
+    //     println!("    Q Queue Head: {}", self.queue_head);
+    //     println!("    Q Queue Tail: {}", self.queue_tail);
+    //     for (_idx, _entry) in self.queue.iter().enumerate() {
+    //         if _entry != &QueuedMessage::Empty {
+    //             println!("    Q  entry[{}]: {:?}", _idx, _entry);
+    //         }
+    //     }
+    // }
 
     /// Convert a `QueuedMesage::WaitingResponse` into `QueuedMessage::Empty`
     /// and return the pair.  Advance the tail.  Note that the `idx` could be

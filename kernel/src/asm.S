@@ -33,9 +33,9 @@ _start:
     // have already been set up by the loader.
     jal x1, init
 
-    // Call the main function.  This function diverges, so
+    // Call the kmain function.  This function diverges, so
     // shouldn't ever return.
-    j main
+    j kmain
 
 
 /*

@@ -116,7 +116,7 @@ impl DerefMut for MemoryManagerHandle<'_> {
 /// and place it at the usual offset.  The MMU will not be enabled yet,
 /// as the process entry has not yet been created.
 impl MemoryManager {
-    pub fn init(&mut self, base: *mut u32, args: &KernelArguments) -> Result<(), xous::Error> {
+    pub fn init_from_memory(&mut self, base: *mut u32, args: &KernelArguments) -> Result<(), xous::Error> {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
         assert!(

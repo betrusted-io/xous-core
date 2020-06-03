@@ -166,9 +166,9 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
         SysCall::ReturnToParentI(_pid, _cpuid) => {
-            let mut ss = SystemServicesHandle::get();
+            let _ss = SystemServicesHandle::get();
             unsafe {
-                let (current_pid, current_ctx) = crate::arch::irq::take_isr_return_pair()
+                let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
                     .expect("couldn't get the isr return pair");
                 // ss.ready_context(current_pid, current_ctx).unwrap();
                 let (parent_pid, parent_ctx) = SWITCHTO_CALLER

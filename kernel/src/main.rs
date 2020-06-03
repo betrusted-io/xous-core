@@ -43,17 +43,17 @@ fn handle_panic(_arg: &PanicInfo) -> ! {
 pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
     unsafe { args::KernelArguments::init(arg_offset) };
     let args = args::KernelArguments::get();
+    // Everything needs memory, so the first thing we should do is initialize the memory manager.
     {
         use mem::MemoryManagerHandle;
         let mut memory_manager = MemoryManagerHandle::get();
         memory_manager
-            .init(rpt_offset, &args)
+            .init_from_memory(rpt_offset, &args)
             .expect("couldn't initialize memory manager");
     }
-    // Everything needs memory, so the first thing we should do is initialize the memory manager.
     {
         let mut system_services = SystemServicesHandle::get();
-        system_services.init(init_offset, &args);
+        system_services.init_from_memory(init_offset, &args);
     }
 
     // Now that the memory manager is set up, perform any arch-specific initializations.
@@ -90,9 +90,8 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     None
 }
 
-#[cfg_attr(baremetal, no_mangle)]
-fn main() {
-    println!("Hello, world!");
+#[no_mangle]
+pub extern "C" fn kmain() {
     // Either map memory using a syscall, or if we're debugging the syscall
     // handler then directly map it.
     #[cfg(all(feature = "debug-print", baremetal))]
@@ -147,4 +146,11 @@ fn main() {
             }
         }
     }
+}
+
+/// The main entrypoint when run in hosted mode. When running in embedded mode,
+/// this function does not exist.
+#[cfg(not(baremetal))]
+fn main() {
+    kmain();
 }

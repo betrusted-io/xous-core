@@ -201,7 +201,7 @@ impl SystemServices {
     /// Create a new "System Services" object based on the arguments from the
     /// kernel. These arguments decide where the memory spaces are located, as
     /// well as where the stack and program counter should initially go.
-    pub fn init(&mut self, base: *const u32, args: &KernelArguments) {
+    pub fn init_from_memory(&mut self, base: *const u32, args: &KernelArguments) {
         // Look through the kernel arguments and create a new process for each.
         let init_offsets = {
             let mut init_count = 1;
