@@ -109,11 +109,11 @@ impl Default for BootConfig {
         BootConfig {
             no_copy: false,
             debug: false,
-            base_addr: 0 as *const usize,
+            base_addr: core::ptr::null::<usize>(),
             regions: Default::default(),
-            sram_start: 0 as *mut usize,
+            sram_start: core::ptr::null_mut::<usize>(),
             sram_size: 0,
-            args: KernelArguments::new(0 as *const usize),
+            args: KernelArguments::new(core::ptr::null::<usize>()),
             init_size: 0,
             extra_pages: 0,
             runtime_page_tracker: Default::default(),
@@ -157,6 +157,10 @@ impl MiniElfSection {
         // Strip off the top four bits, which contain the flags.
         let len = self.size_and_flags & !0xff00_0000;
         len as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
     }
 
     pub fn flags(&self) -> usize {
@@ -225,7 +229,7 @@ impl MiniElf {
 
         // Ensure the pagetables are mapped as well
         let pt_addr = allocator.alloc() as usize;
-        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET + 0, FLG_R | FLG_W);
+        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
 
         // Allocate stack pages.
         for i in 0..STACK_PAGE_COUNT {
@@ -303,10 +307,10 @@ impl MiniElf {
             page_addr = previous_addr & !(PAGE_SIZE - 1);
         }
 
-        let ref mut process = allocator.processes[pid as usize - 1];
+        let mut process = &mut allocator.processes[pid as usize - 1];
         process.entrypoint = self.entry_point as usize;
         process.sp = stack_addr;
-        process.satp = 0x80000000 | ((pid as usize) << 22) | (satp_address >> 12);
+        process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
 
         allocated_bytes
     }
@@ -400,7 +404,7 @@ impl ProgramDescription {
 
         // Ensure the pagetables are mapped as well
         let pt_addr = allocator.alloc() as usize;
-        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET + 0, FLG_R | FLG_W);
+        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
 
         // Allocate stack pages.
         for i in 0..STACK_PAGE_COUNT {
@@ -476,18 +480,18 @@ impl ProgramDescription {
 
         // Our "earlyprintk" equivalent
         if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(satp, 0xF0002000, 0xffcf_0000, FLG_R | FLG_W);
-            allocator.change_owner(pid as XousPid, 0xF0002000);
+            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W);
+            allocator.change_owner(pid as XousPid, 0xF000_2000);
         }
 
-        let ref mut process = allocator.processes[pid_idx];
+        let mut process = &mut allocator.processes[pid_idx];
         process.entrypoint = self.entrypoint as usize;
         process.sp = stack_addr;
-        process.satp = 0x80000000 | ((pid as usize) << 22) | (satp_address >> 12);
+        process.satp = 0x8000_0000 | ((pid as usize) << 22) | (satp_address >> 12);
     }
 }
 
-pub unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
+unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
 where
     T: Copy,
 {
@@ -500,7 +504,7 @@ where
 }
 
 /// Copy _count_ **bytes** from src to dest.
-pub unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
+unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {
@@ -516,7 +520,7 @@ where
     while offset < (count / mem::size_of::<T>()) {
         dest.add(offset)
             .write_volatile(src.add(offset).read_volatile());
-        offset = offset + 1;
+        offset += 1
     }
 }
 
@@ -524,7 +528,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
     let args = cfg.args;
     let mut i = args.iter();
     let xarg = i.next().expect("couldn't read initial tag");
-    if xarg.name != make_type!("XArg") || xarg.size != 20 {
+    if xarg.name != u32::from_le_bytes(*b"XArg") || xarg.size != 20 {
         panic!("XArg wasn't first tag, or was invalid size");
     }
     cfg.sram_start = xarg.data[2] as *mut usize;
@@ -534,32 +538,32 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
     let mut init_seen = false;
 
     for tag in i {
-        if tag.name == make_type!("MREx") {
+        if tag.name == u32::from_le_bytes(*b"MREx") {
             cfg.regions = unsafe {
                 slice::from_raw_parts(
                     tag.data.as_ptr() as *const MemoryRegionExtra,
                     tag.size as usize / mem::size_of::<MemoryRegionExtra>(),
                 )
             };
-        } else if tag.name == make_type!("Bflg") {
+        } else if tag.name == u32::from_le_bytes(*b"Bflg") {
             let boot_flags = tag.data[0];
-            if boot_flags & (1 << 0) != 0 {
+            if boot_flags & 1 != 0 {
                 cfg.no_copy = true;
             }
             if boot_flags & (1 << 1) != 0 {
-                cfg.base_addr = 0 as *const usize;
+                cfg.base_addr = core::ptr::null::<usize>();
             }
             if boot_flags & (1 << 2) != 0 {
                 cfg.debug = true;
             }
-        } else if tag.name == make_type!("XKrn") {
+        } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             assert!(!kernel_seen, "kernel appears twice");
             assert!(
                 tag.size as usize == mem::size_of::<ProgramDescription>(),
                 "invalid XKrn size"
             );
             kernel_seen = true;
-        } else if tag.name == make_type!("IniE") {
+        } else if tag.name == u32::from_le_bytes(*b"IniE") {
             assert!(tag.size >= 4, "invalid Init size");
             init_seen = true;
             cfg.init_process_count += 1;
@@ -574,10 +578,10 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 /// located at the end of memory space.
 fn copy_processes(cfg: &mut BootConfig) {
     for tag in cfg.args.iter() {
-        if tag.name == make_type!("IniE") {
+        if tag.name == u32::from_le_bytes(*b"IniE") {
             let mut page_addr: usize = 0;
             let mut previous_addr: usize = 0;
-            let mut top = 0 as *mut u8;
+            let mut top = core::ptr::null_mut::<u8>();
 
             let inie = MiniElf::new(&tag);
             let mut src_addr = unsafe {
@@ -717,7 +721,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     top.add(PAGE_SIZE as usize),
                 )
             };
-        } else if tag.name == make_type!("XKrn") {
+        } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             let prog = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
 
             // TEXT SECTION
@@ -792,12 +796,10 @@ fn copy_processes(cfg: &mut BootConfig) {
 impl BootConfig {
     fn get_top(&self) -> *mut usize {
         let val = unsafe {
-            let t = self.sram_start.add(
+            self.sram_start.add(
                 (self.sram_size - self.init_size - self.extra_pages * PAGE_SIZE)
                     / mem::size_of::<usize>(),
-            );
-            // println!("top address: {:08x}", t as usize);
-            t
+            )
         };
         assert!((val as usize) >= (self.sram_start as usize));
         assert!(
@@ -874,11 +876,11 @@ impl BootConfig {
     pub fn map_page_32(&mut self, root: &mut PageTable, phys: usize, virt: usize, flags: usize) {
         let ppn1 = (phys >> 22) & ((1 << 12) - 1);
         let ppn0 = (phys >> 12) & ((1 << 10) - 1);
-        let ppo = (phys >> 0) & ((1 << 12) - 1);
+        let ppo = (phys) & ((1 << 12) - 1);
 
         let vpn1 = (virt >> 22) & ((1 << 10) - 1);
         let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-        let vpo = (virt >> 0) & ((1 << 12) - 1);
+        let vpo = (virt) & ((1 << 12) - 1);
 
         assert!(ppn1 < 4096);
         assert!(ppn0 < 1024);
@@ -887,7 +889,7 @@ impl BootConfig {
         assert!(vpn0 < 1024);
         assert!(vpo < 4096);
 
-        let ref mut l1_pt = root.entries;
+        let l1_pt = &mut root.entries;
         let mut new_addr = 0;
 
         // Allocate a new level 1 pagetable entry if one doesn't exist.
@@ -900,7 +902,7 @@ impl BootConfig {
 
         let l0_pt_idx =
             unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
-        let ref mut l0_pt = l0_pt_idx.entries;
+        let l0_pt = &mut l0_pt_idx.entries;
 
         // Ensure the entry hasn't already been mapped.
         // if l0_pt[vpn0] & 1 != 0 {
@@ -1007,7 +1009,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // where in heap this memory will go.
     let mut cfg = BootConfig {
         base_addr: args.base as *const usize,
-        args: args,
+        args,
         ..Default::default()
     };
     read_initial_config(&mut cfg);
@@ -1101,7 +1103,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
     // page tables and mapping memory to them.
     let mut pid = 2;
     for tag in args.iter() {
-        if tag.name == make_type!("IniE") {
+        if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("Mapping program into memory");
             // let init = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
@@ -1109,7 +1111,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             //     + (((init.data_size + init.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
             process_offset -= inie.load(cfg, process_offset, pid);
             pid += 1;
-        } else if tag.name == make_type!("XKrn") {
+        } else if tag.name == u32::from_le_bytes(*b"XKrn") {
             println!("Mapping kernel into memory");
             let xkrn = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
             let load_size_rounded = ((xkrn.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
@@ -1149,13 +1151,13 @@ pub fn phase_2(cfg: &mut BootConfig) {
 
     println!("PID1 pagetables:");
     debug::print_pagetable(cfg.processes[0].satp);
-    println!("");
-    println!("");
+    println!();
+    println!();
     for (_pid, process) in cfg.processes[1..].iter().enumerate() {
         println!("PID{} pagetables:", _pid + 2);
         debug::print_pagetable(process.satp);
-        println!("");
-        println!("");
+        println!();
+        println!();
     }
     println!(
         "Runtime Page Tracker: {} bytes",

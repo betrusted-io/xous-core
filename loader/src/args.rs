@@ -26,7 +26,7 @@ impl KernelArguments {
         }
     }
 
-    pub fn iter(&self) -> KernelArgumentsIterator {
+    pub fn iter(self) -> KernelArgumentsIterator {
         KernelArgumentsIterator {
             base: self.base,
             size: self.size(),
@@ -34,7 +34,7 @@ impl KernelArguments {
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub fn size(self) -> usize {
         let s = unsafe { self.base.add(2).read() * 4 };
         s as usize
     }

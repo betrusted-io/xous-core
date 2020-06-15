@@ -7,7 +7,6 @@ impl Uart {
         unsafe {
             // Wait until TXFULL is `0`
             while self.base.add(1).read_volatile() != 0 {
-                ()
             }
             self.base.add(0).write_volatile(c as u32)
         };

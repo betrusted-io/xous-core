@@ -129,7 +129,7 @@ fn parse_args_bin() {
 
     let mut ka_iter = ka.iter();
     let ka_first = ka_iter.next().expect("kernel args has no first tag");
-    assert_eq!(ka_first.name, make_type!("XArg"), "first tag was not valid");
+    assert_eq!(ka_first.name, u32::from_le_bytes(*b"XArg"), "first tag was not valid");
     assert_eq!(ka_first.size, 20, "first tag had invalid size");
     assert_eq!(ka_first.data[1], 1, "tag version number unexpected");
 
@@ -167,7 +167,7 @@ fn read_initial_config() {
 }
 
 fn read_word(satp: usize, virt: usize) -> Result<u32, &'static str> {
-    if satp & 0x80000000 != 0x80000000 {
+    if satp & 0x8000_0000 != 0x8000_0000 {
         return Err("satp valid bit isn't set");
     }
     // let ppn1 = (phys >> 22) & ((1 << 12) - 1);
@@ -176,7 +176,7 @@ fn read_word(satp: usize, virt: usize) -> Result<u32, &'static str> {
 
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = (virt >> 0) & ((1 << 12) - 1);
+    let vpo = (virt) & ((1 << 12) - 1);
 
     let l1_pt = unsafe { &mut (*((satp << 12) as *mut crate::PageTable)) };
     let l1_entry = l1_pt.entries[vpn1];
@@ -196,7 +196,7 @@ fn read_word(satp: usize, virt: usize) -> Result<u32, &'static str> {
 }
 
 fn read_byte(satp: usize, virt: usize) -> Result<u8, &'static str> {
-    let word = read_word(satp, virt & 0xfffffffc)?;
+    let word = read_word(satp, virt & 0xffff_fffc)?;
     Ok(word.to_le_bytes()[virt & 3])
 }
 
@@ -320,12 +320,12 @@ fn full_boot() {
     let mut xkrn_inspected = false;
     let mut init_index = 0;
     for arg in env.cfg.args.iter() {
-        if arg.name == make_type!("XKrn") {
+        if arg.name == u32::from_le_bytes(*b"XKrn") {
             verify_kernel(&env.cfg, 0, &arg);
-            assert!(xkrn_inspected == false, "multiple kernels found");
+            assert!(!xkrn_inspected, "multiple kernels found");
             xkrn_inspected = true;
             println!("Kernel PASS");
-        } else if arg.name == make_type!("IniE") {
+        } else if arg.name == u32::from_le_bytes(*b"IniE") {
             init_index += 1;
             verify_program(&env.cfg, init_index, &arg);
             println!("PID {} PASS", init_index + 1);
@@ -348,12 +348,12 @@ fn spanning_section() {
     let mut xkrn_inspected = false;
     let mut init_index = 0;
     for arg in env.cfg.args.iter() {
-        if arg.name == make_type!("XKrn") {
+        if arg.name == u32::from_le_bytes(*b"XKrn") {
             verify_kernel(&env.cfg, 0, &arg);
-            assert!(xkrn_inspected == false, "multiple kernels found");
+            assert!(!xkrn_inspected, "multiple kernels found");
             xkrn_inspected = true;
             println!("Kernel PASS");
-        } else if arg.name == make_type!("IniE") {
+        } else if arg.name == u32::from_le_bytes(*b"IniE") {
             init_index += 1;
             verify_program(&env.cfg, init_index, &arg);
             println!("PID {} PASS", init_index + 1);
@@ -406,5 +406,5 @@ pub unsafe extern "C" fn start_kernel(
     _entrypoint: usize,
     _stack: usize,
 ) -> ! {
-    loop {}
+    panic!("not running natively");
 }
