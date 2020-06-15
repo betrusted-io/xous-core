@@ -72,7 +72,9 @@ impl TestEnvironment {
         // }
 
         let args = get_args_bin(idx);
+        #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
         let ka = KernelArguments::new(args.as_ptr() as *const usize);
+        #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
         let mut cfg = BootConfig {
             args: ka,
             base_addr: ka.base as *const usize,
@@ -125,6 +127,7 @@ fn allocate_regions() {
 fn parse_args_bin() {
     use crate::args::KernelArguments;
     let args = get_args_bin(0);
+    #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     let ka = KernelArguments::new(args.as_ptr() as *const usize);
 
     let mut ka_iter = ka.iter();
@@ -157,7 +160,9 @@ fn read_initial_config() {
     use crate::BootConfig;
 
     let args = get_args_bin(0);
+    #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     let ka = KernelArguments::new(args.as_ptr() as *const usize);
+    #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     let mut cfg = BootConfig {
         args: ka,
         base_addr: ka.base as *const usize,

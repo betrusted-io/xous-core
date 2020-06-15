@@ -72,6 +72,8 @@ pub extern "C" fn trap_handler(
         panic!("Ran out of kernel stack");
     }
 
+    let pid = crate::arch::current_pid();
+
     if (sc.bits() == 9) || (sc.bits() == 8) {
         // We got here because of an `ecall` instruction.  When we return, skip
         // past this instruction.  If this is a call such as `SwitchTo`, then we
@@ -85,7 +87,7 @@ pub extern "C" fn trap_handler(
             _xous_syscall_return_result(&xous::Result::Error(xous::Error::UnhandledSyscall), ctx)
         });
 
-        let response = crate::syscall::handle(call).unwrap_or_else(|e| xous::Result::Error(e));
+        let response = crate::syscall::handle(pid, call).unwrap_or_else(|e| xous::Result::Error(e));
 
         println!("Syscall Result: {:?}", response);
         let mut process = ProcessHandle::get();
@@ -102,7 +104,6 @@ pub extern "C" fn trap_handler(
         }
     }
 
-    let pid = crate::arch::current_pid();
     use crate::arch::exception::RiscvException;
     let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
     if sc.is_exception() {

@@ -1,5 +1,5 @@
 pub use crate::arch::process::ProcessContext;
-use core::{mem, slice};
+use core::mem;
 use xous::{CtxID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
 pub struct SenderID {
@@ -92,32 +92,44 @@ pub struct Server {
     queue_tail: usize,
 
     /// Where data will appear
-    queue: &'static mut [QueuedMessage],
+    // queue: &'static mut [QueuedMessage],
+    queue: Vec<QueuedMessage>,
 
     /// The `context mask` is a bitfield of contexts that are able to handle
     /// this message. If there are no available contexts, then messages will
     /// need to be queued.
-    ready_contexts: CtxID,
+    ready_contexts: usize,
 }
 
 impl Server {
+    /// Initialize a server in the given option array. This function is
+    /// designed to be called with `new` pointing to an entry in a vec.
+    ///
+    /// # Errors
+    ///
+    /// * **MemoryInUse**: The provided Server option already exists
     pub fn init(
         new: &mut Option<Server>,
         pid: PID,
         sid: SID,
-        queue_addr: *mut usize,
-        queue_size: usize,
+        // memory_page: MemoryPage,
     ) -> Result<(), xous::Error> {
         if new != &None {
             return Err(xous::Error::MemoryInUse);
         }
 
-        let queue = unsafe {
-            slice::from_raw_parts_mut(
-                queue_addr as *mut QueuedMessage,
-                queue_size / mem::size_of::<QueuedMessage>(),
-            )
-        };
+        let mut queue = vec![]; /* = unsafe {
+                                    slice::from_raw_parts_mut(
+                                        queue_addr as *mut QueuedMessage,
+                                        queue_size / mem::size_of::<QueuedMessage>(),
+                                    )
+                                };*/
+
+        // TODO: Replace this with a direct operation on a passed-in page
+        queue.resize_with(
+            crate::arch::mem::PAGE_SIZE / mem::size_of::<QueuedMessage>(),
+            || QueuedMessage::Empty,
+        );
 
         *new = Some(Server {
             sid,
@@ -408,7 +420,10 @@ impl Server {
     /// If the context cannot be returned because it is already blocking.
     pub fn return_available_context(&mut self, ctx_number: CtxID) {
         if self.ready_contexts & 1 << ctx_number != 0 {
-            panic!("tried to return context {}, but it was already blocking", ctx_number);
+            panic!(
+                "tried to return context {}, but it was already blocking",
+                ctx_number
+            );
         }
         self.ready_contexts |= 1 << ctx_number;
     }

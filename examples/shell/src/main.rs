@@ -9,7 +9,7 @@ mod debug;
 mod baremetal;
 
 mod timer;
-mod logstr;
+// mod logstr;
 
 #[cfg(baremetal)]
 use core::fmt::Write;
@@ -24,54 +24,13 @@ use core::fmt::Write;
 
 #[cfg_attr(baremetal, no_mangle)]
 fn main() {
-    // println!("Allocating a ton of space on the stack...");
-    // {
-    //     let _big_array = [42u8; 131072];
-    // }
-
-    // println!("Increasing heap to 131072...");
-    // let heap = xous::rsyscall(xous::SysCall::IncreaseHeap(
-    //     131072,
-    //     xous::MemoryFlags::R | xous::MemoryFlags::W,
-    // ))
-    // .expect("couldn't increase heap");
-    // if let xous::Result::MemoryRange(range) = heap {
-    //     println!(
-    //         "Heap goes from {:08x} - {:08x}",
-    //         range.addr.get(),
-    //         range.addr.get() + range.size.get()
-    //     );
-    //     use core::slice;
-    //     let mem_range = unsafe { slice::from_raw_parts_mut(range.as_mut_ptr() as *mut u8, range.len()) };
-    //     println!("Filling with bytes...");
-    //     for word in mem_range.iter_mut() {
-    //         *word = 42;
-    //     }
-    //     println!("Done!");
-    // } else {
-    //     println!("Unexpected return value: {:?}", heap);
-    // }
-
     println!("Starting to initialize the timer");
     timer::init();
-
-    // for i in 1usize..5 {
-    //     xous::rsyscall(xous::SysCall::SpawnThread(
-    //         print_and_yield as *mut usize,
-    //         (0x8000_0000 - 32768 - i * 4096) as *mut usize,
-    //         i as *mut usize,
-    //     )).expect("couldn't spawn thread");
-    // }
-    // loop {
-    //     println!("main thread waiting...");
-    //     xous::syscall::wait_event();
-    //     println!("MAIN THREAD WOKE UP");
-    // }
 
     let mut connection = None;
     println!("Attempting to connect to server...");
     while connection.is_none() {
-        if let Ok(cid) = xous::syscall::connect((3, 2_626_920_432, 3, 2_626_920_432)) {
+        if let Ok(cid) = xous::syscall::connect((1, 2_626_920_432, 1, 2_626_920_432)) {
             connection = Some(cid);
         } else {
             xous::syscall::yield_slice();

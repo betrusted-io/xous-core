@@ -40,6 +40,8 @@ fn handle_panic(_arg: &PanicInfo) -> ! {
 
 #[cfg(baremetal)]
 #[no_mangle]
+/// This function is called from baremetal startup code to initialize various kernel structures
+/// based on arguments passed by the bootloader. It is unused when running under an operating system.
 pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
     unsafe { args::KernelArguments::init(arg_offset) };
     let args = args::KernelArguments::get();
@@ -58,8 +60,40 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
 
     // Now that the memory manager is set up, perform any arch-specific initializations.
     arch::init();
-}
 
+    // Either map memory using a syscall, or if we're debugging the syscall
+    // handler then directly map it.
+    #[cfg(feature = "debug-print")]
+    {
+        // Map the serial port so println!() works as expected.
+        use mem::MemoryManagerHandle;
+        let mut memory_manager = MemoryManagerHandle::get();
+        memory_manager
+            .map_range(
+                0xF0002000 as *mut usize,
+                ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut usize,
+                4096,
+                1,
+                MemoryFlags::R | MemoryFlags::W,
+                MemoryType::Default,
+            )
+            .expect("unable to map serial port");
+        println!("KMAIN: Supervisor mode started...");
+        debug::SUPERVISOR_UART.enable_rx();
+        println!("Claiming IRQ 3 via syscall...");
+        xous::claim_interrupt(3, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 3");
+        print!("}} ");
+
+        // Print the processed kernel arguments
+        let args = args::KernelArguments::get();
+        println!("Kernel arguments:");
+        for arg in args.iter() {
+            println!("    {}", arg);
+        }
+    }}
+
+/// Loop through the SystemServices list to determine the next PID to be run.
+/// If no process is ready, return `None`.
 fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
@@ -90,49 +124,17 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     None
 }
 
+/// Common main function for baremetal and hosted environments.
 #[no_mangle]
 pub extern "C" fn kmain() {
-    // Either map memory using a syscall, or if we're debugging the syscall
-    // handler then directly map it.
-    #[cfg(all(feature = "debug-print", baremetal))]
-    {
-        use mem::MemoryManagerHandle;
-        let mut memory_manager = MemoryManagerHandle::get();
-        memory_manager
-            .map_range(
-                0xF0002000 as *mut usize,
-                ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut usize,
-                4096,
-                1,
-                MemoryFlags::R | MemoryFlags::W,
-                MemoryType::Default,
-            )
-            .expect("unable to map serial port");
-        println!("KMAIN: Supervisor mode started...");
-        debug::SUPERVISOR_UART.enable_rx();
-        println!("Claiming IRQ 3 via syscall...");
-        xous::claim_interrupt(3, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 3");
-        print!("}} ");
-    }
-
-    #[cfg(all(feature = "debug-print", baremetal))]
-    {
-        let args = args::KernelArguments::get();
-        println!("Kernel arguments:");
-        for arg in args.iter() {
-            println!("    {}", arg);
-        }
-    }
 
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
     loop {
-        // print!("Determining next PID to run...");
         arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);
         arch::irq::enable_all_irqs();
-        // println!(" {:?}", pid);
 
         match pid {
             Some(pid) => {
@@ -141,7 +143,7 @@ pub extern "C" fn kmain() {
                 ()
             }
             None => {
-                println!("No runnable tasks found.  Zzz...");
+                println!("No runnable tasks found.  Entering idle state...");
                 arch::idle();
             }
         }

@@ -1,10 +1,10 @@
 use super::process::ProcessContext;
 pub fn invoke(
-    context: &mut ProcessContext,
-    supervisor: bool,
-    pc: usize,
-    sp: usize,
-    ret_addr: usize,
-    args: &[usize],
+    _context: &mut ProcessContext,
+    _supervisor: bool,
+    _pc: usize,
+    _sp: usize,
+    _ret_addr: usize,
+    _args: &[usize],
 ) {
 }

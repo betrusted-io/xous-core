@@ -8,6 +8,7 @@ description = "Core kernel for Xous, including task switching and memory managem
 [dependencies]
 bitflags = "1.2.1"
 xous = { path = "../xous-rs", features = ["forget-memory-messages"] }
+debug-here = "0.2.2"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = "0.5.6"

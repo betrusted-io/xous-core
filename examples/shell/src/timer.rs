@@ -1,8 +1,10 @@
-use xous::{MemorySize, MemoryAddress};
 
+#[cfg(baremetal)]
 const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000;
+#[cfg(baremetal)]
 const TIMER_BASE: usize = 0xF000_3000;
 
+#[cfg(baremetal)]
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!(">>> Timer tick");
     let ptr = TIMER_BASE as *mut usize;
@@ -14,7 +16,9 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!("<<< Returning from timer_tick()");
 }
 
+#[cfg(baremetal)]
 pub fn init() {
+    use xous::{MemoryAddress, MemorySize};
     println!("Allocating timer...");
     xous::rsyscall(xous::SysCall::MapMemory(
         MemoryAddress::new(TIMER_BASE),
@@ -42,25 +46,28 @@ pub fn init() {
     unsafe { ptr.add(7).write_volatile(1) };
 }
 
-pub fn load(value: u32) {
-    let ptr = TIMER_BASE as *mut usize;
-    unsafe {
-        ptr.add(0).write_volatile(value as usize);
-    }
-}
+#[cfg(not(baremetal))]
+pub fn init() {}
 
-pub fn reload(value: u32) {
-    let ptr = TIMER_BASE as *mut usize;
-    unsafe {
-        ptr.add(1).write_volatile(value as usize);
-    }
-}
+// pub fn load(value: u32) {
+//     let ptr = TIMER_BASE as *mut usize;
+//     unsafe {
+//         ptr.add(0).write_volatile(value as usize);
+//     }
+// }
 
-pub fn en(en: bool) {
-    let ptr = TIMER_BASE as *mut usize;
-    if en {
-        unsafe { ptr.add(2).write_volatile(1) };
-    } else {
-        unsafe { ptr.add(2).write_volatile(0) };
-    }
-}
+// pub fn reload(value: u32) {
+//     let ptr = TIMER_BASE as *mut usize;
+//     unsafe {
+//         ptr.add(1).write_volatile(value as usize);
+//     }
+// }
+
+// pub fn en(en: bool) {
+//     let ptr = TIMER_BASE as *mut usize;
+//     if en {
+//         unsafe { ptr.add(2).write_volatile(1) };
+//     } else {
+//         unsafe { ptr.add(2).write_volatile(0) };
+//     }
+// }

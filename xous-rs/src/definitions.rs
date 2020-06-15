@@ -104,6 +104,32 @@ impl Error {
             _ => UnknownError,
         }
     }
+    pub fn to_usize(&self) -> usize {
+        use crate::Error::*;
+        match *self {
+            NoError => 0,
+            BadAlignment => 1,
+            BadAddress => 2,
+            OutOfMemory => 3,
+            MemoryInUse => 4,
+            InterruptNotFound => 5,
+            InterruptInUse => 6,
+            InvalidString => 7,
+            ServerExists => 8,
+            ServerNotFound => 9,
+            ProcessNotFound => 10,
+            ProcessNotChild => 11,
+            ProcessTerminated => 12,
+            Timeout => 13,
+            InternalError => 14,
+            ServerQueueFull => 15,
+            ContextNotAvailable => 16,
+            UnhandledSyscall => 17,
+            InvalidSyscall => 18,
+            ShareViolation => 19,
+            UnknownError => usize::MAX,
+        }
+    }
 }
 
 #[repr(C)]
@@ -158,6 +184,15 @@ impl MemoryMessage {
             valid,
         })
     }
+    pub fn to_usize(&self) -> [usize; 5] {
+        [
+            self.id,
+            self.buf.addr.get(),
+            self.buf.size.get(),
+            self.offset.map(|e| e.get()).unwrap_or(0),
+            self.valid.map(|e| e.get()).unwrap_or(0),
+        ]
+    }
 }
 
 #[repr(C)]
@@ -187,6 +222,9 @@ impl ScalarMessage {
             arg4,
         }
     }
+    pub fn to_usize(&self) -> [usize; 5] {
+        [self.id, self.arg1, self.arg2, self.arg3, self.arg4]
+    }
 }
 
 #[repr(usize)]
@@ -205,23 +243,34 @@ pub struct MessageEnvelope {
     pub message: Message,
 }
 
+impl MessageEnvelope {
+    pub fn to_usize(&self) -> [usize; 7] {
+        let ret = match &self.message {
+            Message::MutableBorrow(m) => (0, m.to_usize()),
+            Message::ImmutableBorrow(m) => (1, m.to_usize()),
+            Message::Move(m) => (2, m.to_usize()),
+            Message::Scalar(m) => (3, m.to_usize()),
+        };
+        [
+            self.sender, ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4],
+        ]
+    }
+}
+
 #[cfg(not(feature = "forget-memory-messages"))]
 /// When a MessageEnvelope goes out of scope, return the memory.  It must either
 /// go to the kernel (in the case of a Move), or back to the borrowed process
 /// (in the case of a Borrow).  Ignore Scalar messages.
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
-        let (arg1, arg2) = match &self.message {
-            Message::ImmutableBorrow(x) | Message::MutableBorrow(x) => (
-                x.valid.map(|x| x.get()).unwrap_or(0),
-                x.offset.map(|x| x.get()).unwrap_or(0),
-            ),
-            _ => (0, 0),
-        };
-        crate::syscall::return_memory(self.sender, arg1, arg2).expect("couldn't return memory");
-        if let Message::Move(msg) = &self.message {
-            crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
-                .expect("couldn't free memory message");
+        match &self.message {
+            Message::ImmutableBorrow(x) | Message::MutableBorrow(x) => {
+                crate::syscall::return_memory(self.sender, x.buf.addr.get(), x.buf.size.get())
+                    .expect("couldn't return memory")
+            }
+            Message::Move(msg) => crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
+                .expect("couldn't free memory message"),
+            _ => (),
         }
     }
 }
@@ -303,11 +352,43 @@ pub enum Result {
     ConnectionID(CID),
     Message(MessageEnvelope),
     ThreadID(CtxID),
-    MessageResult(usize, usize),
+
+    /// The requested system call is unimplemented
+    Unimplemented,
+
+    /// The process is blocked and should perform the read() again
+    BlockedProcess,
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
 impl Result {
+    pub fn to_args(&self) -> [usize; 8] {
+        match self {
+            Result::Ok => [0, 0, 0, 0, 0, 0, 0, 0],
+            Result::Error(e) => [1, e.to_usize(), 0, 0, 0, 0, 0, 0],
+            Result::MemoryAddress(s) => [2, s.get(), 0, 0, 0, 0, 0, 0],
+            Result::MemoryRange(r) => [3, r.addr.get(), r.size.get(), 0, 0, 0, 0, 0],
+            Result::ReadyContexts(count, pid0, ctx0, pid1, ctx1, pid2, ctx2) => {
+                [4, *count, *pid0, *ctx0, *pid1, *ctx1, *pid2, *ctx2]
+            }
+            Result::ResumeProcess => [5, 0, 0, 0, 0, 0, 0, 0],
+            Result::ServerID(sid) => [6, sid.0, sid.1, sid.2, sid.3, 0, 0, 0],
+            Result::ConnectionID(cid) => [7, *cid, 0, 0, 0, 0, 0, 0],
+            Result::Message(me) => {
+                let me_enc = me.to_usize();
+                [
+                    8, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
+                ]
+            }
+            Result::ThreadID(ctx) => [9, *ctx, 0, 0, 0, 0, 0, 0],
+            Result::Unimplemented => [10, 0, 0, 0, 0, 0, 0, 0],
+            Result::BlockedProcess => [11, 0, 0, 0, 0, 0, 0, 0],
+            Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
+                [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
+            }
+        }
+    }
     pub fn from_args(src: [usize; 8]) -> Self {
         match src[0] {
             0 => Result::Ok,
@@ -315,7 +396,7 @@ impl Result {
             2 => match MemoryAddress::new(src[1]) {
                 None => Result::Error(Error::InternalError),
                 Some(s) => Result::MemoryAddress(s),
-            }
+            },
             3 => {
                 let addr = match MemoryAddress::new(src[1]) {
                     None => return Result::Error(Error::InternalError),
@@ -355,7 +436,8 @@ impl Result {
                 Result::Message(MessageEnvelope { sender, message })
             }
             9 => Result::ThreadID(src[1] as CtxID),
-            10 => Result::MessageResult(src[1], src[2]),
+            10 => Result::Unimplemented,
+            11 => Result::BlockedProcess,
             _ => Result::UnknownResult(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
         }
     }
@@ -367,4 +449,5 @@ impl From<Error> for Result {
     }
 }
 
-pub type SyscallResult = core::result::Result<Result, Error>;
+pub type SysCallRequest = core::result::Result<crate::syscall::SysCall, Error>;
+pub type SysCallResult = core::result::Result<Result, Error>;

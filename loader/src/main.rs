@@ -985,6 +985,7 @@ pub fn copy_args(cfg: &mut BootConfig) {
     cfg.init_size += cfg.args.size();
     let runtime_arg_buffer = cfg.get_top();
     unsafe {
+        #[allow(clippy::cast_ptr_alignment)]
         memcpy(
             runtime_arg_buffer,
             cfg.args.base as *const usize,
@@ -998,6 +999,10 @@ pub fn copy_args(cfg: &mut BootConfig) {
 /// This makes the program self-sufficient by setting up memory page assignment
 /// and copying the arguments to RAM.
 /// Assume the bootloader has already set up the stack to point to the end of RAM.
+///
+/// # Safety
+///
+/// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
 pub unsafe extern "C" fn rust_entry(arg_buffer: *const usize, signature: u32) -> ! {
     let kab = KernelArguments::new(arg_buffer);
@@ -1007,6 +1012,7 @@ pub unsafe extern "C" fn rust_entry(arg_buffer: *const usize, signature: u32) ->
 fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // Store the initial boot config on the stack.  We don't know
     // where in heap this memory will go.
+    #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     let mut cfg = BootConfig {
         base_addr: args.base as *const usize,
         args,

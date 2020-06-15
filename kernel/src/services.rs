@@ -1,28 +1,18 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
-pub use crate::arch::process::ProcessContext;
+pub use crate::arch::process::{ContextInit, ProcessContext, ProcessInit};
 
-use crate::args::KernelArguments;
 use crate::filled_array;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
-use core::{mem, slice};
-use xous::{CtxID, MemoryAddress, MemoryFlags, MemoryType, Message, CID, PID, SID};
+use core::mem;
+use xous::{CtxID, Error, MemoryAddress, MemoryFlags, MemoryType, Message, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
-const DEFAULT_STACK_SIZE: usize = 131072;
-// pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
-/// This is the address a program will jump to in order to return from an ISR.
-pub const RETURN_FROM_ISR: usize = 0xff80_2000;
-
-/// This is the address a thread will return to when it exits.
-pub const EXIT_THREAD: usize = 0xff80_3000;
-
-pub const INITIAL_CONTEXT: usize = 2;
-pub const IRQ_CONTEXT: usize = 1;
+pub const INITIAL_CONTEXT: usize = 0;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ProcessState {
@@ -30,12 +20,8 @@ pub enum ProcessState {
     Free,
 
     /// This is a brand-new process that hasn't been run yet, and needs its
-    /// stack and entrypoint set up.
-    Setup(
-        usize, /* entrypoint */
-        usize, /* stack */
-        usize, /* stack size */
-    ),
+    /// initial context set up.
+    Setup(ContextInit),
 
     /// This process is able to be run.  The context bitmask describes contexts
     /// that are ready.
@@ -56,7 +42,7 @@ impl Default for ProcessState {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, PartialEq)]
 pub struct Process {
     /// The absolute MMU address.  If 0, then this process is free.  This needs
     /// to be available so we can switch to this process at any time, so it
@@ -83,9 +69,9 @@ pub struct Process {
 /// all possible processes.
 /// Note that this data is only available when the current process is active.
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
+/// Default virtual address when MapMemory is called with no `virt`
 pub struct ProcessInner {
-    /// Default virtual address when MapMemory is called with no `virt`
     pub mem_default_base: usize,
 
     /// The last address allocated from
@@ -120,7 +106,7 @@ impl Default for ProcessInner {
             mem_message_last: arch::mem::DEFAULT_MESSAGE_BASE,
             mem_heap_base: arch::mem::DEFAULT_HEAP_BASE,
             mem_heap_size: 0,
-            mem_heap_max: 524288,
+            mem_heap_max: 524_288,
             connection_map: [0; 32],
             _reserved: [0; 28],
         }
@@ -130,26 +116,10 @@ impl Default for ProcessInner {
 impl Process {
     pub fn runnable(&self) -> bool {
         match self.state {
-            ProcessState::Setup(_, _, _) | ProcessState::Ready(_) => true,
+            ProcessState::Setup(_) | ProcessState::Ready(_) => true,
             _ => false,
         }
     }
-}
-
-#[repr(C)]
-/// The stage1 bootloader sets up some initial processes.  These are reported
-/// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
-/// The first element is always the kernel.
-pub struct InitialProcess {
-    /// The RISC-V SATP value, which includes the offset of the root page
-    /// table plus the process ID.
-    satp: usize,
-
-    /// Where execution begins
-    entrypoint: usize,
-
-    /// Address of the top of the stack
-    sp: usize,
 }
 
 /// A big unifying struct containing all of the system state.
@@ -201,6 +171,7 @@ impl SystemServices {
     /// Create a new "System Services" object based on the arguments from the
     /// kernel. These arguments decide where the memory spaces are located, as
     /// well as where the stack and program counter should initially go.
+    #[cfg(baremetal)]
     pub fn init_from_memory(&mut self, base: *const u32, args: &KernelArguments) {
         // Look through the kernel arguments and create a new process for each.
         let init_offsets = {
@@ -241,8 +212,26 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ProcessHandle::get().init(0, 0, INITIAL_CONTEXT);
+        // ProcessHandle::get().init(0, 0, INITIAL_CONTEXT);
         self.processes[0].current_context = INITIAL_CONTEXT as u8;
+    }
+
+    pub fn spawn_process(&mut self, init_process: ProcessInit, init_context: ContextInit) -> Result<PID, xous::Error> {
+        for (idx, mut entry) in self.processes.iter_mut().enumerate() {
+            if entry.state != ProcessState::Free {
+                continue;
+            }
+            arch::process::Process::create(idx as PID + 1, init_process);
+            // HACK: Mark the first PID as being "Running"
+            if idx == 0 {
+                entry.state = ProcessState::Running(0);
+            } else {
+                entry.state = ProcessState::Setup(init_context);
+            }
+            entry.ppid = 0; // TODO: Fix parent process ID
+            return Ok(idx as PID + 1);
+        }
+        Err(xous::Error::ProcessNotFound)
     }
 
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous::Error> {
@@ -272,14 +261,15 @@ impl SystemServices {
 
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid as usize - 1;
-        if self.processes[pid_idx].mapping.get_pid() != pid {
-            println!(
-                "Process doesn't match ({} vs {})",
-                self.processes[pid_idx].mapping.get_pid(),
-                pid
-            );
-            return Err(xous::Error::ProcessNotFound);
-        }
+
+        // if self.processes[pid_idx].mapping.get_pid() != pid {
+        //     println!(
+        //         "Process doesn't match ({} vs {})",
+        //         self.processes[pid_idx].mapping.get_pid(),
+        //         pid
+        //     );
+        //     return Err(xous::Error::ProcessNotFound);
+        // }
         Ok(&mut self.processes[pid_idx])
     }
 
@@ -288,21 +278,21 @@ impl SystemServices {
     }
 
     pub fn current_pid(&self) -> PID {
-        let pid = arch::current_pid();
+        let pid = arch::process::current_pid();
         assert_ne!(pid, 0, "no current process");
         // PID0 doesn't exist -- process IDs are offset by 1.
-        assert_eq!(
-            self.processes[pid as usize - 1].mapping,
-            MemoryMapping::current(),
-            "process memory map doesn't match -- current_pid: {}",
-            pid
-        );
-        assert_eq!(
-            pid, self.pid,
-            "current pid {} doesn't match arch pid: {}",
-            self.pid, pid
-        );
-        pid as PID
+        // assert_eq!(
+        //     self.processes[pid as usize - 1].mapping,
+        //     MemoryMapping::current(),
+        //     "process memory map doesn't match -- current_pid: {}",
+        //     pid
+        // );
+        // assert_eq!(
+        //     pid, self.pid,
+        //     "current pid {} doesn't match arch pid: {}",
+        //     self.pid, pid
+        // );
+        pid
     }
 
     /// Create a stack frame in the specified process and jump to it.
@@ -365,62 +355,63 @@ impl SystemServices {
         irq_no: usize,
         arg: *mut usize,
     ) -> Result<(), xous::Error> {
-        // Get the current process (which was just interrupted) and mark it as
-        // "ready to run".  If this function is called when the current process
-        // isn't running, that means the system has gotten into an invalid
-        // state.
-        {
-            let current_pid = self.current_pid();
-            let mut current = self
-                .get_process_mut(current_pid)
-                .expect("couldn't get current PID");
-            current.state = match current.state {
-                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_context)),
-                y => panic!("current process was {:?}, not 'Running(_)'", y),
-            };
-            println!("Making PID {} state {:?}", current_pid, current.state);
-        }
+        unimplemented!()
+        // // Get the current process (which was just interrupted) and mark it as
+        // // "ready to run".  If this function is called when the current process
+        // // isn't running, that means the system has gotten into an invalid
+        // // state.
+        // {
+        //     let current_pid = self.current_pid();
+        //     let mut current = self
+        //         .get_process_mut(current_pid)
+        //         .expect("couldn't get current PID");
+        //     current.state = match current.state {
+        //         ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_context)),
+        //         y => panic!("current process was {:?}, not 'Running(_)'", y),
+        //     };
+        //     println!("Making PID {} state {:?}", current_pid, current.state);
+        // }
 
-        // Get the new process, and ensure that it is in a state where it's fit
-        // to run.  Again, if the new process isn't fit to run, then the system
-        // is in a very bad state.
-        {
-            let mut process = self.get_process_mut(pid)?;
-            let available_threads = match process.state {
-                ProcessState::Ready(x) | ProcessState::Running(x) => x,
-                ProcessState::Sleeping => 0,
-                ProcessState::Free => panic!("process was not allocated"),
-                ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
-            };
-            process.state = ProcessState::Running(available_threads);
-            process.previous_context = process.current_context;
-            process.current_context = IRQ_CONTEXT as u8;
-            process.mapping.activate();
-        }
+        // // Get the new process, and ensure that it is in a state where it's fit
+        // // to run.  Again, if the new process isn't fit to run, then the system
+        // // is in a very bad state.
+        // {
+        //     let mut process = self.get_process_mut(pid)?;
+        //     let available_threads = match process.state {
+        //         ProcessState::Ready(x) | ProcessState::Running(x) => x,
+        //         ProcessState::Sleeping => 0,
+        //         ProcessState::Free => panic!("process was not allocated"),
+        //         ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
+        //     };
+        //     process.state = ProcessState::Running(available_threads);
+        //     process.previous_context = process.current_context;
+        //     process.current_context = IRQ_CONTEXT as u8;
+        //     process.mapping.activate();
+        // }
 
-        // Switch to new process memory space, allowing us to save the context
-        // if necessary.
-        self.pid = pid;
+        // // Switch to new process memory space, allowing us to save the context
+        // // if necessary.
+        // self.pid = pid;
 
-        // Invoke the syscall, but use the current stack pointer.  When this
-        // function returns, it will jump to the RETURN_FROM_ISR address,
-        // causing an instruction fault and exiting the interrupt.
-        let mut arch_process = ProcessHandle::get();
-        let sp = arch_process.current_context().stack_pointer();
+        // // Invoke the syscall, but use the current stack pointer.  When this
+        // // function returns, it will jump to the RETURN_FROM_ISR address,
+        // // causing an instruction fault and exiting the interrupt.
+        // let mut arch_process = ProcessHandle::get();
+        // let sp = arch_process.current_context().stack_pointer();
 
-        // Activate the current context
-        arch_process.set_context_nr(IRQ_CONTEXT);
+        // // Activate the current context
+        // arch_process.set_context_nr(IRQ_CONTEXT);
 
-        // Construct the new frame
-        arch::syscall::invoke(
-            arch_process.current_context(),
-            pid == 1,
-            pc as usize,
-            sp,
-            RETURN_FROM_ISR,
-            &[irq_no, arg as usize],
-        );
-        Ok(())
+        // // Construct the new frame
+        // arch::syscall::invoke(
+        //     arch_process.current_context(),
+        //     pid == 1,
+        //     pc as usize,
+        //     sp,
+        //     RETURN_FROM_ISR,
+        //     &[irq_no, arg as usize],
+        // );
+        // Ok(())
     }
 
     /// Mark the specified context as ready to run
@@ -471,6 +462,7 @@ impl SystemServices {
         can_resume: bool,
         advance_context: bool,
     ) -> Result<CtxID, xous::Error> {
+        println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
         let previous_context = self.current_context_nr();
 
@@ -482,7 +474,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                ProcessState::Setup(_, _, _) => new_context = INITIAL_CONTEXT,
+                ProcessState::Setup(_) => new_context = INITIAL_CONTEXT,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
@@ -529,23 +521,24 @@ impl SystemServices {
             // Set up the new process, if necessary.  Remove the new context from
             // the list of ready contexts.
             new.state = match new.state {
-                ProcessState::Setup(entrypoint, stack, stack_size) => {
-                    let mut process = ProcessHandle::get();
-                    println!(
-                        "Initializing new process with stack size of {} bytes",
-                        stack_size
-                    );
-                    process.init(entrypoint, stack, INITIAL_CONTEXT);
-                    // Mark the stack as "unallocated-but-free"
-                    let init_sp = stack & !0xfff;
-                    let mut memory_manager = MemoryManagerHandle::get();
-                    memory_manager
-                        .reserve_range(
-                            (init_sp - stack_size) as *mut usize,
-                            stack_size + 4096,
-                            MemoryFlags::R | MemoryFlags::W,
-                        )
-                        .expect("couldn't reserve stack");
+                ProcessState::Setup(init_context) => {
+                    // entrypoint, stack, stack_size) => {
+                    // let mut process = ProcessHandle::get();
+                    // println!(
+                    //     "Initializing new process with stack size of {} bytes",
+                    //     stack_size
+                    // );
+                    // // process.init(entrypoint, stack, INITIAL_CONTEXT);
+                    // // Mark the stack as "unallocated-but-free"
+                    // let init_sp = stack & !0xfff;
+                    // let mut memory_manager = MemoryManagerHandle::get();
+                    // memory_manager
+                    //     .reserve_range(
+                    //         (init_sp - stack_size) as *mut usize,
+                    //         stack_size + 4096,
+                    //         MemoryFlags::R | MemoryFlags::W,
+                    //     )
+                    //     .expect("couldn't reserve stack");
                     ProcessState::Running(0)
                 }
                 ProcessState::Free => panic!("process was suddenly Free"),
@@ -635,11 +628,7 @@ impl SystemServices {
         // Restore the previous context, if one exists.
         process.set_context_nr(new_context);
         self.processes[self.pid as usize - 1].current_context = new_context as u8;
-        let _ctx = process.current_context();
-        println!(
-            "Switched to PID {}, context {}, with sepc: {:08x}",
-            new_pid, new_context, _ctx.sepc
-        );
+        // let _ctx = process.current_context();
 
         Ok(new_context)
     }
@@ -878,48 +867,52 @@ impl SystemServices {
     ///   slots.
     pub fn spawn_thread(
         &mut self,
-        entrypoint: MemoryAddress,
-        stack_pointer: MemoryAddress,
-        arg: Option<MemoryAddress>,
+        _entrypoint: MemoryAddress,
+        _stack_pointer: MemoryAddress,
+        _arg: Option<MemoryAddress>,
     ) -> Result<CtxID, xous::Error> {
-        let mut process = ProcessHandle::get();
-        let new_context_nr = process
-            .find_free_context_nr()
-            .ok_or(xous::Error::ContextNotAvailable)?;
+        Err(xous::Error::UnhandledSyscall)
+        // let mut process = ProcessHandle::get();
+        // let new_context_nr = process
+        //     .find_free_context_nr()
+        //     .ok_or(xous::Error::ContextNotAvailable)?;
 
-        // Create the new context and set it to run in the new address space.
-        let context = process.context(new_context_nr);
-        arch::syscall::invoke(
-            context,
-            self.pid == 1,
-            entrypoint.get() as usize,
-            stack_pointer.get() as usize,
-            EXIT_THREAD,
-            &[arg.map(|x| x.get()).unwrap_or_default() as usize],
-        );
+        // // Create the new context and set it to run in the new address space.
+        // let context = process.context(new_context_nr);
+        // arch::syscall::invoke(
+        //     context,
+        //     self.pid == 1,
+        //     entrypoint.get() as usize,
+        //     stack_pointer.get() as usize,
+        //     EXIT_THREAD,
+        //     &[arg.map(|x| x.get()).unwrap_or_default() as usize],
+        // );
 
-        // Queue the thread to run
-        let mut process = self
-            .get_process_mut(self.current_pid())
-            .expect("couldn't get current process");
-        process.state = match process.state {
-            ProcessState::Running(x) => ProcessState::Running(x | (1 << new_context_nr)),
-            other => panic!(
-                "error spawning thread: process was in an invalid state {:?}",
-                other
-            ),
-        };
+        // // Queue the thread to run
+        // let mut process = self
+        //     .get_process_mut(self.current_pid())
+        //     .expect("couldn't get current process");
+        // process.state = match process.state {
+        //     ProcessState::Running(x) => ProcessState::Running(x | (1 << new_context_nr)),
+        //     other => panic!(
+        //         "error spawning thread: process was in an invalid state {:?}",
+        //         other
+        //     ),
+        // };
 
-        Ok(new_context_nr)
+        // Ok(new_context_nr)
     }
 
     /// Allocate a new server ID for this process and return the address. If the
-    /// server table is full, return an error.
+    /// server table is full, or if there is not enough memory to map the server queue,
+    /// return an error.
     ///
     /// # Errors
     ///
     /// * **OutOfMemory**: A new page could not be assigned to store the server
     ///   queue.
+    /// * **ServerNotFound**: The server queue was full and a free slot could not
+    ///   be found.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
         println!("Looking through server list for free server");
         println!(
@@ -931,20 +924,26 @@ impl SystemServices {
             if entry == &None {
                 println!("Found a free slot.  Allocating an entry");
                 let pid = self.pid;
+
+                // TODO: Come up with a way to randomize this
                 let sid = (pid as usize, name as usize, pid as usize, name as usize);
-                let (addr, size) = {
-                    let mut mm = MemoryManagerHandle::get();
-                    (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
-                };
-                Server::init(entry, pid, sid, addr, size).or_else(|x| {
-                    let mut mm = MemoryManagerHandle::get();
-                    mm.unmap_page(addr)?;
+
+                // // Allocate a single page for the server queue
+                // let (addr, size) = {
+                //     let mut mm = MemoryManagerHandle::get();
+                //     (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
+                // };
+
+                // Initialize the server with the given memory page.
+                Server::init(entry, pid, sid /*, addr, size*/).or_else(|x| {
+                    // let mut mm = MemoryManagerHandle::get();
+                    // mm.unmap_page(addr)?;
                     Err(x)
                 })?;
                 return Ok(sid);
             }
         }
-        Err(xous::Error::OutOfMemory)
+        Err(xous::Error::ServerNotFound)
     }
 
     /// Allocate a new server ID for this process and return the address. If the
@@ -970,7 +969,7 @@ impl SystemServices {
                 }
             }
         }
-        let slot_idx = slot_idx.ok_or_else(|| xous::Error::OutOfMemory)?;
+        let slot_idx = slot_idx.ok_or_else(|| Error::OutOfMemory)?;
 
         // Look through all servers for one whose SID matches.
         for (idx, server) in self.servers.iter().enumerate() {
@@ -1048,7 +1047,7 @@ impl SystemServices {
     }
 
     /// Switch to the server's address space and add a "remember this address"
-    /// entry to its server queue
+    /// entry to its server queue, then switch back to the original address space.
     pub fn remember_server_message(
         &mut self,
         sidx: usize,
@@ -1057,27 +1056,25 @@ impl SystemServices {
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {
-        let current_pid = self.current_pid();
+        // let current_pid = self.current_pid();
         let result = {
-            let server_pid = self
-                .server_from_sidx(sidx)
-                .ok_or(xous::Error::ServerNotFound)?
-                .pid;
-            {
-                let server_process = self.get_process(server_pid)?;
-                server_process.mapping.activate();
-            }
+            // let server_pid = self
+            //     .server_from_sidx(sidx)
+            //     .ok_or(xous::Error::ServerNotFound)?
+            //     .pid;
+            // {
+            //     let server_process = self.get_process(server_pid)?;
+            //     server_process.mapping.activate();
+            // }
             let server = self
                 .server_from_sidx(sidx)
                 .expect("couldn't re-discover server index");
-            let result = server.queue_address(pid, context, message, client_address);
-            // server.print_queue();
-            result
+            server.queue_address(pid, context, message, client_address)
         };
-        let current_process = self
-            .get_process(current_pid)
-            .expect("couldn't restore previous process");
-        current_process.mapping.activate();
+        // let current_process = self
+        //     .get_process(current_pid)
+        //     .expect("couldn't restore previous process");
+        // current_process.mapping.activate();
         result
     }
 

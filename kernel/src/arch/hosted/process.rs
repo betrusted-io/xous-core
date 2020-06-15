@@ -1,132 +1,126 @@
-use core::mem;
-static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
 pub const MAX_CONTEXT: CtxID = 31;
-use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous::CtxID;
+use std::net::TcpStream;
+use std::sync::Mutex;
 use xous;
+use xous::{CtxID, PID};
 
-#[repr(C)]
-#[derive(Debug)]
+use lazy_static::lazy_static;
+
+pub type ContextInit = ();
+
 pub struct Process {
-    /// Used by the interrupt handler to calculate offsets
-    scratch: usize,
-
-    /// The index into the `contexts` list.  This must never be 0. The interrupt
-    /// handler writes to this field, so it must not be moved.
-    context_nr: CtxID,
-
-    _hash: [usize; 8],
-
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
-    /// The interrupt handler will save the current process to this Context when
-    /// the trap handler is entered.
-    contexts: [ProcessContext; MAX_CONTEXT],
+    /// The network connection to the client process.
+    conn: TcpStream,
+
+    /// Current process ID
+    pid: PID,
+}
+
+impl PartialEq for Process {
+    fn eq(&self, other: &Process) -> bool {
+        self.pid == other.pid
+    }
+}
+
+struct ProcessTable {
+    current: usize,
+    table: Vec<Process>,
+}
+
+lazy_static! {
+    static ref PROCESS_TABLE: Mutex<ProcessTable> = Mutex::new(ProcessTable {
+        current: 0,
+        table: Vec::new(),
+    });
+}
+
+pub fn current_pid() -> PID {
+    PROCESS_TABLE.lock().unwrap().current as PID + 1
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 /// Everything required to keep track of a single thread of execution.
-pub struct ProcessContext {
-    /// Storage for all RISC-V registers, minus $zero
-    pub registers: [usize; 31],
+/// In a `std` environment, we can't manage threads so this is a no-op.
+pub struct ProcessContext {}
 
-    /// The return address.  Note that if this context was created because of an
-    /// `ecall` instruction, you will need to add `4` to this before returning,
-    /// to prevent that instruction from getting executed again. If this is 0,
-    /// then this context is not valid.
-    pub sepc: usize,
+/// Everything required to initialize a process on this platform
+pub struct ProcessInit {
+    /// A network connection to the client
+    conn: TcpStream,
+}
+
+impl ProcessInit {
+    pub fn new(conn: TcpStream) -> ProcessInit {
+        ProcessInit { conn }
+    }
 }
 
 impl Process {
+    /// Mark this process as running (on the current core?!)
+    pub fn activate(&self) {
+        let mut pt = PROCESS_TABLE.lock().unwrap();
+        assert!(pt.table[self.pid as usize - 1] == *self);
+        pt.current = self.pid as _;
+    }
+
     pub fn current_context(&mut self) -> &mut ProcessContext {
-        assert!(self.context_nr != 0, "context number was 0");
-        &mut self.contexts[self.context_nr - 1]
+        unimplemented!()
     }
 
     /// Set the current context number.
     pub fn set_context_nr(&mut self, context: CtxID) {
-        assert!(
-            context > 0 && context <= self.contexts.len(),
-            "attempt to switch to an invalid context {}",
-            context
-        );
-        self.context_nr = context;
+        if context != 0 {
+            panic!("context was {}, not 0", context);
+            unimplemented!()
+        }
     }
 
-    pub fn context(&mut self, context_nr: CtxID) -> &mut ProcessContext {
-        assert!(
-            context_nr > 0 && context_nr <= self.contexts.len(),
-            "attempt to retrieve an invalid context {}",
-            context_nr
-        );
-        &mut self.contexts[context_nr - 1]
+    pub fn context(&mut self, _context_nr: CtxID) -> &mut ProcessContext {
+        unimplemented!()
     }
 
     pub fn find_free_context_nr(&self) -> Option<CtxID> {
-        for (index, context) in self.contexts.iter().enumerate() {
-            if index != 0 && context.sepc == 0 {
-                return Some(index as CtxID + 1);
-            }
-        }
         None
     }
 
-    pub fn set_context_result(&mut self, context_nr: CtxID, result: xous::Result) {
-        let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
-        let context = self.context(context_nr);
-        for (idx, reg) in vals.iter().enumerate() {
-            context.registers[9 + idx] = *reg;
-        }
+    pub fn set_context_result(&mut self, _context_nr: CtxID, _result: xous::Result) {
+        unimplemented!()
     }
 
     /// Initialize this process context with the given entrypoint and stack
     /// addresses.
-    pub fn init(&mut self, entrypoint: usize, stack: usize, context: usize) {
-        assert!(
-            mem::size_of::<Process>() == PAGE_SIZE,
-            "Process size is {}, not PAGE_SIZE ({})",
-            mem::size_of::<Process>(),
-            PAGE_SIZE
-        );
-        assert!(
-            context + 1 < self.contexts.len(),
-            "tried to init a context that's out of range"
-        );
-        assert!(context != 1, "tried to init using the irq context");
-        assert!(context != 0, "tried to init using a context of 0");
-        assert!(
-            context == 2,
-            "tried to init using a context that wasn't 2. This probably isn't what you want."
-        );
-        // By convention, context 0 is the trap context. Therefore, context 1 is
-        // the first default context.
-        self.context_nr = context;
-        for context in self.contexts.iter_mut() {
-            *context = Default::default();
+    pub fn create(pid: PID, init_data: ProcessInit) -> PID {
+        let mut process_table = PROCESS_TABLE.lock().unwrap();
+        assert!(pid != 0, "PID is zero!");
+
+        let pid_idx = (pid - 1) as usize;
+
+        assert!(pid_idx >= process_table.table.len(), "PID {} already allocated", pid);
+        let process = Process {
+            inner: Default::default(),
+            conn: init_data.conn,
+            pid,
+        };
+        if pid_idx >= process_table.table.len() {
+            process_table.table.push(process);
+        } else {
+            panic!("pid already allocated!");
         }
 
-        let mut context = self.current_context();
-
-        context.registers = Default::default();
-        context.sepc = entrypoint;
-        context.registers[1] = stack;
-
-        self.inner = Default::default();
+        pid
     }
 }
 
 impl ProcessContext {
-    /// The current stack pointer for this context
-    pub fn stack_pointer(&self) -> usize {
-        self.registers[1]
-    }
 }
 
 pub struct ProcessHandle<'a> {
-    process: &'a mut Process,
+    inner: std::sync::MutexGuard<'a, ProcessTable>,
 }
 
 /// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
@@ -135,8 +129,12 @@ impl<'a> ProcessHandle<'a> {
     /// Get the singleton Process.
     pub fn get() -> ProcessHandle<'a> {
         ProcessHandle {
-            process: unsafe { &mut *PROCESS },
+            inner:         PROCESS_TABLE.lock().unwrap(),
         }
+    }
+
+    pub fn set(pid: PID) {
+        PROCESS_TABLE.lock().unwrap().current = pid as usize - 1;
     }
 }
 
@@ -144,11 +142,13 @@ use core::ops::{Deref, DerefMut};
 impl Deref for ProcessHandle<'_> {
     type Target = Process;
     fn deref(&self) -> &Process {
-        &*self.process
+        &self.inner.table[self.inner.current]
     }
 }
+
 impl DerefMut for ProcessHandle<'_> {
     fn deref_mut(&mut self) -> &mut Process {
-        &mut *self.process
+        let current = self.inner.current;
+        &mut self.inner.table[current]
     }
 }

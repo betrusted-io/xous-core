@@ -446,7 +446,7 @@ impl MemoryManager {
     ///
     /// * MemoryInUse - The specified page is already mapped
     pub fn unmap_page(&mut self, virt: *mut usize) -> Result<usize, xous::Error> {
-        let pid = crate::arch::current_pid();
+        let pid = crate::arch::process::current_pid();
         let phys = crate::arch::mem::virt_to_phys(virt as usize)?;
         self.release_page(phys as *mut usize, pid)?;
         crate::arch::mem::unmap_page_inner(self, virt as usize)

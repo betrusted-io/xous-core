@@ -1,6 +1,6 @@
 use crate::{
     CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, MemoryType,
-    Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SyscallResult, CID, PID, SID,
+    Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SysCallResult, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -235,7 +235,7 @@ pub enum SysCall {
     SendMessage(CID, Message),
 
     /// Return a Borrowed memory region to a sender
-    ReturnMemory(MessageSender, usize /* arg1 */, usize /* arg2 */),
+    ReturnMemory(MessageSender, usize /* addr */, usize /* size */),
 
     /// Spawn a new thread
     SpawnThread(
@@ -454,11 +454,11 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(a1, a2, a3) => [
+            SysCall::ReturnMemory(sender, addr, size) => [
                 SysCallNumber::ReturnMemory as usize,
-                *a1,
-                *a2,
-                *a3,
+                *sender,
+                *addr,
+                *size,
                 0,
                 0,
                 0,
@@ -656,10 +656,10 @@ pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Resu
 /// The `size` field must be page-aligned.
 pub fn return_memory(
     sender: MessageSender,
-    arg1: usize,
-    arg2: usize,
+    addr: usize,
+    size: usize,
 ) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender, arg1, arg2))?;
+    let result = rsyscall(SysCall::ReturnMemory(sender, addr, size))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -751,11 +751,11 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 pub fn send_message(
     connection: CID,
     message: Message,
-) -> core::result::Result<(usize, usize), Error> {
+) -> core::result::Result<(), Error> {
     let result =
         rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
-    if let Result::MessageResult(arg1, arg2) = result {
-        Ok((arg1, arg2))
+    if let Result::Ok = result {
+        Ok(())
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
@@ -774,7 +774,7 @@ pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
 
-pub fn rsyscall(call: SysCall) -> SyscallResult {
+pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;
     let args = call.as_args();
     unsafe {

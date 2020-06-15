@@ -3,8 +3,42 @@ static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
 pub const MAX_CONTEXT: CtxID = 31;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous::CtxID;
 use xous;
+use xous::CtxID;
+
+use crate::args::KernelArguments;
+const DEFAULT_STACK_SIZE: usize = 131072;
+// pub use crate::arch::mem::DEFAULT_STACK_TOP;
+
+/// This is the address a program will jump to in order to return from an ISR.
+pub const RETURN_FROM_ISR: usize = 0xff80_2000;
+
+/// This is the address a thread will return to when it exits.
+pub const EXIT_THREAD: usize = 0xff80_3000;
+pub const IRQ_CONTEXT: usize = 1;
+
+pub type ContextInit = (
+    usize, /* entrypoint */
+    usize, /* stack */
+    usize, /* stack size */
+);
+
+#[repr(C)]
+#[cfg(baremetal)]
+/// The stage1 bootloader sets up some initial processes.  These are reported
+/// to us as (satp, entrypoint, sp) tuples, which can be turned into a structure.
+/// The first element is always the kernel.
+pub struct InitialProcess {
+    /// The RISC-V SATP value, which includes the offset of the root page
+    /// table plus the process ID.
+    satp: usize,
+
+    /// Where execution begins
+    entrypoint: usize,
+
+    /// Address of the top of the stack
+    sp: usize,
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -38,6 +72,12 @@ pub struct ProcessContext {
     /// to prevent that instruction from getting executed again. If this is 0,
     /// then this context is not valid.
     pub sepc: usize,
+}
+
+pub struct ProcessContextInit {
+    entrypoint: usize,
+    stack: usize,
+    context: usize,
 }
 
 impl Process {

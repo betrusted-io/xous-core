@@ -10,10 +10,10 @@ use xous::*;
 /// This is the context that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, CtxID)> = None;
 
-pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
-    let pid = arch::current_pid();
+pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
+    // let pid = arch::current_pid();
 
-    println!("PID{} Syscall: {:?}", pid, call);
+    // println!("PID{} Syscall: {:?}", pid, call);
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
@@ -25,7 +25,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .unwrap_or(core::ptr::null_mut::<usize>());
 
             // Don't let the address exceed the user area (unless it's PID 1)
-            if pid != 1 && virt.map(|x| x.get() >= arch::mem::USER_AREA_END).unwrap_or(false) {
+            if pid != 1
+                && virt
+                    .map(|x| x.get() >= arch::mem::USER_AREA_END)
+                    .unwrap_or(false)
+            {
                 return Err(xous::Error::BadAddress);
 
             // Don't allow mapping non-page values
@@ -153,6 +157,11 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous::Result::Ok)
         }
         SysCall::Yield => {
+            // If we're not running on bare metal, treat this as a no-op.
+            if !cfg!(baremetal) {
+                return Ok(xous::Result::Ok);
+            }
+
             let (parent_pid, parent_ctx) = unsafe {
                 SWITCHTO_CALLER
                     .take()
@@ -179,9 +188,9 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             Ok(xous::Result::ResumeProcess)
         }
         SysCall::ReceiveMessage(sid) => {
+            // See if there is a pending message.  If so, return immediately.
             let mut ss = SystemServicesHandle::get();
             let context_nr = ss.current_context_nr();
-            // See if there is a pending message.  If so, return immediately.
             let sidx = ss.server_sidx(sid).ok_or(xous::Error::ServerNotFound)?;
             let server = ss
                 .server_from_sidx(sidx)
@@ -203,18 +212,19 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // process and mark ourselves as awaiting an event.  When a message
             // arrives, our return value will already be set to the
             // MessageEnvelope of the incoming message.
-            // println!(
-            //     "PID {} did not have any waiting messages -- parking context",
-            //     pid
-            // );
+            println!(
+                "PID {} did not have any waiting messages -- parking context",
+                pid
+            );
             server.park_context(context_nr);
-            unsafe { SWITCHTO_CALLER = None };
+            // unsafe { SWITCHTO_CALLER = None };
 
-            let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
-            assert_ne!(ppid, 0, "no parent process id");
-            ss.activate_process_context(ppid, 0, false, true)
-                .map(|_| Ok(xous::Result::ResumeProcess))
-                .unwrap_or(Err(xous::Error::ProcessNotFound))
+            // let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
+            // assert_ne!(ppid, 0, "no parent process id");
+            // ss.activate_process_context(ppid, 0, false, true)
+            //     .map(|_| Ok(xous::Result::ResumeProcess))
+            //     .unwrap_or(Err(xous::Error::ProcessNotFound))
+            Ok(xous::Result::BlockedProcess)
         }
         SysCall::WaitEvent => {
             let mut ss = SystemServicesHandle::get();
@@ -229,18 +239,18 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
         SysCall::SpawnThread(entrypoint, stack_pointer, argument) => {
             let mut ss = SystemServicesHandle::get();
             ss.spawn_thread(entrypoint, stack_pointer, argument)
-                .map(|ctx| xous::Result::ThreadID(ctx))
+                .map(xous::Result::ThreadID)
         }
         SysCall::CreateServer(name) => {
             let mut ss = SystemServicesHandle::get();
-            ss.create_server(name).map(|x| xous::Result::ServerID(x))
+            ss.create_server(name).map(xous::Result::ServerID)
         }
         SysCall::Connect(sid) => {
+            // ::debug_here::debug_here!();
             let mut ss = SystemServicesHandle::get();
-            ss.connect_to_server(sid)
-                .map(|x| xous::Result::ConnectionID(x))
+            ss.connect_to_server(sid).map(xous::Result::ConnectionID)
         }
-        SysCall::ReturnMemory(sender, arg1, arg2) => {
+        SysCall::ReturnMemory(sender, addr, size) => {
             let mut ss = SystemServicesHandle::get();
             let sender = SenderID::from_usize(sender)?;
 
@@ -288,11 +298,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
             // Unblock the client context to allow it to continue.
             // println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
             ss.ready_context(client_pid, client_ctx)?;
-            ss.set_context_result(
-                client_pid,
-                client_ctx,
-                xous::Result::MessageResult(arg1, arg2),
-            )?;
+            ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
             Ok(xous::Result::Ok)
         }
         SysCall::SendMessage(cid, message) => {
@@ -323,7 +329,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     let new_virt = ss.send_memory(
                         msg.buf.as_mut_ptr(),
                         server_pid,
-                        0 as *mut usize,
+                        core::ptr::null_mut::<usize>(),
                         msg.buf.len(),
                     )?;
                     (
@@ -340,7 +346,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     let new_virt = ss.lend_memory(
                         msg.buf.as_mut_ptr(),
                         server_pid,
-                        0 as *mut usize,
+                        core::ptr::null_mut::<usize>(),
                         msg.buf.len(),
                         true,
                     )?;
@@ -358,7 +364,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                     let new_virt = ss.lend_memory(
                         msg.buf.as_mut_ptr(),
                         server_pid,
-                        0 as *mut usize,
+                        core::ptr::null_mut::<usize>(),
                         msg.buf.len(),
                         false,
                     )?;
@@ -381,10 +387,10 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 .expect("server couldn't be located")
                 .take_available_context()
             {
-                // println!(
-                //     "There are contexts available to handle this message.  Marking PID {} as Ready",
-                //     server_pid
-                // );
+                println!(
+                    "There are contexts available to handle this message.  Marking PID {} as Ready",
+                    server_pid
+                );
                 let sender = ss
                     .remember_server_message(sidx, pid, context_nr, &message, client_address)
                     .or_else(|e| {
@@ -410,7 +416,7 @@ pub fn handle(call: SysCall) -> core::result::Result<xous::Result, xous::Error> 
                 } else {
                     // println!("Setting the return value of the Server and returning to Client");
                     ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
-                        .map(|_| xous::Result::MessageResult(0, 0))
+                        .map(|_| xous::Result::Ok)
                 }
             } else {
                 // println!("No contexts available to handle this.  Queueing message.");
