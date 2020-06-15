@@ -19,8 +19,7 @@ pub trait XousArgument: fmt::Display {
 
     fn name(&self) -> String {
         let tag_name_bytes = self.code().to_le_bytes();
-        let tag_name = String::from_utf8_lossy(&tag_name_bytes).to_string();
-        tag_name
+        String::from_utf8_lossy(&tag_name_bytes).to_string()
     }
 
     /// The total size of this argument, not including the code and the length.
@@ -105,24 +104,24 @@ impl XousArguments {
 
         // XArg tag contents
         let mut tag_data = Cursor::new(Vec::new());
-        tag_data.write(&((total_length / 4) as u32).to_le_bytes())?;
-        tag_data.write(&1u32.to_le_bytes())?; // Version
-        tag_data.write(&(self.ram_start as u32).to_le_bytes())?;
-        tag_data.write(&(self.ram_length as u32).to_le_bytes())?;
-        tag_data.write(&(self.ram_name as u32).to_le_bytes())?;
+        tag_data.write_all(&((total_length / 4) as u32).to_le_bytes())?;
+        tag_data.write_all(&1u32.to_le_bytes())?; // Version
+        tag_data.write_all(&(self.ram_start as u32).to_le_bytes())?;
+        tag_data.write_all(&(self.ram_length as u32).to_le_bytes())?;
+        tag_data.write_all(&(self.ram_name as u32).to_le_bytes())?;
 
         assert!(
-            (tag_data.get_ref().len() & 3) == 0,
+            tag_data.get_ref().len().trailing_zeros() >= 2,
             "tag data was not a multiple of 4 bytes!"
         );
 
         let mut digest = crc16::Digest::new(crc16::X25);
         // XArg tag header
-        w.write(&make_type!("XArg").to_le_bytes())?;
+        w.write_all(&u32::from_le_bytes(*b"XArg").to_le_bytes())?;
         digest.write(tag_data.get_ref());
-        w.write(&digest.sum16().to_le_bytes())?; // CRC16
-        w.write(&((tag_data.get_ref().len() / 4) as u16).to_le_bytes())?; // Size (in words)
-        w.write(tag_data.get_ref())?;
+        w.write_all(&digest.sum16().to_le_bytes())?; // CRC16
+        w.write_all(&((tag_data.get_ref().len() / 4) as u16).to_le_bytes())?; // Size (in words)
+        w.write_all(tag_data.get_ref())?;
 
         // Write out each subsequent argument
         for arg in &self.arguments {
@@ -145,16 +144,16 @@ impl XousArguments {
 
             let mut digest = crc16::Digest::new(crc16::X25);
             // XArg tag header
-            w.write(&arg.code().to_le_bytes())?;
+            w.write_all(&arg.code().to_le_bytes())?;
             digest.write(tag_data.get_ref());
-            w.write(&digest.sum16().to_le_bytes())?; // CRC16
-            w.write(&((tag_data.get_ref().len() / 4) as u16).to_le_bytes())?; // Size (in words)
-            w.write(tag_data.get_ref())?;
+            w.write_all(&digest.sum16().to_le_bytes())?; // CRC16
+            w.write_all(&((tag_data.get_ref().len() / 4) as u16).to_le_bytes())?; // Size (in words)
+            w.write_all(tag_data.get_ref())?;
         }
 
         // Write any pending data, such as payloads
         for arg in &self.arguments {
-            w.write(arg.last_data()).expect("couldn't write extra arg data");
+            w.write_all(arg.last_data()).expect("couldn't write extra arg data");
         }
 
         Ok(())
@@ -166,6 +165,10 @@ impl XousArguments {
             total_length += arg.length() + 8;
         }
         total_length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
     }
 
     pub fn header_len(&self) -> usize {

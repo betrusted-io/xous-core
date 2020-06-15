@@ -144,10 +144,8 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
     debug!("ELF: {:?}", elf.header);
     for ph in elf.program_iter() {
         debug!("Program Header: {:?}", ph);
-        if ph.get_type() == Ok(ProgramType::Load) {
-            if phys_offset == 0 {
-                phys_offset = ph.physical_addr();
-            }
+        if ph.get_type() == Ok(ProgramType::Load) && phys_offset == 0 {
+            phys_offset = ph.physical_addr();
         }
         debug!("Physical address: {:08x}", ph.physical_addr());
         debug!("Virtual address: {:08x}", ph.virtual_addr());
@@ -351,8 +349,8 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
         sections.push(MiniElfSection {
             virt: s.address() as u32,
             size: size as u32,
-            flags: flags,
             name: name.to_string(),
+            flags,
         });
     }
     let observed_size = program_data

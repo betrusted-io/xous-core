@@ -11,7 +11,7 @@ macro_rules! make_type {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MemoryRegion {
     /// Starting offset (in bytes)
     start: u32,
@@ -26,6 +26,7 @@ pub struct MemoryRegion {
     padding: u32,
 }
 
+#[derive(Default)]
 pub struct MemoryRegions {
     regions: Vec<MemoryRegion>,
 }
@@ -61,14 +62,14 @@ impl MemoryRegion {
 
     pub fn make_name(name: &str) -> u32 {
         match name {
-            "sram_ext" => make_type!("SrEx"),
-            "sram" => make_type!("SrIn"),
-            "memlcd" => make_type!("Disp"),
-            "vexriscv_debug" => make_type!("VexD"),
-            "csr" => make_type!("CSRs"),
-            "audio" => make_type!("Audi"),
-            "rom" => make_type!("Boot"),
-            "spiflash" => make_type!("SpFl"),
+            "sram_ext" => u32::from_le_bytes(*b"SrEx"),
+            "sram" => u32::from_le_bytes(*b"SrIn"),
+            "memlcd" => u32::from_le_bytes(*b"Disp"),
+            "vexriscv_debug" => u32::from_le_bytes(*b"VexD"),
+            "csr" => u32::from_le_bytes(*b"CSRs"),
+            "audio" => u32::from_le_bytes(*b"Audi"),
+            "rom" => u32::from_le_bytes(*b"Boot"),
+            "spiflash" => u32::from_le_bytes(*b"SpFl"),
             other => {
                 let mut region_name = other.to_owned();
                 region_name.push_str("    ");
@@ -81,7 +82,7 @@ impl MemoryRegion {
 
 impl MemoryRegions {
     pub fn new() -> MemoryRegions {
-        MemoryRegions { regions: vec![] }
+        Default::default()
     }
     pub fn add(&mut self, region: MemoryRegion) {
         self.regions.push(region)
@@ -89,11 +90,14 @@ impl MemoryRegions {
     pub fn len(&self) -> usize {
         self.regions.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.regions.is_empty()
+    }
 }
 
 impl XousArgument for MemoryRegions {
     fn code(&self) -> XousArgumentCode {
-        make_type!("MREx")
+        u32::from_le_bytes(*b"MREx")
     }
     fn length(&self) -> XousSize {
         (self.regions.len() * std::mem::size_of::<MemoryRegion>()) as XousSize
@@ -101,10 +105,11 @@ impl XousArgument for MemoryRegions {
     fn serialize(&self, output: &mut dyn io::Write) -> io::Result<usize> {
         let mut written = 0;
         for region in &self.regions {
-            written = written + output.write(&region.start.to_le_bytes())?;
-            written = written + output.write(&region.length.to_le_bytes())?;
-            written = written + output.write(&region.name.to_le_bytes())?;
-            written = written + output.write(&0u32.to_le_bytes())?;
+            output.write_all(&region.start.to_le_bytes())?;
+            output.write_all(&region.length.to_le_bytes())?;
+            output.write_all(&region.name.to_le_bytes())?;
+            output.write_all(&0u32.to_le_bytes())?;
+            written += 4 * 4;
         }
         Ok(written)
     }

@@ -66,7 +66,7 @@ impl XousKernel {
 
 impl XousArgument for XousKernel {
     fn code(&self) -> XousArgumentCode {
-        make_type!("XKrn")
+        u32::from_le_bytes(*b"XKrn")
     }
 
     fn length(&self) -> XousSize {

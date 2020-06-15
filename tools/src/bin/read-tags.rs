@@ -6,7 +6,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process;
 use std::slice;
-use tools::make_type;
+// use tools::make_type;
 
 fn read_next_tag(b8: *mut u8, byte_offset: &mut usize) -> Result<(u32, u16, u32), ()> {
     let tag_name = u32::from_le(unsafe { (b8 as *mut u32).add(*byte_offset / 4).read() }) as u32;
@@ -36,7 +36,7 @@ fn print_tag(b8: *mut u8, size: u32, crc: u16, byte_offset: &mut usize) -> Resul
     } else {
         print!("  CRC: FAIL (calc: {:04x})", digest.sum16());
     }
-    println!("");
+    println!();
     Ok(())
 }
 
@@ -46,7 +46,7 @@ fn process_tags(b8: *mut u8) {
     loop {
         let (tag_name, crc, size) =
             read_next_tag(b8, &mut byte_offset).expect("couldn't read next tag");
-        if tag_name == make_type!("XArg") && size == 20 {
+        if tag_name == u32::from_le_bytes(*b"XArg") && size == 20 {
             total_words = unsafe { (b8 as *mut u32).add(byte_offset / 4).read() } * 4;
             println!(
                 "Found Xous Args Size at offset {}, setting total_words to {}",

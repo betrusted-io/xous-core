@@ -51,7 +51,7 @@ impl IniE {
 
 impl XousArgument for IniE {
     fn code(&self) -> XousArgumentCode {
-        make_type!("IniE")
+        u32::from_le_bytes(*b"IniE")
     }
 
     fn length(&self) -> XousSize {

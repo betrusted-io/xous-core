@@ -2,7 +2,7 @@ use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
 use std::fmt;
 use std::io;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Bflg {
     /// Disable copying data
     no_copy_: bool,
@@ -33,17 +33,18 @@ impl fmt::Display for Bflg {
         } else {
             write!(f, " -debug")?;
         }
-        writeln!(f, "")
+        writeln!(f)
     }
 }
 
 impl Bflg {
     pub fn new() -> Bflg {
-        Bflg {
-            no_copy_: false,
-            absolute_: false,
-            debug_: false,
-        }
+        Default::default()
+        // Bflg {
+        //     no_copy_: false,
+        //     absolute_: false,
+        //     debug_: false,
+        // }
     }
     pub fn no_copy(mut self) -> Bflg {
         self.no_copy_ = true;
@@ -61,7 +62,7 @@ impl Bflg {
 
 impl XousArgument for Bflg {
     fn code(&self) -> XousArgumentCode {
-        make_type!("Bflg")
+        u32::from_le_bytes(*b"Bflg")
     }
     fn length(&self) -> XousSize {
         4
@@ -70,7 +71,7 @@ impl XousArgument for Bflg {
         let mut written = 0;
         let mut val = 0u32;
         if self.no_copy_ {
-            val |= 1 << 0;
+            val |= 1;
         }
         if self.absolute_ {
             val |= 1 << 1;

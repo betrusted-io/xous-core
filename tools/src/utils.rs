@@ -1,4 +1,3 @@
-use csv;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io;
@@ -38,8 +37,8 @@ pub fn get_base(value: &str) -> (&str, u32) {
         (value.trim_start_matches("0b"), 2)
     } else if value.starts_with("0B") {
         (value.trim_start_matches("0B"), 2)
-    } else if value.starts_with("0") && value != "0" {
-        (value.trim_start_matches("0"), 8)
+    } else if value.starts_with('0') && value != "0" {
+        (value.trim_start_matches('0'), 8)
     } else {
         (value, 10)
     }
@@ -61,7 +60,7 @@ pub fn parse_csr_csv(filename: &str) -> Result<CsrConfig, ConfigError> {
     let mut rdr = csv::ReaderBuilder::new().flexible(true).from_reader(file);
     for result in rdr.records() {
         if let Ok(r) = result {
-            if r.len() < 1 {
+            if r.is_empty() {
                 eprintln!("csv: ignoring blank line");
                 continue;
             }

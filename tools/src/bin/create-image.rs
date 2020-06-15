@@ -81,7 +81,7 @@ fn main() {
     let mut memory_required = 0;
 
     if let Some(val) = matches.value_of("ram") {
-        let ram_parts: Vec<&str> = val.split(":").collect();
+        let ram_parts: Vec<&str> = val.split(':').collect();
         if ram_parts.len() != 2 {
             eprintln!("Error: --ram argument should be of the form [offset]:[size]");
             return;
@@ -114,12 +114,10 @@ fn main() {
         }
         // Look for the largest "ram" block, which we'll treat as main memory
         for (k, v) in &hv.regions {
-            if k.find("ram").is_some() {
-                if v.length > ram_size {
-                    ram_size = round_mem(v.length);
-                    ram_offset = v.start;
-                    found_ram_name = Some(k.clone());
-                }
+            if k.find("ram").is_some() && v.length > ram_size {
+                ram_size = round_mem(v.length);
+                ram_offset = v.start;
+                found_ram_name = Some(k.clone());
             }
         }
 
@@ -148,7 +146,7 @@ fn main() {
 
     let mut args = XousArguments::new(ram_offset, ram_size, ram_name);
 
-    if regions.len() > 0 {
+    if !regions.is_empty() {
         args.add(regions);
     }
 
@@ -189,7 +187,7 @@ fn main() {
         .value_of("output")
         .expect("output filename not present");
     let f = File::create(output_filename)
-        .expect(&format!("Couldn't create output file {}", output_filename));
+        .unwrap_or_else(|_| panic!("Couldn't create output file {}", output_filename));
     args.write(&f).expect("Couldn't write to args");
 
     println!("Arguments: {}", args);
