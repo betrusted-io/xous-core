@@ -261,12 +261,12 @@ impl MemoryManager {
             }
             xous::MemoryType::Default => (
                 process.inner.mem_default_base,
-                process.inner.mem_default_base + 0x10000000,
+                process.inner.mem_default_base + 0x1000_0000,
                 process.inner.mem_default_last,
             ),
             xous::MemoryType::Messages => (
                 process.inner.mem_message_base,
-                process.inner.mem_message_base + 0x10000000,
+                process.inner.mem_message_base + 0x1000_0000,
                 process.inner.mem_message_last,
             ),
         };

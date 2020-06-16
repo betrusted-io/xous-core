@@ -57,13 +57,13 @@ pub struct Process {
 
     /// The interrupt handler will save the current process to this Context when
     /// the trap handler is entered.
-    contexts: [ProcessContext; MAX_CONTEXT],
+    contexts: [Context; MAX_CONTEXT],
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 /// Everything required to keep track of a single thread of execution.
-pub struct ProcessContext {
+pub struct Context {
     /// Storage for all RISC-V registers, minus $zero
     pub registers: [usize; 31],
 
@@ -74,20 +74,20 @@ pub struct ProcessContext {
     pub sepc: usize,
 }
 
-pub struct ProcessContextInit {
+pub struct ContextInit {
     entrypoint: usize,
     stack: usize,
     context: usize,
 }
 
 impl Process {
-    pub fn current_context(&mut self) -> &mut ProcessContext {
+    pub fn current_context(&mut self) -> &mut Context {
         assert!(self.context_nr != 0, "context number was 0");
         &mut self.contexts[self.context_nr - 1]
     }
 
     /// Set the current context number.
-    pub fn set_context_nr(&mut self, context: CtxID) {
+    pub fn set_context(&mut self, context: CtxID) {
         assert!(
             context > 0 && context <= self.contexts.len(),
             "attempt to switch to an invalid context {}",
@@ -96,7 +96,7 @@ impl Process {
         self.context_nr = context;
     }
 
-    pub fn context(&mut self, context_nr: CtxID) -> &mut ProcessContext {
+    pub fn context(&mut self, context_nr: CtxID) -> &mut Context {
         assert!(
             context_nr > 0 && context_nr <= self.contexts.len(),
             "attempt to retrieve an invalid context {}",
@@ -158,7 +158,7 @@ impl Process {
     }
 }
 
-impl ProcessContext {
+impl Context {
     /// The current stack pointer for this context
     pub fn stack_pointer(&self) -> usize {
         self.registers[1]

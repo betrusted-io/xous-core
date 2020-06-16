@@ -74,7 +74,8 @@ pub enum Error {
     UnhandledSyscall = 17,
     InvalidSyscall = 18,
     ShareViolation = 19,
-    UnknownError = 20,
+    InvalidContext = 20,
+    UnknownError = 21,
 }
 
 impl Error {
@@ -101,6 +102,7 @@ impl Error {
             17 => UnhandledSyscall,
             18 => InvalidSyscall,
             19 => ShareViolation,
+            20 => InvalidContext,
             _ => UnknownError,
         }
     }
@@ -127,6 +129,7 @@ impl Error {
             UnhandledSyscall => 17,
             InvalidSyscall => 18,
             ShareViolation => 19,
+            InvalidContext => 20,
             UnknownError => usize::MAX,
         }
     }
@@ -381,7 +384,7 @@ impl Result {
                     8, me_enc[0], me_enc[1], me_enc[2], me_enc[3], me_enc[4], me_enc[5], me_enc[6],
                 ]
             }
-            Result::ThreadID(ctx) => [9, *ctx, 0, 0, 0, 0, 0, 0],
+            Result::ThreadID(ctx) => [9, *ctx as usize, 0, 0, 0, 0, 0, 0],
             Result::Unimplemented => [10, 0, 0, 0, 0, 0, 0, 0],
             Result::BlockedProcess => [11, 0, 0, 0, 0, 0, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {

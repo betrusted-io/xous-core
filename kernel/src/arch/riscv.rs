@@ -7,7 +7,7 @@ pub mod mem;
 pub mod process;
 pub mod syscall;
 
-pub use process::ProcessContext;
+pub use process::Context;
 
 pub fn current_pid() -> PID {
     satp::read().asid() as PID

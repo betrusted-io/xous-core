@@ -112,7 +112,7 @@ _start_trap:
 /*
     Resume a context (_xous_resume_context)
 
-    Restores all registers from a ProcessContext passed in $a0.
+    Restores all registers from a Context passed in $a0.
     Note that the SEPC and SSTATUS should be set already.
 */
 .global _xous_resume_context

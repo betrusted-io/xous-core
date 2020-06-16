@@ -1,4 +1,4 @@
-use crate::services::ProcessContext;
+use crate::services::Context;
 use riscv::register::{sepc, sstatus};
 
 extern "C" {
@@ -6,7 +6,7 @@ extern "C" {
 }
 
 pub fn invoke(
-    context: &mut ProcessContext,
+    context: &mut Context,
     supervisor: bool,
     pc: usize,
     sp: usize,
@@ -31,7 +31,7 @@ fn set_supervisor(supervisor: bool) {
     }
 }
 
-pub fn resume(supervisor: bool, context: &ProcessContext) -> ! {
+pub fn resume(supervisor: bool, context: &Context) -> ! {
     sepc::write(context.sepc);
 
     // Return to the appropriate CPU mode

@@ -213,18 +213,27 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             // arrives, our return value will already be set to the
             // MessageEnvelope of the incoming message.
             println!(
-                "PID {} did not have any waiting messages -- parking context",
-                pid
+                "PID {} did not have any waiting messages -- parking context {}",
+                pid, context_nr
             );
             server.park_context(context_nr);
-            // unsafe { SWITCHTO_CALLER = None };
 
-            // let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
-            // assert_ne!(ppid, 0, "no parent process id");
-            // ss.activate_process_context(ppid, 0, false, true)
-            //     .map(|_| Ok(xous::Result::ResumeProcess))
-            //     .unwrap_or(Err(xous::Error::ProcessNotFound))
-            Ok(xous::Result::BlockedProcess)
+            // For baremetal targets, switch away from this process.
+            if cfg!(baremetal) {
+                unsafe { SWITCHTO_CALLER = None };
+
+                let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
+                assert_ne!(ppid, 0, "no parent process id");
+                ss.activate_process_context(ppid, 0, false, true)
+                    .map(|_| Ok(xous::Result::ResumeProcess))
+                    .unwrap_or(Err(xous::Error::ProcessNotFound))
+            }
+            // For hosted targets, simply return `BlockedProcess` indicating we'll make
+            // a callback to their socket at a later time.
+            else {
+                ss.switch_from(pid, context_nr, false)
+                    .map(|_| xous::Result::BlockedProcess)
+            }
         }
         SysCall::WaitEvent => {
             let mut ss = SystemServicesHandle::get();
@@ -391,16 +400,21 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     "There are contexts available to handle this message.  Marking PID {} as Ready",
                     server_pid
                 );
-                let sender = ss
-                    .remember_server_message(sidx, pid, context_nr, &message, client_address)
-                    .or_else(|e| {
-                        ss.server_from_sidx(sidx)
-                            .expect("server couldn't be located")
-                            .return_available_context(context_nr);
-                        Err(e)
-                    })?;
+                let sender = match message {
+                    Message::Scalar(_) | Message::Move(_) => 0,
+                    Message::ImmutableBorrow(_) | Message::MutableBorrow(_) => ss
+                        .remember_server_message(sidx, pid, context_nr, &message, client_address)
+                        .or_else(|e| {
+                            ss.server_from_sidx(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_context(context_nr);
+                            Err(e)
+                        })?,
+                };
                 let envelope = MessageEnvelope { sender, message };
 
+                // Mark the server's context as "Ready". If this fails, return the context
+                // to the blocking list.
                 ss.ready_context(server_pid, ctx_number).or_else(|e| {
                     ss.server_from_sidx(sidx)
                         .expect("server couldn't be located")
@@ -408,18 +422,24 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     Err(e)
                 })?;
 
-                if blocking {
-                    // println!("Activating Server context and switching away from Client");
+                if blocking && cfg!(baremetal) {
+                    println!("Activating Server context and switching away from Client");
                     ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
                         .map(|_| Ok(xous::Result::Message(envelope)))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
+                } else if blocking && !cfg!(baremetal) {
+                    ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                        .map(|_| xous::Result::BlockedProcess)
+                } else if cfg!(baremetal) {
+                    println!("Setting the return value of the Server and returning to Client");
+                    ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                        .map(|_| xous::Result::Ok)
                 } else {
-                    // println!("Setting the return value of the Server and returning to Client");
                     ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
                         .map(|_| xous::Result::Ok)
                 }
             } else {
-                // println!("No contexts available to handle this.  Queueing message.");
+                println!("No contexts available to handle this.  Queueing message.");
                 // There is no server context we can use, so add the message to
                 // the queue.
                 let context_nr = ss.current_context_nr();

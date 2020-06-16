@@ -27,9 +27,9 @@ pub fn current_pid() -> PID {
 pub fn init() {}
 
 pub mod syscall {
-    use crate::arch::ProcessContext;
+    use crate::arch::Context;
     pub fn invoke(
-        context: &mut ProcessContext,
+        context: &mut Context,
         supervisor: bool,
         pc: usize,
         sp: usize,
@@ -43,7 +43,7 @@ pub mod syscall {
         unimplemented!();
     }
 
-    pub fn resume(supervisor: bool, context: &ProcessContext) -> ! {
+    pub fn resume(supervisor: bool, context: &Context) -> ! {
         unimplemented!();
     }
 }
@@ -118,13 +118,13 @@ pub mod mem {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct ProcessContext {}
+pub struct Context {}
 
-impl ProcessContext {
-    pub fn current() -> &'static mut ProcessContext {
+impl Context {
+    pub fn current() -> &'static mut Context {
         unimplemented!();
     }
-    pub fn saved() -> &'static mut ProcessContext {
+    pub fn saved() -> &'static mut Context {
         unimplemented!();
     }
 

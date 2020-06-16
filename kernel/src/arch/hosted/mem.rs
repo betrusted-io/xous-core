@@ -32,8 +32,9 @@ impl MemoryMapping {
     /// kernel, which should be mapped into every possible address space.
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
-    pub fn activate(self) {
-        // unimplemented!()
+    pub fn activate(self) -> Result<(), xous::Error>{
+        // This is a no-op on hosted environments
+        Ok(())
     }
 
     pub fn reserve_address(

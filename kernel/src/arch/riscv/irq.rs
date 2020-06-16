@@ -2,12 +2,12 @@ use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::ProcessHandle;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
-use crate::services::{ProcessContext, SystemServicesHandle, RETURN_FROM_ISR};
+use crate::services::{Context, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID, CtxID};
 
 extern "Rust" {
-    fn _xous_syscall_return_result(result: &xous::Result, context: &ProcessContext) -> !;
+    fn _xous_syscall_return_result(result: &xous::Result, context: &Context) -> !;
 }
 
 extern "C" {

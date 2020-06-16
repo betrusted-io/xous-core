@@ -56,9 +56,7 @@ fn listen_thread(chn: Sender<(TcpStream, PID, SysCall)>) {
 
         let new_pid = {
             let mut ss = SystemServicesHandle::get();
-            let pid = ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ()).unwrap();
-            ss.activate_process_context(pid, 0, true, false).unwrap();
-            pid
+            ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ()).unwrap()
         };
         println!("Assigned PID {}", new_pid);
         spawn(move || handle_connection(conn, new_pid, thr_chn));
@@ -74,8 +72,15 @@ pub fn idle() {
     let listen_thread_handle = spawn(move || listen_thread(sender));
 
     while let Ok((mut conn, pid, call)) = receiver.recv() {
-        crate::arch::process::ProcessHandle::set(pid);
+        {
+            let mut ss = SystemServicesHandle::get();
+            ss.switch_to(pid, Some(1)).unwrap();
+        }
         let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
+        if response != Result::BlockedProcess {
+            let mut ss = SystemServicesHandle::get();
+            ss.switch_from(pid, 1, true).unwrap();
+        }
         for word in response.to_args().iter_mut() {
             conn.write_all(&word.to_le_bytes()).expect("Disconnection");
         }

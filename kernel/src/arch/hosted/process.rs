@@ -1,13 +1,14 @@
 pub const MAX_CONTEXT: CtxID = 31;
 use crate::services::ProcessInner;
+use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Mutex;
-use xous;
 use xous::{CtxID, PID};
 
 use lazy_static::lazy_static;
 
 pub type ContextInit = ();
+pub const INITIAL_CONTEXT: usize = 1;
 
 pub struct Process {
     /// Global parameters used by the operating system
@@ -46,7 +47,7 @@ pub fn current_pid() -> PID {
 #[derive(Copy, Clone, Debug, Default)]
 /// Everything required to keep track of a single thread of execution.
 /// In a `std` environment, we can't manage threads so this is a no-op.
-pub struct ProcessContext {}
+pub struct Context {}
 
 /// Everything required to initialize a process on this platform
 pub struct ProcessInit {
@@ -62,34 +63,47 @@ impl ProcessInit {
 
 impl Process {
     /// Mark this process as running (on the current core?!)
-    pub fn activate(&self) {
-        let mut pt = PROCESS_TABLE.lock().unwrap();
-        assert!(pt.table[self.pid as usize - 1] == *self);
-        pt.current = self.pid as _;
+    pub fn activate(&mut self) -> Result<(), xous::Error> {
+        // let mut pt = PROCESS_TABLE.lock().unwrap();
+        // assert!(pt.table[self.pid as usize - 1] == *self);
+        // pt.current = self.pid as _;
+        Ok(())
     }
 
-    pub fn current_context(&mut self) -> &mut ProcessContext {
-        unimplemented!()
+    pub fn setup_context(
+        &mut self,
+        context: CtxID,
+        _setup: ContextInit,
+    ) -> Result<(), xous::Error> {
+        if context != INITIAL_CONTEXT {
+            return Err(xous::Error::ProcessNotFound);
+        }
+        Ok(())
+    }
+
+    pub fn current_context(&mut self) -> CtxID {
+        INITIAL_CONTEXT
     }
 
     /// Set the current context number.
-    pub fn set_context_nr(&mut self, context: CtxID) {
-        if context != 0 {
-            panic!("context was {}, not 0", context);
-            unimplemented!()
+    pub fn set_context(&mut self, context: CtxID) -> Result<(), xous::Error> {
+        if context != INITIAL_CONTEXT {
+            panic!("context was {}, not 1", context);
         }
-    }
-
-    pub fn context(&mut self, _context_nr: CtxID) -> &mut ProcessContext {
-        unimplemented!()
+        Ok(())
     }
 
     pub fn find_free_context_nr(&self) -> Option<CtxID> {
         None
     }
 
-    pub fn set_context_result(&mut self, _context_nr: CtxID, _result: xous::Result) {
-        unimplemented!()
+    pub fn set_context_result(&mut self, context: CtxID, result: xous::Result) {
+        assert!(context == INITIAL_CONTEXT);
+        for word in result.to_args().iter_mut() {
+            self.conn
+                .write_all(&word.to_le_bytes())
+                .expect("Disconnection");
+        }
     }
 
     /// Initialize this process context with the given entrypoint and stack
@@ -100,7 +114,11 @@ impl Process {
 
         let pid_idx = (pid - 1) as usize;
 
-        assert!(pid_idx >= process_table.table.len(), "PID {} already allocated", pid);
+        assert!(
+            pid_idx >= process_table.table.len(),
+            "PID {} already allocated",
+            pid
+        );
         let process = Process {
             inner: Default::default(),
             conn: init_data.conn,
@@ -116,8 +134,7 @@ impl Process {
     }
 }
 
-impl ProcessContext {
-}
+impl Context {}
 
 pub struct ProcessHandle<'a> {
     inner: std::sync::MutexGuard<'a, ProcessTable>,
@@ -129,14 +146,19 @@ impl<'a> ProcessHandle<'a> {
     /// Get the singleton Process.
     pub fn get() -> ProcessHandle<'a> {
         ProcessHandle {
-            inner:         PROCESS_TABLE.lock().unwrap(),
+            inner: PROCESS_TABLE.lock().unwrap(),
         }
     }
-
     pub fn set(pid: PID) {
         PROCESS_TABLE.lock().unwrap().current = pid as usize - 1;
     }
 }
+
+// impl<'a> Drop for ProcessHandle<'a> {
+//     fn drop(&mut self) {
+//         println!("<<< Dropping ProcessHandle");
+//     }
+// }
 
 use core::ops::{Deref, DerefMut};
 impl Deref for ProcessHandle<'_> {

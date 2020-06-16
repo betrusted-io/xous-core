@@ -1,4 +1,4 @@
-pub use crate::arch::process::ProcessContext;
+pub use crate::arch::process::Context;
 use core::mem;
 use xous::{CtxID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
@@ -190,9 +190,21 @@ impl Server {
         ))
     }
 
-    /// Remove a message from the server's queue and replace it with
-    /// QueuedMessage::WaitingResponse.
+    /// Remove a message from the server's queue and replace it with either a QueuedMessage::WaitingResponse
+    /// or, for Scalar messages, QueuedMessage::Empty.
+    ///
+    /// For non-Scalar messages, you must call `take_waiting_message()` in order to return
+    /// memory to the calling process.
+    ///
+    /// # Returns
+    ///
+    /// * **None**: There are no waiting messages
+    /// ***Some(MessageEnvelope): This message is queued.
     pub fn take_next_message(&mut self, server_idx: usize) -> Option<xous::MessageEnvelope> {
+        println!(
+            "queue_head: ((({})))  queue_tail: ((({}))): {:?}",
+            self.queue_head, self.queue_tail, self.queue[self.queue_tail]
+        );
         let result = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::WaitingResponse(_, _, _, _) => return None,
@@ -250,24 +262,28 @@ impl Server {
                 buf_size,
                 offset,
                 valid,
-            ) => (
-                xous::MessageEnvelope {
-                    sender: self.queue_tail | (server_idx << 16),
+            ) => {
+                let msg = xous::MessageEnvelope {
+                    sender: pid_ctx,
                     message: xous::Message::Move(xous::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size),
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
-                },
-                pid_ctx,
-                0,
-                0,
-                0,
-            ),
-            QueuedMessage::ScalarMessage(pid_ctx, _reserved, id, arg1, arg2, arg3, arg4) => (
-                xous::MessageEnvelope {
-                    sender: self.queue_tail | (server_idx << 16),
+                };
+                self.queue[self.queue_tail] = QueuedMessage::Empty;
+                self.queue_tail += 1;
+                if self.queue_tail >= self.queue.len() {
+                    self.queue_tail = 0;
+                }
+                return Some(msg);
+            }
+
+            // Scalar messages have nothing to return, so they can go straight to the `Free` state
+            QueuedMessage::ScalarMessage(pid_ctx, _reserved, id, arg1, arg2, arg3, arg4) => {
+                let msg = xous::MessageEnvelope {
+                    sender: pid_ctx,
                     message: xous::Message::Scalar(xous::ScalarMessage {
                         id,
                         arg1,
@@ -275,12 +291,14 @@ impl Server {
                         arg3,
                         arg4,
                     }),
-                },
-                pid_ctx,
-                0,
-                0,
-                0,
-            ),
+                };
+                self.queue[self.queue_tail] = QueuedMessage::Empty;
+                self.queue_tail += 1;
+                if self.queue_tail >= self.queue.len() {
+                    self.queue_tail = 0;
+                }
+                return Some(msg);
+            }
         };
         self.queue[self.queue_tail] =
             QueuedMessage::WaitingResponse(result.1, result.2, result.3, result.4);
@@ -299,6 +317,7 @@ impl Server {
         message: xous::Message,
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
+        println!("Queueing message: {:?}", message);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous::Error::ServerQueueFull);
         }
@@ -357,6 +376,7 @@ impl Server {
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
+        println!("Queueing address message: {:?}", message);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous::Error::ServerQueueFull);
         }
@@ -395,16 +415,17 @@ impl Server {
         }
         let mut test_ctx_mask = 1;
         let mut ctx_number = 0;
+        println!("Ready contexts: 0b{:08b}", self.ready_contexts);
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.
             if self.ready_contexts & test_ctx_mask == test_ctx_mask {
-                self.ready_contexts = self.ready_contexts & !test_ctx_mask;
+                self.ready_contexts &= !test_ctx_mask;
                 return Some(ctx_number);
             }
             // Advance to the next slot.
             test_ctx_mask = test_ctx_mask.rotate_left(1);
-            ctx_number = ctx_number + 1;
+            ctx_number += 1;
             if test_ctx_mask == 1 {
                 panic!("didn't find a free context, even though there should be one");
             }
@@ -430,6 +451,7 @@ impl Server {
 
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_context(&mut self, context: CtxID) {
+        println!("Parking context: {}", context);
         self.ready_contexts |= 1 << context;
     }
 }
