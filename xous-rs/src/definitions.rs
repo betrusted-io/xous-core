@@ -308,7 +308,7 @@ impl MemoryRange {
 }
 
 /// Which memory region the operation should affect.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemoryType {
     /// The address where addresses go when no `virt` is specified.
     Default = 1,

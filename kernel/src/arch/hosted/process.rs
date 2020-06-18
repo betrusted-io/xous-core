@@ -132,6 +132,11 @@ impl Process {
 
         pid
     }
+
+    pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous::Error> {
+        self.conn.write_all(bytes).unwrap();
+        Ok(())
+    }
 }
 
 impl Context {}

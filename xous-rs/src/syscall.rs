@@ -5,7 +5,7 @@ use crate::{
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SysCall {
     /// Allocates pages of memory, equal to a total of `size` bytes.  A physical
     /// address may be specified, which can be used to allocate regions such as
@@ -139,8 +139,8 @@ pub enum SysCall {
     ///   system
     /// * **InterruptInUse**: The specified interrupt has already been claimed
     ClaimInterrupt(
-        usize,         /* IRQ number */
-        MemoryAddress, /* function pointer */
+        usize,                 /* IRQ number */
+        MemoryAddress,         /* function pointer */
         Option<MemoryAddress>, /* argument */
     ),
 
@@ -244,6 +244,13 @@ pub enum SysCall {
         Option<MemoryAddress>, /* argument */
     ),
 
+    /// Create a new process, setting the current process as the parent ID.
+    /// Does not start the process immediately.
+    CreateProcess,
+
+    /// Terminate the current process, closing all server connections.
+    TerminateProcess,
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -270,6 +277,8 @@ enum SysCallNumber {
     SpawnThread = 18,
     UnmapMemory = 19,
     ReturnMemory = 20,
+    CreateProcess = 21,
+    TerminateProcess = 22,
     Invalid,
 }
 
@@ -474,6 +483,8 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::TerminateProcess => [SysCallNumber::TerminateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -585,6 +596,8 @@ impl SysCall {
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a3),
             ),
+            Some(SysCallNumber::CreateProcess) => SysCall::CreateProcess,
+            Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(Error::InvalidSyscall),
         })
@@ -748,10 +761,7 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
-pub fn send_message(
-    connection: CID,
-    message: Message,
-) -> core::result::Result<(), Error> {
+pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
     let result =
         rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
     if let Result::Ok = result {
