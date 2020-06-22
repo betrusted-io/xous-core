@@ -17,9 +17,18 @@ impl SenderID {
 }
 
 pub enum WaitingMessage {
+
+    /// There is no waiting message.
     None,
+
+    /// The memory was borrowed and should be returned to the given process.
     BorrowedMemory(PID, CtxID, MemoryAddress, MemoryAddress, MemorySize),
+
+    /// The memory was moved, and so shouldn't be returned.
     MovedMemory,
+
+    /// This memory should be returned to the system.
+    ForgetMemory(MemoryRange),
 }
 
 /// Internal representation of a queued message for a server. This should be
@@ -65,11 +74,44 @@ enum QueuedMessage {
         usize, /* valid */
     ),
 
+    /// The process lending this memory terminated before
+    /// we could receive the message.
+    MemoryMessageROLendTerminated(
+        usize, /* sender PID/CtxID */
+        usize, /* sender base address */
+        usize, /* id */
+        usize, /* buf */
+        usize, /* buf_size */
+        usize, /* offset */
+        usize, /* valid */
+    ),
+
+    /// The process lending this memory terminated before
+    /// we could receive the message.
+    MemoryMessageRWLendTerminated(
+        usize, /* sender PID/CtxID */
+        usize, /* sender base address */
+        usize, /* id */
+        usize, /* buf */
+        usize, /* buf_size */
+        usize, /* offset */
+        usize, /* valid */
+    ),
+
     /// When a message is taken that needs to be returned -- such as an ROLend
     /// or RWLend -- the slot is replaced with a WaitingResponse token and its
     /// index is returned as the message sender.  This is used to unblock the
     /// sending process.
     WaitingResponse(
+        usize, /* sender PID/CtxID */
+        usize, /* Client base address */
+        usize, /* Server base address */
+        usize, /* Range size */
+    ),
+
+    /// When a server goes away, its memory must be forgotten instead of being returned
+    /// to the previous process.
+    WaitingForget(
         usize, /* sender PID/CtxID */
         usize, /* Client base address */
         usize, /* Server base address */
@@ -152,6 +194,27 @@ impl Server {
     //     }
     // }
 
+    /// When a process terminates, there may be memory that is lent to us.
+    /// Mark all of that memory to be discarded when it is returned, rather than
+    /// giving it back to the previous process space.
+    pub fn discard_messages_for_pid(&mut self, pid: PID) {
+        for entry in self.queue.iter_mut() {
+            match entry {
+                &mut QueuedMessage::MemoryMessageROLend(pid_ctx, arg1, arg2, arg3, arg4, arg5, arg6)
+                    if (pid_ctx >> 16) as PID == pid =>
+                {
+                    *entry = QueuedMessage::MemoryMessageROLendTerminated(pid_ctx, arg1, arg2, arg3, arg4, arg5, arg6);
+                }
+                &mut QueuedMessage::MemoryMessageRWLend(pid_ctx, arg1, arg2, arg3, arg4, arg5, arg6)
+                    if (pid_ctx >> 16) as PID == pid =>
+                {
+                    *entry = QueuedMessage::MemoryMessageRWLendTerminated(pid_ctx, arg1, arg2, arg3, arg4, arg5, arg6);
+                }
+                x => (),
+            }
+        }
+    }
+
     /// Convert a `QueuedMesage::WaitingResponse` into `QueuedMessage::Empty`
     /// and return the pair.  Advance the tail.  Note that the `idx` could be
     /// somewhere other than the tail, but as long as it points to a valid
@@ -160,9 +223,12 @@ impl Server {
         if idx > self.queue.len() {
             return Err(xous::Error::BadAddress);
         }
-        let (pid_ctx, server_addr, client_addr, len) = match self.queue[idx] {
+        let (pid_ctx, server_addr, client_addr, len, forget) = match self.queue[idx] {
             QueuedMessage::WaitingResponse(pid_ctx, server_addr, client_addr, len) => {
-                (pid_ctx, server_addr, client_addr, len)
+                (pid_ctx, server_addr, client_addr, len, false)
+            }
+            QueuedMessage::WaitingForget(pid_ctx, server_addr, client_addr, len) => {
+                (pid_ctx, server_addr, client_addr, len, true)
             }
             _ => return Ok(WaitingMessage::None),
         };
@@ -172,12 +238,20 @@ impl Server {
             self.queue_tail = 0;
         }
 
+        // Destructure the PID and context ID from the `pid_ctx` field
         let pid = ((pid_ctx >> 16) & 0xff) as PID;
         let ctx = (pid_ctx & 0xffff) as CtxID;
+
+        if forget {
+            return Ok(WaitingMessage::ForgetMemory(MemoryRange::new(server_addr, len)));
+        }
+
+        // If a `move` address somehow ends up here, indicate the memory has been moved.
         let server_addr = match MemoryAddress::new(server_addr) {
             Some(o) => o,
             None => return Ok(WaitingMessage::MovedMemory),
         };
+
         let client_addr = MemoryAddress::new(client_addr)
             .expect("client memory address was 0, but server address was not");
         let len = MemorySize::new(len).expect("memory length was 0, but address was not None");
@@ -208,6 +282,7 @@ impl Server {
         let result = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::WaitingResponse(_, _, _, _) => return None,
+            QueuedMessage::WaitingForget(_, _, _, _) => return None,
             QueuedMessage::MemoryMessageROLend(
                 pid_ctx,
                 client_addr,
@@ -230,6 +305,7 @@ impl Server {
                 buf,
                 client_addr,
                 buf_size,
+                false,
             ),
             QueuedMessage::MemoryMessageRWLend(
                 pid_ctx,
@@ -253,6 +329,55 @@ impl Server {
                 buf,
                 client_addr,
                 buf_size,
+                false,
+            ),
+            QueuedMessage::MemoryMessageROLendTerminated(
+                pid_ctx,
+                client_addr,
+                id,
+                buf,
+                buf_size,
+                offset,
+                valid,
+            ) => (
+                xous::MessageEnvelope {
+                    sender: self.queue_tail | (server_idx << 16),
+                    message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
+                        id,
+                        buf: MemoryRange::new(buf, buf_size),
+                        offset: MemorySize::new(offset),
+                        valid: MemorySize::new(valid),
+                    }),
+                },
+                pid_ctx,
+                buf,
+                client_addr,
+                buf_size,
+                true,
+            ),
+            QueuedMessage::MemoryMessageRWLendTerminated(
+                pid_ctx,
+                client_addr,
+                id,
+                buf,
+                buf_size,
+                offset,
+                valid,
+            ) => (
+                xous::MessageEnvelope {
+                    sender: self.queue_tail | (server_idx << 16),
+                    message: xous::Message::MutableBorrow(xous::MemoryMessage {
+                        id,
+                        buf: MemoryRange::new(buf, buf_size),
+                        offset: MemorySize::new(offset),
+                        valid: MemorySize::new(valid),
+                    }),
+                },
+                pid_ctx,
+                buf,
+                client_addr,
+                buf_size,
+                true,
             ),
             QueuedMessage::MemoryMessageSend(
                 pid_ctx,
@@ -300,8 +425,13 @@ impl Server {
                 return Some(msg);
             }
         };
-        self.queue[self.queue_tail] =
-            QueuedMessage::WaitingResponse(result.1, result.2, result.3, result.4);
+        if result.5 {
+            self.queue[self.queue_tail] =
+                QueuedMessage::WaitingForget(result.1, result.2, result.3, result.4);
+        } else {
+            self.queue[self.queue_tail] =
+                QueuedMessage::WaitingResponse(result.1, result.2, result.3, result.4);
+        }
         Some(result.0)
     }
 

@@ -119,9 +119,18 @@ impl Default for ProcessInner {
 }
 
 impl Process {
+    /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
         match self.state {
             ProcessState::Setup(_) | ProcessState::Ready(_) => true,
+            _ => false,
+        }
+    }
+
+    /// This process slot is unallocated and may be turn into a process
+    pub fn free(&self) -> bool {
+        match self.state {
+            ProcessState::Free => true,
             _ => false,
         }
     }
@@ -133,6 +142,19 @@ impl Process {
             p.activate()?
         };
         ProcessHandle::set(pid);
+        Ok(())
+    }
+
+    pub fn terminate(&mut self) -> Result<(), xous::Error> {
+        if ! self.free() {
+            return Err(xous::Error::ProcessNotFound);
+        }
+
+        // TODO: Free all pages
+
+        // TODO: Free all IRQs
+
+        self.state = ProcessState::Free;
         Ok(())
     }
 }
@@ -242,6 +264,7 @@ impl SystemServices {
             }
             arch::process::Process::create(idx as PID + 1, init_process);
             // HACK: Mark the first PID as being "Running"
+            #[allow(clippy::unit_arg)]
             if idx == 0 {
                 entry.state = ProcessState::Running(0);
             } else {
@@ -1137,7 +1160,7 @@ impl SystemServices {
             // If a connection to this server ID exists already, return it.
             if let Some(allocated_server) = &self.servers[*server_idx as usize] {
                 if allocated_server.sid == sid {
-                    return Ok(idx as CID + 1);
+                    return Ok(idx as CID + 2);
                 }
             }
         }
@@ -1147,7 +1170,7 @@ impl SystemServices {
         for (idx, server) in self.servers.iter().enumerate() {
             if let Some(allocated_server) = server {
                 if allocated_server.sid == sid {
-                    process.inner.connection_map[slot_idx] = idx as u8 + 1;
+                    process.inner.connection_map[slot_idx] = idx as u8 + 2;
                     return Ok(idx + 1);
                 }
             }
@@ -1166,10 +1189,15 @@ impl SystemServices {
 
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
         if cid == 0 {
-            println!("CID is 0, returning");
+            println!("CID is invalid -- returning");
+            return None;
+        } else if cid == 1 {
+            println!("Server has terminated -- returning");
             return None;
         }
-        let cid = cid - 1;
+
+        let cid = cid - 2;
+
         let process = ProcessHandle::get();
         if cid >= process.inner.connection_map.len() {
             println!("CID {} > connection map len", cid);
@@ -1202,19 +1230,17 @@ impl SystemServices {
                 .pid;
             {
                 let server_process = self.get_process(server_pid)?;
-                server_process.mapping.activate();
+                server_process.mapping.activate().unwrap();
             }
             let server = self
                 .server_from_sidx(sidx)
                 .expect("couldn't re-discover server index");
-            let result = server.queue_message(pid, context, message, original_address);
-            // server.print_queue();
-            result
+            server.queue_message(pid, context, message, original_address)
         };
         let current_process = self
             .get_process(current_pid)
             .expect("couldn't restore previous process");
-        current_process.mapping.activate();
+        current_process.mapping.activate()?;
         result
     }
 
@@ -1229,25 +1255,18 @@ impl SystemServices {
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {
         // let current_pid = self.current_pid();
-        let result = {
-            // let server_pid = self
-            //     .server_from_sidx(sidx)
-            //     .ok_or(xous::Error::ServerNotFound)?
-            //     .pid;
-            // {
-            //     let server_process = self.get_process(server_pid)?;
-            //     server_process.mapping.activate();
-            // }
-            let server = self
-                .server_from_sidx(sidx)
-                .expect("couldn't re-discover server index");
-            server.queue_address(pid, context, message, client_address)
-        };
-        // let current_process = self
-        //     .get_process(current_pid)
-        //     .expect("couldn't restore previous process");
-        // current_process.mapping.activate();
-        result
+        // let server_pid = self
+        //     .server_from_sidx(sidx)
+        //     .ok_or(xous::Error::ServerNotFound)?
+        //     .pid;
+        // {
+        //     let server_process = self.get_process(server_pid)?;
+        //     server_process.mapping.activate();
+        // }
+        let server = self
+            .server_from_sidx(sidx)
+            .expect("couldn't re-discover server index");
+        server.queue_address(pid, context, message, client_address)
     }
 
     /// Get a server index based on a SID
@@ -1260,6 +1279,57 @@ impl SystemServices {
             }
         }
         None
+    }
+
+    /// Terminate the given process. Returns the process' parent PID.
+    pub fn terminate_process(&mut self, target_pid: PID) -> Result<PID, xous::Error> {
+        // To terminate a process, we must perform the following:
+        //
+        // 1. If we have any client connections, remove them.
+        // 2. If there are any clients connected to our server, insert a tombstone so writes fail
+        // 3. If there are any incoming server requests queued, dequeue them and return an error
+        // 4. Mark all "Borrowed" memory as "Free-when-returned". That way, if we've shared
+        //    memory to a Server, it will be reclaimed by the system when it comes back
+
+        // 1. Find all servers associated with this PID and remove them.
+        for (idx, server) in self.servers.iter_mut().enumerate() {
+            if let Some(server) = server {
+                if server.pid == target_pid {
+                    // This is our server, so look through the connection map of each
+                    // process to determine if this connection needs to be replaced
+                    // with a tombstone.
+                    for process in self.processes.iter() {
+                        if process.free() {
+                            continue;
+                        }
+                        process.activate(target_pid);
+                        let mut p = ProcessHandle::get();
+
+                        // Look through the connection map for a connection
+                        // that matches this index. Note that connection map entries
+                        // are offset by two, because 0 == free and 1 == "tombstone".
+                        for mapping in p.inner.connection_map.iter_mut() {
+                            if *mapping == (idx as u8) + 2 {
+                                *mapping = 1;
+                            }
+                        }
+                    }
+                }
+
+                // Look through this server's memory space to determine if this process
+                // is mentioned there as having some memory lent out.
+                server.discard_messages_for_pid(target_pid);
+            }
+        }
+        let process = self.get_process_mut(target_pid)?;
+        process.activate(target_pid);
+        let parent_pid = process.ppid;
+        process.terminate();
+
+        let process = self.get_process(parent_pid)?;
+        process.activate(parent_pid).unwrap();
+
+        Ok(parent_pid)
     }
 }
 

@@ -140,7 +140,6 @@ pub extern "C" fn kmain() {
             Some(pid) => {
                 // println!("Attempting to switch to PID {}", pid);
                 xous::rsyscall(xous::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
-                ()
             }
             None => {
                 println!("No runnable tasks found.  Entering idle state...");

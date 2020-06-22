@@ -290,6 +290,10 @@ impl MemoryRange {
         }
     }
 
+    pub fn from_parts(addr: MemoryAddress, size: MemorySize) -> MemoryRange {
+        MemoryRange { addr, size }
+    }
+
     pub fn len(&self) -> usize {
         self.size.get()
     }

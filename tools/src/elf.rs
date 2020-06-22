@@ -122,6 +122,7 @@ impl fmt::Display for ElfReadError {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, ElfReadError> {
     let mut b = Vec::new();
     {
@@ -261,6 +262,7 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
 }
 
 /// Read an ELF file into a mini ELF file.
+#[allow(clippy::cognitive_complexity)]
 pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError> {
     let mut b = Vec::new();
     {

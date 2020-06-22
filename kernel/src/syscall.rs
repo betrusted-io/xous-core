@@ -281,6 +281,23 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 WaitingMessage::MovedMemory => {
                     return Ok(xous::Result::Ok);
                 }
+                WaitingMessage::ForgetMemory(range) => {
+                    let mut mm = MemoryManagerHandle::get();
+                    let mut result = Ok(xous::Result::Ok);
+                    let virt = range.addr.get();
+                    let size = range.size.get();
+                    if virt & 0xfff != 0 {
+                        return Err(xous::Error::BadAlignment);
+                    }
+                    for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+                        if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                            if result.is_ok() {
+                                result = Err(e);
+                            }
+                        }
+                    }
+                    return result
+                }
                 WaitingMessage::None => {
                     println!("WARNING: Tried to wait on a message that didn't exist");
                     return Err(xous::Error::ProcessNotFound);
@@ -462,6 +479,17 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     // println!("Returning to Client with Ok result");
                     Ok(xous::Result::Ok)
                 }
+            }
+        }
+        SysCall::TerminateProcess => {
+            let mut ss = SystemServicesHandle::get();
+            let context_nr = ss.current_context_nr();
+            ss.switch_from(pid, context_nr, false)?;
+            let ppid = ss.terminate_process(pid)?;
+            if cfg!(baremetal) {
+                ss.switch_to(ppid, None).map(|_| xous::Result::ResumeProcess)
+            } else {
+                Ok(xous::Result::Ok)
             }
         }
         _ => Err(xous::Error::UnhandledSyscall),

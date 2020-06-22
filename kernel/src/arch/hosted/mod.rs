@@ -22,8 +22,8 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<(PID, SysCall)>)
         for word in pkt.iter_mut() {
             if let Err(e) = conn.read_exact(&mut incoming_word) {
                 println!(
-                    "Client {} disconnected. Shutting down virtual process.",
-                    pid
+                    "Client {} disconnected: {}. Shutting down virtual process.",
+                    pid, e
                 );
                 let call = xous::SysCall::TerminateProcess;
                 chn.send((pid, call)).unwrap();
@@ -92,7 +92,11 @@ pub fn idle() {
                 for word in response.to_args().iter_mut() {
                     response_vec.extend_from_slice(&word.to_le_bytes());
                 }
-                processes.send(&response_vec);
+                processes.send(&response_vec).unwrap_or_else(|e| {
+                    // If we're unable to send data to the process, assume it's dead and terminate it.
+                    println!("Unable to send response to process: {:?} -- terminating", e);
+                    crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
+                });
             }
             let mut ss = SystemServicesHandle::get();
             ss.switch_from(pid, 1, true).unwrap();
