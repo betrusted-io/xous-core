@@ -30,14 +30,30 @@ pub fn _xous_syscall(
         let conn = TcpStream::connect("localhost:9687").unwrap();
         *xous_server_connection = Some(conn);
     }
+    let xsc: &mut TcpStream = (*xous_server_connection).as_mut().unwrap();
+    _xous_syscall_to(nr, a1, a2, a3, a4, a5, a6, a7, ret, xsc)
+}
 
+#[allow(clippy::too_many_arguments)]
+#[no_mangle]
+pub fn _xous_syscall_to(
+    nr: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
+    ret: &mut Result,
+    xsc: &mut TcpStream,
+) {
     print!(
         "Making Syscall: {:?}",
         SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
     );
 
     // Send the packet to the server
-    let mut xsc = xous_server_connection.as_ref().unwrap();
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
         xsc.write_all(&word.to_le_bytes()).expect("Disconnection");
     }

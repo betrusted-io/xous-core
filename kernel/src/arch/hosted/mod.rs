@@ -7,7 +7,7 @@ use std::env;
 use std::io::Read;
 use std::mem::size_of;
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::spawn;
 use std::time::Duration;
 
@@ -15,6 +15,10 @@ use xous::{Result, SysCall, PID};
 
 use crate::arch::process::ProcessHandle;
 use crate::services::SystemServicesHandle;
+
+pub type KernelArguments = Option<String>;
+
+const DEFAULT_LISTEN_ADDRESS: &str = "localhost:9687";
 
 /// Each client gets its own connection and its own thread, which is handled here.
 fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<(PID, SysCall)>) {
@@ -49,15 +53,19 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<(PID, SysCall)>)
     }
 }
 
-fn listen_thread(chn: Sender<(PID, SysCall)>, quit: Receiver<()>) {
-    let listen_addr = env::var("XOUS_LISTEN_ADDR").unwrap_or_else(|_| "localhost:9687".to_owned());
+fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Receiver<()>) {
+    let listen_addr = address.unwrap_or_else(|| {
+        env::var("XOUS_LISTEN_ADDR").unwrap_or_else(|_| DEFAULT_LISTEN_ADDRESS.to_owned())
+    });
     println!("Starting Xous server on {}...", listen_addr);
     let listener = TcpListener::bind(listen_addr).unwrap_or_else(|e| {
         panic!("Unable to create server: {}", e);
     });
 
     // Use `listener` in a nonblocking setup so that we can exit when doing tests
-    listener.set_nonblocking(true).expect("couldn't set TcpListener to nonblocking");
+    listener
+        .set_nonblocking(true)
+        .expect("couldn't set TcpListener to nonblocking");
     loop {
         match listener.accept() {
             Ok((conn, addr)) => {
@@ -76,12 +84,12 @@ fn listen_thread(chn: Sender<(PID, SysCall)>, quit: Receiver<()>) {
                 match quit.recv_timeout(Duration::from_millis(10)) {
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         continue;
-                    },
+                    }
                     _ => {
                         return;
                     }
                 }
-            },
+            }
             Err(e) => {
                 eprintln!("error accepting connections: {}", e);
                 return;
@@ -93,19 +101,13 @@ fn listen_thread(chn: Sender<(PID, SysCall)>, quit: Receiver<()>) {
 /// The idle function is run when there are no directly-runnable processes
 /// that kmain can activate. In a hosted environment,this is the primary
 /// thread that handles network communications, and this function never returns.
-pub fn idle() -> bool {
+pub fn idle(args: &KernelArguments) -> bool {
     // Start listening.
     let (sender, receiver) = channel();
     let (term_sender, term_receiver) = channel();
-    let listen_thread_handle = spawn(move || listen_thread(sender, term_receiver));
 
-    // // Spawn initial programs
-    // let all_args = env::args();
-    // all_args.next();
-    // for i in all_args {
-    //     let listen_addr = env::var("XOUS_LISTEN_ADDR").unwrap_or_else(|_| "localhost:9687".to_owned();
-    //     let cmd = Command::new(i).env("XOUS_LISTEN_ADDR", listen_addr)
-    // }
+    let server_addr = args.clone();
+    let listen_thread_handle = spawn(move || listen_thread(server_addr, sender, term_receiver));
 
     while let Ok((pid, call)) = receiver.recv() {
         {
@@ -117,7 +119,9 @@ pub fn idle() -> bool {
         // because we won't be able to send a response.
         let is_terminate = call == SysCall::TerminateProcess;
         if call == SysCall::Shutdown {
-            term_sender.send(()).expect("unable to send shutdown message");
+            term_sender
+                .send(())
+                .expect("unable to send shutdown message");
         }
 
         // Handle the syscall within the Xous kernel
