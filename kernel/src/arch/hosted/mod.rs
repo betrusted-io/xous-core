@@ -50,10 +50,10 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<(PID, SysCall)>)
         match call {
             Err(e) => println!("Received invalid syscall: {:?}", e),
             Ok(call) => {
-                println!(
-                    "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
-                    pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
-                );
+                // println!(
+                //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
+                //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
+                // );
                 chn.send((pid, call)).expect("couldn't make syscall");
             }
         }
@@ -78,7 +78,6 @@ fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Rec
     loop {
         match listener.accept() {
             Ok((conn, addr)) => {
-                println!("New client connected from {}", addr);
                 let thr_chn = chn.clone();
 
                 let new_pid = {
@@ -86,7 +85,7 @@ fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Rec
                     ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
                         .unwrap()
                 };
-                println!("Assigned PID {}", new_pid);
+                println!("New client connected from {} and assigned PID {}", addr, new_pid);
                 let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
                 let jh = spawn(move || handle_connection(conn, new_pid, thr_chn));
                 clients.push((jh, conn_copy));
@@ -97,14 +96,11 @@ fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Rec
                         continue;
                     }
                     x => {
-                        println!("Got shutdown indicator: {:?}", x);
                         for (jh, conn) in clients {
                             use std::net::Shutdown;
-                            eprintln!("Shutting down client...");
                             conn.shutdown(Shutdown::Both).expect("couldn't shutdown client");
                             jh.join().expect("couldn't join client thread");
                         }
-                        eprintln!("Done shutting down everything");
                         return;
                     }
                 }

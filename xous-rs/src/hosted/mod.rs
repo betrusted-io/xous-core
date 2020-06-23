@@ -5,7 +5,7 @@ use std::mem::size_of;
 use std::net::TcpStream;
 use std::sync::Mutex;
 
-use crate::{Result, SysCall};
+use crate::Result;
 
 lazy_static! {
     pub static ref XOUS_SERVER_CONNECTION: Mutex<Option<TcpStream>> = Mutex::new(None);
@@ -48,10 +48,10 @@ pub fn _xous_syscall_to(
     ret: &mut Result,
     xsc: &mut TcpStream,
 ) {
-    print!(
-        "Making Syscall: {:?}",
-        SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
-    );
+    // print!(
+    //     "Making Syscall: {:?}",
+    //     SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
+    // );
 
     // Send the packet to the server
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
@@ -68,9 +68,9 @@ pub fn _xous_syscall_to(
         }
 
         *ret = Result::from_args(pkt);
-        println!("   Response: {:?}", *ret);
+        // println!("   Response: {:?}", *ret);
         if Result::BlockedProcess == *ret {
-            println!("   Waiting again");
+            // println!("   Waiting again");
         } else {
             return;
         }
