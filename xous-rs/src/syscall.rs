@@ -251,6 +251,9 @@ pub enum SysCall {
     /// Terminate the current process, closing all server connections.
     TerminateProcess,
 
+    /// Shut down the entire system
+    Shutdown,
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -279,6 +282,7 @@ enum SysCallNumber {
     ReturnMemory = 20,
     CreateProcess = 21,
     TerminateProcess = 22,
+    Shutdown = 23,
     Invalid,
 }
 
@@ -485,6 +489,7 @@ impl SysCall {
             ],
             SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::TerminateProcess => [SysCallNumber::TerminateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::Shutdown => [SysCallNumber::Shutdown as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -598,6 +603,7 @@ impl SysCall {
             ),
             Some(SysCallNumber::CreateProcess) => SysCall::CreateProcess,
             Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
+            Some(SysCallNumber::Shutdown) => SysCall::Shutdown,
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             None => return Err(Error::InvalidSyscall),
         })

@@ -143,7 +143,10 @@ pub extern "C" fn kmain() {
             }
             None => {
                 println!("No runnable tasks found.  Entering idle state...");
-                arch::idle();
+                // Special case for testing: idle can return `false` to indicate exit
+                if ! arch::idle() {
+                    return;
+                }
             }
         }
     }
