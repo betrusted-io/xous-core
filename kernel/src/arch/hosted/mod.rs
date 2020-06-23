@@ -25,15 +25,22 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<(PID, SysCall)>)
     loop {
         let mut pkt = [0usize; 8];
         let mut incoming_word = [0u8; size_of::<usize>()];
+        conn.set_nonblocking(true).expect("couldn't enable nonblocking mode");
         for word in pkt.iter_mut() {
-            if let Err(e) = conn.read_exact(&mut incoming_word) {
-                println!(
-                    "Client {} disconnected: {}. Shutting down virtual process.",
-                    pid, e
-                );
-                let call = xous::SysCall::TerminateProcess;
-                chn.send((pid, call)).unwrap();
-                return;
+            loop {
+                if let Err(e) = conn.read_exact(&mut incoming_word) {
+                    if e.kind() != std::io::ErrorKind::WouldBlock {
+                        println!(
+                            "Client {} disconnected: {}. Shutting down virtual process.",
+                            pid, e
+                        );
+                        let call = xous::SysCall::TerminateProcess;
+                        chn.send((pid, call)).unwrap();
+                        return;
+                    }
+                    continue;
+                }
+                break;
             }
             *word = usize::from_le_bytes(incoming_word);
         }
@@ -62,6 +69,8 @@ fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Rec
         panic!("Unable to create server: {}", e);
     });
 
+    let mut clients = vec![];
+
     // Use `listener` in a nonblocking setup so that we can exit when doing tests
     listener
         .set_nonblocking(true)
@@ -78,14 +87,24 @@ fn listen_thread(address: Option<String>, chn: Sender<(PID, SysCall)>, quit: Rec
                         .unwrap()
                 };
                 println!("Assigned PID {}", new_pid);
-                spawn(move || handle_connection(conn, new_pid, thr_chn));
+                let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
+                let jh = spawn(move || handle_connection(conn, new_pid, thr_chn));
+                clients.push((jh, conn_copy));
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 match quit.recv_timeout(Duration::from_millis(10)) {
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         continue;
                     }
-                    _ => {
+                    x => {
+                        println!("Got shutdown indicator: {:?}", x);
+                        for (jh, conn) in clients {
+                            use std::net::Shutdown;
+                            eprintln!("Shutting down client...");
+                            conn.shutdown(Shutdown::Both).expect("couldn't shutdown client");
+                            jh.join().expect("couldn't join client thread");
+                        }
+                        eprintln!("Done shutting down everything");
                         return;
                     }
                 }
@@ -118,18 +137,14 @@ pub fn idle(args: &KernelArguments) -> bool {
         // If the call being made is to terminate the current process, we need to know
         // because we won't be able to send a response.
         let is_terminate = call == SysCall::TerminateProcess;
-        if call == SysCall::Shutdown {
-            term_sender
-                .send(())
-                .expect("unable to send shutdown message");
-        }
+        let is_shutdown = call == SysCall::Shutdown;
 
         // Handle the syscall within the Xous kernel
         let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
 
         // There's a response if it wasn't a blocked process and we're not terminating.
         // Send the response back to the target.
-        if response != Result::BlockedProcess && !is_terminate {
+        if response != Result::BlockedProcess && !is_terminate && !is_shutdown{
             {
                 let mut processes = ProcessHandle::get();
                 let mut response_vec = Vec::new();
@@ -144,6 +159,21 @@ pub fn idle(args: &KernelArguments) -> bool {
             }
             let mut ss = SystemServicesHandle::get();
             ss.switch_from(pid, 1, true).unwrap();
+        }
+
+        if is_shutdown {
+            let mut processes = ProcessHandle::get();
+            let mut response_vec = Vec::new();
+            for word in Result::Ok.to_args().iter_mut() {
+                response_vec.extend_from_slice(&word.to_le_bytes());
+            }
+            processes.send(&response_vec).unwrap_or_else(|e| {
+                // If we're unable to send data to the process, assume it's dead and terminate it.
+                println!("Unable to send response to process: {:?} -- terminating", e);
+                crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
+            });
+            term_sender.send(()).expect("couldn't send shutdown signal");
+            break;
         }
     }
 
