@@ -5,9 +5,6 @@ use crate::{
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-#[cfg(not(baremetal))]
-use std::net::TcpStream;
-
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
     /// Allocates pages of memory, equal to a total of `size` bytes.  A physical
@@ -636,19 +633,6 @@ extern "Rust" {
         a7: usize,
         ret: &mut Result,
     );
-    #[cfg(not(baremetal))]
-    pub fn _xous_syscall_to(
-        nr: usize,
-        a1: usize,
-        a2: usize,
-        a3: usize,
-        a4: usize,
-        a5: usize,
-        a6: usize,
-        a7: usize,
-        ret: &mut Result,
-        xsc: &mut TcpStream,
-    );
 }
 
 /// Map the given physical address to the given virtual address.
@@ -820,21 +804,6 @@ pub fn rsyscall(call: SysCall) -> SysCallResult {
     }
 }
 
-/// Perform a remote syscall to a given address
-#[cfg(not(baremetal))]
-pub fn rsyscall_to(call: SysCall, stream: &mut TcpStream) -> SysCallResult {
-    let mut ret = Result::Ok;
-    let args = call.as_args();
-    unsafe {
-        _xous_syscall_to(
-            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret, stream,
-        )
-    };
-    match ret {
-        Result::Error(e) => Err(e),
-        other => Ok(other),
-    }
-}
 // /// This is dangerous, but fast.
 // pub unsafe fn dangerous_syscall(call: SysCall) -> SyscallResult {
 //     use core::mem::{transmute, MaybeUninit};

@@ -3,7 +3,8 @@ use std::thread::spawn;
 
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
-use xous::{rsyscall_to, SysCall, Result};
+use xous::{SysCall, rsyscall};
+use std::sync::mpsc::channel;
 
 mod shutdown;
 
@@ -15,17 +16,23 @@ fn shutdown() {
         .expect("invalid server address")
         .next()
         .expect("unable to resolve server address");
-    let server_spec = server_spec.to_owned();
 
     // Launch the main thread
-    let main_thread = spawn(|| kmain(Some(server_spec)));
+    let server_spec_server = server_spec.clone();
+    let main_thread = spawn(move || {
+        crate::arch::set_listen_address(&server_spec_server);
+        kmain()
+    });
+
+    // This is now the client.
+    xous::hosted::set_xous_address(&server_spec);
 
     // Connect to server
     for i in 1..11 {
         println!("Retrying connection {}/10", i);
         let res = TcpStream::connect_timeout(&server_addr, Duration::from_millis(200));
-        if let Ok(mut stream) = res {
-            let call_result = rsyscall_to(SysCall::Shutdown, &mut stream);
+        if res.is_ok() {
+            let call_result = rsyscall(SysCall::Shutdown);
             println!("Call result: {:?}", call_result);
             break;
         }
@@ -42,63 +49,59 @@ fn send_scalar_message() {
         .expect("invalid server address")
         .next()
         .expect("unable to resolve server address");
-    let server_spec = server_spec.to_owned();
 
     // Launch the main thread
-    let main_thread = spawn(|| kmain(Some(server_spec)));
+    let server_spec_server = server_spec.clone();
+    let main_thread = spawn(move || {
+        crate::arch::set_listen_address(&server_spec_server);
+        kmain()
+    });
 
     // Connect to server. This first instance needs to make sure the kernel is listening.
-    let mut server_conn = None;
+    // let mut server_conn = None;
+    let mut connected = false;
     for i in 1..11 {
         println!("Retrying connection {}/10", i);
         let res = TcpStream::connect_timeout(&server_addr, Duration::from_millis(200));
-        if let Ok(stream) = res {
-            server_conn = Some(stream);
+        if res.is_ok() {
+            connected = true;
             break;
         }
     }
-
     // Convert the Option<conn> into conn
-    let mut server_conn = server_conn.expect("unable to connect to server");
+    assert!(connected, "unable to connect to server");
 
-    // The client instance should connect instantly.
-    let mut client_conn = TcpStream::connect_timeout(&server_addr, Duration::from_millis(200)).expect("client couldn't connect");
+    let xous_client_spec = server_spec.to_owned();
+    let xous_server_spec = server_spec.to_owned();
+    xous::hosted::set_xous_address(server_spec);
 
-    let server_xous_addr = match rsyscall_to(SysCall::CreateServer(5), &mut server_conn).expect("couldn't create xous server") {
-        Result::ServerID(sid) => sid,
-        x => panic!("unexpected syscall result: {:?}", x),
-    };
+    let (server_addr_send, server_addr_recv) = channel();
 
-    eprintln!("CLIENT: Connecting to server {:?}", server_xous_addr);
-    let client_xous_conn = match rsyscall_to(SysCall::Connect(server_xous_addr), &mut client_conn) {
-        Err(e) => panic!("unable to connect to xous server: {:?}", e),
-        Ok(Result::ConnectionID(i)) => i,
-        Ok(o) => panic!("unexpected return value: {:?}", o),
-    };
+    let xous_server = spawn(move || {
+        xous::hosted::set_xous_address(&xous_client_spec);
+        println!("SERVER: Creating server");
+        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        println!("SERVER: Now listening on {:?}", sid);
+        server_addr_send.send(sid).unwrap();
+        println!("SERVER: Listening for message...");
+        let msg = xous::receive_message(sid).expect("couldn't receive messages");
+        println!("SERVER: Received message: {:?}", msg);
+    });
 
-    eprintln!("CLIENT: Calling SendMessage...");
-    match rsyscall_to(
-        SysCall::SendMessage(client_xous_conn, xous::Message::Scalar(xous::ScalarMessage { id: 1, arg1: 2, arg2: 3, arg3: 4, arg4: 5} )),
-        &mut client_conn).expect("couldn't send message") {
-        Result::Ok => (),
-        x => panic!("Unexpected message result: {:?}", x),
-    }
+    let xous_client = spawn(move || {
+        xous::hosted::set_xous_address(&xous_server_spec);
+        println!("CLIENT: Waiting for server address...");
+        let sid = server_addr_recv.recv().unwrap();
+        println!("CLIENT: Connecting to server {:?}", sid);
+        let conn = xous::connect(sid).expect("couldn't connect to server");
+        xous::send_message(conn, xous::Message::Scalar(xous::ScalarMessage { id: 1, arg1: 2, arg2: 3, arg3: 4, arg4: 5} )).expect("couldn't send message");
+    });
 
-    std::thread::sleep(Duration::from_secs(1));
-    eprintln!("SERVER: Calling ReceiveMessage...");
-    let incoming_message = match rsyscall_to(
-        SysCall::ReceiveMessage(server_xous_addr),
-        &mut server_conn
-    ) {
-        Err(e) => panic!("couldn't receive message: {:?}", e),
-        Ok(Result::Message(m)) => m,
-        Ok(o) => panic!("received invalid message: {:?}", o),
-    };
-    eprintln!("SERVER: Received message: {:?}", incoming_message);
+    xous_server.join().expect("couldn't join server process");
+    xous_client.join().expect("couldn't join client process");
 
     // Any process ought to be able to shut down the system currently.
-    rsyscall_to(SysCall::Shutdown, &mut client_conn).expect("unable to shutdown server");
+    rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
 
-    eprintln!("Joining main thread, waiting for it to quit");
-    main_thread.join().expect("couldn't join main thread");
+    main_thread.join().expect("couldn't join kernel process");
 }

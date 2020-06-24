@@ -126,7 +126,7 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
 
 /// Common main function for baremetal and hosted environments.
 #[no_mangle]
-pub extern "C" fn kmain(args: crate::arch::KernelArguments) {
+pub extern "C" fn kmain() {
 
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
@@ -144,7 +144,7 @@ pub extern "C" fn kmain(args: crate::arch::KernelArguments) {
             None => {
                 println!("No runnable tasks found.  Entering idle state...");
                 // Special case for testing: idle can return `false` to indicate exit
-                if ! arch::idle(&args) {
+                if ! arch::idle() {
                     return;
                 }
             }
@@ -156,5 +156,5 @@ pub extern "C" fn kmain(args: crate::arch::KernelArguments) {
 /// this function does not exist.
 #[cfg(not(baremetal))]
 fn main() {
-    kmain(None);
+    kmain();
 }

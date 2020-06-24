@@ -120,7 +120,7 @@ enum QueuedMessage {
 }
 
 /// A pointer to resolve a server ID to a particular process
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct Server {
     /// A randomly-generated ID
     pub sid: SID,

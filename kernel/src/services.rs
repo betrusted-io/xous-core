@@ -1150,6 +1150,9 @@ impl SystemServices {
         let mut slot_idx = None;
         let mut process = ProcessHandle::get();
 
+        println!("KERNEL: Connecting to server -- map: {:?}", process.inner.connection_map);
+        println!("KERNEL: All servers: {:?}", self.servers);
+
         // Look through the connection map for (1) a free slot, and (2) an
         // existing connection
         for (idx, server_idx) in process.inner.connection_map.iter().enumerate() {
@@ -1171,6 +1174,7 @@ impl SystemServices {
             if let Some(allocated_server) = server {
                 if allocated_server.sid == sid {
                     process.inner.connection_map[slot_idx] = idx as u8 + 2;
+                    println!("KERNEL: After connection, server map is: {:?}", process.inner.connection_map);
                     return Ok(idx + 1);
                 }
             }
