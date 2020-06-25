@@ -177,7 +177,7 @@ impl Process {
     }
 
     pub fn terminate(&mut self) -> Result<(), xous::Error> {
-        if !self.free() {
+        if self.free() {
             return Err(xous::Error::ProcessNotFound);
         }
 
@@ -186,8 +186,8 @@ impl Process {
         // TODO: Free all IRQs
 
         // TODO: Free memory mapping
-
         self.state = ProcessState::Free;
+        crate::arch::process::Process::destroy(self.pid)?;
         Ok(())
     }
 }
@@ -1378,15 +1378,15 @@ impl SystemServices {
         // Destroy all servers. This will cause all queued messages to be lost.
         for server in &mut self.servers {
             if server.is_some() {
-                Server::destroy(server)?;
+                Server::destroy(server).unwrap();
             }
         }
 
         // Destroy all processes. This will cause them to immediately terminate.
         for process in &mut self.processes {
             if !process.free() {
-                process.activate()?;
-                process.terminate()?;
+                process.activate().unwrap();
+                process.terminate().unwrap();
             }
         }
         Ok(())

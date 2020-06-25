@@ -19,9 +19,6 @@ struct ProcessImpl {
 
     /// The network connection to the client process.
     conn: TcpStream,
-
-    /// Current process ID
-    pid: PID,
 }
 
 impl PartialEq for Process {
@@ -32,7 +29,7 @@ impl PartialEq for Process {
 
 struct ProcessTable {
     current: PID,
-    table: Vec<ProcessImpl>,
+    table: Vec<Option<ProcessImpl>>,
 }
 
 thread_local!(
@@ -89,7 +86,7 @@ impl Process {
     {
         PROCESS_TABLE.with(|pt| {
             let process_table = pt.borrow();
-            let current = &process_table.table[process_table.current.get() as usize - 1];
+            let current = &process_table.table[process_table.current.get() as usize - 1].as_ref().unwrap();
             f(&current.inner)
         })
     }
@@ -101,7 +98,7 @@ impl Process {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
-            let current = &mut process_table.table[current_pid_idx];
+            let current = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             f(&mut current.inner)
         })
     }
@@ -138,7 +135,7 @@ impl Process {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
-            let process = &mut process_table.table[current_pid_idx];
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             for word in result.to_args().iter_mut() {
                 process.conn
                     .write_all(&word.to_le_bytes())
@@ -154,18 +151,14 @@ impl Process {
             let mut process_table = process_table.borrow_mut();
             let pid_idx = (pid.get() - 1) as usize;
 
-            assert!(
-                pid_idx >= process_table.table.len(),
-                "PID {} already allocated",
-                pid
-            );
             let process = ProcessImpl {
                 inner: Default::default(),
                 conn: init_data.conn,
-                pid,
             };
             if pid_idx >= process_table.table.len() {
-                process_table.table.push(process);
+                process_table.table.push(Some(process));
+            } else if process_table.table[pid_idx].is_none() {
+                process_table.table[pid_idx] = Some(process);
             } else {
                 panic!("pid already allocated!");
             }
@@ -173,11 +166,24 @@ impl Process {
         })
     }
 
+    pub fn destroy(pid: PID) -> Result<(), xous::Error> {
+        println!("KERNEL: Destroying PID {}", pid);
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let pid_idx = pid.get() as usize - 1;
+            if pid_idx >= process_table.table.len() {
+                panic!("attempted to destroy PID that exceeds table index: {}", pid);
+            }
+            process_table.table[pid_idx] = None;
+            Ok(())
+        })
+    }
+
     pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous::Error> {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
-            let process = &mut process_table.table[current_pid_idx];
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             process.conn.write_all(bytes).unwrap();
         });
         Ok(())

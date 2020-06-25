@@ -184,10 +184,12 @@ pub fn idle() -> bool {
     while let Ok(msg) = receiver.recv() {
         match msg {
             ThreadMessage::NewConnection(conn) => {
+                println!("KERNEL(?): Going to call ss.spawn_process()");
                 let new_pid = SystemServices::with_mut(|ss| {
                     ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
                 })
                 .unwrap();
+                println!("KERNEL({}): SystemServices assigned new PID of {}", new_pid, new_pid);
                 backchannel_sender
                     .send(BackchannelMessage::NewPid(new_pid))
                     .expect("couldn't send new pid to new connection");
@@ -217,6 +219,7 @@ pub fn idle() -> bool {
                         println!("Unable to send response to process: {:?} -- terminating", e);
                         crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                     });
+                    println!("Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
