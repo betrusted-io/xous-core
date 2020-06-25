@@ -44,6 +44,7 @@ fn shutdown() {
 #[test]
 fn send_scalar_message() {
     let server_spec = "localhost:9998";
+    xous::hosted::set_xous_address(server_spec);
     let server_addr = server_spec
         .to_socket_addrs()
         .expect("invalid server address")
@@ -73,7 +74,6 @@ fn send_scalar_message() {
 
     let xous_client_spec = server_spec.to_owned();
     let xous_server_spec = server_spec.to_owned();
-    xous::hosted::set_xous_address(server_spec);
 
     let (server_addr_send, server_addr_recv) = channel();
 

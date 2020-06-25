@@ -23,7 +23,7 @@ mod server;
 mod services;
 mod syscall;
 
-use services::SystemServicesHandle;
+use services::SystemServices;
 use xous::*;
 
 #[cfg(baremetal)]
@@ -53,10 +53,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
             .init_from_memory(rpt_offset, &args)
             .expect("couldn't initialize memory manager");
     }
-    {
-        let mut system_services = SystemServicesHandle::get();
-        system_services.init_from_memory(init_offset, &args);
-    }
+    SystemServices::with_mut(|system_services| system_services.init_from_memory(init_offset, &args));
 
     // Now that the memory manager is set up, perform any arch-specific initializations.
     arch::init();
@@ -98,30 +95,37 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
     // pick the next process in the list.
-    let current_pid = last_pid.unwrap_or_default() as usize;
+    let current_pid = last_pid.unwrap_or(unsafe { PID::new_unchecked(1)}).get() as usize;
 
-    let system_services = SystemServicesHandle::get();
-    for test_idx in current_pid..system_services.processes.len() {
-        if system_services.processes[test_idx].ppid == 1 {
-            // print!("PID {} is owned by PID1... ", test_idx + 1);
-            if system_services.processes[test_idx].runnable() {
-                // println!(" and is runnable");
-                return Some((test_idx + 1) as PID);
+    SystemServices::with(|system_services| {
+        for test_idx in current_pid..system_services.processes.len() {
+            if system_services.processes[test_idx].ppid.get() == 1 {
+                // print!("PID {} is owned by PID1... ", test_idx + 1);
+                if system_services.processes[test_idx].runnable() {
+                    // println!(" and is runnable");
+                    return match pid_from_usize(test_idx + 1) {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    };
+                }
+                // println!(" and is NOT RUNNABLE");
             }
-            // println!(" and is NOT RUNNABLE");
         }
-    }
-    for test_idx in 0..current_pid {
-        if system_services.processes[test_idx].ppid == 1 {
-            // print!("PID {} is owned by PID1... ", test_idx + 1);
-            if system_services.processes[test_idx].runnable() {
-                // println!(" and is runnable");
-                return Some((test_idx + 1) as PID);
+        for test_idx in 0..current_pid {
+            if system_services.processes[test_idx].ppid.get() == 1 {
+                // print!("PID {} is owned by PID1... ", test_idx + 1);
+                if system_services.processes[test_idx].runnable() {
+                    // println!(" and is runnable");
+                    return match pid_from_usize(test_idx + 1) {
+                        Ok(x) => Some(x),
+                        Err(_) => None,
+                    };
+                }
+                // println!(" and is NOT RUNNABLE");
             }
-            // println!(" and is NOT RUNNABLE");
         }
-    }
-    None
+        None
+    })
 }
 
 /// Common main function for baremetal and hosted environments.

@@ -1,6 +1,7 @@
 use crate::{
     CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, MemoryType,
     Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SysCallResult, CID, PID, SID,
+    pid_from_usize,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -330,7 +331,7 @@ impl SysCall {
             ],
             SysCall::ReturnToParentI(a1, a2) => [
                 SysCallNumber::ReturnToParentI as usize,
-                *a1 as usize,
+                a1.get() as usize,
                 *a2 as usize,
                 0,
                 0,
@@ -353,7 +354,7 @@ impl SysCall {
             }
             SysCall::SwitchTo(a1, a2) => [
                 SysCallNumber::SwitchTo as usize,
-                *a1 as usize,
+                a1.get() as usize,
                 *a2 as usize,
                 0,
                 0,
@@ -363,7 +364,7 @@ impl SysCall {
             ],
             SysCall::ReadyContexts(a1) => [
                 SysCallNumber::ReadyContexts as usize,
-                *a1 as usize,
+                a1.get() as usize,
                 0,
                 0,
                 0,
@@ -403,7 +404,7 @@ impl SysCall {
             ],
             SysCall::SetMemRegion(a1, a2, a3, a4) => [
                 SysCallNumber::SetMemRegion as usize,
-                *a1 as usize,
+                a1.get() as usize,
                 *a2 as usize,
                 a3.get(),
                 *a4,
@@ -528,15 +529,15 @@ impl SysCall {
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
-            Some(SysCallNumber::ReturnToParentI) => SysCall::ReturnToParentI(a1 as PID, a2),
+            Some(SysCallNumber::ReturnToParentI) => SysCall::ReturnToParentI(pid_from_usize(a1)?, a2),
             Some(SysCallNumber::ClaimInterrupt) => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a3),
             ),
             Some(SysCallNumber::FreeInterrupt) => SysCall::FreeInterrupt(a1),
-            Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(a1 as PID, a2 as usize),
-            Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(a1 as u8),
+            Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(pid_from_usize(a1)?, a2 as usize),
+            Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(pid_from_usize(a1)?),
             Some(SysCallNumber::IncreaseHeap) => SysCall::IncreaseHeap(
                 a1 as usize,
                 MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
@@ -548,7 +549,7 @@ impl SysCall {
                 MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
             Some(SysCallNumber::SetMemRegion) => SysCall::SetMemRegion(
-                a1 as PID,
+                pid_from_usize(a1)?,
                 MemoryType::from(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 a4,

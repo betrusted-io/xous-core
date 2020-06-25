@@ -1,11 +1,11 @@
-use core::num::NonZeroUsize;
+use core::num::{NonZeroUsize, NonZeroU8};
 
 pub type MemoryAddress = NonZeroUsize;
 pub type MemorySize = NonZeroUsize;
 pub type StackPointer = usize;
 pub type MessageId = usize;
 
-pub type PID = u8;
+pub type PID = NonZeroU8;
 pub type MessageSender = usize;
 pub type Connection = usize;
 
@@ -51,6 +51,13 @@ bitflags! {
     }
 }
 
+pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {
+    if src > u8::MAX as _ {
+        return Err(Error::InvalidPID);
+    }
+    Ok(PID::new(src as u8).ok_or(Error::InvalidPID)?)
+}
+
 #[repr(usize)]
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -75,7 +82,8 @@ pub enum Error {
     InvalidSyscall = 18,
     ShareViolation = 19,
     InvalidContext = 20,
-    UnknownError = 21,
+    InvalidPID = 21,
+    UnknownError = 22,
 }
 
 impl Error {
@@ -103,6 +111,7 @@ impl Error {
             18 => InvalidSyscall,
             19 => ShareViolation,
             20 => InvalidContext,
+            21 => InvalidPID,
             _ => UnknownError,
         }
     }
@@ -130,6 +139,7 @@ impl Error {
             InvalidSyscall => 18,
             ShareViolation => 19,
             InvalidContext => 20,
+            InvalidPID => 21,
             UnknownError => usize::MAX,
         }
     }

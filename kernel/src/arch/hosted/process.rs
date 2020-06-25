@@ -1,16 +1,19 @@
 pub const MAX_CONTEXT: CtxID = 31;
 use crate::services::ProcessInner;
+use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
-use std::sync::Mutex;
+use std::thread_local;
 use xous::{CtxID, PID};
-
-use lazy_static::lazy_static;
 
 pub type ContextInit = ();
 pub const INITIAL_CONTEXT: usize = 1;
 
 pub struct Process {
+    pid: PID,
+}
+
+struct ProcessImpl {
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
@@ -28,19 +31,23 @@ impl PartialEq for Process {
 }
 
 struct ProcessTable {
-    current: usize,
-    table: Vec<Process>,
+    current: PID,
+    table: Vec<ProcessImpl>,
 }
 
-lazy_static! {
-    static ref PROCESS_TABLE: Mutex<ProcessTable> = Mutex::new(ProcessTable {
-        current: 0,
+thread_local!(
+    static PROCESS_TABLE: RefCell<ProcessTable> = RefCell::new(ProcessTable {
+        current: unsafe { PID::new_unchecked(1) },
         table: Vec::new(),
-    });
-}
+    })
+);
 
 pub fn current_pid() -> PID {
-    PROCESS_TABLE.lock().unwrap().current as PID + 1
+    PROCESS_TABLE.with(|pt| pt.borrow().current)
+}
+
+pub fn set_current_pid(pid: PID) {
+    PROCESS_TABLE.with(|pt| (*pt.borrow_mut()).current = pid);
 }
 
 #[repr(C)]
@@ -62,12 +69,41 @@ impl ProcessInit {
 }
 
 impl Process {
+    pub fn current() -> Process {
+        let current_pid = PROCESS_TABLE.with(|pt| pt.borrow().current);
+        Process{pid: current_pid}
+    }
+
     /// Mark this process as running (on the current core?!)
     pub fn activate(&mut self) -> Result<(), xous::Error> {
         // let mut pt = PROCESS_TABLE.lock().unwrap();
         // assert!(pt.table[self.pid as usize - 1] == *self);
         // pt.current = self.pid as _;
         Ok(())
+    }
+
+    /// Calls the provided function with the current inner process state.
+    pub fn with_inner<F, R>(f: F) -> R
+    where
+        F: FnOnce(&ProcessInner) -> R,
+    {
+        PROCESS_TABLE.with(|pt| {
+            let process_table = pt.borrow();
+            let current = &process_table.table[process_table.current.get() as usize - 1];
+            f(&current.inner)
+        })
+    }
+
+    pub fn with_inner_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut ProcessInner) -> R,
+    {
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let current = &mut process_table.table[current_pid_idx];
+            f(&mut current.inner)
+        })
     }
 
     pub fn setup_context(
@@ -99,83 +135,89 @@ impl Process {
 
     pub fn set_context_result(&mut self, context: CtxID, result: xous::Result) {
         assert!(context == INITIAL_CONTEXT);
-        for word in result.to_args().iter_mut() {
-            self.conn
-                .write_all(&word.to_le_bytes())
-                .expect("Disconnection");
-        }
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx];
+            for word in result.to_args().iter_mut() {
+                process.conn
+                    .write_all(&word.to_le_bytes())
+                    .expect("Disconnection");
+            }
+        });
     }
 
     /// Initialize this process context with the given entrypoint and stack
     /// addresses.
     pub fn create(pid: PID, init_data: ProcessInit) -> PID {
-        let mut process_table = PROCESS_TABLE.lock().unwrap();
-        assert!(pid != 0, "PID is zero!");
+        PROCESS_TABLE.with(|process_table| {
+            let mut process_table = process_table.borrow_mut();
+            let pid_idx = (pid.get() - 1) as usize;
 
-        let pid_idx = (pid - 1) as usize;
-
-        assert!(
-            pid_idx >= process_table.table.len(),
-            "PID {} already allocated",
+            assert!(
+                pid_idx >= process_table.table.len(),
+                "PID {} already allocated",
+                pid
+            );
+            let process = ProcessImpl {
+                inner: Default::default(),
+                conn: init_data.conn,
+                pid,
+            };
+            if pid_idx >= process_table.table.len() {
+                process_table.table.push(process);
+            } else {
+                panic!("pid already allocated!");
+            }
             pid
-        );
-        let process = Process {
-            inner: Default::default(),
-            conn: init_data.conn,
-            pid,
-        };
-        if pid_idx >= process_table.table.len() {
-            process_table.table.push(process);
-        } else {
-            panic!("pid already allocated!");
-        }
-
-        pid
+        })
     }
 
     pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous::Error> {
-        self.conn.write_all(bytes).unwrap();
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx];
+            process.conn.write_all(bytes).unwrap();
+        });
         Ok(())
     }
 }
 
 impl Context {}
 
-pub struct ProcessHandle<'a> {
-    inner: std::sync::MutexGuard<'a, ProcessTable>,
-}
+// pub struct ProcessHandle {
+//     inner: RefCell<ProcessTable>,
+// }
 
-/// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-/// to the Memory Manager should only be made during interrupt contexts.
-impl<'a> ProcessHandle<'a> {
-    /// Get the singleton Process.
-    pub fn get() -> ProcessHandle<'a> {
-        ProcessHandle {
-            inner: PROCESS_TABLE.lock().unwrap(),
-        }
-    }
-    pub fn set(pid: PID) {
-        PROCESS_TABLE.lock().unwrap().current = pid as usize - 1;
-    }
-}
-
-// impl<'a> Drop for ProcessHandle<'a> {
-//     fn drop(&mut self) {
-//         println!("<<< Dropping ProcessHandle");
+// /// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
+// /// to the Memory Manager should only be made during interrupt contexts.
+// impl ProcessHandle {
+//     /// Get the singleton Process.
+//     pub fn get() -> ProcessHandle {
+//         ProcessHandle {
+//             inner: *PROCESS_TABLE.with(|pt| pt.clone()),
+//         }
 //     }
 // }
 
-use core::ops::{Deref, DerefMut};
-impl Deref for ProcessHandle<'_> {
-    type Target = Process;
-    fn deref(&self) -> &Process {
-        &self.inner.table[self.inner.current]
-    }
-}
+// // impl<'a> Drop for ProcessHandle<'a> {
+// //     fn drop(&mut self) {
+// //         println!("<<< Dropping ProcessHandle");
+// //     }
+// // }
 
-impl DerefMut for ProcessHandle<'_> {
-    fn deref_mut(&mut self) -> &mut Process {
-        let current = self.inner.current;
-        &mut self.inner.table[current]
-    }
-}
+// use core::ops::{Deref, DerefMut};
+// impl Deref for ProcessHandle {
+//     type Target = Process;
+//     fn deref(&self) -> &Process {
+//         &self.inner.table[self.inner.current]
+//     }
+// }
+
+// impl DerefMut for ProcessHandle {
+//     fn deref_mut(&mut self) -> &mut Process {
+//         let current = self.inner.current;
+//         &mut self.inner.table[current]
+//     }
+// }

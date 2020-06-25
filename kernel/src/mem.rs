@@ -5,7 +5,8 @@ use core::slice;
 use core::str;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
-use crate::arch::process::ProcessHandle;
+use crate::arch::process::Process;
+
 use xous::{MemoryFlags, MemoryRange, PID};
 
 #[derive(Debug)]
@@ -45,7 +46,7 @@ impl fmt::Display for MemoryRangeExtra {
 }
 
 pub struct MemoryManager {
-    allocations: &'static mut [PID],
+    allocations: &'static mut [Option<PID>],
     extra: &'static [MemoryRangeExtra],
     ram_start: usize,
     ram_size: usize,
@@ -155,7 +156,7 @@ impl MemoryManager {
             mem_size += range.mem_size as usize / PAGE_SIZE;
         }
 
-        self.allocations = unsafe { slice::from_raw_parts_mut(base as *mut PID, mem_size) };
+        self.allocations = unsafe { slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size) };
         Ok(())
     }
 
@@ -179,11 +180,11 @@ impl MemoryManager {
             );
         };
         for o in 0..self.ram_size / PAGE_SIZE {
-            if self.allocations[offset + o] != 0 {
+            if let Some(allocation) = self.allocations[offset + o] {
                 println!(
                     "        {:08x} => {}",
                     self.ram_size + o * PAGE_SIZE,
-                    self.allocations[o]
+                    allocation.get()
                 );
             }
         }
@@ -195,11 +196,11 @@ impl MemoryManager {
         for region in self.extra {
             println!("    Region {}:", region);
             for o in 0..(region.mem_size as usize) / PAGE_SIZE {
-                if self.allocations[offset + o] != 0 {
+                if let Some(allocation) = self.allocations[offset + o] {
                     println!(
                         "        {:08x} => {}",
                         (region.mem_start as usize) + o * PAGE_SIZE,
-                        self.allocations[offset + o]
+                        allocation.get()
                     )
                 }
             }
@@ -215,8 +216,8 @@ impl MemoryManager {
         // println!("Allocating page for PID {}", pid);
         for index in self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE) {
             // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-            if self.allocations[index] == 0 {
-                self.allocations[index] = pid;
+            if self.allocations[index].is_none() {
+                self.allocations[index] = Some(pid);
                 self.last_ram_page = index + 1;
                 let page = index * PAGE_SIZE + self.ram_start;
                 return Ok(page);
@@ -224,8 +225,8 @@ impl MemoryManager {
         }
         for index in 0..self.last_ram_page {
             // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-            if self.allocations[index] == 0 {
-                self.allocations[index] = pid;
+            if self.allocations[index].is_none() {
+                self.allocations[index] = Some(pid);
                 self.last_ram_page = index + 1;
                 let page = index * PAGE_SIZE + self.ram_start;
                 return Ok(page);
@@ -247,70 +248,70 @@ impl MemoryManager {
             return Ok(virt_ptr);
         }
 
-        let mut process = ProcessHandle::get();
+        let process = Process::current();
+        Process::with_inner_mut(|process_inner| {
+            let (start, end, initial) = match kind {
+                xous::MemoryType::Stack => return Err(xous::Error::BadAddress),
+                xous::MemoryType::Heap => {
+                    let new_virt =
+                        process_inner.mem_heap_base + process_inner.mem_heap_size + PAGE_SIZE;
+                    if new_virt + size > process_inner.mem_heap_base + process_inner.mem_heap_max {
+                        return Err(xous::Error::OutOfMemory);
+                    }
+                    return Ok(new_virt as *mut usize);
+                }
+                xous::MemoryType::Default => (
+                    process_inner.mem_default_base,
+                    process_inner.mem_default_base + 0x1000_0000,
+                    process_inner.mem_default_last,
+                ),
+                xous::MemoryType::Messages => (
+                    process_inner.mem_message_base,
+                    process_inner.mem_message_base + 0x1000_0000,
+                    process_inner.mem_message_last,
+                ),
+            };
 
-        let (start, end, initial) = match kind {
-            xous::MemoryType::Stack => return Err(xous::Error::BadAddress),
-            xous::MemoryType::Heap => {
-                let new_virt =
-                    process.inner.mem_heap_base + process.inner.mem_heap_size + PAGE_SIZE;
-                if new_virt + size > process.inner.mem_heap_base + process.inner.mem_heap_max {
-                    return Err(xous::Error::OutOfMemory);
+            // Look for a sequence of `size` pages that are free.
+            for potential_start in (initial..end - size).step_by(PAGE_SIZE) {
+                // println!("    Checking {:08x}...", potential_start);
+                let mut all_free = true;
+                for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
+                    if !crate::arch::mem::address_available(check_page) {
+                        all_free = false;
+                        break;
+                    }
                 }
-                return Ok(new_virt as *mut usize);
+                if all_free {
+                    match kind {
+                        xous::MemoryType::Default => process_inner.mem_default_last = potential_start,
+                        xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        other => panic!("invalid kind: {:?}", other),
+                    }
+                    return Ok(potential_start as *mut usize);
+                }
             }
-            xous::MemoryType::Default => (
-                process.inner.mem_default_base,
-                process.inner.mem_default_base + 0x1000_0000,
-                process.inner.mem_default_last,
-            ),
-            xous::MemoryType::Messages => (
-                process.inner.mem_message_base,
-                process.inner.mem_message_base + 0x1000_0000,
-                process.inner.mem_message_last,
-            ),
-        };
 
-        // Look for a sequence of `size` pages that are free.
-        for potential_start in (initial..end - size).step_by(PAGE_SIZE) {
-            // println!("    Checking {:08x}...", potential_start);
-            let mut all_free = true;
-            for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
-                if !crate::arch::mem::address_available(check_page) {
-                    all_free = false;
-                    break;
+            for potential_start in (start..initial).step_by(PAGE_SIZE) {
+                // println!("    Checking {:08x}...", potential_start);
+                let mut all_free = true;
+                for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
+                    if !crate::arch::mem::address_available(check_page) {
+                        all_free = false;
+                        break;
+                    }
+                }
+                if all_free {
+                    match kind {
+                        xous::MemoryType::Default => process_inner.mem_default_last = potential_start,
+                        xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        other => panic!("invalid kind: {:?}", other),
+                    }
+                    return Ok(potential_start as *mut usize);
                 }
             }
-            if all_free {
-                match kind {
-                    xous::MemoryType::Default => process.inner.mem_default_last = potential_start,
-                    xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
-                    other => panic!("invalid kind: {:?}", other),
-                }
-                return Ok(potential_start as *mut usize);
-            }
-        }
-
-        for potential_start in (start..initial).step_by(PAGE_SIZE) {
-            // println!("    Checking {:08x}...", potential_start);
-            let mut all_free = true;
-            for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
-                if !crate::arch::mem::address_available(check_page) {
-                    all_free = false;
-                    break;
-                }
-            }
-            if all_free {
-                match kind {
-                    xous::MemoryType::Default => process.inner.mem_default_last = potential_start,
-                    xous::MemoryType::Messages => process.inner.mem_message_last = potential_start,
-                    other => panic!("invalid kind: {:?}", other),
-                }
-                return Ok(potential_start as *mut usize);
-            }
-        }
-
-        Err(xous::Error::BadAddress)
+            Err(xous::Error::BadAddress)
+        })
     }
 
     /// Reserve the given range without actually allocating memory.
@@ -394,7 +395,7 @@ impl MemoryManager {
         phys_ptr: *mut usize,
         virt_ptr: *mut usize,
         size: usize,
-        pid: u8,
+        pid: PID,
         flags: MemoryFlags,
         kind: xous::MemoryType,
     ) -> Result<xous::MemoryRange, xous::Error> {
@@ -519,26 +520,34 @@ impl MemoryManager {
             dest_addr,
         )
     }
+
+    /// Claim the given memory for the given process, or release the memory
+    /// back to the free pool.
     fn claim_or_release(
         &mut self,
         addr: *mut usize,
         pid: PID,
         action: ClaimOrRelease,
     ) -> Result<(), xous::Error> {
+
+        /// Modify the memory tracking table to note which process owns
+        /// the specified address.
         fn action_inner(
-            addr: &mut PID,
+            addr: &mut Option<PID>,
             pid: PID,
             action: ClaimOrRelease,
         ) -> Result<(), xous::Error> {
-            if *addr != 0 && *addr != pid {
-                return Err(xous::Error::MemoryInUse);
+            if let Some(current_pid) = *addr {
+                if current_pid != pid {
+                    return Err(xous::Error::MemoryInUse);
+                }
             }
             match action {
                 ClaimOrRelease::Claim => {
-                    *addr = pid;
+                    *addr = Some(pid);
                 }
                 ClaimOrRelease::Release => {
-                    *addr = 0;
+                    *addr = None;
                 }
             }
             Ok(())

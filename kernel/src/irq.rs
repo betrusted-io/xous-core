@@ -1,5 +1,5 @@
 use crate::arch;
-use crate::services::SystemServicesHandle;
+use crate::services::SystemServices;
 use xous::{MemoryAddress, PID};
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
@@ -15,19 +15,19 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
         for irq_no in 0..IRQ_HANDLERS.len() {
             if irqs_pending & (1 << irq_no) != 0 {
                 if let Some((pid, f, arg)) = IRQ_HANDLERS[irq_no] {
-                    let mut ss = SystemServicesHandle::get();
-                    // Disable all other IRQs and redirect into userspace
-                    arch::irq::disable_all_irqs();
-                    // println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
-                    return ss
-                        .make_callback_to(
+                    return SystemServices::with_mut(|ss| {
+                        // Disable all other IRQs and redirect into userspace
+                        arch::irq::disable_all_irqs();
+                        // println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
+                        ss.make_callback_to(
                             pid,
                             f.get() as *mut usize,
                             irq_no,
                             arg.map(|x| x.get() as *mut usize)
                                 .unwrap_or(core::ptr::null_mut::<usize>()),
                         )
-                        .map(|_| xous::Result::ResumeProcess);
+                        .map(|_| xous::Result::ResumeProcess)
+                    });
                 } else {
                     // If there is no handler, mask this interrupt
                     // to prevent an IRQ storm.  This is considered

@@ -1,8 +1,8 @@
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::TcpStream;
 use std::thread_local;
-use std::cell::RefCell;
 
 use crate::Result;
 
@@ -13,7 +13,8 @@ thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<TcpStream>> = RefCel
 pub fn set_xous_address(new_address: &str) {
     NETWORK_CONNECT_ADDRESS.with(|nca| {
         let mut address = nca.borrow_mut();
-        *address = new_address.to_owned(); 
+        *address = new_address.to_owned();
+        XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = None);
     });
 }
 
@@ -39,7 +40,18 @@ pub fn _xous_syscall(
             });
         }
         // let xsc: &mut TcpStream = (*xous_server_connection).as_mut().unwrap();
-        _xous_syscall_to(nr, a1, a2, a3, a4, a5, a6, a7, ret, xsc.borrow_mut().as_mut().unwrap())
+        _xous_syscall_to(
+            nr,
+            a1,
+            a2,
+            a3,
+            a4,
+            a5,
+            a6,
+            a7,
+            ret,
+            xsc.borrow_mut().as_mut().unwrap(),
+        )
     })
 }
 
@@ -64,7 +76,8 @@ fn _xous_syscall_to(
 
     // Send the packet to the server
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
-        xsc.write_all(&word.to_le_bytes()).expect("Disconnection");
+        xsc.write_all(&word.to_le_bytes())
+            .expect("Server shut down");
     }
 
     // Receive the packet back
@@ -72,7 +85,7 @@ fn _xous_syscall_to(
         let mut pkt = [0usize; 8];
         let mut word = [0u8; size_of::<usize>()];
         for pkt_word in pkt.iter_mut() {
-            xsc.read_exact(&mut word).expect("Disconnection");
+            xsc.read_exact(&mut word).expect("Server shut down");
             *pkt_word = usize::from_le_bytes(word);
         }
 
