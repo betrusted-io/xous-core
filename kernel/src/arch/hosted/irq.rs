@@ -12,8 +12,8 @@ pub fn enable_irq(_irq_no: usize) {
     unimplemented!();
 }
 
-pub fn disable_irq(_irq_no: usize) {
-    unimplemented!();
+pub fn disable_irq(_irq_no: usize) -> Result<(), xous::Error> {
+    Err(xous::Error::UnhandledSyscall)
 }
 
 pub unsafe fn take_isr_return_pair() -> Option<(PID, CtxID)> {

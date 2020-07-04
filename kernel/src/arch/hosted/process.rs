@@ -167,7 +167,6 @@ impl Process {
     }
 
     pub fn destroy(pid: PID) -> Result<(), xous::Error> {
-        println!("KERNEL: Destroying PID {}", pid);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let pid_idx = pid.get() as usize - 1;
@@ -191,39 +190,3 @@ impl Process {
 }
 
 impl Context {}
-
-// pub struct ProcessHandle {
-//     inner: RefCell<ProcessTable>,
-// }
-
-// /// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-// /// to the Memory Manager should only be made during interrupt contexts.
-// impl ProcessHandle {
-//     /// Get the singleton Process.
-//     pub fn get() -> ProcessHandle {
-//         ProcessHandle {
-//             inner: *PROCESS_TABLE.with(|pt| pt.clone()),
-//         }
-//     }
-// }
-
-// // impl<'a> Drop for ProcessHandle<'a> {
-// //     fn drop(&mut self) {
-// //         println!("<<< Dropping ProcessHandle");
-// //     }
-// // }
-
-// use core::ops::{Deref, DerefMut};
-// impl Deref for ProcessHandle {
-//     type Target = Process;
-//     fn deref(&self) -> &Process {
-//         &self.inner.table[self.inner.current]
-//     }
-// }
-
-// impl DerefMut for ProcessHandle {
-//     fn deref_mut(&mut self) -> &mut Process {
-//         let current = self.inner.current;
-//         &mut self.inner.table[current]
-//     }
-// }

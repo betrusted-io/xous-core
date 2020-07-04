@@ -222,7 +222,10 @@ impl Server {
                         }
                     }
                 }
-                x => (),
+                // For "Scalar" and "Move" messages, this memory has already
+                // been moved into this process, so memory will be reclaimed
+                // when the process terminates.
+                _ => (),
             }
         }
     }

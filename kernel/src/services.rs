@@ -361,6 +361,7 @@ impl SystemServices {
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
     /// 3. Run the new process, returning to an illegal instruction
+    #[allow(dead_code)]
     pub fn finish_callback_and_resume(
         &mut self,
         pid: PID,
@@ -412,12 +413,12 @@ impl SystemServices {
     /// 3. Run the new process, returning to an illegal instruction
     pub fn make_callback_to(
         &mut self,
-        pid: PID,
-        pc: *const usize,
-        irq_no: usize,
-        arg: *mut usize,
+        _pid: PID,
+        _pc: *const usize,
+        _irq_no: usize,
+        _arg: *mut usize,
     ) -> Result<(), xous::Error> {
-        unimplemented!()
+        Err(xous::Error::UnhandledSyscall)
         // // Get the current process (which was just interrupted) and mark it as
         // // "ready to run".  If this function is called when the current process
         // // isn't running, that means the system has gotten into an invalid

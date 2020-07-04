@@ -30,8 +30,9 @@ pub fn enable_irq(irq_no: usize) {
     sim::write(sim::read() | (1 << irq_no));
 }
 
-pub fn disable_irq(irq_no: usize) {
+pub fn disable_irq(irq_no: usize) -> Result<(), xous::Error> {
     sim::write(sim::read() & !(1 << irq_no));
+    Ok(())
 }
 
 static mut PREVIOUS_PAIR: Option<(PID, CtxID)> = None;
