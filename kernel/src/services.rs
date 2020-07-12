@@ -507,9 +507,9 @@ impl SystemServices {
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
     pub fn switch_to(&mut self, pid: PID, context: Option<CtxID>) -> Result<(), xous::Error> {
-        println!("KERNEL(?): Getting current process...");
+        // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
-        println!("KERNEL(?): Current process is {:?}", process);
+        // println!("KERNEL(?): Current process is {:?}", process);
 
         // Determine which context number to switch to
         process.state = match process.state {
@@ -1139,17 +1139,17 @@ impl SystemServices {
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
     pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
-        println!(
-            "KERNEL({}): Looking through server list for free server",
-            self.pid.get()
-        );
+        // println!(
+        //     "KERNEL({}): Looking through server list for free server",
+        //     self.pid.get()
+        // );
 
         for entry in self.servers.iter_mut() {
             if entry == &None {
-                println!(
-                    "KERNEL({}): Found a free slot for a server -- allocating an entry",
-                    self.pid.get()
-                );
+                // println!(
+                //     "KERNEL({}): Found a free slot for a server -- allocating an entry",
+                //     self.pid.get()
+                // );
                 let pid = self.pid;
 
                 // TODO: Come up with a way to randomize this

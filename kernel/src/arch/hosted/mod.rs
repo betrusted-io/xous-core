@@ -89,7 +89,7 @@ fn listen_thread(
     backchannel: Receiver<BackchannelMessage>,
 ) {
     let client_addr = listen_addr.clone();
-    println!("KERNEL(1): Starting Xous server on {}...", listen_addr);
+    // println!("KERNEL(1): Starting Xous server on {}...", listen_addr);
     let listener = TcpListener::bind(listen_addr).unwrap_or_else(|e| {
         panic!("Unable to create server: {}", e);
     });
@@ -99,7 +99,7 @@ fn listen_thread(
     let pid1_thread = spawn(move || {
         let mut client = TcpStream::connect(client_addr).expect("couldn't connect to xous server");
         let mut buffer = [0; 32];
-        println!("KERNEL(1): Started PID1 idle thread");
+        // println!("KERNEL(1): Started PID1 idle thread");
         loop {
             match client.read(&mut buffer) {
                 Ok(0) => return,
@@ -130,7 +130,7 @@ fn listen_thread(
                     BackchannelMessage::NewPid(p) => p,
                     x => panic!("unexpected backchannel message from main thread: {:?}", x),
                 };
-                println!("KERNEL({}): New client connected from {}", new_pid, addr);
+                // println!("KERNEL({}): New client connected from {}", new_pid, addr);
                 let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
                 let jh = spawn(move || handle_connection(conn, new_pid, thr_chn));
                 clients.push((jh, conn_copy));
@@ -184,20 +184,20 @@ pub fn idle() -> bool {
     while let Ok(msg) = receiver.recv() {
         match msg {
             ThreadMessage::NewConnection(conn) => {
-                println!("KERNEL(?): Going to call ss.spawn_process()");
+                // println!("KERNEL(?): Going to call ss.spawn_process()");
                 let new_pid = SystemServices::with_mut(|ss| {
                     ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
                 })
                 .unwrap();
-                println!("KERNEL({}): SystemServices assigned new PID of {}", new_pid, new_pid);
+                // println!("KERNEL({}): SystemServices assigned new PID of {}", new_pid, new_pid);
                 backchannel_sender
                     .send(BackchannelMessage::NewPid(new_pid))
                     .expect("couldn't send new pid to new connection");
             }
             ThreadMessage::SysCall(pid, call) => {
-                println!("KERNEL({}): Received syscall {:?}", pid, call);
+                // println!("KERNEL({}): Received syscall {:?}", pid, call);
                 SystemServices::with_mut(|ss| ss.switch_to(pid, Some(1))).unwrap();
-                println!("KERNEL({}): Now running as the new process", pid);
+                // println!("KERNEL({}): Now running as the new process", pid);
 
                 // If the call being made is to terminate the current process, we need to know
                 // because we won't be able to send a response.
@@ -208,7 +208,7 @@ pub fn idle() -> bool {
                 // This is because the "process" will be "terminated" (the network socket will be closed),
                 // and we won't be able to send the response after we're done.
                 if is_shutdown {
-                    println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
+                    // println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
                     let mut process = Process::current();
                     let mut response_vec = Vec::new();
                     for word in Result::Ok.to_args().iter_mut() {
@@ -216,16 +216,16 @@ pub fn idle() -> bool {
                     }
                     process.send(&response_vec).unwrap_or_else(|e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        println!("Unable to send response to process: {:?} -- terminating", e);
+                        // println!("Unable to send response to process: {:?} -- terminating", e);
                         crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                     });
-                    println!("Done sending");
+                    // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
                 let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
 
-                println!("KERNEL({}): Syscall response {:?}", pid, response);
+                // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
                 // Send the response back to the target.
                 if response != Result::BlockedProcess && !is_terminate && !is_shutdown {
@@ -237,10 +237,10 @@ pub fn idle() -> bool {
                         }
                         process.send(&response_vec).unwrap_or_else(|e| {
                             // If we're unable to send data to the process, assume it's dead and terminate it.
-                            println!(
-                                "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                                pid, e
-                            );
+                            // println!(
+                            //     "KERNEL({}): Unable to send response to process: {:?} -- terminating",
+                            //     pid, e
+                            // );
                             crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                         });
                     }
@@ -257,11 +257,11 @@ pub fn idle() -> bool {
         }
     }
 
-    println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
+    // println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
     listen_thread_handle
         .join()
         .expect("error waiting for listen thread to return");
 
-    println!("Thank you for using Xous!");
+    // println!("Thank you for using Xous!");
     false
 }

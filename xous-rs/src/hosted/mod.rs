@@ -69,16 +69,47 @@ fn _xous_syscall_to(
     ret: &mut Result,
     xsc: &mut TcpStream,
 ) {
-    println!(
-        "Making Syscall: {:?}",
-        crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
-    );
+    // println!(
+    //     "Making Syscall: {:?}",
+    //     crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
+    // );
+    let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
     // Send the packet to the server
+    let mut pkt = vec![];
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
-        xsc.write_all(&word.to_le_bytes())
-            .expect("Server shut down");
+        pkt.extend_from_slice(&word.to_le_bytes());
     }
+    if let crate::SysCall::SendMessage(_, ref msg) = call {
+        match msg {
+            crate::Message::MutableBorrow(crate::MemoryMessage {
+                id: _id,
+                buf,
+                offset: _offset,
+                valid: _valid,
+            })
+            | crate::Message::ImmutableBorrow(crate::MemoryMessage {
+                id: _id,
+                buf,
+                offset: _offset,
+                valid: _valid,
+            })
+            | crate::Message::Move(crate::MemoryMessage {
+                id: _id,
+                buf,
+                offset: _offset,
+                valid: _valid,
+            }) => {
+                use core::slice;
+                let data: &[u8] =
+                    unsafe { slice::from_raw_parts(buf.addr.get() as _, buf.size.get()) };
+                pkt.extend_from_slice(data);
+            }
+            crate::Message::Scalar(_) => (),
+        }
+    }
+
+    xsc.write_all(&pkt).expect("Server shut down");
 
     // Receive the packet back
     loop {
@@ -90,10 +121,48 @@ fn _xous_syscall_to(
         }
 
         *ret = Result::from_args(pkt);
+
         println!("   Response: {:?}", *ret);
         if Result::BlockedProcess == *ret {
             // println!("   Waiting again");
         } else {
+            if let crate::SysCall::SendMessage(_, ref msg) = call {
+                match msg {
+                    crate::Message::MutableBorrow(crate::MemoryMessage {
+                        id: _id,
+                        buf,
+                        offset: _offset,
+                        valid: _valid,
+                    }) => {
+                        // Read the buffer back from the remote host.
+                        use core::slice;
+                        let mut data = unsafe {
+                            slice::from_raw_parts_mut(buf.addr.get() as _, buf.size.get())
+                        };
+                        xsc.read_exact(&mut data).expect("Server shut down");
+                        // pkt.extend_from_slice(data);
+                    }
+                    crate::Message::Move(crate::MemoryMessage {
+                        id: _id,
+                        buf,
+                        offset: _offset,
+                        valid: _valid,
+                    }) => {
+                        let offset = buf.addr.get() as *mut u8;
+                        let size = buf.size.get();
+                        extern crate alloc;
+                        use alloc::alloc::{dealloc, Layout};
+                        let layout = Layout::from_size_align(size, 4096).unwrap();
+                        // Free memory that was moved
+                        unsafe {
+                            dealloc(offset, layout);
+                        }
+                    }
+                    // Nothing to do for Immutable borrow, since the memory can't change
+                    crate::Message::ImmutableBorrow(_) => (),
+                    crate::Message::Scalar(_) => (),
+                }
+            }
             return;
         }
     }
