@@ -149,7 +149,18 @@ fn send_move_message() {
         // println!("SERVER: Now listening on {:?}", sid);
         server_addr_send.send(sid).unwrap();
         // println!("SERVER: Listening for message...");
-        let msg = xous::receive_message(sid).expect("couldn't receive messages");
+        let envelope = xous::receive_message(sid).expect("couldn't receive messages");
+        println!("Received message from {}", envelope.sender);
+        let message = envelope.message;
+        if let xous::Message::Move(m) = message {
+            let buf = m.buf;
+            let bt = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len())};
+            let s = String::from_utf8_lossy(&bt);
+            println!("Got message: {:?} -> \"{}\"", bt, s);
+        } else {
+            panic!("unexpected message type");
+        }
+
         // println!("SERVER: Received message: {:?}", msg);
     });
 

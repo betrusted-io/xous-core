@@ -117,6 +117,7 @@ impl DerefMut for MemoryManagerHandle<'_> {
 /// and place it at the usual offset.  The MMU will not be enabled yet,
 /// as the process entry has not yet been created.
 impl MemoryManager {
+    #[allow(dead_code)]
     pub fn init_from_memory(&mut self, base: *mut u32, args: &KernelArguments) -> Result<(), xous::Error> {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
@@ -210,6 +211,7 @@ impl MemoryManager {
 
     /// Allocate a single page to the given process. DOES NOT ZERO THE PAGE!!!
     /// This function CANNOT zero the page, as it hasn't been mapped yet.
+    #[allow(dead_code)]
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous::Error> {
         // Go through all RAM pages looking for a free page.
         // Optimization: start from the previous address.
@@ -248,7 +250,7 @@ impl MemoryManager {
             return Ok(virt_ptr);
         }
 
-        let process = Process::current();
+        // let process = Process::current();
         Process::with_inner_mut(|process_inner| {
             let (start, end, initial) = match kind {
                 xous::MemoryType::Stack => return Err(xous::Error::BadAddress),
@@ -345,6 +347,7 @@ impl MemoryManager {
 
     /// Attempt to allocate a single page from the default section.
     /// Note that this will be backed by a real page.
+    #[allow(dead_code)]
     pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous::Error> {
         let virt =
             self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?

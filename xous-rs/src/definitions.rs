@@ -312,8 +312,8 @@ impl MemoryRange {
         self.size.get() > 0
     }
 
-    pub fn as_ptr(&self) -> *const usize {
-        self.addr.get() as *const usize
+    pub fn as_ptr(&self) -> *const u8 {
+        self.addr.get() as *const u8
     }
 
     pub fn as_mut_ptr(&self) -> *mut usize {

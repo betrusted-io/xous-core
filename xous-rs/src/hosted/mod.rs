@@ -144,10 +144,10 @@ fn _xous_syscall_to(
                     }
                     crate::Message::Move(crate::MemoryMessage {
                         id: _id,
-                        buf,
+                        buf: _buf,
                         offset: _offset,
                         valid: _valid,
-                    }) => {
+                    }) => (),/*{
                         let offset = buf.addr.get() as *mut u8;
                         let size = buf.size.get();
                         extern crate alloc;
@@ -157,7 +157,7 @@ fn _xous_syscall_to(
                         unsafe {
                             dealloc(offset, layout);
                         }
-                    }
+                    }*/
                     // Nothing to do for Immutable borrow, since the memory can't change
                     crate::Message::ImmutableBorrow(_) => (),
                     crate::Message::Scalar(_) => (),

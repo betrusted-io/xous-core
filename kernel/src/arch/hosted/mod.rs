@@ -16,7 +16,7 @@ use std::time::Duration;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous::{Result, SysCall, PID};
+use xous::{MemoryAddress, Result, SysCall, PID};
 
 enum ThreadMessage {
     SysCall(PID, SysCall),
@@ -51,13 +51,15 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
         for word in pkt.iter_mut() {
             loop {
                 if let Err(e) = conn.read_exact(&mut incoming_word) {
+                    // If the connection has gone away, send a `TerminateProcess` message to the main
+                    // and then exit this thread.
                     if e.kind() != std::io::ErrorKind::WouldBlock {
                         println!(
                             "KERNEL({}): Client disconnected: {}. Shutting down virtual process.",
                             pid, e
                         );
-                        let call = xous::SysCall::TerminateProcess;
-                        chn.send(ThreadMessage::SysCall(pid, call)).unwrap();
+                        chn.send(ThreadMessage::SysCall(pid, xous::SysCall::TerminateProcess))
+                            .unwrap();
                         return;
                     }
                     continue;
@@ -71,7 +73,45 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
         );
         match call {
             Err(e) => println!("KERNEL({}): Received invalid syscall: {:?}", pid, e),
-            Ok(call) => {
+            Ok(mut call) => {
+                if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
+                    match envelope {
+                        xous::Message::MutableBorrow(msg)
+                        | xous::Message::ImmutableBorrow(msg)
+                        | xous::Message::Move(msg) => {
+                            let mut tmp_data = Vec::with_capacity(msg.buf.len());
+                            tmp_data.resize(msg.buf.len(), 0);
+                            conn.read_exact(&mut tmp_data)
+                                .map_err(|_e| {
+                                    chn.send(ThreadMessage::SysCall(
+                                        pid,
+                                        xous::SysCall::TerminateProcess,
+                                    ))
+                                    .unwrap();
+                                })
+                                .unwrap();
+                            // Update the address pointer. This will get turned back into a
+                            // usable pointer by casting it back into a Box<[T]> on the other
+                            // side. This is a pointer to &[T], which itself contains len()
+                            // as well as the index into the data it points at. The lengths
+                            // should still be equal once we reconstitute the data in the
+                            // other process.
+                            let sliced_data = tmp_data.into_boxed_slice();
+                            assert_eq!(
+                                (*sliced_data).len(),
+                                msg.buf.len(),
+                                "deconstructed data {} != message buf length {}",
+                                sliced_data.len(),
+                                msg.buf.len()
+                            );
+                            msg.buf.addr = MemoryAddress::new(Box::into_raw(sliced_data)
+                                as *mut usize
+                                as usize)
+                            .unwrap();
+                        }
+                        xous::Message::Scalar(_) => (),
+                    }
+                }
                 // println!(
                 //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
                 //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
@@ -115,7 +155,7 @@ fn listen_thread(
         .expect("couldn't set TcpListener to nonblocking");
     loop {
         match listener.accept() {
-            Ok((conn, addr)) => {
+            Ok((conn, _addr)) => {
                 let thr_chn = chn.clone();
 
                 // Spawn a new process. This process will start out in the "Setup()" state.
@@ -130,7 +170,7 @@ fn listen_thread(
                     BackchannelMessage::NewPid(p) => p,
                     x => panic!("unexpected backchannel message from main thread: {:?}", x),
                 };
-                // println!("KERNEL({}): New client connected from {}", new_pid, addr);
+                // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
                 let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
                 let jh = spawn(move || handle_connection(conn, new_pid, thr_chn));
                 clients.push((jh, conn_copy));
@@ -214,9 +254,9 @@ pub fn idle() -> bool {
                     for word in Result::Ok.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());
                     }
-                    process.send(&response_vec).unwrap_or_else(|e| {
+                    process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        // println!("Unable to send response to process: {:?} -- terminating", e);
+                        // println!("Unable to send response to process: {:?} -- terminating", _e);
                         crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                     });
                     // println!("KERNEL: Done sending");
@@ -235,11 +275,11 @@ pub fn idle() -> bool {
                         for word in response.to_args().iter_mut() {
                             response_vec.extend_from_slice(&word.to_le_bytes());
                         }
-                        process.send(&response_vec).unwrap_or_else(|e| {
+                        process.send(&response_vec).unwrap_or_else(|_e| {
                             // If we're unable to send data to the process, assume it's dead and terminate it.
                             // println!(
                             //     "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                            //     pid, e
+                            //     pid, _e
                             // );
                             crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                         });

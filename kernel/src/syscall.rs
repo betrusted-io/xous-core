@@ -325,6 +325,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             SystemServices::with_mut(|ss| {
                 let context_nr = ss.current_context_nr();
                 let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+                // ::debug_here::debug_here!();
 
                 let server_pid = ss
                     .server_from_sidx(sidx)

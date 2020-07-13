@@ -867,7 +867,7 @@ impl SystemServices {
     /// into a situation where memory may appear in two different processes at
     /// once.
     ///
-    /// The given memory range is guaranteed to be unavailable in this process
+    /// The given memory range is guaranteed to be unavailable in the src process
     /// after this function returns.
     ///
     /// # Returns
@@ -885,6 +885,7 @@ impl SystemServices {
     ///
     /// If the memory should have been able to go into the destination process
     /// but failed, then the system panics.
+    #[cfg(baremetal)]
     pub fn send_memory(
         &mut self,
         src_virt: *mut usize,
@@ -938,6 +939,17 @@ impl SystemServices {
             .unwrap_or_else(|e| error = Some(e));
         }
         error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to send: {:?}", e))
+    }
+
+    #[cfg(not(baremetal))]
+    pub fn send_memory(
+        &mut self,
+        src_virt: *mut usize,
+        _dest_pid: PID,
+        _dest_virt: *mut usize,
+        _len: usize,
+    ) -> Result<*mut usize, xous::Error> {
+        Ok(src_virt)
     }
 
     /// Lend memory from one process to another.
