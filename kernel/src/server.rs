@@ -309,7 +309,7 @@ impl Server {
             ) => (
                 xous::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
+                    message: xous::Message::Borrow(xous::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size),
                         offset: MemorySize::new(offset),
@@ -357,7 +357,7 @@ impl Server {
             ) => (
                 xous::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::ImmutableBorrow(xous::MemoryMessage {
+                    message: xous::Message::Borrow(xous::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size),
                         offset: MemorySize::new(offset),
@@ -495,7 +495,7 @@ impl Server {
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
-            xous::Message::ImmutableBorrow(msg) => QueuedMessage::MemoryMessageROLend(
+            xous::Message::Borrow(msg) => QueuedMessage::MemoryMessageROLend(
                 pid.get() as usize | (context << 16),
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
@@ -527,7 +527,7 @@ impl Server {
         }
         let (server_address, len) = match message {
             xous::Message::Scalar(_) | xous::Message::Move(_) => (0, 0),
-            xous::Message::MutableBorrow(msg) | xous::Message::ImmutableBorrow(msg) => {
+            xous::Message::MutableBorrow(msg) | xous::Message::Borrow(msg) => {
                 (msg.buf.addr.get(), msg.buf.size.get())
             }
         };

@@ -88,7 +88,7 @@ fn _xous_syscall_to(
                 offset: _offset,
                 valid: _valid,
             })
-            | crate::Message::ImmutableBorrow(crate::MemoryMessage {
+            | crate::Message::Borrow(crate::MemoryMessage {
                 id: _id,
                 buf,
                 offset: _offset,
@@ -159,7 +159,7 @@ fn _xous_syscall_to(
                         }
                     }*/
                     // Nothing to do for Immutable borrow, since the memory can't change
-                    crate::Message::ImmutableBorrow(_) => (),
+                    crate::Message::Borrow(_) => (),
                     crate::Message::Scalar(_) => (),
                 }
             }

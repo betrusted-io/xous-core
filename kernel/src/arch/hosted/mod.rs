@@ -77,7 +77,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                 if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
                     match envelope {
                         xous::Message::MutableBorrow(msg)
-                        | xous::Message::ImmutableBorrow(msg)
+                        | xous::Message::Borrow(msg)
                         | xous::Message::Move(msg) => {
                             let mut tmp_data = Vec::with_capacity(msg.buf.len());
                             tmp_data.resize(msg.buf.len(), 0);

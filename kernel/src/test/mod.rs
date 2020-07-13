@@ -170,3 +170,55 @@ fn send_move_message() {
 
     main_thread.join().expect("couldn't join kernel process");
 }
+
+#[test]
+fn send_borrow_message() {
+    let server_spec = "localhost:9997";
+
+    let main_thread = start_kernel(server_spec);
+
+    let xous_client_spec = server_spec.to_owned();
+    let xous_server_spec = server_spec.to_owned();
+
+    let (server_addr_send, server_addr_recv) = channel();
+
+    let xous_server = spawn(move || {
+        xous::hosted::set_xous_address(&xous_client_spec);
+        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        server_addr_send.send(sid).unwrap();
+        let envelope = xous::receive_message(sid).expect("couldn't receive messages");
+        println!("Received message from {}", envelope.sender);
+        let message = envelope.message;
+        if let xous::Message::Borrow(m) = message {
+            let buf = m.buf;
+            let bt = unsafe {
+                Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
+            };
+            let s = String::from_utf8_lossy(&bt);
+            println!("Got message: {:?} -> \"{}\"", bt, s);
+        } else {
+            panic!("unexpected message type");
+        }
+
+        // println!("SERVER: Received message: {:?}", msg);
+    });
+
+    let xous_client = spawn(move || {
+        xous::hosted::set_xous_address(&xous_server_spec);
+        // println!("CLIENT: Waiting for server address...");
+        let sid = server_addr_recv.recv().unwrap();
+        // println!("CLIENT: Connecting to server {:?}", sid);
+        let conn = xous::connect(sid).expect("couldn't connect to server");
+        let msg = xous::carton::Carton::from_bytes(format!("Hello, world!").as_bytes());
+        xous::send_message(conn, xous::Message::Borrow(msg.into_message(0)))
+            .expect("couldn't send a message");
+    });
+
+    xous_server.join().expect("couldn't join server process");
+    xous_client.join().expect("couldn't join client process");
+
+    // Any process ought to be able to shut down the system currently.
+    rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+
+    main_thread.join().expect("couldn't join kernel process");
+}

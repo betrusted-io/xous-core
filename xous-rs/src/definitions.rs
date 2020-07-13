@@ -244,7 +244,7 @@ impl ScalarMessage {
 #[derive(Debug, PartialEq)]
 pub enum Message {
     MutableBorrow(MemoryMessage),
-    ImmutableBorrow(MemoryMessage),
+    Borrow(MemoryMessage),
     Move(MemoryMessage),
     Scalar(ScalarMessage),
 }
@@ -260,7 +260,7 @@ impl MessageEnvelope {
     pub fn to_usize(&self) -> [usize; 7] {
         let ret = match &self.message {
             Message::MutableBorrow(m) => (0, m.to_usize()),
-            Message::ImmutableBorrow(m) => (1, m.to_usize()),
+            Message::Borrow(m) => (1, m.to_usize()),
             Message::Move(m) => (2, m.to_usize()),
             Message::Scalar(m) => (3, m.to_usize()),
         };
@@ -439,7 +439,7 @@ impl Result {
                     },
                     1 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
                         None => return Result::Error(Error::InternalError),
-                        Some(s) => Message::ImmutableBorrow(s),
+                        Some(s) => Message::Borrow(s),
                     },
                     2 => match MemoryMessage::from_usize(src[3], src[4], src[5], src[6], src[7]) {
                         None => return Result::Error(Error::InternalError),

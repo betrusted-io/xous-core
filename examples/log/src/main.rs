@@ -86,7 +86,7 @@ fn main() {
                 let log_entry = LogString::from_message(msg);
                 println!("Moved log  message from {}: {}", envelope.sender, log_entry);
             }
-            xous::Message::ImmutableBorrow(msg) => {
+            xous::Message::Borrow(msg) => {
                 let log_entry = LogString::from_message(msg);
                 println!("Immutably borrowed log message from {}: {}", envelope.sender, log_entry);
             }

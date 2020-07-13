@@ -338,7 +338,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     Message::Scalar(_) => None,
                     Message::Move(msg)
                     | Message::MutableBorrow(msg)
-                    | Message::ImmutableBorrow(msg) => Some(msg.buf.addr),
+                    | Message::Borrow(msg) => Some(msg.buf.addr),
                 };
 
                 // Translate memory messages from the client process to the server
@@ -381,7 +381,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             true,
                         )
                     }
-                    Message::ImmutableBorrow(msg) => {
+                    Message::Borrow(msg) => {
                         let new_virt = ss.lend_memory(
                             msg.buf.as_mut_ptr(),
                             server_pid,
@@ -390,7 +390,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             false,
                         )?;
                         (
-                            Message::ImmutableBorrow(MemoryMessage {
+                            Message::Borrow(MemoryMessage {
                                 id: msg.id,
                                 buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
                                 offset: msg.offset,
@@ -414,7 +414,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     );
                     let sender = match message {
                         Message::Scalar(_) | Message::Move(_) => 0,
-                        Message::ImmutableBorrow(_) | Message::MutableBorrow(_) => ss
+                        Message::Borrow(_) | Message::MutableBorrow(_) => ss
                             .remember_server_message(
                                 sidx,
                                 pid,

@@ -437,7 +437,7 @@ impl SysCall {
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
-                Message::ImmutableBorrow(mm) => [
+                Message::Borrow(mm) => [
                     SysCallNumber::SendMessage as usize,
                     *a1,
                     2,
@@ -568,7 +568,7 @@ impl SysCall {
                 ),
                 2 => SysCall::SendMessage(
                     a1,
-                    Message::ImmutableBorrow(MemoryMessage {
+                    Message::Borrow(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5),
                         offset: MemoryAddress::new(a6),
