@@ -18,11 +18,11 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
             let phys_ptr = phys
-                .map(|x| x.get() as *mut usize)
-                .unwrap_or(core::ptr::null_mut::<usize>());
+                .map(|x| x.get() as *mut u8)
+                .unwrap_or(core::ptr::null_mut());
             let virt_ptr = virt
-                .map(|x| x.get() as *mut usize)
-                .unwrap_or(core::ptr::null_mut::<usize>());
+                .map(|x| x.get() as *mut u8)
+                .unwrap_or(core::ptr::null_mut());
 
             // Don't let the address exceed the user area (unless it's PID 1)
             if pid.get() != 1
@@ -107,7 +107,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
 
                     let start = process_inner.mem_heap_base + process_inner.mem_heap_size;
                     process_inner.mem_heap_size += delta;
-                    Ok(start as *mut usize)
+                    Ok(start as *mut u8)
                 })?
             };
             let mut mm = MemoryManagerHandle::get();
@@ -350,7 +350,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         let new_virt = ss.send_memory(
                             msg.buf.as_mut_ptr(),
                             server_pid,
-                            core::ptr::null_mut::<usize>(),
+                            core::ptr::null_mut(),
                             msg.buf.len(),
                         )?;
                         (
@@ -367,7 +367,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         let new_virt = ss.lend_memory(
                             msg.buf.as_mut_ptr(),
                             server_pid,
-                            core::ptr::null_mut::<usize>(),
+                            core::ptr::null_mut(),
                             msg.buf.len(),
                             true,
                         )?;
@@ -385,7 +385,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         let new_virt = ss.lend_memory(
                             msg.buf.as_mut_ptr(),
                             server_pid,
-                            core::ptr::null_mut::<usize>(),
+                            core::ptr::null_mut(),
                             msg.buf.len(),
                             false,
                         )?;

@@ -888,9 +888,9 @@ impl SystemServices {
     #[cfg(baremetal)]
     pub fn send_memory(
         &mut self,
-        src_virt: *mut usize,
+        src_virt: *mut u8,
         dest_pid: PID,
-        dest_virt: *mut usize,
+        dest_virt: *mut u8,
         len: usize,
     ) -> Result<*mut usize, xous::Error> {
         if len == 0 {
@@ -944,11 +944,11 @@ impl SystemServices {
     #[cfg(not(baremetal))]
     pub fn send_memory(
         &mut self,
-        src_virt: *mut usize,
+        src_virt: *mut u8,
         _dest_pid: PID,
-        _dest_virt: *mut usize,
+        _dest_virt: *mut u8,
         _len: usize,
-    ) -> Result<*mut usize, xous::Error> {
+    ) -> Result<*mut u8, xous::Error> {
         Ok(src_virt)
     }
 
@@ -979,12 +979,12 @@ impl SystemServices {
     /// * **BadAlignment**: The provided address or length was not page-aligned
     pub fn lend_memory(
         &mut self,
-        src_virt: *mut usize,
+        src_virt: *mut u8,
         dest_pid: PID,
-        dest_virt: *mut usize,
+        dest_virt: *mut u8,
         len: usize,
         mutable: bool,
-    ) -> Result<*mut usize, xous::Error> {
+    ) -> Result<*mut u8, xous::Error> {
         if len == 0 {
             return Err(xous::Error::BadAddress);
         }

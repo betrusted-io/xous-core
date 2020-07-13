@@ -241,10 +241,10 @@ impl MemoryManager {
     /// to fit `size` bytes.
     pub fn find_virtual_address(
         &mut self,
-        virt_ptr: *mut usize,
+        virt_ptr: *mut u8,
         size: usize,
         kind: xous::MemoryType,
-    ) -> Result<*mut usize, xous::Error> {
+    ) -> Result<*mut u8, xous::Error> {
         // If we were supplied a perfectly good address, return that.
         if virt_ptr as usize != 0 {
             return Ok(virt_ptr);
@@ -260,7 +260,7 @@ impl MemoryManager {
                     if new_virt + size > process_inner.mem_heap_base + process_inner.mem_heap_max {
                         return Err(xous::Error::OutOfMemory);
                     }
-                    return Ok(new_virt as *mut usize);
+                    return Ok(new_virt as *mut u8);
                 }
                 xous::MemoryType::Default => (
                     process_inner.mem_default_base,
@@ -290,7 +290,7 @@ impl MemoryManager {
                         xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
                         other => panic!("invalid kind: {:?}", other),
                     }
-                    return Ok(potential_start as *mut usize);
+                    return Ok(potential_start as *mut u8);
                 }
             }
 
@@ -309,7 +309,7 @@ impl MemoryManager {
                         xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
                         other => panic!("invalid kind: {:?}", other),
                     }
-                    return Ok(potential_start as *mut usize);
+                    return Ok(potential_start as *mut u8);
                 }
             }
             Err(xous::Error::BadAddress)
@@ -321,7 +321,7 @@ impl MemoryManager {
     /// needing to actually have pages to back it.
     pub fn reserve_range(
         &mut self,
-        virt_ptr: *mut usize,
+        virt_ptr: *mut u8,
         size: usize,
         flags: MemoryFlags,
     ) -> Result<xous::MemoryRange, xous::Error> {
@@ -350,7 +350,7 @@ impl MemoryManager {
     #[allow(dead_code)]
     pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous::Error> {
         let virt =
-            self.find_virtual_address(0 as *mut usize, PAGE_SIZE, xous::MemoryType::Default)?
+            self.find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous::MemoryType::Default)?
                 as usize;
 
         // Grab the next available page.  This claims it for this process.
@@ -383,7 +383,7 @@ impl MemoryManager {
         Ok(virt)
     }
 
-    pub fn is_main_memory(&self, phys: *mut usize) -> bool {
+    pub fn is_main_memory(&self, phys: *mut u8) -> bool {
         (phys as usize) >= self.ram_start && (phys as usize) < self.ram_start + self.ram_size
     }
 
@@ -395,8 +395,8 @@ impl MemoryManager {
     /// * MemoryInUse - The specified page is already mapped
     pub fn map_range(
         &mut self,
-        phys_ptr: *mut usize,
-        virt_ptr: *mut usize,
+        phys_ptr: *mut u8,
+        virt_ptr: *mut u8,
         size: usize,
         pid: PID,
         flags: MemoryFlags,
@@ -482,10 +482,10 @@ impl MemoryManager {
     pub fn lend_page(
         &mut self,
         src_mapping: &MemoryMapping,
-        src_addr: *mut usize,
+        src_addr: *mut u8,
         dest_pid: PID,
         dest_mapping: &MemoryMapping,
-        dest_addr: *mut usize,
+        dest_addr: *mut u8,
         mutable: bool,
     ) -> Result<usize, xous::Error> {
         // If this page is to be writable, detach it from this process.

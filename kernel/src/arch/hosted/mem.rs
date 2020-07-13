@@ -77,10 +77,10 @@ pub fn move_page_inner(
 pub fn lend_page_inner(
     _mm: &mut MemoryManager,
     _src_space: &MemoryMapping,
-    _src_addr: *mut usize,
+    _src_addr: *mut u8,
     _dest_pid: PID,
     _dest_space: &MemoryMapping,
-    _dest_addr: *mut usize,
+    _dest_addr: *mut u8,
     _mutable: bool,
 ) -> Result<usize, Error> {
     unimplemented!()

@@ -91,14 +91,15 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                                 })
                                 .unwrap();
                             // Update the address pointer. This will get turned back into a
-                            // usable pointer by casting it back into a Box<[T]> on the other
-                            // side. This is a pointer to &[T], which itself contains len()
+                            // usable pointer by casting it back into a &[T] on the other
+                            // side. This is just a pointer to the start of data
                             // as well as the index into the data it points at. The lengths
                             // should still be equal once we reconstitute the data in the
                             // other process.
+                            // ::debug_here::debug_here!();
                             let sliced_data = tmp_data.into_boxed_slice();
                             assert_eq!(
-                                (*sliced_data).len(),
+                                sliced_data.len(),
                                 msg.buf.len(),
                                 "deconstructed data {} != message buf length {}",
                                 sliced_data.len(),

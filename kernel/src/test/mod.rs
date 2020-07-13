@@ -154,7 +154,9 @@ fn send_move_message() {
         let message = envelope.message;
         if let xous::Message::Move(m) = message {
             let buf = m.buf;
-            let bt = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len())};
+            // let bt = unsafe { Box::from_raw(buf.as_mut_ptr() as *mut [u8]) };
+            // let bt = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len())};
+            let bt = unsafe { Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len())) };
             let s = String::from_utf8_lossy(&bt);
             println!("Got message: {:?} -> \"{}\"", bt, s);
         } else {
