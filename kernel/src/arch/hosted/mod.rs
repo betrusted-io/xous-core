@@ -54,10 +54,10 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                     // If the connection has gone away, send a `TerminateProcess` message to the main
                     // and then exit this thread.
                     if e.kind() != std::io::ErrorKind::WouldBlock {
-                        println!(
-                            "KERNEL({}): Client disconnected: {}. Shutting down virtual process.",
-                            pid, e
-                        );
+                        // println!(
+                        //     "KERNEL({}): Client disconnected: {}. Shutting down virtual process.",
+                        //     pid, e
+                        // );
                         chn.send(ThreadMessage::SysCall(pid, xous::SysCall::TerminateProcess))
                             .unwrap();
                         return;
