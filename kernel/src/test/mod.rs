@@ -14,6 +14,7 @@ fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
         .expect("invalid server address")
         .next()
         .expect("unable to resolve server address");
+    // Attempt to bind. This will fail if the port is in use.
     let temp_server = TcpListener::bind(server_addr).unwrap();
     let server_addr = temp_server.local_addr().unwrap();
     drop(temp_server);
@@ -45,7 +46,7 @@ fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
 
 #[test]
 fn shutdown() {
-    let server_spec = "localhost:9999";
+    let server_spec = "localhost:0";
 
     // Start the server in another thread.
     let (main_thread, server_spec) = start_kernel(server_spec);
@@ -63,7 +64,7 @@ fn shutdown() {
 
 #[test]
 fn send_scalar_message() {
-    let server_spec = "localhost:9998";
+    let server_spec = "localhost:0";
     // Start the server in another thread
     let (main_thread, server_spec) = start_kernel(server_spec);
 
@@ -122,7 +123,7 @@ fn send_scalar_message() {
 
 #[test]
 fn send_move_message() {
-    let server_spec = "localhost:9997";
+    let server_spec = "localhost:0";
 
     let (main_thread, server_spec) = start_kernel(server_spec);
 
@@ -171,7 +172,7 @@ fn send_move_message() {
 
 #[test]
 fn send_borrow_message() {
-    let server_spec = "localhost:9997";
+    let server_spec = "localhost:0";
     let (main_thread, server_spec) = start_kernel(server_spec);
     let (server_addr_send, server_addr_recv) = channel();
 

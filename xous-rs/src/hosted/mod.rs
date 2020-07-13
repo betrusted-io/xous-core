@@ -8,7 +8,7 @@ use crate::Result;
 
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
-thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
+thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<TcpStream>> = RefCell::new(None));
 
 /// Set the network address for this particular thread.
