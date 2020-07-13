@@ -1,23 +1,27 @@
 use crate::kmain;
 use std::thread::{spawn, JoinHandle};
 
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use xous::{rsyscall, SysCall};
 
 mod shutdown;
 
-fn start_kernel(server_spec: &str) -> JoinHandle<()> {
-    xous::hosted::set_xous_address(server_spec);
+fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
     let server_addr = server_spec
         .to_socket_addrs()
         .expect("invalid server address")
         .next()
         .expect("unable to resolve server address");
+    let temp_server = TcpListener::bind(server_addr).unwrap();
+    let server_addr = temp_server.local_addr().unwrap();
+    drop(temp_server);
+
+    xous::hosted::set_xous_address(server_addr);
 
     // Launch the main thread
-    let server_spec_server = server_spec.to_owned();
+    let server_spec_server = server_addr.clone();
     let main_thread = spawn(move || {
         crate::arch::set_listen_address(&server_spec_server);
         kmain()
@@ -36,7 +40,7 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     }
     // Convert the Option<conn> into conn
     assert!(connected, "unable to connect to server");
-    main_thread
+    (main_thread, server_addr)
 }
 
 #[test]
@@ -44,10 +48,10 @@ fn shutdown() {
     let server_spec = "localhost:9999";
 
     // Start the server in another thread.
-    let main_thread = start_kernel(server_spec);
+    let (main_thread, server_spec) = start_kernel(server_spec);
 
     // This is now the client.
-    xous::hosted::set_xous_address(&server_spec);
+    xous::hosted::set_xous_address(server_spec);
 
     // Send a raw `Shutdown` message to terminate the kernel.
     let call_result = rsyscall(SysCall::Shutdown);
@@ -61,12 +65,9 @@ fn shutdown() {
 fn send_scalar_message() {
     let server_spec = "localhost:9998";
     // Start the server in another thread
-    let main_thread = start_kernel(server_spec);
+    let (main_thread, server_spec) = start_kernel(server_spec);
 
     xous::hosted::set_xous_address(server_spec);
-
-    let xous_client_spec = server_spec.to_owned();
-    let xous_server_spec = server_spec.to_owned();
 
     let (server_addr_send, server_addr_recv) = channel();
 
@@ -75,7 +76,7 @@ fn send_scalar_message() {
     // "Client" what our server ID is. Normally this would be done via
     // an external nameserver.
     let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(&xous_client_spec);
+        xous::hosted::set_xous_address(server_spec);
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -93,7 +94,7 @@ fn send_scalar_message() {
 
     // Spawn the client "process" and wait for the server address.
     let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(&xous_server_spec);
+        xous::hosted::set_xous_address(server_spec);
         let sid = server_addr_recv.recv().unwrap();
         let conn = xous::connect(sid).expect("couldn't connect to server");
         xous::send_message(
@@ -123,15 +124,12 @@ fn send_scalar_message() {
 fn send_move_message() {
     let server_spec = "localhost:9997";
 
-    let main_thread = start_kernel(server_spec);
-
-    let xous_client_spec = server_spec.to_owned();
-    let xous_server_spec = server_spec.to_owned();
+    let (main_thread, server_spec) = start_kernel(server_spec);
 
     let (server_addr_send, server_addr_recv) = channel();
 
     let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(&xous_client_spec);
+        xous::hosted::set_xous_address(server_spec);
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -152,7 +150,7 @@ fn send_move_message() {
     });
 
     let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(&xous_server_spec);
+        xous::hosted::set_xous_address(server_spec);
         // println!("CLIENT: Waiting for server address...");
         let sid = server_addr_recv.recv().unwrap();
         // println!("CLIENT: Connecting to server {:?}", sid);
@@ -174,16 +172,11 @@ fn send_move_message() {
 #[test]
 fn send_borrow_message() {
     let server_spec = "localhost:9997";
-
-    let main_thread = start_kernel(server_spec);
-
-    let xous_client_spec = server_spec.to_owned();
-    let xous_server_spec = server_spec.to_owned();
-
+    let (main_thread, server_spec) = start_kernel(server_spec);
     let (server_addr_send, server_addr_recv) = channel();
 
     let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(&xous_client_spec);
+        xous::hosted::set_xous_address(server_spec);
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -199,19 +192,25 @@ fn send_borrow_message() {
         } else {
             panic!("unexpected message type");
         }
-
-        // println!("SERVER: Received message: {:?}", msg);
     });
 
     let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(&xous_server_spec);
-        // println!("CLIENT: Waiting for server address...");
+        xous::hosted::set_xous_address(server_spec);
+
+        // Get the server address (out of band) so we know what to connect to
         let sid = server_addr_recv.recv().unwrap();
-        // println!("CLIENT: Connecting to server {:?}", sid);
+
+        // Perform a connection to the server
         let conn = xous::connect(sid).expect("couldn't connect to server");
+
+        // Convert the message into a "Carton" that can be shipped as a message
         let msg = xous::carton::Carton::from_bytes(format!("Hello, world!").as_bytes());
+
+        // Send the message to the server
         xous::send_message(conn, xous::Message::Borrow(msg.into_message(0)))
             .expect("couldn't send a message");
+
+        // TODO: Assert that we wait for the server to process the message before returning
     });
 
     xous_server.join().expect("couldn't join server process");

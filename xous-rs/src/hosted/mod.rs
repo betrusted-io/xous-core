@@ -6,14 +6,16 @@ use std::thread_local;
 
 use crate::Result;
 
-thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<String> = RefCell::new("localhost:9687".to_owned()));
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+
+thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<TcpStream>> = RefCell::new(None));
 
 /// Set the network address for this particular thread.
-pub fn set_xous_address(new_address: &str) {
+pub fn set_xous_address(new_address: SocketAddr) {
     NETWORK_CONNECT_ADDRESS.with(|nca| {
         let mut address = nca.borrow_mut();
-        *address = new_address.to_owned();
+        *address = new_address;
         XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = None);
     });
 }
@@ -35,7 +37,7 @@ pub fn _xous_syscall(
         if xsc.borrow().is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
                 println!("Opening connection to Xous server @ {}...", nca.borrow());
-                let conn = TcpStream::connect(nca.borrow().as_str()).unwrap();
+                let conn = TcpStream::connect(*nca.borrow()).unwrap();
                 *xsc.borrow_mut() = Some(conn);
             });
         }

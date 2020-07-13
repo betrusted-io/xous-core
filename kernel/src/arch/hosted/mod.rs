@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::env;
 use std::io::Read;
 use std::mem::size_of;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::spawn;
 use std::thread_local;
@@ -29,15 +29,15 @@ enum BackchannelMessage {
     NewPid(PID),
 }
 
-const DEFAULT_LISTEN_ADDRESS: &str = "localhost:9687";
-thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<String> = RefCell::new(DEFAULT_LISTEN_ADDRESS.to_owned()));
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
 
 /// Set the network address for this particular thread.
 #[cfg(test)]
-pub fn set_listen_address(new_address: &str) {
+pub fn set_listen_address(new_address: &SocketAddr) {
     NETWORK_LISTEN_ADDRESS.with(|nla| {
         let mut address = nla.borrow_mut();
-        *address = new_address.to_owned();
+        *address = *new_address;
     });
 }
 
@@ -125,7 +125,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
 }
 
 fn listen_thread(
-    listen_addr: String,
+    listen_addr: SocketAddr,
     chn: Sender<ThreadMessage>,
     backchannel: Receiver<BackchannelMessage>,
 ) {
@@ -216,8 +216,13 @@ pub fn idle() -> bool {
     let (sender, receiver) = channel();
     let (backchannel_sender, backchannel_receiver) = channel();
 
-    let listen_addr = env::var("XOUS_LISTEN_ADDR")
-        .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| nla.borrow().clone()));
+    let listen_addr = env::var("XOUS_LISTEN_ADDR").map(|s|
+        s
+        .to_socket_addrs()
+        .expect("invalid server address")
+        .next()
+        .expect("unable to resolve server address"))
+        .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
     let listen_thread_handle =
         spawn(move || listen_thread(listen_addr, sender, backchannel_receiver));
