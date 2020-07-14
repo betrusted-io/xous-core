@@ -146,7 +146,7 @@ pub extern "C" fn kmain() {
                 xous::rsyscall(xous::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
             }
             None => {
-                println!("No runnable tasks found.  Entering idle state...");
+                // println!("No runnable tasks found.  Entering idle state...");
                 // Special case for testing: idle can return `false` to indicate exit
                 if ! arch::idle() {
                     return;

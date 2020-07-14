@@ -209,10 +209,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // process and mark ourselves as awaiting an event.  When a message
                 // arrives, our return value will already be set to the
                 // MessageEnvelope of the incoming message.
-                println!(
-                    "PID {} did not have any waiting messages -- parking context {}",
-                    pid, context_nr
-                );
+                // println!(
+                //     "PID {} did not have any waiting messages -- parking context {}",
+                //     pid, context_nr
+                // );
                 server.park_context(context_nr);
 
                 // For baremetal targets, switch away from this process.
@@ -408,10 +408,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     .expect("server couldn't be located")
                     .take_available_context()
                 {
-                    println!(
-                        "There are contexts available to handle this message.  Marking PID {} as Ready",
-                        server_pid
-                    );
+                    // println!(
+                    //     "There are contexts available to handle this message.  Marking PID {} as Ready",
+                    //     server_pid
+                    // );
                     let sender = match message {
                         Message::Scalar(_) | Message::Move(_) => 0,
                         Message::Borrow(_) | Message::MutableBorrow(_) => ss

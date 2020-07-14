@@ -290,10 +290,10 @@ impl Server {
     /// * **None**: There are no waiting messages
     /// ***Some(MessageEnvelope): This message is queued.
     pub fn take_next_message(&mut self, server_idx: usize) -> Option<xous::MessageEnvelope> {
-        println!(
-            "queue_head: ((({})))  queue_tail: ((({}))): {:?}",
-            self.queue_head, self.queue_tail, self.queue[self.queue_tail]
-        );
+        // println!(
+        //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}",
+        //     self.queue_head, self.queue_tail, self.queue[self.queue_tail]
+        // );
         let result = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::WaitingResponse(_, _, _, _) => return None,
@@ -596,7 +596,7 @@ impl Server {
 
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_context(&mut self, context: CtxID) {
-        println!("Parking context: {}", context);
+        // println!("Parking context: {}", context);
         self.ready_contexts |= 1 << context;
     }
 }

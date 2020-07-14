@@ -36,7 +36,7 @@ pub fn _xous_syscall(
     XOUS_SERVER_CONNECTION.with(|xsc| {
         if xsc.borrow().is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
-                println!("Opening connection to Xous server @ {}...", nca.borrow());
+                // println!("Opening connection to Xous server @ {}...", nca.borrow());
                 let conn = TcpStream::connect(*nca.borrow()).unwrap();
                 *xsc.borrow_mut() = Some(conn);
             });
