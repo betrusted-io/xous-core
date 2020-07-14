@@ -630,8 +630,8 @@ impl SystemServices {
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
-                "PID {} was already queued to run, despite the fact it was already running",
-                pid
+                "PID {} context {} was already queued for running when `switch_from()` was called",
+                pid, context
             ),
             ProcessState::Running(x) => {
                 if x == 0 {
@@ -977,6 +977,7 @@ impl SystemServices {
     ///   shared
     /// * **BadAddress**: The provided address was not valid
     /// * **BadAlignment**: The provided address or length was not page-aligned
+    #[cfg(baremetal)]
     pub fn lend_memory(
         &mut self,
         src_virt: *mut u8,
@@ -1035,6 +1036,18 @@ impl SystemServices {
         error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to lend: {:?}", e))
     }
 
+    #[cfg(not(baremetal))]
+    pub fn lend_memory(
+        &mut self,
+        src_virt: *mut u8,
+        _dest_pid: PID,
+        _dest_virt: *mut u8,
+        _len: usize,
+        _mutable: bool,
+    ) -> Result<*mut u8, xous::Error> {
+        Ok(src_virt)
+    }
+
     /// Return memory from one process back to another
     ///
     /// During this process, memory is unmapped from the source process.
@@ -1046,13 +1059,14 @@ impl SystemServices {
     /// # Errors
     ///
     /// * **ShareViolation**: Tried to mutably share a region that was already shared
+    #[cfg(baremetal)]
     pub fn return_memory(
         &mut self,
-        src_virt: *mut usize,
+        src_virt: *mut u8,
         dest_pid: PID,
-        dest_virt: *mut usize,
+        dest_virt: *mut u8,
         len: usize,
-    ) -> Result<*mut usize, xous::Error> {
+    ) -> Result<*mut u8, xous::Error> {
         if len == 0 {
             return Err(xous::Error::BadAddress);
         }
@@ -1089,6 +1103,17 @@ impl SystemServices {
             });
         }
         error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+    }
+
+    #[cfg(not(baremetal))]
+    pub fn return_memory(
+        &mut self,
+        src_virt: *mut u8,
+        _dest_pid: PID,
+        _dest_virt: *mut u8,
+        _len: usize,
+    ) -> Result<*mut u8, xous::Error> {
+        Ok(src_virt)
     }
 
     /// Create a new thread in the current process.  Execution begins at

@@ -234,7 +234,7 @@ impl Server {
     /// and return the pair.  Advance the tail.  Note that the `idx` could be
     /// somewhere other than the tail, but as long as it points to a valid
     /// message that's waiting a response, that's acceptable.
-    pub fn take_waiting_message(&mut self, idx: usize) -> Result<WaitingMessage, xous::Error> {
+    pub fn take_waiting_message(&mut self, idx: usize, buf: MemoryRange) -> Result<WaitingMessage, xous::Error> {
         if idx > self.queue.len() {
             return Err(xous::Error::BadAddress);
         }
@@ -247,6 +247,9 @@ impl Server {
             }
             _ => return Ok(WaitingMessage::None),
         };
+        if server_addr != buf.as_ptr() as usize || len != buf.len() {
+            return Err(xous::Error::BadAddress);
+        }
         self.queue[idx] = QueuedMessage::Empty;
         self.queue_tail += 1;
         if self.queue_tail >= self.queue.len() {
@@ -462,7 +465,7 @@ impl Server {
         message: xous::Message,
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
-        println!("Queueing message: {:?}", message);
+        // println!("Queueing message: {:?} for pid: {}  ctx: {}", message, pid.get(), context);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous::Error::ServerQueueFull);
         }
@@ -521,7 +524,7 @@ impl Server {
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
-        println!("Queueing address message: {:?}", message);
+        // println!("Queueing address message: {:?} (pid: {} ctx: {})", message, pid.get(), context);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous::Error::ServerQueueFull);
         }
@@ -533,7 +536,7 @@ impl Server {
         };
 
         self.queue[self.queue_head] = QueuedMessage::WaitingResponse(
-            pid.get() as usize | (context << 16),
+            ((pid.get() as usize) << 16) | (context & 0xffff),
             server_address,
             client_address.map(|x| x.get()).unwrap_or(0),
             len,
@@ -560,7 +563,7 @@ impl Server {
         }
         let mut test_ctx_mask = 1;
         let mut ctx_number = 0;
-        println!("Ready contexts: 0b{:08b}", self.ready_contexts);
+        // println!("Ready contexts: 0b{:08b}", self.ready_contexts);
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.

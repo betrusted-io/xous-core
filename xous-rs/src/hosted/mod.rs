@@ -124,7 +124,7 @@ fn _xous_syscall_to(
 
         *ret = Result::from_args(pkt);
 
-        println!("   Response: {:?}", *ret);
+        // println!("   Response: {:?}", *ret);
         if Result::BlockedProcess == *ret {
             // println!("   Waiting again");
         } else {

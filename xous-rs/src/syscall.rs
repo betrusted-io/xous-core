@@ -1,7 +1,7 @@
 use crate::{
-    CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, MemoryType,
-    Message, MessageEnvelope, MessageSender, Result, ScalarMessage, SysCallResult, CID, PID, SID,
-    pid_from_usize,
+    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
+    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, Result, ScalarMessage,
+    SysCallResult, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -236,7 +236,7 @@ pub enum SysCall {
     SendMessage(CID, Message),
 
     /// Return a Borrowed memory region to a sender
-    ReturnMemory(MessageSender, usize /* addr */, usize /* size */),
+    ReturnMemory(MessageSender, MemoryRange),
 
     /// Spawn a new thread
     SpawnThread(
@@ -468,11 +468,11 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(sender, addr, size) => [
+            SysCall::ReturnMemory(sender, buf) => [
                 SysCallNumber::ReturnMemory as usize,
                 *sender,
-                *addr,
-                *size,
+                buf.as_ptr() as usize,
+                buf.len(),
                 0,
                 0,
                 0,
@@ -489,7 +489,16 @@ impl SysCall {
                 0,
             ],
             SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
-            SysCall::TerminateProcess => [SysCallNumber::TerminateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::TerminateProcess => [
+                SysCallNumber::TerminateProcess as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Shutdown => [SysCallNumber::Shutdown as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
@@ -529,7 +538,9 @@ impl SysCall {
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => SysCall::ReceiveMessage((a1, a2, a3, a4)),
-            Some(SysCallNumber::ReturnToParentI) => SysCall::ReturnToParentI(pid_from_usize(a1)?, a2),
+            Some(SysCallNumber::ReturnToParentI) => {
+                SysCall::ReturnToParentI(pid_from_usize(a1)?, a2)
+            }
             Some(SysCallNumber::ClaimInterrupt) => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
@@ -596,7 +607,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, a2, a3),
+            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)),
             Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
@@ -674,12 +685,8 @@ pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Resu
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_memory(
-    sender: MessageSender,
-    addr: usize,
-    size: usize,
-) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender, addr, size))?;
+pub fn return_memory(sender: MessageSender, mem: MemoryRange) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {

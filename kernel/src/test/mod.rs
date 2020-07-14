@@ -134,7 +134,7 @@ fn send_move_message() {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
-        println!("Received message from {}", envelope.sender);
+        // println!("Received message from {}", envelope.sender);
         let message = envelope.message;
         if let xous::Message::Move(m) = message {
             let buf = m.buf;
@@ -142,7 +142,7 @@ fn send_move_message() {
                 Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
             };
             let s = String::from_utf8_lossy(&bt);
-            println!("Got message: {:?} -> \"{}\"", bt, s);
+            // println!("Got message: {:?} -> \"{}\"", bt, s);
         } else {
             panic!("unexpected message type");
         }
@@ -181,7 +181,7 @@ fn send_borrow_message() {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
-        println!("Received message from {}", envelope.sender);
+        // println!("Received message from {}", envelope.sender);
         let message = envelope.message;
         if let xous::Message::Borrow(m) = message {
             let buf = m.buf;
@@ -189,7 +189,8 @@ fn send_borrow_message() {
                 Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
             };
             let s = String::from_utf8_lossy(&bt);
-            println!("Got message: {:?} -> \"{}\"", bt, s);
+            // println!("Got message: {:?} -> \"{}\"", bt, s);
+            xous::return_memory(envelope.sender, m.buf).unwrap();
         } else {
             panic!("unexpected message type");
         }
@@ -210,8 +211,6 @@ fn send_borrow_message() {
         // Send the message to the server
         xous::send_message(conn, xous::Message::Borrow(msg.into_message(0)))
             .expect("couldn't send a message");
-
-        // TODO: Assert that we wait for the server to process the message before returning
     });
 
     xous_server.join().expect("couldn't join server process");

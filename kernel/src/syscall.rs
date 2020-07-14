@@ -252,7 +252,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             // ::debug_here::debug_here!();
             SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous::Result::ConnectionID))
         }
-        SysCall::ReturnMemory(sender, addr, size) => {
+        SysCall::ReturnMemory(sender, buf) => {
             SystemServices::with_mut(|ss| {
                 let sender = SenderID::from_usize(sender)?;
 
@@ -262,7 +262,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 if server.pid != pid {
                     return Err(xous::Error::ServerNotFound);
                 }
-                let result = server.take_waiting_message(sender.tidx)?;
+                let result = server.take_waiting_message(sender.tidx, buf)?;
                 let (client_pid, client_ctx, server_addr, client_addr, len) = match result {
                     WaitingMessage::BorrowedMemory(
                         client_pid,
@@ -308,9 +308,9 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
 
                 // Return the memory to the calling process
                 ss.return_memory(
-                    server_addr.get() as *mut usize,
+                    server_addr.get() as _,
                     client_pid,
-                    client_addr.get() as *mut usize,
+                    client_addr.get() as _,
                     len.get(),
                 )?;
 
@@ -336,9 +336,9 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // return it after the borrow is through.
                 let client_address = match &message {
                     Message::Scalar(_) => None,
-                    Message::Move(msg)
-                    | Message::MutableBorrow(msg)
-                    | Message::Borrow(msg) => Some(msg.buf.addr),
+                    Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
+                        Some(msg.buf.addr)
+                    }
                 };
 
                 // Translate memory messages from the client process to the server
@@ -389,6 +389,14 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             msg.buf.len(),
                             false,
                         )?;
+                        // println!(
+                        //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
+                        //     msg.buf.len(),
+                        //     msg.buf.as_mut_ptr() as usize,
+                        //     pid,
+                        //     new_virt as usize,
+                        //     server_pid,
+                        // );
                         (
                             Message::Borrow(MemoryMessage {
                                 id: msg.id,
@@ -441,19 +449,20 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                     })?;
 
                     if blocking && cfg!(baremetal) {
-                        println!("Activating Server context and switching away from Client");
+                        // println!("Activating Server context and switching away from Client");
                         ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
                             .map(|_| Ok(xous::Result::Message(envelope)))
                             .unwrap_or(Err(xous::Error::ProcessNotFound))
                     } else if blocking && !cfg!(baremetal) {
+                        // println!("Blocking client, since it sent a blocking message");
                         ss.set_context_result(
                             server_pid,
                             ctx_number,
                             xous::Result::Message(envelope),
-                        )
+                        ).and_then(|_| ss.switch_from(pid, context_nr, false))
                         .map(|_| xous::Result::BlockedProcess)
                     } else if cfg!(baremetal) {
-                        println!("Setting the return value of the Server and returning to Client");
+                        // println!("Setting the return value of the Server and returning to Client");
                         ss.set_context_result(
                             server_pid,
                             ctx_number,
@@ -461,6 +470,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         )
                         .map(|_| xous::Result::Ok)
                     } else {
+                        // println!("Setting the return value of the Server and returning to Client");
                         ss.set_context_result(
                             server_pid,
                             ctx_number,
@@ -506,9 +516,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 Ok(xous::Result::Ok)
             }
         }),
-        SysCall::Shutdown => SystemServices::with_mut(|ss| {
-            ss.shutdown().map(|_| xous::Result::Ok)
-        }),
+        SysCall::Shutdown => SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous::Result::Ok)),
         _ => Err(xous::Error::UnhandledSyscall),
     }
 }

@@ -181,7 +181,7 @@ fn listen_thread(
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         continue;
                     }
-                    Err(e) => println!(
+                    Err(e) => panic!(
                         "KERNEL: got error when trying to receive quit timeout: {:?} ({})",
                         e, e
                     ),
