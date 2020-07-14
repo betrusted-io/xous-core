@@ -124,6 +124,8 @@ fn send_scalar_message() {
 #[test]
 fn send_move_message() {
     let server_spec = "localhost:0";
+    let test_str = "Hello, world!";
+    let test_bytes = test_str.as_bytes();
 
     let (main_thread, server_spec) = start_kernel(server_spec);
 
@@ -141,6 +143,7 @@ fn send_move_message() {
             let bt = unsafe {
                 Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
             };
+            assert_eq!(*test_bytes, *bt);
             // let s = String::from_utf8_lossy(&bt);
             // println!("Got message: {:?} -> \"{}\"", bt, s);
         } else {
@@ -156,7 +159,7 @@ fn send_move_message() {
         let sid = server_addr_recv.recv().unwrap();
         // println!("CLIENT: Connecting to server {:?}", sid);
         let conn = xous::connect(sid).expect("couldn't connect to server");
-        let msg = xous::carton::Carton::from_bytes(format!("Hello, world!").as_bytes());
+        let msg = xous::carton::Carton::from_bytes(test_bytes);
         xous::send_message(conn, xous::Message::Move(msg.into_message(0)))
             .expect("couldn't send a message");
     });

@@ -131,6 +131,7 @@ impl Process {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn find_free_context_nr(&self) -> Option<CtxID> {
         None
     }

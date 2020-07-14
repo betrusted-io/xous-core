@@ -181,7 +181,6 @@ fn _xous_syscall_to(
                         }
                     }*/
                     // Nothing to do for Immutable borrow, since the memory can't change
-                    crate::Message::Borrow(_) => (),
                     crate::Message::Scalar(_) => (),
                 }
             }

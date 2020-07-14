@@ -457,6 +457,7 @@ impl MemoryManager {
     }
 
     /// Move a page from one process into another, keeping its permissions.
+    #[allow(dead_code)]
     pub fn move_page(
         &mut self,
         src_mapping: &MemoryMapping,
@@ -479,6 +480,7 @@ impl MemoryManager {
     /// read-only, then additionally remove the "write" bit on it.  If the page
     /// is writable, then remove it from the current process until the borrow is
     /// returned.
+    #[allow(dead_code)]
     pub fn lend_page(
         &mut self,
         src_mapping: &MemoryMapping,
@@ -503,6 +505,7 @@ impl MemoryManager {
     }
 
     /// Return the range from `src_mapping` back to `dest_mapping`
+    #[allow(dead_code)]
     pub fn unlend_page(
         &mut self,
         src_mapping: &MemoryMapping,
