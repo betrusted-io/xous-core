@@ -7,10 +7,10 @@ use core::cell::RefCell;
 use std::thread_local;
 
 use crate::filled_array;
-use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+// use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
-use core::mem;
-use xous::{pid_from_usize, CtxID, Error, MemoryAddress, MemoryType, Message, CID, PID, SID};
+// use core::mem;
+use xous::{pid_from_usize, CtxID, Error, MemoryAddress, Message, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -397,11 +397,11 @@ impl SystemServices {
             };
             process.state = ProcessState::Running(available_contexts);
             process.current_context = context as u8;
-            process.mapping.activate();
+            process.mapping.activate()?;
 
             // Activate the current context
             let mut arch_process = crate::arch::process::Process::current();
-            arch_process.set_context(context);
+            arch_process.set_context(context)?;
         }
         self.pid = pid;
         Ok(())
@@ -744,7 +744,7 @@ impl SystemServices {
             // Set up the new process, if necessary.  Remove the new context from
             // the list of ready contexts.
             new.state = match new.state {
-                ProcessState::Setup(init_context) => {
+                ProcessState::Setup(_init_context) => {
                     // entrypoint, stack, stack_size) => {
                     // let mut process = ProcessHandle::get();
                     // println!(
@@ -1109,10 +1109,21 @@ impl SystemServices {
     pub fn return_memory(
         &mut self,
         src_virt: *mut u8,
-        _dest_pid: PID,
+        dest_pid: PID,
         _dest_virt: *mut u8,
-        _len: usize,
+        len: usize,
     ) -> Result<*mut u8, xous::Error> {
+        let buf = unsafe { core::slice::from_raw_parts(src_virt, len) };
+        let current_pid = self.current_pid();
+        {
+            let target_process = self.get_process(dest_pid)?;
+            target_process.activate()?;
+            let mut arch_process = crate::arch::process::Process::current();
+            arch_process.return_memory(buf);
+        }
+        let target_process = self.get_process(current_pid)?;
+        target_process.activate()?;
+
         Ok(src_virt)
     }
 

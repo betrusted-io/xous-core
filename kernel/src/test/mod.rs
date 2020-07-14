@@ -141,7 +141,7 @@ fn send_move_message() {
             let bt = unsafe {
                 Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
             };
-            let s = String::from_utf8_lossy(&bt);
+            // let s = String::from_utf8_lossy(&bt);
             // println!("Got message: {:?} -> \"{}\"", bt, s);
         } else {
             panic!("unexpected message type");
@@ -175,6 +175,8 @@ fn send_borrow_message() {
     let server_spec = "localhost:0";
     let (main_thread, server_spec) = start_kernel(server_spec);
     let (server_addr_send, server_addr_recv) = channel();
+    let test_str = "Hello, world!";
+    let test_bytes = test_str.as_bytes();
 
     let xous_server = spawn(move || {
         xous::hosted::set_xous_address(server_spec);
@@ -188,7 +190,8 @@ fn send_borrow_message() {
             let bt = unsafe {
                 Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
             };
-            let s = String::from_utf8_lossy(&bt);
+            assert_eq!(*test_bytes, *bt);
+            // let s = String::from_utf8_lossy(&bt);
             // println!("Got message: {:?} -> \"{}\"", bt, s);
             xous::return_memory(envelope.sender, m.buf).unwrap();
         } else {
@@ -206,11 +209,71 @@ fn send_borrow_message() {
         let conn = xous::connect(sid).expect("couldn't connect to server");
 
         // Convert the message into a "Carton" that can be shipped as a message
-        let msg = xous::carton::Carton::from_bytes(format!("Hello, world!").as_bytes());
+        let carton = xous::carton::Carton::from_bytes(test_bytes);
 
         // Send the message to the server
-        xous::send_message(conn, xous::Message::Borrow(msg.into_message(0)))
-            .expect("couldn't send a message");
+        carton.lend(conn, 0).expect("couldn't lend message to server");
+    });
+
+    xous_server.join().expect("couldn't join server process");
+    xous_client.join().expect("couldn't join client process");
+
+    // Any process ought to be able to shut down the system currently.
+    rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+#[test]
+fn send_mutableborrow_message() {
+    let server_spec = "localhost:0";
+    let (main_thread, server_spec) = start_kernel(server_spec);
+    let (server_addr_send, server_addr_recv) = channel();
+    let test_str = "Hello, world!";
+    let test_bytes = test_str.as_bytes();
+
+    let xous_server = spawn(move || {
+        xous::hosted::set_xous_address(server_spec);
+        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        server_addr_send.send(sid).unwrap();
+        let envelope = xous::receive_message(sid).expect("couldn't receive messages");
+        // println!("Received message from {}", envelope.sender);
+        let message = envelope.message;
+        if let xous::Message::MutableBorrow(m) = message {
+            let buf = m.buf;
+            let mut bt = unsafe {
+                Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
+            };
+            for letter in bt.iter_mut() {
+                *letter += 1;
+            }
+            xous::return_memory(envelope.sender, m.buf).unwrap();
+        } else {
+            panic!("unexpected message type");
+        }
+    });
+
+    let xous_client = spawn(move || {
+        xous::hosted::set_xous_address(server_spec);
+
+        // Get the server address (out of band) so we know what to connect to
+        let sid = server_addr_recv.recv().unwrap();
+
+        // Perform a connection to the server
+        let conn = xous::connect(sid).expect("couldn't connect to server");
+
+        // Convert the message into a "Carton" that can be shipped as a message
+        let mut carton = xous::carton::Carton::from_bytes(&test_bytes);
+        let mut check_bytes = test_bytes.to_vec();
+        for letter in check_bytes.iter_mut() {
+            *letter += 1;
+        }
+
+        // Send the message to the server
+        carton.lend_mut(conn, 3).expect("couldn't mutably lend data");
+
+        let modified_bytes: &[u8] = carton.as_ref();
+        assert_eq!(&check_bytes, &modified_bytes);
     });
 
     xous_server.join().expect("couldn't join server process");

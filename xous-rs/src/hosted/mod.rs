@@ -144,6 +144,26 @@ fn _xous_syscall_to(
                         xsc.read_exact(&mut data).expect("Server shut down");
                         // pkt.extend_from_slice(data);
                     }
+
+                    crate::Message::Borrow(crate::MemoryMessage {
+                        id: _id,
+                        buf,
+                        offset: _offset,
+                        valid: _valid,
+                    }) => {
+                        // Read the buffer back from the remote host and ensure it's the same
+                        use core::slice;
+                        let mut check_data = Vec::new();
+                        check_data.resize(buf.len(), 0);
+                        let data = unsafe {
+                            slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len())
+                        };
+                        xsc.read_exact(&mut check_data).expect("Server shut down");
+
+                        assert_eq!(data, check_data.as_slice());
+                        // pkt.extend_from_slice(data);
+                    }
+
                     crate::Message::Move(crate::MemoryMessage {
                         id: _id,
                         buf: _buf,

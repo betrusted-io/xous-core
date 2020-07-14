@@ -19,6 +19,9 @@ struct ProcessImpl {
 
     /// The network connection to the client process.
     conn: TcpStream,
+
+    /// Memory that may need to be returned to the caller
+    memory_to_return: Option<Vec<u8>>,
 }
 
 impl PartialEq for Process {
@@ -68,7 +71,7 @@ impl ProcessInit {
 impl Process {
     pub fn current() -> Process {
         let current_pid = PROCESS_TABLE.with(|pt| pt.borrow().current);
-        Process{pid: current_pid}
+        Process { pid: current_pid }
     }
 
     /// Mark this process as running (on the current core?!)
@@ -86,7 +89,9 @@ impl Process {
     {
         PROCESS_TABLE.with(|pt| {
             let process_table = pt.borrow();
-            let current = &process_table.table[process_table.current.get() as usize - 1].as_ref().unwrap();
+            let current = &process_table.table[process_table.current.get() as usize - 1]
+                .as_ref()
+                .unwrap();
             f(&current.inner)
         })
     }
@@ -132,15 +137,31 @@ impl Process {
 
     pub fn set_context_result(&mut self, context: CtxID, result: xous::Result) {
         assert!(context == INITIAL_CONTEXT);
+        let mut response = vec![];
+        for word in result.to_args().iter_mut() {
+            response.extend_from_slice(&word.to_le_bytes());
+        }
+
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            for word in result.to_args().iter_mut() {
-                process.conn
-                    .write_all(&word.to_le_bytes())
-                    .expect("Disconnection");
+
+            if let Some(buf) = process.memory_to_return.take() {
+                response.extend_from_slice(&buf);
             }
+
+            process.conn.write_all(&response).expect("Disconnection");
+        });
+    }
+
+    pub fn return_memory(&mut self, buf: &[u8]) {
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+            assert!(process.memory_to_return.is_none());
+            process.memory_to_return = Some(buf.to_vec());
         });
     }
 
@@ -154,6 +175,7 @@ impl Process {
             let process = ProcessImpl {
                 inner: Default::default(),
                 conn: init_data.conn,
+                memory_to_return: None,
             };
             if pid_idx >= process_table.table.len() {
                 process_table.table.push(Some(process));
