@@ -29,7 +29,7 @@ enum BackchannelMessage {
     NewPid(PID),
 }
 
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
 
 /// Set the network address for this particular thread.
@@ -54,10 +54,10 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                     // If the connection has gone away, send a `TerminateProcess` message to the main
                     // and then exit this thread.
                     if e.kind() != std::io::ErrorKind::WouldBlock {
-                        // println!(
-                        //     "KERNEL({}): Client disconnected: {}. Shutting down virtual process.",
-                        //     pid, e
-                        // );
+                        println!(
+                            "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
+                            pid, e, e
+                        );
                         chn.send(ThreadMessage::SysCall(pid, xous::SysCall::TerminateProcess))
                             .unwrap();
                         return;
@@ -83,6 +83,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                             tmp_data.resize(msg.buf.len(), 0);
                             conn.read_exact(&mut tmp_data)
                                 .map_err(|_e| {
+                                    println!("KERNEL({}): Read Error {}", pid, _e);
                                     chn.send(ThreadMessage::SysCall(
                                         pid,
                                         xous::SysCall::TerminateProcess,
@@ -216,12 +217,13 @@ pub fn idle() -> bool {
     let (sender, receiver) = channel();
     let (backchannel_sender, backchannel_receiver) = channel();
 
-    let listen_addr = env::var("XOUS_LISTEN_ADDR").map(|s|
-        s
-        .to_socket_addrs()
-        .expect("invalid server address")
-        .next()
-        .expect("unable to resolve server address"))
+    let listen_addr = env::var("XOUS_LISTEN_ADDR")
+        .map(|s| {
+            s.to_socket_addrs()
+                .expect("invalid server address")
+                .next()
+                .expect("unable to resolve server address")
+        })
         .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
     let listen_thread_handle =
@@ -230,19 +232,26 @@ pub fn idle() -> bool {
     while let Ok(msg) = receiver.recv() {
         match msg {
             ThreadMessage::NewConnection(conn) => {
-                // println!("KERNEL(?): Going to call ss.spawn_process()");
+                // Spawn a new process inside the kernel. This will assign us a PID.
                 let new_pid = SystemServices::with_mut(|ss| {
                     ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
                 })
                 .unwrap();
-                // println!("KERNEL({}): SystemServices assigned new PID of {}", new_pid, new_pid);
+
+                // Inform the backchannel of the new process ID.
                 backchannel_sender
                     .send(BackchannelMessage::NewPid(new_pid))
                     .expect("couldn't send new pid to new connection");
+
+                // Switch to this process immediately, which moves it from `Setup(_)` to `Running(0)`.
+                // Note that in this system, multiple processes can be active at once. This is
+                // similar to having one core for each process. However, each process may only have
+                // one context running at a time.
+                SystemServices::with_mut(|ss| ss.switch_to(new_pid, Some(1))).unwrap();
             }
             ThreadMessage::SysCall(pid, call) => {
-                // println!("KERNEL({}): Received syscall {:?}", pid, call);
-                SystemServices::with_mut(|ss| ss.switch_to(pid, Some(1))).unwrap();
+                println!("KERNEL({}): Received syscall {:?}", pid, call);
+                crate::arch::process::set_current_pid(pid);
                 // println!("KERNEL({}): Now running as the new process", pid);
 
                 // If the call being made is to terminate the current process, we need to know
@@ -271,11 +280,18 @@ pub fn idle() -> bool {
                 // Handle the syscall within the Xous kernel
                 let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
 
-                // println!("KERNEL({}): Syscall response {:?}", pid, response);
+                println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
                 // Send the response back to the target.
                 if response != Result::BlockedProcess && !is_terminate && !is_shutdown {
                     {
+                        // The syscall may change what the current process is, but we always
+                        // want to send a response to the process where the request came from.
+                        // For this block, switch to the original PID, send the message, then
+                        // switch back.
+                        let existing_pid = crate::arch::process::current_pid();
+                        crate::arch::process::set_current_pid(pid);
+
                         let mut process = Process::current();
                         let mut response_vec = Vec::new();
                         for word in response.to_args().iter_mut() {
@@ -289,8 +305,11 @@ pub fn idle() -> bool {
                             // );
                             crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
                         });
+                        crate::arch::process::set_current_pid(existing_pid);
                     }
-                    SystemServices::with_mut(|ss| ss.switch_from(pid, 1, true)).unwrap();
+                    // SystemServices::with_mut(|ss| {
+                    // println!("295: Switching from {}", pid);
+                    // ss.switch_from(pid, 1, true)}).unwrap();
                 }
 
                 if is_shutdown {

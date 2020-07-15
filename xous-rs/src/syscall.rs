@@ -607,7 +607,9 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::ReturnMemory) => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)),
+            Some(SysCallNumber::ReturnMemory) => {
+                SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
+            }
             Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
@@ -797,6 +799,16 @@ pub fn yield_slice() {
 pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
+
+/// Create a new thread
+// pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+// where
+//     F: FnOnce() -> T,
+//     F: Send + 'static,
+//     T: Send + 'static,
+// {
+//     Builder::new().spawn(f).expect("failed to spawn thread")
+// }
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;

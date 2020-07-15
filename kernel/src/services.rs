@@ -21,7 +21,7 @@ pub use crate::arch::process::INITIAL_CONTEXT;
 /// This is inherited from the stage 1 bootloader.
 pub struct SystemServices {
     /// Current PID.
-    pid: PID,
+    // pid: PID,
 
     /// A table of all processes in the system
     pub processes: [Process; MAX_PROCESS_COUNT],
@@ -193,7 +193,7 @@ impl Process {
 }
 
 thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
-    pid: unsafe { PID::new_unchecked(1) },
+    // pid: unsafe { PID::new_unchecked(1) },
     processes: [Process {
         state: ProcessState::Free,
         ppid: unsafe { PID::new_unchecked(1) },
@@ -299,6 +299,7 @@ impl SystemServices {
             let new_pid = pid_from_usize(idx + 1)?;
             arch::process::Process::create(new_pid, init_process);
             // #[allow(clippy::unit_arg)]
+            println!("Creating new process for PID {}", new_pid);
             entry.state = ProcessState::Setup(init_context);
             entry.ppid = crate::arch::process::current_pid();
             entry.pid = new_pid;
@@ -336,8 +337,8 @@ impl SystemServices {
         Ok(&mut self.processes[pid_idx])
     }
 
-    pub fn current_context_nr(&self) -> usize {
-        self.processes[self.pid.get() as usize - 1].current_context as usize
+    pub fn current_context_nr(&self, pid: PID) -> usize {
+        self.processes[pid.get() as usize - 1].current_context as usize
     }
 
     pub fn current_pid(&self) -> PID {
@@ -403,7 +404,7 @@ impl SystemServices {
             let mut arch_process = crate::arch::process::Process::current();
             arch_process.set_context(context)?;
         }
-        self.pid = pid;
+        // self.pid = pid;
         Ok(())
     }
 
@@ -480,6 +481,7 @@ impl SystemServices {
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
     pub fn ready_context(&mut self, pid: PID, context: CtxID) -> Result<(), xous::Error> {
+        assert!(context == INITIAL_CONTEXT);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
             ProcessState::Free => panic!(
@@ -498,6 +500,7 @@ impl SystemServices {
                 pid, context, other
             ),
         };
+        println!("KERNEL({}): Readying context {} -> {:?}", pid, context, process.state);
         Ok(())
     }
 
@@ -510,6 +513,7 @@ impl SystemServices {
         // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
         // println!("KERNEL(?): Current process is {:?}", process);
+        println!("switch_to (start): PID {}: {:?} @ {:?}", pid, process.state, std::thread::current().id());
 
         // Determine which context number to switch to
         process.state = match process.state {
@@ -530,6 +534,7 @@ impl SystemServices {
                 let mut p = crate::arch::process::Process::current();
                 p.setup_context(INITIAL_CONTEXT, setup)?;
                 p.set_context(INITIAL_CONTEXT)?;
+                process.current_context = INITIAL_CONTEXT as u8;
 
                 // Mark the current proces state as "running, and no waiting contexts"
                 ProcessState::Running(0)
@@ -609,7 +614,8 @@ impl SystemServices {
                 ProcessState::Running(new_mask)
             }
         };
-        self.pid = pid;
+        println!("switch_to (end): PID {}: {:?}", pid, process.state);
+        // self.pid = pid;
         Ok(())
     }
 
@@ -628,6 +634,7 @@ impl SystemServices {
         can_resume: bool,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
+        println!("switch_from (start): PID {}: {:?}", pid, process.state);
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
                 "PID {} context {} was already queued for running when `switch_from()` was called",
@@ -649,6 +656,7 @@ impl SystemServices {
                 pid, other
             ),
         };
+        println!("switch_from (end): PID {}: {:?}", pid, process.state);
         Ok(())
     }
 
@@ -685,9 +693,10 @@ impl SystemServices {
         can_resume: bool,
         advance_context: bool,
     ) -> Result<CtxID, xous::Error> {
-        println!("Activating PID {}, context {}", new_pid, new_context);
+        // println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
-        let previous_context = self.current_context_nr();
+        let previous_context = self.current_context_nr(previous_pid);
+        println!("KERNEL({}): Activating process {} context {}", previous_pid, new_pid, new_context);
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -814,7 +823,7 @@ impl SystemServices {
         //     previous_pid, previous.state, can_resume
         // );
         } else {
-            if self.current_context_nr() == new_context {
+            if self.current_context_nr(previous_pid) == new_context {
                 if !can_resume {
                     panic!("tried to switch to our own context without resume");
                 }
@@ -844,13 +853,13 @@ impl SystemServices {
                 }
             }
         }
-        self.pid = new_pid;
+        // self.pid = new_pid;
 
         let mut process = crate::arch::process::Process::current();
 
         // Restore the previous context, if one exists.
         process.set_context(new_context)?;
-        self.processes[self.pid.get() as usize - 1].current_context = new_context as u8;
+        self.processes[new_pid.get() as usize - 1].current_context = new_context as u8;
         // let _ctx = process.current_context();
 
         Ok(new_context)
@@ -1186,7 +1195,7 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, name: usize) -> Result<SID, xous::Error> {
+    pub fn create_server(&mut self, pid: PID, name: usize) -> Result<SID, xous::Error> {
         // println!(
         //     "KERNEL({}): Looking through server list for free server",
         //     self.pid.get()
@@ -1198,7 +1207,6 @@ impl SystemServices {
                 //     "KERNEL({}): Found a free slot for a server -- allocating an entry",
                 //     self.pid.get()
                 // );
-                let pid = self.pid;
 
                 // TODO: Come up with a way to randomize this
                 let sid = (
@@ -1415,6 +1423,7 @@ impl SystemServices {
         process.activate()?;
         let parent_pid = process.ppid;
         process.terminate()?;
+        println!("KERNEL({}): Terminated", target_pid);
 
         let process = self.get_process(parent_pid)?;
         process.activate().unwrap();

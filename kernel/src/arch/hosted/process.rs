@@ -137,7 +137,7 @@ impl Process {
     }
 
     pub fn set_context_result(&mut self, context: CtxID, result: xous::Result) {
-        assert!(context == INITIAL_CONTEXT);
+        assert!(context == INITIAL_CONTEXT, "context is {} and not {}", context, INITIAL_CONTEXT);
         let mut response = vec![];
         for word in result.to_args().iter_mut() {
             response.extend_from_slice(&word.to_le_bytes());

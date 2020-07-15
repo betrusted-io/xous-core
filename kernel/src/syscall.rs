@@ -137,7 +137,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
         }
         SysCall::SwitchTo(new_pid, new_context) => {
             SystemServices::with_mut(|ss| {
-                let context_nr = ss.current_context_nr();
+                let context_nr = ss.current_context_nr(pid);
                 unsafe {
                     assert!(
                         SWITCHTO_CALLER.is_none(),
@@ -187,7 +187,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
         SysCall::ReceiveMessage(sid) => {
             SystemServices::with_mut(|ss| {
                 // See if there is a pending message.  If so, return immediately.
-                let context_nr = ss.current_context_nr();
+                let context_nr = ss.current_context_nr(pid);
                 let sidx = ss.server_sidx(sid).ok_or(xous::Error::ServerNotFound)?;
                 let server = ss
                     .server_from_sidx(sidx)
@@ -209,10 +209,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // process and mark ourselves as awaiting an event.  When a message
                 // arrives, our return value will already be set to the
                 // MessageEnvelope of the incoming message.
-                // println!(
-                //     "PID {} did not have any waiting messages -- parking context {}",
-                //     pid, context_nr
-                // );
+                println!(
+                    "KERNEL({}): did not have any waiting messages -- parking context {}",
+                    pid, context_nr
+                );
                 server.park_context(context_nr);
 
                 // For baremetal targets, switch away from this process.
@@ -226,6 +226,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // For hosted targets, simply return `BlockedProcess` indicating we'll make
                 // a callback to their socket at a later time.
                 else {
+                    println!("229: Switching from {}", pid);
                     ss.switch_from(pid, context_nr, false)
                         .map(|_| xous::Result::BlockedProcess)
                 }
@@ -246,7 +247,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             })
         }
         SysCall::CreateServer(name) => {
-            SystemServices::with_mut(|ss| ss.create_server(name).map(xous::Result::ServerID))
+            SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous::Result::ServerID))
         }
         SysCall::Connect(sid) => {
             // ::debug_here::debug_here!();
@@ -296,15 +297,15 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         return Err(xous::Error::ProcessNotFound);
                     }
                 };
-                // println!(
-                //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
-                //     len,
-                //     server_addr.get(),
-                //     pid,
-                //     client_addr.get(),
-                //     client_pid,
-                //     client_ctx
-                // );
+                println!(
+                    "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+                    len,
+                    server_addr.get(),
+                    pid,
+                    client_addr.get(),
+                    client_pid,
+                    client_ctx
+                );
 
                 // Return the memory to the calling process
                 ss.return_memory(
@@ -315,15 +316,19 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 )?;
 
                 // Unblock the client context to allow it to continue.
-                // println!("Unblocking PID {} CTX {}", client_pid, client_ctx);
+                println!(
+                    "KERNEL({}): Unblocking PID {} CTX {}",
+                    pid, client_pid, client_ctx
+                );
                 ss.ready_context(client_pid, client_ctx)?;
                 ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
+                ss.switch_to(client_pid, Some(client_ctx))?;
                 Ok(xous::Result::Ok)
             })
         }
         SysCall::SendMessage(cid, message) => {
             SystemServices::with_mut(|ss| {
-                let context_nr = ss.current_context_nr();
+                let context_nr = ss.current_context_nr(pid);
                 let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
                 // ::debug_here::debug_here!();
 
@@ -455,11 +460,16 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             .unwrap_or(Err(xous::Error::ProcessNotFound))
                     } else if blocking && !cfg!(baremetal) {
                         // println!("Blocking client, since it sent a blocking message");
+                        ss.switch_to(server_pid, None)?;
                         ss.set_context_result(
                             server_pid,
                             ctx_number,
                             xous::Result::Message(envelope),
-                        ).and_then(|_| ss.switch_from(pid, context_nr, false))
+                        )
+                        .and_then(|_| {
+                            println!("464: Switching from {}", pid);
+                            ss.switch_from(pid, context_nr, false)
+                        })
                         .map(|_| xous::Result::BlockedProcess)
                     } else if cfg!(baremetal) {
                         // println!("Setting the return value of the Server and returning to Client");
@@ -471,6 +481,9 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         .map(|_| xous::Result::Ok)
                     } else {
                         // println!("Setting the return value of the Server and returning to Client");
+                        // "Switch to" the server PID when not running on bare metal. This ensures
+                        // that it's "Running".
+                        ss.switch_to(server_pid, None)?;
                         ss.set_context_result(
                             server_pid,
                             ctx_number,
@@ -479,10 +492,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         .map(|_| xous::Result::Ok)
                     }
                 } else {
-                    println!("No contexts available to handle this.  Queueing message.");
+                    // println!("No contexts available to handle this.  Queueing message.");
                     // There is no server context we can use, so add the message to
                     // the queue.
-                    let context_nr = ss.current_context_nr();
+                    let context_nr = ss.current_context_nr(pid);
 
                     // Add this message to the queue.  If the queue is full, this
                     // returns an error.
@@ -490,7 +503,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
 
                     // Park this context if it's blocking.  This is roughly
                     // equivalent to a "Yield".
-                    if blocking {
+                    if !cfg!(baremetal) {
+                        ss.switch_from(pid, context_nr, false)?;
+                        Ok(xous::Result::BlockedProcess)
+                    } else if blocking {
                         // println!("Returning to parent");
                         let process = ss.get_process(pid).expect("Can't get current process");
                         let ppid = process.ppid;
@@ -506,7 +522,8 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             })
         }
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
-            let context_nr = ss.current_context_nr();
+            let context_nr = ss.current_context_nr(pid);
+            println!("515: Switching from {}", pid);
             ss.switch_from(pid, context_nr, false)?;
             let ppid = ss.terminate_process(pid)?;
             if cfg!(baremetal) {
