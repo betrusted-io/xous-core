@@ -289,7 +289,7 @@ impl Server {
         }
 
         // Destructure the PID and context ID from the `pid_ctx` field
-        println!("Taking waiting message -- pid: {} ctx: {}", pid, ctx);
+        // println!("Taking waiting message -- pid: {} ctx: {}", pid, ctx);
 
         if forget {
             return Ok(WaitingMessage::ForgetMemory(MemoryRange::new(
@@ -616,10 +616,6 @@ impl Server {
             // If the context mask matches this context number, remove it
             // and return the index.
             if self.ready_contexts & test_ctx_mask == test_ctx_mask {
-                println!(
-                    "Returning ready context {:08b}: {}",
-                    self.ready_contexts, ctx_number
-                );
                 self.ready_contexts &= !test_ctx_mask;
                 return Some(ctx_number);
             }
@@ -651,7 +647,7 @@ impl Server {
 
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_context(&mut self, context: CtxID) {
-        println!("KERNEL({}): Parking context: {}", self.pid, context);
+        // println!("KERNEL({}): Parking context: {}", self.pid, context);
         self.ready_contexts |= 1 << context;
     }
 }

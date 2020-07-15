@@ -209,10 +209,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // process and mark ourselves as awaiting an event.  When a message
                 // arrives, our return value will already be set to the
                 // MessageEnvelope of the incoming message.
-                println!(
-                    "KERNEL({}): did not have any waiting messages -- parking context {}",
-                    pid, context_nr
-                );
+                // println!(
+                //     "KERNEL({}): did not have any waiting messages -- parking context {}",
+                //     pid, context_nr
+                // );
                 server.park_context(context_nr);
 
                 // For baremetal targets, switch away from this process.
@@ -226,7 +226,6 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 // For hosted targets, simply return `BlockedProcess` indicating we'll make
                 // a callback to their socket at a later time.
                 else {
-                    println!("229: Switching from {}", pid);
                     ss.switch_from(pid, context_nr, false)
                         .map(|_| xous::Result::BlockedProcess)
                 }
@@ -297,15 +296,15 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                         return Err(xous::Error::ProcessNotFound);
                     }
                 };
-                println!(
-                    "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
-                    len,
-                    server_addr.get(),
-                    pid,
-                    client_addr.get(),
-                    client_pid,
-                    client_ctx
-                );
+                // println!(
+                //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+                //     len,
+                //     server_addr.get(),
+                //     pid,
+                //     client_addr.get(),
+                //     client_pid,
+                //     client_ctx
+                // );
 
                 // Return the memory to the calling process
                 ss.return_memory(
@@ -316,10 +315,10 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 )?;
 
                 // Unblock the client context to allow it to continue.
-                println!(
-                    "KERNEL({}): Unblocking PID {} CTX {}",
-                    pid, client_pid, client_ctx
-                );
+                // println!(
+                //     "KERNEL({}): Unblocking PID {} CTX {}",
+                //     pid, client_pid, client_ctx
+                // );
                 ss.ready_context(client_pid, client_ctx)?;
                 ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
                 ss.switch_to(client_pid, Some(client_ctx))?;
@@ -467,7 +466,6 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             xous::Result::Message(envelope),
                         )
                         .and_then(|_| {
-                            println!("464: Switching from {}", pid);
                             ss.switch_from(pid, context_nr, false)
                         })
                         .map(|_| xous::Result::BlockedProcess)
@@ -523,7 +521,6 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
         }
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             let context_nr = ss.current_context_nr(pid);
-            println!("515: Switching from {}", pid);
             ss.switch_from(pid, context_nr, false)?;
             let ppid = ss.terminate_process(pid)?;
             if cfg!(baremetal) {

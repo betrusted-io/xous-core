@@ -54,10 +54,10 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                     // If the connection has gone away, send a `TerminateProcess` message to the main
                     // and then exit this thread.
                     if e.kind() != std::io::ErrorKind::WouldBlock {
-                        println!(
-                            "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
-                            pid, e, e
-                        );
+                        // println!(
+                        //     "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
+                        //     pid, e, e
+                        // );
                         chn.send(ThreadMessage::SysCall(pid, xous::SysCall::TerminateProcess))
                             .unwrap();
                         return;
@@ -83,7 +83,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                             tmp_data.resize(msg.buf.len(), 0);
                             conn.read_exact(&mut tmp_data)
                                 .map_err(|_e| {
-                                    println!("KERNEL({}): Read Error {}", pid, _e);
+                                    // println!("KERNEL({}): Read Error {}", pid, _e);
                                     chn.send(ThreadMessage::SysCall(
                                         pid,
                                         xous::SysCall::TerminateProcess,
@@ -250,7 +250,7 @@ pub fn idle() -> bool {
                 SystemServices::with_mut(|ss| ss.switch_to(new_pid, Some(1))).unwrap();
             }
             ThreadMessage::SysCall(pid, call) => {
-                println!("KERNEL({}): Received syscall {:?}", pid, call);
+                // println!("KERNEL({}): Received syscall {:?}", pid, call);
                 crate::arch::process::set_current_pid(pid);
                 // println!("KERNEL({}): Now running as the new process", pid);
 
@@ -280,7 +280,7 @@ pub fn idle() -> bool {
                 // Handle the syscall within the Xous kernel
                 let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
 
-                println!("KERNEL({}): Syscall response {:?}", pid, response);
+                // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
                 // Send the response back to the target.
                 if response != Result::BlockedProcess && !is_terminate && !is_shutdown {
@@ -308,7 +308,6 @@ pub fn idle() -> bool {
                         crate::arch::process::set_current_pid(existing_pid);
                     }
                     // SystemServices::with_mut(|ss| {
-                    // println!("295: Switching from {}", pid);
                     // ss.switch_from(pid, 1, true)}).unwrap();
                 }
 

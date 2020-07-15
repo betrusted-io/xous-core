@@ -299,7 +299,7 @@ impl SystemServices {
             let new_pid = pid_from_usize(idx + 1)?;
             arch::process::Process::create(new_pid, init_process);
             // #[allow(clippy::unit_arg)]
-            println!("Creating new process for PID {}", new_pid);
+            // println!("Creating new process for PID {}", new_pid);
             entry.state = ProcessState::Setup(init_context);
             entry.ppid = crate::arch::process::current_pid();
             entry.pid = new_pid;
@@ -500,7 +500,7 @@ impl SystemServices {
                 pid, context, other
             ),
         };
-        println!("KERNEL({}): Readying context {} -> {:?}", pid, context, process.state);
+        // println!("KERNEL({}): Readying context {} -> {:?}", pid, context, process.state);
         Ok(())
     }
 
@@ -513,7 +513,6 @@ impl SystemServices {
         // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
         // println!("KERNEL(?): Current process is {:?}", process);
-        println!("switch_to (start): PID {}: {:?} @ {:?}", pid, process.state, std::thread::current().id());
 
         // Determine which context number to switch to
         process.state = match process.state {
@@ -614,7 +613,6 @@ impl SystemServices {
                 ProcessState::Running(new_mask)
             }
         };
-        println!("switch_to (end): PID {}: {:?}", pid, process.state);
         // self.pid = pid;
         Ok(())
     }
@@ -634,7 +632,6 @@ impl SystemServices {
         can_resume: bool,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
-        println!("switch_from (start): PID {}: {:?}", pid, process.state);
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
                 "PID {} context {} was already queued for running when `switch_from()` was called",
@@ -656,7 +653,6 @@ impl SystemServices {
                 pid, other
             ),
         };
-        println!("switch_from (end): PID {}: {:?}", pid, process.state);
         Ok(())
     }
 
@@ -696,7 +692,7 @@ impl SystemServices {
         // println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
         let previous_context = self.current_context_nr(previous_pid);
-        println!("KERNEL({}): Activating process {} context {}", previous_pid, new_pid, new_context);
+        // println!("KERNEL({}): Activating process {} context {}", previous_pid, new_pid, new_context);
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -1423,7 +1419,7 @@ impl SystemServices {
         process.activate()?;
         let parent_pid = process.ppid;
         process.terminate()?;
-        println!("KERNEL({}): Terminated", target_pid);
+        // println!("KERNEL({}): Terminated", target_pid);
 
         let process = self.get_process(parent_pid)?;
         process.activate().unwrap();
