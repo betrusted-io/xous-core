@@ -1,7 +1,7 @@
 use crate::kmain;
-use std::thread::{spawn, JoinHandle};
+use std::thread::JoinHandle;
 
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use xous::{rsyscall, SysCall};
@@ -16,7 +16,7 @@ static GLOBAL: &StatsAlloc<std::alloc::System> = &INSTRUMENTED_SYSTEM;
 
 const SERVER_SPEC: &str = "127.0.0.1:0";
 
-fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
+fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     let server_addr = server_spec
         .to_socket_addrs()
         .expect("invalid server address")
@@ -30,8 +30,8 @@ fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
     xous::hosted::set_xous_address(server_addr);
 
     // Launch the main thread
-    let server_spec_server = server_addr.clone();
-    let main_thread = spawn(move || {
+    let main_thread = std::thread::spawn(move || {
+        let server_spec_server = server_addr;
         crate::arch::set_listen_address(&server_spec_server);
         kmain()
     });
@@ -49,16 +49,28 @@ fn start_kernel(server_spec: &str) -> (JoinHandle<()>, SocketAddr) {
     }
     // Convert the Option<conn> into conn
     assert!(connected, "unable to connect to server");
-    (main_thread, server_addr)
+    main_thread
+}
+
+/// Spawn a new "process" with the given server spec inside the given closure
+/// and return a join handle
+fn as_process<F, R>(f: F) -> JoinHandle<R>
+where
+    F: FnOnce() -> R,
+    F: Send + 'static,
+    R: Send + 'static,
+{
+    let server_spec = xous::hosted::xous_address();
+    std::thread::spawn(move || {
+        xous::hosted::set_xous_address(server_spec);
+        f()
+    })
 }
 
 #[test]
 fn shutdown() {
     // Start the server in another thread.
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
-
-    // This is now the client.
-    xous::hosted::set_xous_address(server_spec);
+    let main_thread = start_kernel(SERVER_SPEC);
 
     // Send a raw `Shutdown` message to terminate the kernel.
     let call_result = rsyscall(SysCall::Shutdown);
@@ -71,9 +83,7 @@ fn shutdown() {
 #[test]
 fn send_scalar_message() {
     // Start the server in another thread
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
-
-    xous::hosted::set_xous_address(server_spec);
+    let main_thread = start_kernel(SERVER_SPEC);
 
     let (server_addr_send, server_addr_recv) = channel();
 
@@ -81,8 +91,7 @@ fn send_scalar_message() {
     // and receive the message. Note that we need to communicate to the
     // "Client" what our server ID is. Normally this would be done via
     // an external nameserver.
-    let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_server = as_process(move || {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -99,8 +108,7 @@ fn send_scalar_message() {
     });
 
     // Spawn the client "process" and wait for the server address.
-    let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_client = as_process(move || {
         let sid = server_addr_recv.recv().unwrap();
         let conn = xous::connect(sid).expect("couldn't connect to server");
         xous::send_message(
@@ -131,12 +139,11 @@ fn send_move_message() {
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
+    let main_thread = start_kernel(SERVER_SPEC);
 
     let (server_addr_send, server_addr_recv) = channel();
 
-    let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_server = as_process(move || {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -157,8 +164,7 @@ fn send_move_message() {
         // println!("SERVER: Received message: {:?}", msg);
     });
 
-    let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_client = as_process(move || {
         // println!("CLIENT: Waiting for server address...");
         let sid = server_addr_recv.recv().unwrap();
         // println!("CLIENT: Connecting to server {:?}", sid);
@@ -179,13 +185,12 @@ fn send_move_message() {
 
 #[test]
 fn send_borrow_message() {
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
+    let main_thread = start_kernel(SERVER_SPEC);
     let (server_addr_send, server_addr_recv) = channel();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_server = as_process(move || {
         // println!("SERVER: Creating server...");
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
@@ -208,9 +213,7 @@ fn send_borrow_message() {
         }
     });
 
-    let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
-
+    let xous_client = as_process(move || {
         // Get the server address (out of band) so we know what to connect to
         // println!("CLIENT: Waiting for server to start...");
         let sid = server_addr_recv.recv().unwrap();
@@ -229,7 +232,7 @@ fn send_borrow_message() {
             .lend(conn, 0)
             .expect("couldn't lend message to server");
 
-        println!("CLIENT: Done");
+        // println!("CLIENT: Done");
     });
 
     xous_server.join().expect("couldn't join server process");
@@ -243,13 +246,12 @@ fn send_borrow_message() {
 
 #[test]
 fn send_mutableborrow_message() {
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
+    let main_thread = start_kernel(SERVER_SPEC);
     let (server_addr_send, server_addr_recv) = channel();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_server = as_process(move || {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -269,9 +271,7 @@ fn send_mutableborrow_message() {
         }
     });
 
-    let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
-
+    let xous_client = as_process(move || {
         // Get the server address (out of band) so we know what to connect to
         let sid = server_addr_recv.recv().unwrap();
 
@@ -305,15 +305,14 @@ fn send_mutableborrow_message() {
 
 #[test]
 fn send_mutableborrow_message_repeat() {
-    let (main_thread, server_spec) = start_kernel(SERVER_SPEC);
+    let main_thread = start_kernel(SERVER_SPEC);
     let (server_addr_send, server_addr_recv) = channel();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
     let loops = 50_000;
 
-    let xous_server = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
+    let xous_server = as_process(move || {
         let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
 
@@ -335,9 +334,7 @@ fn send_mutableborrow_message_repeat() {
         }
     });
 
-    let xous_client = spawn(move || {
-        xous::hosted::set_xous_address(server_spec);
-
+    let xous_client = as_process(move || {
         // Get the server address (out of band) so we know what to connect to
         let sid = server_addr_recv.recv().unwrap();
 
@@ -374,17 +371,14 @@ fn send_mutableborrow_message_repeat() {
 #[cfg(feature = "report-memory")]
 #[test]
 fn measure_memory_usage() {
-    // let _server_addr: Vec<SocketAddr> = SERVER_SPEC
-    //     .to_socket_addrs()
-    //     .expect("invalid server address").collect();
-        // .next()
-        // .expect("unable to resolve server address");
     let mut reg = Region::new(&GLOBAL);
     reg.reset();
 
     {
-        let jh = spawn(|| shutdown());
-        jh.join().expect("couldn't join message thread");
+        // Run the "shutdown" test in its own thread. This ensures that
+        // any TLS is freed when the thread exits.
+        let jh = as_process(|| shutdown());
+        jh.join().expect("couldn't run shutdown test for measuring memory");
     }
 
     fn memory_in_use(start: &Stats) -> usize {
