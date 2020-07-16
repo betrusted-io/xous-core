@@ -20,6 +20,13 @@ pub fn set_xous_address(new_address: SocketAddr) {
     });
 }
 
+/// Set the network address for this particular thread.
+pub fn xous_address() -> SocketAddr {
+    NETWORK_CONNECT_ADDRESS.with(|nca| {
+        *nca.borrow()
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 #[no_mangle]
 pub fn _xous_syscall(
@@ -41,7 +48,6 @@ pub fn _xous_syscall(
                 *xsc.borrow_mut() = Some(conn);
             });
         }
-        // let xsc: &mut TcpStream = (*xous_server_connection).as_mut().unwrap();
         _xous_syscall_to(
             nr,
             a1,
