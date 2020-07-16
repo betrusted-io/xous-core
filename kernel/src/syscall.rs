@@ -465,9 +465,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                             ctx_number,
                             xous::Result::Message(envelope),
                         )
-                        .and_then(|_| {
-                            ss.switch_from(pid, context_nr, false)
-                        })
+                        .and_then(|_| ss.switch_from(pid, context_nr, false))
                         .map(|_| xous::Result::BlockedProcess)
                     } else if cfg!(baremetal) {
                         // println!("Setting the return value of the Server and returning to Client");
@@ -501,17 +499,19 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
 
                     // Park this context if it's blocking.  This is roughly
                     // equivalent to a "Yield".
-                    if !cfg!(baremetal) {
-                        ss.switch_from(pid, context_nr, false)?;
-                        Ok(xous::Result::BlockedProcess)
-                    } else if blocking {
-                        // println!("Returning to parent");
-                        let process = ss.get_process(pid).expect("Can't get current process");
-                        let ppid = process.ppid;
-                        unsafe { SWITCHTO_CALLER = None };
-                        ss.activate_process_context(ppid, 0, !blocking, blocking)
-                            .map(|_| Ok(xous::Result::ResumeProcess))
-                            .unwrap_or(Err(xous::Error::ProcessNotFound))
+                    if blocking {
+                        if !cfg!(baremetal) {
+                            ss.switch_from(pid, context_nr, false)?;
+                            Ok(xous::Result::BlockedProcess)
+                        } else {
+                            // println!("Returning to parent");
+                            let process = ss.get_process(pid).expect("Can't get current process");
+                            let ppid = process.ppid;
+                            unsafe { SWITCHTO_CALLER = None };
+                            ss.activate_process_context(ppid, 0, !blocking, blocking)
+                                .map(|_| Ok(xous::Result::ResumeProcess))
+                                .unwrap_or(Err(xous::Error::ProcessNotFound))
+                        }
                     } else {
                         // println!("Returning to Client with Ok result");
                         Ok(xous::Result::Ok)
