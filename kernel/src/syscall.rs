@@ -239,7 +239,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),
-        SysCall::SpawnThread(entrypoint, stack_pointer, argument) => {
+        SysCall::CreateThread(entrypoint, stack_pointer, argument) => {
             SystemServices::with_mut(|ss| {
                 ss.spawn_thread(entrypoint, stack_pointer, argument)
                     .map(xous::Result::ThreadID)

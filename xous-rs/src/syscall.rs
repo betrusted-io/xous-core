@@ -203,7 +203,7 @@ pub enum SysCall {
     SwitchTo(PID, usize /* context ID */),
 
     /// Get a list of contexts that can be run in the given PID.
-    ReadyContexts(PID),
+    ReadyThreads(PID),
 
     /// Create a new Server
     ///
@@ -239,7 +239,7 @@ pub enum SysCall {
     ReturnMemory(MessageSender, MemoryRange),
 
     /// Spawn a new thread
-    SpawnThread(
+    CreateThread(
         MemoryAddress,         /* entrypoint */
         MemoryAddress,         /* stack pointer */
         Option<MemoryAddress>, /* argument */
@@ -268,7 +268,7 @@ enum SysCallNumber {
     ClaimInterrupt = 5,
     FreeInterrupt = 6,
     SwitchTo = 7,
-    ReadyContexts = 8,
+    ReadyThreads = 8,
     WaitEvent = 9,
     IncreaseHeap = 10,
     DecreaseHeap = 11,
@@ -278,7 +278,7 @@ enum SysCallNumber {
     ReceiveMessage = 15,
     SendMessage = 16,
     Connect = 17,
-    SpawnThread = 18,
+    CreateThread = 18,
     UnmapMemory = 19,
     ReturnMemory = 20,
     CreateProcess = 21,
@@ -362,8 +362,8 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::ReadyContexts(a1) => [
-                SysCallNumber::ReadyContexts as usize,
+            SysCall::ReadyThreads(a1) => [
+                SysCallNumber::ReadyThreads as usize,
                 a1.get() as usize,
                 0,
                 0,
@@ -478,8 +478,8 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::SpawnThread(a1, a2, a3) => [
-                SysCallNumber::SpawnThread as usize,
+            SysCall::CreateThread(a1, a2, a3) => [
+                SysCallNumber::CreateThread as usize,
                 a1.get(),
                 a2.get(),
                 a3.map(|x| x.get()).unwrap_or_default(),
@@ -548,7 +548,7 @@ impl SysCall {
             ),
             Some(SysCallNumber::FreeInterrupt) => SysCall::FreeInterrupt(a1),
             Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(pid_from_usize(a1)?, a2 as usize),
-            Some(SysCallNumber::ReadyContexts) => SysCall::ReadyContexts(pid_from_usize(a1)?),
+            Some(SysCallNumber::ReadyThreads) => SysCall::ReadyThreads(pid_from_usize(a1)?),
             Some(SysCallNumber::IncreaseHeap) => SysCall::IncreaseHeap(
                 a1 as usize,
                 MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
@@ -610,7 +610,7 @@ impl SysCall {
             Some(SysCallNumber::ReturnMemory) => {
                 SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
             }
-            Some(SysCallNumber::SpawnThread) => SysCall::SpawnThread(
+            Some(SysCallNumber::CreateThread) => SysCall::CreateThread(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a3),

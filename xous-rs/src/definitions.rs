@@ -355,7 +355,7 @@ pub enum Result {
     Error(Error),
     MemoryAddress(MemoryAddress),
     MemoryRange(MemoryRange),
-    ReadyContexts(
+    ReadyThreads(
         usize, /* count */
         usize,
         /* pid0 */ usize, /* context0 */
@@ -386,7 +386,7 @@ impl Result {
             Result::Error(e) => [1, e.to_usize(), 0, 0, 0, 0, 0, 0],
             Result::MemoryAddress(s) => [2, s.get(), 0, 0, 0, 0, 0, 0],
             Result::MemoryRange(r) => [3, r.addr.get(), r.size.get(), 0, 0, 0, 0, 0],
-            Result::ReadyContexts(count, pid0, ctx0, pid1, ctx1, pid2, ctx2) => {
+            Result::ReadyThreads(count, pid0, ctx0, pid1, ctx1, pid2, ctx2) => {
                 [4, *count, *pid0, *ctx0, *pid1, *ctx1, *pid2, *ctx2]
             }
             Result::ResumeProcess => [5, 0, 0, 0, 0, 0, 0, 0],
@@ -426,7 +426,7 @@ impl Result {
 
                 Result::MemoryRange(MemoryRange { addr, size })
             }
-            4 => Result::ReadyContexts(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
+            4 => Result::ReadyThreads(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
             5 => Result::ResumeProcess,
             6 => Result::ServerID((src[1], src[2], src[3], src[4])),
             7 => Result::ConnectionID(src[1] as CID),
