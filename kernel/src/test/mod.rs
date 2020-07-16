@@ -396,6 +396,45 @@ fn measure_memory_usage() {
     println!("After test: {:#?} ({} bytes in use)", after_join, miu);
 }
 
+/// Test that a server can be its own client
+#[test]
+fn server_client_same_process() {
+    // Start the kernel in its own thread
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    let internal_server = as_process(|| {
+        let server = xous::create_server(0x53_4534).expect("couldn't create server");
+        let connection = xous::connect(server).expect("couldn't connect to our own server");
+        let msg_contents = xous::ScalarMessage {
+            id: 1,
+            arg1: 2,
+            arg2: 3,
+            arg3: 4,
+            arg4: 5,
+        };
+
+        xous::send_message(connection, xous::Message::Scalar(msg_contents))
+            .expect("couldn't send message");
+
+        let msg = xous::receive_message(server).expect("couldn't receive message");
+
+        assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
+        // let client_thread = xous::create_thread(move || {
+
+        // })
+    });
+
+    internal_server
+        .join()
+        .expect("couldn't join internal_server process");
+
+    // Any process ought to be able to shut down the system currently.
+    rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+/// Test that one process can have multiple contexts
 #[test]
 fn multiple_contexts() {
     // Start the kernel in its own thread
@@ -414,10 +453,10 @@ fn multiple_contexts() {
                 arg3: 4,
                 arg4: 5,
             }),
-        ).expect("couldn't send message");
+        )
+        .expect("couldn't send message");
 
         let msg = xous::receive_message(server).expect("couldn't receive message");
-        println!("Received message: {:?}", msg);
         // let client_thread = xous::create_thread(move || {
 
         // })
