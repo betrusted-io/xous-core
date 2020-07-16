@@ -474,7 +474,9 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::CreateThread(init) => crate::context_to_args(SysCallNumber::CreateThread as usize, init),
+            SysCall::CreateThread(init) => {
+                crate::arch::context_to_args(SysCallNumber::CreateThread as usize, init)
+            }
             SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::TerminateProcess => [
                 SysCallNumber::TerminateProcess as usize,
@@ -597,7 +599,9 @@ impl SysCall {
             Some(SysCallNumber::ReturnMemory) => {
                 SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
             }
-            Some(SysCallNumber::CreateThread) => SysCall::CreateThread(crate::args_to_context(a1, a2, a3, a4, a5, a6, a7)?),
+            Some(SysCallNumber::CreateThread) => {
+                SysCall::CreateThread(crate::arch::args_to_context(a1, a2, a3, a4, a5, a6, a7)?)
+            }
             Some(SysCallNumber::CreateProcess) => SysCall::CreateProcess,
             Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
             Some(SysCallNumber::Shutdown) => SysCall::Shutdown,
@@ -740,7 +744,7 @@ pub fn connect(server: SID) -> core::result::Result<CID, Error> {
 /// # Errors
 ///
 pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Error> {
-    let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call watimessage");
+    let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::Message(envelope) = result {
         Ok(envelope)
     } else if let Result::Error(e) = result {
@@ -784,14 +788,26 @@ pub fn wait_event() {
 }
 
 /// Create a new thread
-// pub fn spawn<F, T>(f: F) -> JoinHandle<T>
-// where
-//     F: FnOnce() -> T,
-//     F: Send + 'static,
-//     T: Send + 'static,
-// {
-//     Builder::new().spawn(f).expect("failed to spawn thread")
-// }
+pub fn create_thread<F, T>(f: F) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    let ctx_info = crate::arch::create_thread_pre(&f)?;
+    rsyscall(SysCall::CreateThread(ctx_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_post(f, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Wait for a thread to finish
+pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
+    crate::arch::wait_thread(joiner)
+}
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;

@@ -10,7 +10,7 @@ use crate::filled_array;
 // use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 // use core::mem;
-use xous::{pid_from_usize, ContextInit, ThreadID, Error, MemoryAddress, Message, CID, PID, SID};
+use xous::{pid_from_usize, ContextInit, Error, MemoryAddress, Message, ThreadID, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -1143,12 +1143,21 @@ impl SystemServices {
     ///
     /// * **ContextNotAvailable**: The process has used all of its context
     ///   slots.
-    pub fn create_thread(&mut self, context_init: ContextInit) -> Result<ThreadID, xous::Error> {
-        Err(xous::Error::UnhandledSyscall)
-        // let mut process = ProcessHandle::get();
-        // let new_context_nr = process
-        //     .find_free_context_nr()
-        //     .ok_or(xous::Error::ContextNotAvailable)?;
+    pub fn create_thread(
+        &mut self,
+        pid: PID,
+        context_init: ContextInit,
+    ) -> Result<ThreadID, xous::Error> {
+        let mut process = self
+            .get_process_mut(pid)
+            .expect("couldn't find current process");
+
+        let mut arch_process = crate::arch::process::Process::current();
+        let new_context_nr = arch_process
+            .find_free_context_nr()
+            .ok_or(xous::Error::ContextNotAvailable)?;
+
+        arch_process.setup_context(new_context_nr, context_init)?;
 
         // // Create the new context and set it to run in the new address space.
         // let context = process.context(new_context_nr);
@@ -1161,19 +1170,16 @@ impl SystemServices {
         //     &[arg.map(|x| x.get()).unwrap_or_default() as usize],
         // );
 
-        // // Queue the thread to run
-        // let mut process = self
-        //     .get_process_mut(self.current_pid())
-        //     .expect("couldn't get current process");
-        // process.state = match process.state {
-        //     ProcessState::Running(x) => ProcessState::Running(x | (1 << new_context_nr)),
-        //     other => panic!(
-        //         "error spawning thread: process was in an invalid state {:?}",
-        //         other
-        //     ),
-        // };
+        // Queue the thread to run
+        process.state = match process.state {
+            ProcessState::Running(x) => ProcessState::Running(x | (1 << new_context_nr)),
+            other => panic!(
+                "error spawning thread: process was in an invalid state {:?}",
+                other
+            ),
+        };
 
-        // Ok(new_context_nr)
+        Ok(new_context_nr)
     }
 
     /// Allocate a new server ID for this process and return the address. If the

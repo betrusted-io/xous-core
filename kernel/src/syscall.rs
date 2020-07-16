@@ -241,7 +241,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
         }),
         SysCall::CreateThread(context_init) => {
             SystemServices::with_mut(|ss| {
-                ss.create_thread(context_init)
+                ss.create_thread(pid, context_init)
                     .map(xous::Result::ThreadID)
             })
         }

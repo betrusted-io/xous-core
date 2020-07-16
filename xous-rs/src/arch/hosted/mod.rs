@@ -4,15 +4,14 @@ use std::mem::size_of;
 use std::net::TcpStream;
 use std::thread_local;
 
-use crate::Result;
+use crate::{Result, ThreadID};
 
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 pub type ContextInit = ();
+pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
 pub fn context_to_args(call: usize, _init: &ContextInit) -> [usize; 8] {
-    [
-        call, 0, 0, 0, 0, 0, 0, 0
-    ]
+    [call, 0, 0, 0, 0, 0, 0, 0]
 }
 
 pub fn args_to_context(
@@ -29,6 +28,7 @@ pub fn args_to_context(
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<TcpStream>> = RefCell::new(None));
+thread_local!(static THREAD_ID: RefCell<ThreadID> = RefCell::new(1));
 
 /// Set the network address for this particular thread.
 pub fn set_xous_address(new_address: SocketAddr) {
@@ -41,9 +41,46 @@ pub fn set_xous_address(new_address: SocketAddr) {
 
 /// Set the network address for this particular thread.
 pub fn xous_address() -> SocketAddr {
-    NETWORK_CONNECT_ADDRESS.with(|nca| {
-        *nca.borrow()
-    })
+    NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow())
+}
+
+pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ContextInit, crate::Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    Ok(())
+}
+
+pub fn create_thread_post<F, T>(
+    f: F,
+    thread_id: ThreadID,
+) -> core::result::Result<WaitHandle<T>, crate::Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    let server_address = xous_address();
+    let server_connection = XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().try_clone().unwrap());
+    Ok(std::thread::Builder::new()
+        .spawn(move || {
+            set_xous_address(server_address);
+            THREAD_ID.with(|tid| *tid.borrow_mut() = thread_id);
+            XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = Some(server_connection));
+            f()
+        })
+        .map(|j| WaitHandle(j))
+        .map_err(|_| crate::Error::InternalError)?)
+}
+
+pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
+    joiner
+        .0
+        .join()
+        .map(|_| Result::Ok)
+        .map_err(|_| crate::Error::InternalError)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -104,6 +141,7 @@ fn _xous_syscall_to(
 
     // Send the packet to the server
     let mut pkt = vec![];
+    THREAD_ID.with(|tid| pkt.extend_from_slice(&tid.borrow().to_le_bytes()));
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
         pkt.extend_from_slice(&word.to_le_bytes());
     }

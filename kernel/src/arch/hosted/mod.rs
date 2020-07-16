@@ -44,10 +44,10 @@ pub fn set_listen_address(new_address: &SocketAddr) {
 /// Each client gets its own connection and its own thread, which is handled here.
 fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) {
     loop {
-        let mut pkt = [0usize; 8];
+        let mut pkt = [0usize; 9];
         let mut incoming_word = [0u8; size_of::<usize>()];
-        conn.set_nonblocking(true)
-            .expect("couldn't enable nonblocking mode");
+        // conn.set_nonblocking(true)
+        //     .expect("couldn't enable nonblocking mode");
         for word in pkt.iter_mut() {
             loop {
                 if let Err(e) = conn.read_exact(&mut incoming_word) {
@@ -62,15 +62,19 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                             .unwrap();
                         return;
                     }
+                    // std::thread::sleep(Duration::from_millis(20));
                     continue;
                 }
                 break;
             }
             *word = usize::from_le_bytes(incoming_word);
         }
+
+        let _thread_id = pkt[0];
         let call = xous::SysCall::from_args(
-            pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7],
+            pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
         );
+
         match call {
             Err(e) => println!("KERNEL({}): Received invalid syscall: {:?}", pid, e),
             Ok(mut call) => {

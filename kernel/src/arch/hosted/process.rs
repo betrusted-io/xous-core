@@ -4,12 +4,17 @@ use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ThreadID, PID, ContextInit};
+use xous::{ContextInit, ThreadID, PID};
 
 pub const INITIAL_CONTEXT: usize = 1;
 
 pub struct Process {
     pid: PID,
+
+    /// This enables the kernel to keep track of threads in the
+    /// target process, and know which threads are ready to
+    /// receive messages.
+    contexts: [Context; MAX_CONTEXT],
 }
 
 struct ProcessImpl {
@@ -50,10 +55,18 @@ pub fn set_current_pid(pid: PID) {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug)]
 /// Everything required to keep track of a single thread of execution.
 /// In a `std` environment, we can't manage threads so this is a no-op.
-pub struct Context {}
+pub struct Context {
+    allocated: bool,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Context { allocated: false }
+    }
+}
 
 /// Everything required to initialize a process on this platform
 pub struct ProcessInit {
@@ -70,7 +83,7 @@ impl ProcessInit {
 impl Process {
     pub fn current() -> Process {
         let current_pid = PROCESS_TABLE.with(|pt| pt.borrow().current);
-        Process { pid: current_pid }
+        Process { pid: current_pid, contexts: Default::default() }
     }
 
     /// Mark this process as running (on the current core?!)
@@ -109,12 +122,12 @@ impl Process {
 
     pub fn setup_context(
         &mut self,
-        context: ThreadID,
+        _context: ThreadID,
         _setup: ContextInit,
     ) -> Result<(), xous::Error> {
-        if context != INITIAL_CONTEXT {
-            return Err(xous::Error::ProcessNotFound);
-        }
+        // if context != INITIAL_CONTEXT {
+        //     return Err(xous::Error::ProcessNotFound);
+        // }
         Ok(())
     }
 
@@ -132,11 +145,21 @@ impl Process {
 
     #[allow(dead_code)]
     pub fn find_free_context_nr(&self) -> Option<ThreadID> {
+        for (index, context) in self.contexts.iter().enumerate() {
+            if index != 0 && context.allocated == false {
+                return Some(index as ThreadID + 1);
+            }
+        }
         None
     }
 
     pub fn set_context_result(&mut self, context: ThreadID, result: xous::Result) {
-        assert!(context == INITIAL_CONTEXT, "context is {} and not {}", context, INITIAL_CONTEXT);
+        assert!(
+            context == INITIAL_CONTEXT,
+            "context is {} and not {}",
+            context,
+            INITIAL_CONTEXT
+        );
         let mut response = vec![];
         for word in result.to_args().iter_mut() {
             response.extend_from_slice(&word.to_le_bytes());

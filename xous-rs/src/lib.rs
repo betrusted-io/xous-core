@@ -5,15 +5,7 @@ extern crate bitflags;
 extern crate num_derive;
 extern crate num_traits;
 
-#[cfg(not(any(windows,unix)))]
-pub mod native;
-#[cfg(not(any(windows,unix)))]
-pub use native::*;
-
-#[cfg(any(windows,unix))]
-pub mod hosted;
-#[cfg(any(windows,unix))]
-pub use hosted::*;
+pub mod arch;
 
 pub mod definitions;
 pub mod syscall;
@@ -23,6 +15,7 @@ mod messages;
 pub use definitions::*;
 pub use syscall::*;
 pub use messages::*;
+pub use arch::ContextInit;
 
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]
