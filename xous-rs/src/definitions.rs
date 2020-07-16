@@ -209,7 +209,7 @@ impl MemoryMessage {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 /// A simple scalar message.  This is similar to a `move` message.
 pub struct ScalarMessage {
     pub id: MessageId,
