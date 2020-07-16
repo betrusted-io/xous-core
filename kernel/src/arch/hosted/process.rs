@@ -1,12 +1,11 @@
-pub const MAX_CONTEXT: CtxID = 31;
+pub const MAX_CONTEXT: ThreadID = 31;
 use crate::services::ProcessInner;
 use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{CtxID, PID};
+use xous::{ThreadID, PID, ContextInit};
 
-pub type ContextInit = ();
 pub const INITIAL_CONTEXT: usize = 1;
 
 pub struct Process {
@@ -110,7 +109,7 @@ impl Process {
 
     pub fn setup_context(
         &mut self,
-        context: CtxID,
+        context: ThreadID,
         _setup: ContextInit,
     ) -> Result<(), xous::Error> {
         if context != INITIAL_CONTEXT {
@@ -119,12 +118,12 @@ impl Process {
         Ok(())
     }
 
-    pub fn current_context(&mut self) -> CtxID {
+    pub fn current_context(&mut self) -> ThreadID {
         INITIAL_CONTEXT
     }
 
     /// Set the current context number.
-    pub fn set_context(&mut self, context: CtxID) -> Result<(), xous::Error> {
+    pub fn set_context(&mut self, context: ThreadID) -> Result<(), xous::Error> {
         if context != INITIAL_CONTEXT {
             panic!("context was {}, not 1", context);
         }
@@ -132,11 +131,11 @@ impl Process {
     }
 
     #[allow(dead_code)]
-    pub fn find_free_context_nr(&self) -> Option<CtxID> {
+    pub fn find_free_context_nr(&self) -> Option<ThreadID> {
         None
     }
 
-    pub fn set_context_result(&mut self, context: CtxID, result: xous::Result) {
+    pub fn set_context_result(&mut self, context: ThreadID, result: xous::Result) {
         assert!(context == INITIAL_CONTEXT, "context is {} and not {}", context, INITIAL_CONTEXT);
         let mut response = vec![];
         for word in result.to_args().iter_mut() {

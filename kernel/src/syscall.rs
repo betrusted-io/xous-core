@@ -8,7 +8,7 @@ use core::mem;
 use xous::*;
 
 /// This is the context that called SwitchTo
-static mut SWITCHTO_CALLER: Option<(PID, CtxID)> = None;
+static mut SWITCHTO_CALLER: Option<(PID, ThreadID)> = None;
 
 pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     // let pid = arch::current_pid();
@@ -239,9 +239,9 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),
-        SysCall::CreateThread(entrypoint, stack_pointer, argument) => {
+        SysCall::CreateThread(context_init) => {
             SystemServices::with_mut(|ss| {
-                ss.spawn_thread(entrypoint, stack_pointer, argument)
+                ss.create_thread(context_init)
                     .map(xous::Result::ThreadID)
             })
         }

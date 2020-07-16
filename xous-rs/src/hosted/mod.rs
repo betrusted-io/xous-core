@@ -7,6 +7,25 @@ use std::thread_local;
 use crate::Result;
 
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+pub type ContextInit = ();
+
+pub fn context_to_args(call: usize, _init: &ContextInit) -> [usize; 8] {
+    [
+        call, 0, 0, 0, 0, 0, 0, 0
+    ]
+}
+
+pub fn args_to_context(
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
+) -> core::result::Result<ContextInit, crate::Error> {
+    Ok(())
+}
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<TcpStream>> = RefCell::new(None));

@@ -96,8 +96,8 @@ pub type SID = (usize, usize, usize, usize);
 /// Connection ID
 pub type CID = usize;
 
-/// Context ID
-pub type CtxID = usize;
+/// Thread ID
+pub type ThreadID = usize;
 
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;

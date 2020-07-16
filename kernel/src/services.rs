@@ -1,7 +1,7 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
-pub use crate::arch::process::{Context, ContextInit, ProcessInit};
+pub use crate::arch::process::{Context, ProcessInit};
 
 use core::cell::RefCell;
 use std::thread_local;
@@ -10,7 +10,7 @@ use crate::filled_array;
 // use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 // use core::mem;
-use xous::{pid_from_usize, CtxID, Error, MemoryAddress, Message, CID, PID, SID};
+use xous::{pid_from_usize, ContextInit, ThreadID, Error, MemoryAddress, Message, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -366,7 +366,7 @@ impl SystemServices {
     pub fn finish_callback_and_resume(
         &mut self,
         pid: PID,
-        context: CtxID,
+        context: ThreadID,
     ) -> Result<(), xous::Error> {
         // Get the current process (which was the interrupt handler) and mark it
         // as Ready.  Note that the new PID may very well be the same PID.
@@ -392,7 +392,7 @@ impl SystemServices {
             let available_contexts = match process.state {
                 ProcessState::Ready(x) if x & 1 << context != 0 => x & !(1 << context),
                 other => panic!(
-                    "process was in an invalid state {:?} -- ctxid {} not available to run",
+                    "process was in an invalid state {:?} -- thread {} not available to run",
                     other, context
                 ),
             };
@@ -480,7 +480,7 @@ impl SystemServices {
 
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
-    pub fn ready_context(&mut self, pid: PID, context: CtxID) -> Result<(), xous::Error> {
+    pub fn ready_context(&mut self, pid: PID, context: ThreadID) -> Result<(), xous::Error> {
         assert!(context == INITIAL_CONTEXT);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
@@ -509,7 +509,7 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
-    pub fn switch_to(&mut self, pid: PID, context: Option<CtxID>) -> Result<(), xous::Error> {
+    pub fn switch_to(&mut self, pid: PID, context: Option<ThreadID>) -> Result<(), xous::Error> {
         // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
         // println!("KERNEL(?): Current process is {:?}", process);
@@ -628,7 +628,7 @@ impl SystemServices {
     pub fn switch_from(
         &mut self,
         pid: PID,
-        context: CtxID,
+        context: ThreadID,
         can_resume: bool,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
@@ -659,7 +659,7 @@ impl SystemServices {
     pub fn set_context_result(
         &mut self,
         pid: PID,
-        context: CtxID,
+        context: ThreadID,
         result: xous::Result,
     ) -> Result<(), xous::Error> {
         // Temporarily switch into the target process memory space
@@ -685,10 +685,10 @@ impl SystemServices {
     pub fn activate_process_context(
         &mut self,
         new_pid: PID,
-        mut new_context: CtxID,
+        mut new_context: ThreadID,
         can_resume: bool,
         advance_context: bool,
-    ) -> Result<CtxID, xous::Error> {
+    ) -> Result<ThreadID, xous::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
         let previous_context = self.current_context_nr(previous_pid);
@@ -810,7 +810,7 @@ impl SystemServices {
             };
             if advance_context {
                 previous.current_context += 1;
-                if previous.current_context as CtxID > arch::process::MAX_CONTEXT {
+                if previous.current_context as ThreadID > arch::process::MAX_CONTEXT {
                     previous.current_context = 0;
                 }
             }
@@ -844,7 +844,7 @@ impl SystemServices {
             };
             if advance_context {
                 new.current_context += 1;
-                if new.current_context as CtxID > arch::process::MAX_CONTEXT {
+                if new.current_context as ThreadID > arch::process::MAX_CONTEXT {
                     new.current_context = 0;
                 }
             }
@@ -1143,12 +1143,7 @@ impl SystemServices {
     ///
     /// * **ContextNotAvailable**: The process has used all of its context
     ///   slots.
-    pub fn spawn_thread(
-        &mut self,
-        _entrypoint: MemoryAddress,
-        _stack_pointer: MemoryAddress,
-        _arg: Option<MemoryAddress>,
-    ) -> Result<CtxID, xous::Error> {
+    pub fn create_thread(&mut self, context_init: ContextInit) -> Result<ThreadID, xous::Error> {
         Err(xous::Error::UnhandledSyscall)
         // let mut process = ProcessHandle::get();
         // let new_context_nr = process
@@ -1312,7 +1307,7 @@ impl SystemServices {
         &mut self,
         sidx: usize,
         pid: PID,
-        context: CtxID,
+        context: ThreadID,
         message: Message,
         original_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {
@@ -1344,7 +1339,7 @@ impl SystemServices {
         &mut self,
         sidx: usize,
         pid: PID,
-        context: CtxID,
+        context: ThreadID,
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {

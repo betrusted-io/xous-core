@@ -1,7 +1,7 @@
 use crate::{
-    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, Result, ScalarMessage,
-    SysCallResult, CID, PID, SID,
+    pid_from_usize, ContextInit, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage,
+    MemoryRange, MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, Result,
+    ScalarMessage, SysCallResult, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -239,11 +239,7 @@ pub enum SysCall {
     ReturnMemory(MessageSender, MemoryRange),
 
     /// Spawn a new thread
-    CreateThread(
-        MemoryAddress,         /* entrypoint */
-        MemoryAddress,         /* stack pointer */
-        Option<MemoryAddress>, /* argument */
-    ),
+    CreateThread(ContextInit),
 
     /// Create a new process, setting the current process as the parent ID.
     /// Does not start the process immediately.
@@ -478,16 +474,7 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::CreateThread(a1, a2, a3) => [
-                SysCallNumber::CreateThread as usize,
-                a1.get(),
-                a2.get(),
-                a3.map(|x| x.get()).unwrap_or_default(),
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::CreateThread(init) => crate::context_to_args(SysCallNumber::CreateThread as usize, init),
             SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::TerminateProcess => [
                 SysCallNumber::TerminateProcess as usize,
@@ -610,11 +597,7 @@ impl SysCall {
             Some(SysCallNumber::ReturnMemory) => {
                 SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
             }
-            Some(SysCallNumber::CreateThread) => SysCall::CreateThread(
-                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
-                MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
-                MemoryAddress::new(a3),
-            ),
+            Some(SysCallNumber::CreateThread) => SysCall::CreateThread(crate::args_to_context(a1, a2, a3, a4, a5, a6, a7)?),
             Some(SysCallNumber::CreateProcess) => SysCall::CreateProcess,
             Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
             Some(SysCallNumber::Shutdown) => SysCall::Shutdown,

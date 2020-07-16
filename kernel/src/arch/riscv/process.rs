@@ -1,10 +1,10 @@
 use core::mem;
 static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
-pub const MAX_CONTEXT: CtxID = 31;
+pub const MAX_CONTEXT: ThreadID = 31;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous;
-use xous::CtxID;
+use xous::ThreadID;
 
 use crate::args::KernelArguments;
 const DEFAULT_STACK_SIZE: usize = 131072;
@@ -48,7 +48,7 @@ pub struct Process {
 
     /// The index into the `contexts` list.  This must never be 0. The interrupt
     /// handler writes to this field, so it must not be moved.
-    context_nr: CtxID,
+    context_nr: ThreadID,
 
     _hash: [usize; 8],
 
@@ -87,7 +87,7 @@ impl Process {
     }
 
     /// Set the current context number.
-    pub fn set_context(&mut self, context: CtxID) {
+    pub fn set_context(&mut self, context: ThreadID) {
         assert!(
             context > 0 && context <= self.contexts.len(),
             "attempt to switch to an invalid context {}",
@@ -96,7 +96,7 @@ impl Process {
         self.context_nr = context;
     }
 
-    pub fn context(&mut self, context_nr: CtxID) -> &mut Context {
+    pub fn context(&mut self, context_nr: ThreadID) -> &mut Context {
         assert!(
             context_nr > 0 && context_nr <= self.contexts.len(),
             "attempt to retrieve an invalid context {}",
@@ -105,16 +105,16 @@ impl Process {
         &mut self.contexts[context_nr - 1]
     }
 
-    pub fn find_free_context_nr(&self) -> Option<CtxID> {
+    pub fn find_free_context_nr(&self) -> Option<ThreadID> {
         for (index, context) in self.contexts.iter().enumerate() {
             if index != 0 && context.sepc == 0 {
-                return Some(index as CtxID + 1);
+                return Some(index as ThreadID + 1);
             }
         }
         None
     }
 
-    pub fn set_context_result(&mut self, context_nr: CtxID, result: xous::Result) {
+    pub fn set_context_result(&mut self, context_nr: ThreadID, result: xous::Result) {
         let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
         let context = self.context(context_nr);
         for (idx, reg) in vals.iter().enumerate() {

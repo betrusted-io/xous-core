@@ -4,7 +4,7 @@ use crate::arch::process::ProcessHandle;
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::services::{Context, SystemServicesHandle, RETURN_FROM_ISR};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
-use xous::{SysCall, PID, CtxID};
+use xous::{SysCall, PID, ThreadID};
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous::Result, context: &Context) -> !;
@@ -35,13 +35,13 @@ pub fn disable_irq(irq_no: usize) -> Result<(), xous::Error> {
     Ok(())
 }
 
-static mut PREVIOUS_PAIR: Option<(PID, CtxID)> = None;
+static mut PREVIOUS_PAIR: Option<(PID, ThreadID)> = None;
 
-pub unsafe fn set_isr_return_pair(pid: PID, ctx: CtxID) {
+pub unsafe fn set_isr_return_pair(pid: PID, ctx: ThreadID) {
     PREVIOUS_PAIR = Some((pid, ctx));
 }
 
-pub unsafe fn take_isr_return_pair() -> Option<(PID, CtxID)> {
+pub unsafe fn take_isr_return_pair() -> Option<(PID, ThreadID)> {
     PREVIOUS_PAIR.take()
 }
 

@@ -16,7 +16,7 @@ pub type SID = (usize, usize, usize, usize);
 pub type CID = usize;
 
 /// Context ID
-pub type CtxID = usize;
+pub type ThreadID = usize;
 
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
@@ -368,7 +368,7 @@ pub enum Result {
     ServerID(SID),
     ConnectionID(CID),
     Message(MessageEnvelope),
-    ThreadID(CtxID),
+    ThreadID(ThreadID),
 
     /// The requested system call is unimplemented
     Unimplemented,
@@ -452,7 +452,7 @@ impl Result {
                 };
                 Result::Message(MessageEnvelope { sender, message })
             }
-            9 => Result::ThreadID(src[1] as CtxID),
+            9 => Result::ThreadID(src[1] as ThreadID),
             10 => Result::Unimplemented,
             11 => Result::BlockedProcess,
             _ => Result::UnknownResult(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
