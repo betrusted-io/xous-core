@@ -96,7 +96,7 @@ fn send_scalar_message() {
     // "Client" what our server ID is. Normally this would be done via
     // an external nameserver.
     let xous_server = as_process(move || {
-        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        let sid = xous::create_server(b"send_scalar_mesg").expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
         assert_eq!(
@@ -148,7 +148,7 @@ fn send_move_message() {
     let (server_addr_send, server_addr_recv) = channel();
 
     let xous_server = as_process(move || {
-        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        let sid = xous::create_server(b"send_move_messag").expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
         // println!("Received message from {}", envelope.sender);
@@ -196,7 +196,7 @@ fn send_borrow_message() {
 
     let xous_server = as_process(move || {
         // println!("SERVER: Creating server...");
-        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        let sid = xous::create_server(b"send_borrow_mesg").expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         // println!("SERVER: Receiving message...");
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
@@ -256,7 +256,7 @@ fn send_mutableborrow_message() {
     let test_bytes = test_str.as_bytes();
 
     let xous_server = as_process(move || {
-        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        let sid = xous::create_server(b"send_mutborrow_m").expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
         // println!("Received message from {}", envelope.sender);
@@ -317,7 +317,7 @@ fn send_mutableborrow_message_repeat() {
     let loops = 50_000;
 
     let xous_server = as_process(move || {
-        let sid = xous::create_server(0x7884_3123).expect("couldn't create test server");
+        let sid = xous::create_server(b"send_mutborrow_r").expect("couldn't create test server");
         server_addr_send.send(sid).unwrap();
 
         for iteration in 0..loops {
@@ -407,7 +407,7 @@ fn server_client_same_process() {
     let main_thread = start_kernel(SERVER_SPEC);
 
     let internal_server = as_process(|| {
-        let server = xous::create_server(0x53_4534).expect("couldn't create server");
+        let server = xous::create_server(b"s_c_same_process").expect("couldn't create server");
         let connection = xous::connect(server).expect("couldn't connect to our own server");
         let msg_contents = xous::ScalarMessage {
             id: 1,
@@ -447,7 +447,7 @@ fn multiple_contexts() {
 
 
     let internal_server = as_process(|| {
-        let server = xous::create_server(0x53_4534).expect("couldn't create server");
+        let server = xous::create_server(b"multiple_context").expect("couldn't create server");
         let connection = xous::connect(server).expect("couldn't connect to our own server");
         let msg_contents = xous::ScalarMessage {
             id: 1,

@@ -1,4 +1,4 @@
-use core::num::{NonZeroUsize, NonZeroU8};
+use core::num::{NonZeroU8, NonZeroUsize};
 
 pub type MemoryAddress = NonZeroUsize;
 pub type MemorySize = NonZeroUsize;
@@ -10,7 +10,7 @@ pub type MessageSender = usize;
 pub type Connection = usize;
 
 /// Server ID
-pub type SID = (usize, usize, usize, usize);
+pub type SID = (u32, u32, u32, u32);
 
 /// Connection ID
 pub type CID = usize;
@@ -265,7 +265,13 @@ impl MessageEnvelope {
             Message::Scalar(m) => (3, m.to_usize()),
         };
         [
-            self.sender, ret.0, ret.1[0], ret.1[1], ret.1[2], ret.1[3], ret.1[4],
+            self.sender,
+            ret.0,
+            ret.1[0],
+            ret.1[1],
+            ret.1[2],
+            ret.1[3],
+            ret.1[4],
         ]
     }
 }
@@ -390,7 +396,7 @@ impl Result {
                 [4, *count, *pid0, *ctx0, *pid1, *ctx1, *pid2, *ctx2]
             }
             Result::ResumeProcess => [5, 0, 0, 0, 0, 0, 0, 0],
-            Result::ServerID(sid) => [6, sid.0, sid.1, sid.2, sid.3, 0, 0, 0],
+            Result::ServerID(sid) => [6, sid.0 as _, sid.1 as _, sid.2 as _, sid.3 as _, 0, 0, 0],
             Result::ConnectionID(cid) => [7, *cid, 0, 0, 0, 0, 0, 0],
             Result::Message(me) => {
                 let me_enc = me.to_usize();
@@ -428,7 +434,7 @@ impl Result {
             }
             4 => Result::ReadyThreads(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
             5 => Result::ResumeProcess,
-            6 => Result::ServerID((src[1], src[2], src[3], src[4])),
+            6 => Result::ServerID((src[1] as _, src[2] as _, src[3] as _, src[4] as _)),
             7 => Result::ConnectionID(src[1] as CID),
             8 => {
                 let sender = src[1];

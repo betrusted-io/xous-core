@@ -1228,11 +1228,17 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, pid: PID, name: usize) -> Result<SID, xous::Error> {
+    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<SID, xous::Error> {
         // println!(
         //     "KERNEL({}): Looking through server list for free server",
         //     self.pid.get()
         // );
+
+        // TODO: Come up with a way to randomize the server ID
+        let ppid = self.get_process(pid)?.ppid.get();
+        if ppid != 1 {
+            panic!("Clients cannot start servers yet");
+        }
 
         for entry in self.servers.iter_mut() {
             if entry == &None {
@@ -1240,14 +1246,6 @@ impl SystemServices {
                 //     "KERNEL({}): Found a free slot for a server -- allocating an entry",
                 //     self.pid.get()
                 // );
-
-                // TODO: Come up with a way to randomize this
-                let sid = (
-                    pid.get() as usize,
-                    name as usize,
-                    pid.get() as usize,
-                    name as usize,
-                );
 
                 // // Allocate a single page for the server queue
                 // let (addr, size) = {
