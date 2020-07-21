@@ -1,9 +1,8 @@
 use crate::kmain;
 use std::thread::JoinHandle;
 
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::sync::mpsc::channel;
-use std::time::Duration;
 use xous::{rsyscall, SysCall};
 
 mod shutdown;
@@ -23,32 +22,37 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
         .next()
         .expect("unable to resolve server address");
     // Attempt to bind. This will fail if the port is in use.
-    let temp_server = TcpListener::bind(server_addr).unwrap();
-    let server_addr = temp_server.local_addr().unwrap();
-    drop(temp_server);
+    // let temp_server = TcpListener::bind(server_addr).unwrap();
+    // let server_addr = temp_server.local_addr().unwrap();
+    // drop(temp_server);
 
-    xous::arch::set_xous_address(server_addr);
+
+    let (send_addr, recv_addr) = channel();
 
     // Launch the main thread
     let main_thread = std::thread::spawn(move || {
         let server_spec_server = server_addr;
+        crate::arch::set_send_addr(send_addr);
         crate::arch::set_listen_address(&server_spec_server);
         kmain()
     });
+    let server_addr = recv_addr.recv().unwrap();
+    println!("Got server address: {:?}", server_addr);
+    xous::arch::set_xous_address(server_addr);
 
     // Connect to server. This first instance needs to make sure the kernel is listening.
     // let mut server_conn = None;
-    let mut connected = false;
-    for i in 1..11 {
-        println!("Retrying connection {}/10", i);
-        let res = TcpStream::connect_timeout(&server_addr, Duration::from_millis(200));
-        if res.is_ok() {
-            connected = true;
-            break;
-        }
-    }
-    // Convert the Option<conn> into conn
-    assert!(connected, "unable to connect to server");
+    // let mut connected = false;
+    // for i in 1..11 {
+    //     let res = TcpStream::connect_timeout(&server_addr, Duration::from_millis(200));
+    //     if res.is_ok() {
+    //         connected = true;
+    //         break;
+    //     }
+    //     println!("Retrying connection {}/10", i);
+    // }
+    // // Convert the Option<conn> into conn
+    // assert!(connected, "unable to connect to server");
     main_thread
 }
 

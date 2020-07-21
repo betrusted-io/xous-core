@@ -9,7 +9,7 @@ use std::thread_local;
 use crate::{Result, TID};
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-pub type ContextInit = ();
+pub type ThreadInit = ();
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
 #[derive(Clone)]
@@ -19,7 +19,7 @@ struct ServerConnection {
     mailbox: Arc<Mutex<HashMap<TID, Result>>>,
 }
 
-pub fn context_to_args(call: usize, _init: &ContextInit) -> [usize; 8] {
+pub fn context_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
     [call, 0, 0, 0, 0, 0, 0, 0]
 }
 
@@ -31,7 +31,7 @@ pub fn args_to_context(
     _a5: usize,
     _a6: usize,
     _a7: usize,
-) -> core::result::Result<ContextInit, crate::Error> {
+) -> core::result::Result<ThreadInit, crate::Error> {
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub fn xous_address() -> SocketAddr {
     NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow())
 }
 
-pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ContextInit, crate::Error>
+pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
 where
     F: FnOnce() -> T,
     F: Send + 'static,
@@ -154,14 +154,15 @@ fn _xous_syscall_result(
     {
         let mut mailbox = server_connection.mailbox.lock().unwrap();
         if let Some(entry) = mailbox.remove(&thread_id) {
-            *ret = entry;
-            return;
+            if Result::BlockedProcess != entry {
+                *ret = entry;
+                return;
+            }
         }
     }
 
     // Receive the packet back
     loop {
-        let mut stream = server_connection.recv.lock().unwrap();
 
         // Now that we have the Stream mutex, temporarily take the Mailbox mutex to see if
         // this thread ID is there. If it is, there's no need to read via the network.
@@ -169,10 +170,21 @@ fn _xous_syscall_result(
         {
             let mut mailbox = server_connection.mailbox.lock().unwrap();
             if let Some(entry) = mailbox.remove(&thread_id) {
-                *ret = entry;
-                return;
+                if Result::BlockedProcess != entry {
+                    *ret = entry;
+                    return;
+                }
             }
         }
+
+        let mut stream = match server_connection.recv.try_lock() {
+            Ok(lk) => lk,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                continue;
+            },
+            Err(e) => panic!("Receive error: {}", e),
+        };
 
         // This thread_id doesn't exist in the mailbox, so read additional data.
         let mut pkt = [0usize; 8];
@@ -254,7 +266,7 @@ fn _xous_syscall_result(
 
             // Otherwise, add it to the mailbox and try again.
             let mut mailbox = server_connection.mailbox.lock().unwrap();
-            mailbox.insert(thread_id, response);
+            mailbox.insert(msg_thread_id, response);
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    pid_from_usize, ContextInit, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage,
+    pid_from_usize, ThreadInit, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage,
     MemoryRange, MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, Result,
     ScalarMessage, SysCallResult, CID, PID, SID,
 };
@@ -239,7 +239,7 @@ pub enum SysCall {
     ReturnMemory(MessageSender, MemoryRange),
 
     /// Spawn a new thread
-    CreateThread(ContextInit),
+    CreateThread(ThreadInit),
 
     /// Create a new process, setting the current process as the parent ID.
     /// Does not start the process immediately.

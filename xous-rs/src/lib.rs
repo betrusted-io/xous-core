@@ -15,7 +15,7 @@ mod messages;
 pub use definitions::*;
 pub use syscall::*;
 pub use messages::*;
-pub use arch::ContextInit;
+pub use arch::ThreadInit;
 
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]

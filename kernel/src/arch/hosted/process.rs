@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ContextInit, TID, PID};
+use xous::{ThreadInit, TID, PID};
 
 pub const INITIAL_TID: usize = 1;
 
@@ -123,10 +123,10 @@ impl Process {
         })
     }
 
-    pub fn setup_context(
+    pub fn setup_thread(
         &mut self,
         context: TID,
-        _setup: ContextInit,
+        _setup: ThreadInit,
     ) -> Result<(), xous::Error> {
         // println!(
         //     "KERNEL({}): Setting up context {} @ {:?}",
@@ -152,17 +152,17 @@ impl Process {
         Ok(())
     }
 
-    pub fn current_context(&mut self) -> TID {
-        PROCESS_TABLE.with(|pt| {
-            let mut process_table = pt.borrow_mut();
-            let current_pid_idx = process_table.current.get() as usize - 1;
-            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            process.current_context
-        })
-    }
+    // pub fn current_thread(&mut self) -> TID {
+    //     PROCESS_TABLE.with(|pt| {
+    //         let mut process_table = pt.borrow_mut();
+    //         let current_pid_idx = process_table.current.get() as usize - 1;
+    //         let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+    //         process.current_context
+    //     })
+    // }
 
     /// Set the current context number.
-    pub fn set_context(&mut self, context: TID) -> Result<(), xous::Error> {
+    pub fn set_thread(&mut self, context: TID) -> Result<(), xous::Error> {
         assert!(context > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
@@ -189,20 +189,20 @@ impl Process {
         })
     }
 
-    pub fn set_context_result(&mut self, context: TID, result: xous::Result) {
-        assert!(context > 0);
+    pub fn set_thread_result(&mut self, tid: TID, result: xous::Result) {
+        assert!(tid > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             assert!(
-                process.contexts[context - 1].allocated,
+                process.contexts[tid - 1].allocated,
                 "context {} is not allocated",
-                context,
+                tid,
             );
 
             let mut response = vec![];
-            response.extend_from_slice(&context.to_le_bytes());
+            response.extend_from_slice(&tid.to_le_bytes());
             for word in result.to_args().iter_mut() {
                 response.extend_from_slice(&word.to_le_bytes());
             }

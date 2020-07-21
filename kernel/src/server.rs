@@ -609,20 +609,20 @@ impl Server {
         if self.ready_threads == 0 {
             return None;
         }
-        let mut test_ctx_mask = 1;
-        let mut ctx_number = 0;
+        let mut test_thread_mask = 1;
+        let mut thread_number = 0;
         // println!("Ready contexts: 0b{:08b}", self.ready_contexts);
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.
-            if self.ready_threads & test_ctx_mask == test_ctx_mask {
-                self.ready_threads &= !test_ctx_mask;
-                return Some(ctx_number);
+            if self.ready_threads & test_thread_mask == test_thread_mask {
+                self.ready_threads &= !test_thread_mask;
+                return Some(thread_number);
             }
             // Advance to the next slot.
-            test_ctx_mask = test_ctx_mask.rotate_left(1);
-            ctx_number += 1;
-            if test_ctx_mask == 1 {
+            test_thread_mask = test_thread_mask.rotate_left(1);
+            thread_number += 1;
+            if test_thread_mask == 1 {
                 panic!("didn't find a free context, even though there should be one");
             }
         }
@@ -648,6 +648,7 @@ impl Server {
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_thread(&mut self, tid: TID) {
         // println!("KERNEL({}): Parking context: {}", self.pid, context);
+        assert!(self.ready_threads & (1 << tid) == 0);
         self.ready_threads |= 1 << tid;
     }
 }

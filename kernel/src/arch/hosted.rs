@@ -16,7 +16,7 @@ use std::time::Duration;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous::{MemoryAddress, Result, SysCall, TID, PID};
+use xous::{MemoryAddress, Result, SysCall, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
@@ -31,6 +31,7 @@ enum BackchannelMessage {
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
+thread_local!(static SEND_ADDR: RefCell<Option<Sender<SocketAddr>>> = RefCell::new(None));
 
 /// Set the network address for this particular thread.
 #[cfg(test)]
@@ -38,6 +39,14 @@ pub fn set_listen_address(new_address: &SocketAddr) {
     NETWORK_LISTEN_ADDRESS.with(|nla| {
         let mut address = nla.borrow_mut();
         *address = *new_address;
+    });
+}
+
+/// Set the network address for this particular thread.
+#[cfg(test)]
+pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
+    SEND_ADDR.with(|sa| {
+        *sa.borrow_mut() = Some(send_addr);
     });
 }
 
@@ -116,8 +125,9 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                                 msg.buf.len()
                             );
                             msg.buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
-                                                            as *mut usize
-                                                            as usize) {
+                                as *mut usize
+                                as usize)
+                            {
                                 Some(a) => a,
                                 _ => unreachable!(),
                             };
@@ -139,13 +149,18 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
 fn listen_thread(
     listen_addr: SocketAddr,
     chn: Sender<ThreadMessage>,
+    mut local_addr_sender: Option<Sender<SocketAddr>>,
     backchannel: Receiver<BackchannelMessage>,
 ) {
-    let client_addr = listen_addr.clone();
     // println!("KERNEL(1): Starting Xous server on {}...", listen_addr);
     let listener = TcpListener::bind(listen_addr).unwrap_or_else(|e| {
         panic!("Unable to create server: {}", e);
     });
+    let client_addr = listener.local_addr().unwrap();
+    // Notify the host what our kernel address is, if a listener exists.
+    if let Some(las) = local_addr_sender.take() {
+        las.send(listener.local_addr().unwrap()).unwrap();
+    }
 
     let mut clients = vec![];
 
@@ -237,8 +252,10 @@ pub fn idle() -> bool {
         })
         .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
-    let listen_thread_handle =
-        spawn(move || listen_thread(listen_addr, sender, backchannel_receiver));
+    let listen_thread_handle = SEND_ADDR.with(|sa| {
+        let sa = sa.borrow_mut().take();
+        spawn(move || listen_thread(listen_addr, sender, sa, backchannel_receiver))
+    });
 
     while let Ok(msg) = receiver.recv() {
         match msg {
@@ -290,7 +307,8 @@ pub fn idle() -> bool {
                 }
 
                 // Handle the syscall within the Xous kernel
-                let response = crate::syscall::handle(pid, thread_id, call).unwrap_or_else(Result::Error);
+                let response =
+                    crate::syscall::handle(pid, thread_id, call).unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
