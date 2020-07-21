@@ -258,7 +258,7 @@ pub fn idle() -> bool {
                 // Note that in this system, multiple processes can be active at once. This is
                 // similar to having one core for each process. However, each process may only have
                 // one context running at a time.
-                SystemServices::with_mut(|ss| ss.switch_to(new_pid, Some(1))).unwrap();
+                SystemServices::with_mut(|ss| ss.switch_to_thread(new_pid, Some(1))).unwrap();
             }
             ThreadMessage::SysCall(pid, thread_id, call) => {
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);

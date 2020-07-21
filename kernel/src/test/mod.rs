@@ -482,3 +482,10 @@ fn multiple_contexts() {
 
     main_thread.join().expect("couldn't join kernel process");
 }
+
+#[test]
+fn multiple_multiple_contexts() {
+    for _ in 0..60 {
+        multiple_contexts();
+    }
+}

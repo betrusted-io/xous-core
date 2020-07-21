@@ -123,7 +123,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
-            ss.ready_context(server_pid, ctx_number).or_else(|e| {
+            ss.ready_thread(server_pid, ctx_number).or_else(|e| {
                 ss.server_from_sidx(sidx)
                     .expect("server couldn't be located")
                     .return_available_thread(thread);
@@ -137,20 +137,20 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
                 // println!("Blocking client, since it sent a blocking message");
-                ss.switch_to(server_pid, None)?;
-                ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
-                    .and_then(|_| ss.switch_from(pid, thread, false))
+                ss.switch_to_thread(server_pid, None)?;
+                ss.set_thread_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                    .and_then(|_| ss.switch_from_thread(pid, thread))
                     .map(|_| xous::Result::BlockedProcess)
             } else if cfg!(baremetal) {
                 // println!("Setting the return value of the Server and returning to Client");
-                ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                ss.set_thread_result(server_pid, ctx_number, xous::Result::Message(envelope))
                     .map(|_| xous::Result::Ok)
             } else {
                 // println!("Setting the return value of the Server and returning to Client");
                 // "Switch to" the server PID when not running on bare metal. This ensures
                 // that it's "Running".
-                ss.switch_to(server_pid, None)?;
-                ss.set_context_result(server_pid, ctx_number, xous::Result::Message(envelope))
+                ss.switch_to_thread(server_pid, None)?;
+                ss.set_thread_result(server_pid, ctx_number, xous::Result::Message(envelope))
                     .map(|_| xous::Result::Ok)
             }
         } else {
@@ -162,7 +162,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             // equivalent to a "Yield".
             if blocking {
                 if !cfg!(baremetal) {
-                    ss.switch_from(pid, thread, false)?;
+                    ss.switch_from_thread(pid, thread)?;
                     Ok(xous::Result::BlockedProcess)
                 } else {
                     // println!("Returning to parent");
@@ -222,7 +222,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         // For hosted targets, simply return `BlockedProcess` indicating we'll make
         // a callback to their socket at a later time.
         else {
-            ss.switch_from(pid, tid, false)
+            ss.switch_from_thread(pid, tid)
                 .map(|_| xous::Result::BlockedProcess)
         }
     })
@@ -493,18 +493,18 @@ pub fn handle(
                 //     "KERNEL({}): Unblocking PID {} CTX {}",
                 //     pid, client_pid, client_ctx
                 // );
-                ss.ready_context(client_pid, client_ctx)?;
-                ss.set_context_result(client_pid, client_ctx, xous::Result::Ok)?;
-                ss.switch_to(client_pid, Some(client_ctx))?;
+                ss.ready_thread(client_pid, client_ctx)?;
+                ss.set_thread_result(client_pid, client_ctx, xous::Result::Ok)?;
+                ss.switch_to_thread(client_pid, Some(client_ctx))?;
                 Ok(xous::Result::Ok)
             })
         }
         SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
-            ss.switch_from(pid, tid, false)?;
+            ss.switch_from_thread(pid, tid)?;
             let ppid = ss.terminate_process(pid)?;
             if cfg!(baremetal) {
-                ss.switch_to(ppid, None)
+                ss.switch_to_thread(ppid, None)
                     .map(|_| xous::Result::ResumeProcess)
             } else {
                 Ok(xous::Result::Ok)

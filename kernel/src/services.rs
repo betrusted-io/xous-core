@@ -15,7 +15,7 @@ use xous::{pid_from_usize, ContextInit, Error, MemoryAddress, Message, TID, CID,
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
 
-pub use crate::arch::process::INITIAL_CONTEXT;
+pub use crate::arch::process::INITIAL_TID;
 
 /// A big unifying struct containing all of the system state.
 /// This is inherited from the stage 1 bootloader.
@@ -200,7 +200,7 @@ thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(Sys
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         current_context: 0,
-        previous_context: INITIAL_CONTEXT as u8,
+        previous_context: INITIAL_TID as u8,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -281,8 +281,8 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        // ProcessHandle::get().init(0, 0, INITIAL_CONTEXT);
-        self.processes[0].current_context = INITIAL_CONTEXT as u8;
+        // ProcessHandle::get().init(0, 0, INITIAL_TID);
+        self.processes[0].current_context = INITIAL_TID as u8;
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -480,24 +480,24 @@ impl SystemServices {
 
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
-    pub fn ready_context(&mut self, pid: PID, context: TID) -> Result<(), xous::Error> {
-        assert!(context == INITIAL_CONTEXT);
+    pub fn ready_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous::Error> {
+        assert!(tid == INITIAL_TID);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
             ProcessState::Free => panic!(
                 "PID {} was not running, so cannot wake context {}",
-                pid, context
+                pid, tid
             ),
-            ProcessState::Running(x) if x & (1 << context) == 0 => {
-                ProcessState::Running(x | (1 << context))
+            ProcessState::Running(x) if x & (1 << tid) == 0 => {
+                ProcessState::Running(x | (1 << tid))
             }
-            ProcessState::Ready(x) if x & (1 << context) == 0 => {
-                ProcessState::Ready(x | (1 << context))
+            ProcessState::Ready(x) if x & (1 << tid) == 0 => {
+                ProcessState::Ready(x | (1 << tid))
             }
-            ProcessState::Sleeping => ProcessState::Ready(1 << context),
+            ProcessState::Sleeping => ProcessState::Ready(1 << tid),
             other => panic!(
                 "PID {} was not in a state to wake context {}: {:?}",
-                pid, context, other
+                pid, tid, other
             ),
         };
         // println!(
@@ -512,7 +512,7 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
-    pub fn switch_to(&mut self, pid: PID, context: Option<TID>) -> Result<(), xous::Error> {
+    pub fn switch_to_thread(&mut self, pid: PID, context: Option<TID>) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
         // println!(
         //     "switch_to({}:{:?}): Old state was {:?}",
@@ -528,17 +528,17 @@ impl SystemServices {
                 process.activate()?;
 
                 // If a context is specified for a Setup task to switch to,
-                // ensure it's the INITIAL_CONTEXT. Otherwise it's not valid.
+                // ensure it's the INITIAL_TID. Otherwise it's not valid.
                 if let Some(ctx) = context {
-                    if ctx != INITIAL_CONTEXT {
+                    if ctx != INITIAL_TID {
                         return Err(xous::Error::InvalidContext);
                     }
                 }
 
                 let mut p = crate::arch::process::Process::current();
-                p.setup_context(INITIAL_CONTEXT, setup)?;
-                p.set_context(INITIAL_CONTEXT)?;
-                process.current_context = INITIAL_CONTEXT as u8;
+                p.setup_context(INITIAL_TID, setup)?;
+                p.set_context(INITIAL_TID)?;
+                process.current_context = INITIAL_TID as u8;
 
                 // Mark the current proces state as "running, and no waiting contexts"
                 ProcessState::Running(0)
@@ -634,11 +634,10 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running.
-    pub fn switch_from(
+    pub fn switch_from_thread(
         &mut self,
         pid: PID,
-        context: TID,
-        can_resume: bool,
+        tid: TID,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
         // println!(
@@ -646,31 +645,31 @@ impl SystemServices {
         //     pid, context, process.state
         // );
         process.state = match process.state {
-            ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
-                "PID {} context {} was already queued for running when `switch_from()` was called",
-                pid, context
+            ProcessState::Running(x) if x & (1 << tid) != 0 => panic!(
+                "PID {} thread {} was already queued for running when `switch_from_thread()` was called",
+                pid, tid
             ),
             ProcessState::Running(x) if x == 0 => {
-                if can_resume {
-                    if cfg!(baremetal) {
-                        ProcessState::Ready(1 << context)
-                    } else {
-                        ProcessState::Running(1 << context)
-                    }
-                } else {
+                // if can_resume {
+                //     if cfg!(baremetal) {
+                //         ProcessState::Ready(1 << tid)
+                //     } else {
+                //         ProcessState::Running(1 << tid)
+                //     }
+                // } else {
                     ProcessState::Sleeping
-                }
+                // }
             }
             ProcessState::Running(x) => {
                 if cfg!(baremetal) {
-                    ProcessState::Ready(x | if can_resume { 1 << context } else { 0 })
+                    ProcessState::Ready(x)
                 } else {
-                    ProcessState::Running(x | if can_resume { 1 << context } else { 0 })
+                    ProcessState::Running(x)
                 }
             }
             other => panic!(
-                "PID {} was not in a state to be switched from: {:?}",
-                pid, other
+                "PID {} TID {} was not in a state to be switched from: {:?}",
+                pid, tid, other
             ),
         };
         // println!(
@@ -680,7 +679,7 @@ impl SystemServices {
         Ok(())
     }
 
-    pub fn set_context_result(
+    pub fn set_thread_result(
         &mut self,
         pid: PID,
         context: TID,
@@ -726,7 +725,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                ProcessState::Setup(_) => new_context = INITIAL_CONTEXT,
+                ProcessState::Setup(_) => new_context = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
@@ -780,7 +779,7 @@ impl SystemServices {
                     //     "Initializing new process with stack size of {} bytes",
                     //     stack_size
                     // );
-                    // // process.init(entrypoint, stack, INITIAL_CONTEXT);
+                    // // process.init(entrypoint, stack, INITIAL_TID);
                     // // Mark the stack as "unallocated-but-free"
                     // let init_sp = stack & !0xfff;
                     // let mut memory_manager = MemoryManagerHandle::get();

@@ -6,7 +6,7 @@ use std::net::TcpStream;
 use std::thread_local;
 use xous::{ContextInit, TID, PID};
 
-pub const INITIAL_CONTEXT: usize = 1;
+pub const INITIAL_TID: usize = 1;
 
 pub struct Process {
     pid: PID,
@@ -236,7 +236,7 @@ impl Process {
                 inner: Default::default(),
                 conn: init_data.conn,
                 memory_to_return: None,
-                current_context: INITIAL_CONTEXT,
+                current_context: INITIAL_TID,
                 contexts: [Context {allocated: false}; MAX_CONTEXT],
             };
             if pid_idx >= process_table.table.len() {
