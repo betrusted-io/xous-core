@@ -132,7 +132,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
             if blocking && cfg!(baremetal) {
                 // println!("Activating Server context and switching away from Client");
-                ss.activate_process_thread(server_pid, server_tid, !blocking, blocking)
+                ss.activate_process_thread(server_pid, server_tid, !blocking)
                     .map(|_| Ok(xous::Result::Message(envelope)))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
@@ -166,7 +166,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     let process = ss.get_process(pid).expect("Can't get current process");
                     let ppid = process.ppid;
                     unsafe { SWITCHTO_CALLER = None };
-                    ss.activate_process_thread(ppid, 0, !blocking, blocking)
+                    ss.activate_process_thread(ppid, 0, !blocking)
                         .map(|_| Ok(xous::Result::ResumeProcess))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
                 } else {
@@ -293,7 +293,8 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         if cfg!(baremetal) {
             unsafe { SWITCHTO_CALLER = None };
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
-            ss.activate_process_thread(ppid, 0, false, true)
+            // TODO: Advance thread
+            ss.activate_process_thread(ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -306,22 +307,14 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
     })
 }
 
-pub fn handle(
-    pid: PID,
-    tid: TID,
-    call: SysCall,
-) -> SysCallResult {
+pub fn handle(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
     // print!("KERNEL({}:{}): Syscall {:?}", pid, tid, call);
     let result = handle_inner(pid, tid, call);
     // println!(" -> {:?}", result);
     result
 }
 
-pub fn handle_inner(
-    pid: PID,
-    tid: TID,
-    call: SysCall,
-) -> SysCallResult {
+pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
     // let pid = arch::current_pid();
 
     match call {
@@ -454,7 +447,7 @@ pub fn handle_inner(
                     );
                     SWITCHTO_CALLER = Some((pid, tid));
                 }
-                ss.activate_process_thread(new_pid, new_context, true, false)
+                ss.activate_process_thread(new_pid, new_context, true)
                     .map(|_ctx| {
                         // println!("switchto ({}, {})", pid, _ctx);
                         xous::Result::ResumeProcess
@@ -476,7 +469,8 @@ pub fn handle_inner(
                     .expect("yielded when no parent context was present")
             };
             SystemServices::with_mut(|ss| {
-                ss.activate_process_thread(parent_pid, parent_ctx, true, true)
+                // TODO: Advance thread
+                ss.activate_process_thread(parent_pid, parent_ctx, true)
                     .map(|_| Ok(xous::Result::ResumeProcess))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             })
@@ -498,7 +492,8 @@ pub fn handle_inner(
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
             unsafe { SWITCHTO_CALLER = None };
-            ss.activate_process_thread(ppid, 0, false, true)
+            // TODO: Advance thread
+            ss.activate_process_thread(ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),
@@ -506,7 +501,8 @@ pub fn handle_inner(
             #[allow(clippy::unit_arg)]
             ss.create_thread(pid, thread_init).map(|new_tid| {
                 if !cfg!(baremetal) {
-                    ss.switch_to_thread(pid, Some(new_tid)).expect("couldn't activate new thread");
+                    ss.switch_to_thread(pid, Some(new_tid))
+                        .expect("couldn't activate new thread");
                 }
                 xous::Result::ThreadID(new_tid)
             })

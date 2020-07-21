@@ -166,11 +166,13 @@ fn listen_thread(
 
     let pid1_thread = spawn(move || {
         let mut client = TcpStream::connect(client_addr).expect("couldn't connect to xous server");
+        client.set_nonblocking(true).expect("pid1: couldn't set nonblocking mode");
         let mut buffer = [0; 32];
         // println!("KERNEL(1): Started PID1 idle thread");
         loop {
             match client.read(&mut buffer) {
                 Ok(0) => return,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
                 Err(e) => panic!("KERNEL(1): Unable to read buffer: {}", e),
                 Ok(x) => println!("KERNEL(1): Read {} bytes", x),
             }

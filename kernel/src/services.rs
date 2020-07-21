@@ -718,7 +718,6 @@ impl SystemServices {
         new_pid: PID,
         mut new_tid: TID,
         can_resume: bool,
-        advance_thread: bool,
     ) -> Result<TID, xous::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
@@ -859,7 +858,7 @@ impl SystemServices {
             //     }
             //     return Ok(new_tid);
             // }
-            let new = self.get_process_mut(new_pid)?;
+            let new = self.get_process_mut(new_pid)?;/*
             new.state = match new.state {
                 ProcessState::Running(x) if (x & 1 << new_tid) == 0 => {
                     return Err(xous::Error::ProcessNotFound)
@@ -871,11 +870,11 @@ impl SystemServices {
                 //         ProcessState::Running(x | (1 << previous_tid))
                 //     }
                 // }
-                other => panic!(
+                other => */panic!(
                     "PID {} invalid process state (not Running): {:?}",
-                    previous_pid, other
-                ),
-            };
+                    previous_pid, new.state
+                )/*,
+            }*/;
             // if advance_thread {
             //     new.current_thread += 1;
             //     if new.current_thread as TID > arch::process::MAX_CONTEXT {
