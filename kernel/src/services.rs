@@ -500,10 +500,10 @@ impl SystemServices {
                 pid, context, other
             ),
         };
-        println!(
-            "KERNEL({}): Readying context {} -> {:?}",
-            pid, context, process.state
-        );
+        // println!(
+        //     "KERNEL({}): Readying context {} -> {:?}",
+        //     pid, context, process.state
+        // );
         Ok(())
     }
 
@@ -513,13 +513,11 @@ impl SystemServices {
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
     pub fn switch_to(&mut self, pid: PID, context: Option<TID>) -> Result<(), xous::Error> {
-        // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
-        // println!("KERNEL(?): Current process is {:?}", process);
-        println!(
-            "switch_to({}:{:?}): Old state was {:?}",
-            pid, context, process.state
-        );
+        // println!(
+        //     "switch_to({}:{:?}): Old state was {:?}",
+        //     pid, context, process.state
+        // );
 
         // Determine which context number to switch to
         process.state = match process.state {
@@ -620,10 +618,10 @@ impl SystemServices {
                 ProcessState::Running(new_mask)
             }
         };
-        println!(
-            "switch_to({}:{:?}): New state is {:?}",
-            pid, context, process.state
-        );
+        // println!(
+        //     "switch_to({}:{:?}): New state is {:?}",
+        //     pid, context, process.state
+        // );
         // self.pid = pid;
         Ok(())
     }
@@ -643,10 +641,10 @@ impl SystemServices {
         can_resume: bool,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
-        println!(
-            "switch_from({}:{}): Old state was {:?}",
-            pid, context, process.state
-        );
+        // println!(
+        //     "switch_from({}:{}): Old state was {:?}",
+        //     pid, context, process.state
+        // );
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
                 "PID {} context {} was already queued for running when `switch_from()` was called",
@@ -675,10 +673,10 @@ impl SystemServices {
                 pid, other
             ),
         };
-        println!(
-            "switch_from({}:{}): New state is {:?}",
-            pid, context, process.state
-        );
+        // println!(
+        //     "switch_from({}:{}): New state is {:?}",
+        //     pid, context, process.state
+        // );
         Ok(())
     }
 
@@ -1196,7 +1194,7 @@ impl SystemServices {
         //     &[arg.map(|x| x.get()).unwrap_or_default() as usize],
         // );
 
-        println!("KERNEL({}): Created new context {}", pid, new_context_nr);
+        // println!("KERNEL({}): Created new context {}", pid, new_context_nr);
 
         // Queue the thread to run
         process.state = match process.state {

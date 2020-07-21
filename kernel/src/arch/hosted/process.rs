@@ -128,12 +128,12 @@ impl Process {
         context: TID,
         _setup: ContextInit,
     ) -> Result<(), xous::Error> {
-        println!(
-            "KERNEL({}): Setting up context {} @ {:?}",
-            self.pid,
-            context,
-            std::thread::current()
-        );
+        // println!(
+        //     "KERNEL({}): Setting up context {} @ {:?}",
+        //     self.pid,
+        //     context,
+        //     std::thread::current()
+        // );
         assert!(context > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
@@ -142,12 +142,12 @@ impl Process {
 
             assert!(!process.contexts[context - 1].allocated);
             process.contexts[context - 1].allocated = true;
-            println!(
-                "KERNEL({}): self.contexts[{}].allocated = {}",
-                current_pid_idx,
-                context - 1,
-                process.contexts[context - 1].allocated
-            );
+            // println!(
+            //     "KERNEL({}): self.contexts[{}].allocated = {}",
+            //     current_pid_idx,
+            //     context - 1,
+            //     process.contexts[context - 1].allocated
+            // );
         });
         Ok(())
     }
