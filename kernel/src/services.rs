@@ -10,7 +10,7 @@ use crate::filled_array;
 // use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use crate::server::Server;
 // use core::mem;
-use xous::{pid_from_usize, ContextInit, Error, MemoryAddress, Message, ThreadID, CID, PID, SID};
+use xous::{pid_from_usize, ContextInit, Error, MemoryAddress, Message, TID, CID, PID, SID};
 
 const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
@@ -366,7 +366,7 @@ impl SystemServices {
     pub fn finish_callback_and_resume(
         &mut self,
         pid: PID,
-        context: ThreadID,
+        context: TID,
     ) -> Result<(), xous::Error> {
         // Get the current process (which was the interrupt handler) and mark it
         // as Ready.  Note that the new PID may very well be the same PID.
@@ -480,7 +480,7 @@ impl SystemServices {
 
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
-    pub fn ready_context(&mut self, pid: PID, context: ThreadID) -> Result<(), xous::Error> {
+    pub fn ready_context(&mut self, pid: PID, context: TID) -> Result<(), xous::Error> {
         assert!(context == INITIAL_CONTEXT);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
@@ -500,7 +500,10 @@ impl SystemServices {
                 pid, context, other
             ),
         };
-        // println!("KERNEL({}): Readying context {} -> {:?}", pid, context, process.state);
+        println!(
+            "KERNEL({}): Readying context {} -> {:?}",
+            pid, context, process.state
+        );
         Ok(())
     }
 
@@ -509,10 +512,14 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
-    pub fn switch_to(&mut self, pid: PID, context: Option<ThreadID>) -> Result<(), xous::Error> {
+    pub fn switch_to(&mut self, pid: PID, context: Option<TID>) -> Result<(), xous::Error> {
         // println!("KERNEL(?): Getting current process...");
         let process = self.get_process_mut(pid)?;
         // println!("KERNEL(?): Current process is {:?}", process);
+        println!(
+            "switch_to({}:{:?}): Old state was {:?}",
+            pid, context, process.state
+        );
 
         // Determine which context number to switch to
         process.state = match process.state {
@@ -613,14 +620,18 @@ impl SystemServices {
                 ProcessState::Running(new_mask)
             }
         };
+        println!(
+            "switch_to({}:{:?}): New state is {:?}",
+            pid, context, process.state
+        );
         // self.pid = pid;
         Ok(())
     }
 
-    /// Switches away from the specified context ID.
-    /// If `can_resume` is `true`, then the current context ID will be placed
-    /// in the list of available context IDs.
-    /// If no context IDs are available, the thread will enter a `Sleeping` state.
+    /// Switches away from the specified process ID.
+    /// If `can_resume` is `true`, then the current thread ID will be placed
+    /// in the list of available thread IDs.
+    /// If no thread IDs are available, the process will enter a `Sleeping` state.
     ///
     /// # Panics
     ///
@@ -628,24 +639,35 @@ impl SystemServices {
     pub fn switch_from(
         &mut self,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         can_resume: bool,
     ) -> Result<(), xous::Error> {
         let process = self.get_process_mut(pid)?;
+        println!(
+            "switch_from({}:{}): Old state was {:?}",
+            pid, context, process.state
+        );
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << context) != 0 => panic!(
                 "PID {} context {} was already queued for running when `switch_from()` was called",
                 pid, context
             ),
-            ProcessState::Running(x) => {
-                if x == 0 {
-                    if can_resume {
+            ProcessState::Running(x) if x == 0 => {
+                if can_resume {
+                    if cfg!(baremetal) {
                         ProcessState::Ready(1 << context)
                     } else {
-                        ProcessState::Sleeping
+                        ProcessState::Running(1 << context)
                     }
                 } else {
+                    ProcessState::Sleeping
+                }
+            }
+            ProcessState::Running(x) => {
+                if cfg!(baremetal) {
                     ProcessState::Ready(x | if can_resume { 1 << context } else { 0 })
+                } else {
+                    ProcessState::Running(x | if can_resume { 1 << context } else { 0 })
                 }
             }
             other => panic!(
@@ -653,13 +675,17 @@ impl SystemServices {
                 pid, other
             ),
         };
+        println!(
+            "switch_from({}:{}): New state is {:?}",
+            pid, context, process.state
+        );
         Ok(())
     }
 
     pub fn set_context_result(
         &mut self,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         result: xous::Result,
     ) -> Result<(), xous::Error> {
         // Temporarily switch into the target process memory space
@@ -685,10 +711,10 @@ impl SystemServices {
     pub fn activate_process_context(
         &mut self,
         new_pid: PID,
-        mut new_context: ThreadID,
+        mut new_context: TID,
         can_resume: bool,
         advance_context: bool,
-    ) -> Result<ThreadID, xous::Error> {
+    ) -> Result<TID, xous::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_context);
         let previous_pid = self.current_pid();
         let previous_context = self.current_context_nr(previous_pid);
@@ -810,14 +836,14 @@ impl SystemServices {
             };
             if advance_context {
                 previous.current_context += 1;
-                if previous.current_context as ThreadID > arch::process::MAX_CONTEXT {
+                if previous.current_context as TID > arch::process::MAX_CONTEXT {
                     previous.current_context = 0;
                 }
             }
-        // println!(
-        //     "Set previous process PID {} state to {:?} (with can_resume = {})",
-        //     previous_pid, previous.state, can_resume
-        // );
+            println!(
+                "Set previous process PID {} state to {:?} (with can_resume = {})",
+                previous_pid, previous.state, can_resume
+            );
         } else {
             if self.current_context_nr(previous_pid) == new_context {
                 if !can_resume {
@@ -844,7 +870,7 @@ impl SystemServices {
             };
             if advance_context {
                 new.current_context += 1;
-                if new.current_context as ThreadID > arch::process::MAX_CONTEXT {
+                if new.current_context as TID > arch::process::MAX_CONTEXT {
                     new.current_context = 0;
                 }
             }
@@ -1147,7 +1173,7 @@ impl SystemServices {
         &mut self,
         pid: PID,
         context_init: ContextInit,
-    ) -> Result<ThreadID, xous::Error> {
+    ) -> Result<TID, xous::Error> {
         let mut process = self
             .get_process_mut(pid)
             .expect("couldn't find current process");
@@ -1169,6 +1195,8 @@ impl SystemServices {
         //     EXIT_THREAD,
         //     &[arg.map(|x| x.get()).unwrap_or_default() as usize],
         // );
+
+        println!("KERNEL({}): Created new context {}", pid, new_context_nr);
 
         // Queue the thread to run
         process.state = match process.state {
@@ -1313,7 +1341,7 @@ impl SystemServices {
         &mut self,
         sidx: usize,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         message: Message,
         original_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {
@@ -1345,7 +1373,7 @@ impl SystemServices {
         &mut self,
         sidx: usize,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous::Error> {

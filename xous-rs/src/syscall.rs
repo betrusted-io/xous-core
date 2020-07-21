@@ -750,6 +750,7 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
+        println!("Unexpected return value: {:?}", result);
         Err(Error::InternalError)
     }
 }

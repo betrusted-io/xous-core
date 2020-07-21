@@ -8,12 +8,201 @@ use core::mem;
 use xous::*;
 
 /// This is the context that called SwitchTo
-static mut SWITCHTO_CALLER: Option<(PID, ThreadID)> = None;
+static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
-pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
+fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
+        // ::debug_here::debug_here!();
+
+        let server_pid = ss
+            .server_from_sidx(sidx)
+            .expect("server couldn't be located")
+            .pid;
+
+        // Remember the address the message came from, in case we need to
+        // return it after the borrow is through.
+        let client_address = match &message {
+            Message::Scalar(_) => None,
+            Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
+                Some(msg.buf.addr)
+            }
+        };
+
+        // Translate memory messages from the client process to the server
+        // process. Additionally, determine whether the call is blocking. If
+        // so, switch to the server context right away.
+        let (message, blocking) = match message {
+            Message::Scalar(_) => (message, false),
+            Message::Move(msg) => {
+                let new_virt = ss.send_memory(
+                    msg.buf.as_mut_ptr(),
+                    server_pid,
+                    core::ptr::null_mut(),
+                    msg.buf.len(),
+                )?;
+                (
+                    Message::Move(MemoryMessage {
+                        id: msg.id,
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        offset: msg.offset,
+                        valid: msg.valid,
+                    }),
+                    false,
+                )
+            }
+            Message::MutableBorrow(msg) => {
+                let new_virt = ss.lend_memory(
+                    msg.buf.as_mut_ptr(),
+                    server_pid,
+                    core::ptr::null_mut(),
+                    msg.buf.len(),
+                    true,
+                )?;
+                (
+                    Message::MutableBorrow(MemoryMessage {
+                        id: msg.id,
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        offset: msg.offset,
+                        valid: msg.valid,
+                    }),
+                    true,
+                )
+            }
+            Message::Borrow(msg) => {
+                let new_virt = ss.lend_memory(
+                    msg.buf.as_mut_ptr(),
+                    server_pid,
+                    core::ptr::null_mut(),
+                    msg.buf.len(),
+                    false,
+                )?;
+                // println!(
+                //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
+                //     msg.buf.len(),
+                //     msg.buf.as_mut_ptr() as usize,
+                //     pid,
+                //     new_virt as usize,
+                //     server_pid,
+                // );
+                (
+                    Message::Borrow(MemoryMessage {
+                        id: msg.id,
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        offset: msg.offset,
+                        valid: msg.valid,
+                    }),
+                    true,
+                )
+            }
+        };
+
+        // If the server has an available context to receive the message,
+        // transfer it right away.
+        if let Some(ctx_number) = ss
+            .server_from_sidx(sidx)
+            .expect("server couldn't be located")
+            .take_available_context()
+        {
+            // println!(
+            //     "There are contexts available to handle this message.  Marking PID {} as Ready",
+            //     server_pid
+            // );
+            let sender = match message {
+                Message::Scalar(_) | Message::Move(_) => 0,
+                Message::Borrow(_) | Message::MutableBorrow(_) => ss
+                    .remember_server_message(
+                        sidx,
+                        pid,
+                        thread,
+                        &message,
+                        client_address,
+                    )
+                    .or_else(|e| {
+                        ss.server_from_sidx(sidx)
+                            .expect("server couldn't be located")
+                            .return_available_context(thread);
+                        Err(e)
+                    })?,
+            };
+            let envelope = MessageEnvelope { sender, message };
+
+            // Mark the server's context as "Ready". If this fails, return the context
+            // to the blocking list.
+            ss.ready_context(server_pid, ctx_number).or_else(|e| {
+                ss.server_from_sidx(sidx)
+                    .expect("server couldn't be located")
+                    .return_available_context(thread);
+                Err(e)
+            })?;
+
+            if blocking && cfg!(baremetal) {
+                // println!("Activating Server context and switching away from Client");
+                ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
+                    .map(|_| Ok(xous::Result::Message(envelope)))
+                    .unwrap_or(Err(xous::Error::ProcessNotFound))
+            } else if blocking && !cfg!(baremetal) {
+                // println!("Blocking client, since it sent a blocking message");
+                ss.switch_to(server_pid, None)?;
+                ss.set_context_result(
+                    server_pid,
+                    ctx_number,
+                    xous::Result::Message(envelope),
+                )
+                .and_then(|_| ss.switch_from(pid, thread, false))
+                .map(|_| xous::Result::BlockedProcess)
+            } else if cfg!(baremetal) {
+                // println!("Setting the return value of the Server and returning to Client");
+                ss.set_context_result(
+                    server_pid,
+                    ctx_number,
+                    xous::Result::Message(envelope),
+                )
+                .map(|_| xous::Result::Ok)
+            } else {
+                // println!("Setting the return value of the Server and returning to Client");
+                // "Switch to" the server PID when not running on bare metal. This ensures
+                // that it's "Running".
+                ss.switch_to(server_pid, None)?;
+                ss.set_context_result(
+                    server_pid,
+                    ctx_number,
+                    xous::Result::Message(envelope),
+                )
+                .map(|_| xous::Result::Ok)
+            }
+        } else {
+            // Add this message to the queue.  If the queue is full, this
+            // returns an error.
+            ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+
+            // Park this context if it's blocking.  This is roughly
+            // equivalent to a "Yield".
+            if blocking {
+                if !cfg!(baremetal) {
+                    ss.switch_from(pid, thread, false)?;
+                    Ok(xous::Result::BlockedProcess)
+                } else {
+                    // println!("Returning to parent");
+                    let process = ss.get_process(pid).expect("Can't get current process");
+                    let ppid = process.ppid;
+                    unsafe { SWITCHTO_CALLER = None };
+                    ss.activate_process_context(ppid, 0, !blocking, blocking)
+                        .map(|_| Ok(xous::Result::ResumeProcess))
+                        .unwrap_or(Err(xous::Error::ProcessNotFound))
+                }
+            } else {
+                // println!("Returning to Client with Ok result");
+                Ok(xous::Result::Ok)
+            }
+        }
+    })
+}
+
+pub fn handle(pid: PID, tid: TID, call: SysCall) -> core::result::Result<xous::Result, xous::Error> {
     // let pid = arch::current_pid();
 
-    // println!("PID{} Syscall: {:?}", pid, call);
+    println!("KERNEL({}): Syscall {:?}", pid, call);
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             let mut mm = MemoryManagerHandle::get();
@@ -239,12 +428,11 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),
-        SysCall::CreateThread(context_init) => {
-            SystemServices::with_mut(|ss| {
-                ss.create_thread(pid, context_init)
-                    .map(xous::Result::ThreadID)
-            })
-        }
+        SysCall::CreateThread(context_init) => SystemServices::with_mut(|ss| {
+            #[allow(clippy::unit_arg)]
+            ss.create_thread(pid, context_init)
+                .map(xous::Result::ThreadID)
+        }),
         SysCall::CreateServer(name) => {
             SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous::Result::ServerID))
         }
@@ -326,198 +514,7 @@ pub fn handle(pid: PID, call: SysCall) -> core::result::Result<xous::Result, xou
             })
         }
         SysCall::SendMessage(cid, message) => {
-            SystemServices::with_mut(|ss| {
-                let context_nr = ss.current_context_nr(pid);
-                let sidx = ss.sidx_from_cid(cid).ok_or(xous::Error::ServerNotFound)?;
-                // ::debug_here::debug_here!();
-
-                let server_pid = ss
-                    .server_from_sidx(sidx)
-                    .expect("server couldn't be located")
-                    .pid;
-
-                // Remember the address the message came from, in case we need to
-                // return it after the borrow is through.
-                let client_address = match &message {
-                    Message::Scalar(_) => None,
-                    Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
-                        Some(msg.buf.addr)
-                    }
-                };
-
-                // Translate memory messages from the client process to the server
-                // process. Additionally, determine whether the call is blocking. If
-                // so, switch to the server context right away.
-                let (message, blocking) = match message {
-                    Message::Scalar(_) => (message, false),
-                    Message::Move(msg) => {
-                        let new_virt = ss.send_memory(
-                            msg.buf.as_mut_ptr(),
-                            server_pid,
-                            core::ptr::null_mut(),
-                            msg.buf.len(),
-                        )?;
-                        (
-                            Message::Move(MemoryMessage {
-                                id: msg.id,
-                                buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
-                                offset: msg.offset,
-                                valid: msg.valid,
-                            }),
-                            false,
-                        )
-                    }
-                    Message::MutableBorrow(msg) => {
-                        let new_virt = ss.lend_memory(
-                            msg.buf.as_mut_ptr(),
-                            server_pid,
-                            core::ptr::null_mut(),
-                            msg.buf.len(),
-                            true,
-                        )?;
-                        (
-                            Message::MutableBorrow(MemoryMessage {
-                                id: msg.id,
-                                buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
-                                offset: msg.offset,
-                                valid: msg.valid,
-                            }),
-                            true,
-                        )
-                    }
-                    Message::Borrow(msg) => {
-                        let new_virt = ss.lend_memory(
-                            msg.buf.as_mut_ptr(),
-                            server_pid,
-                            core::ptr::null_mut(),
-                            msg.buf.len(),
-                            false,
-                        )?;
-                        // println!(
-                        //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
-                        //     msg.buf.len(),
-                        //     msg.buf.as_mut_ptr() as usize,
-                        //     pid,
-                        //     new_virt as usize,
-                        //     server_pid,
-                        // );
-                        (
-                            Message::Borrow(MemoryMessage {
-                                id: msg.id,
-                                buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
-                                offset: msg.offset,
-                                valid: msg.valid,
-                            }),
-                            true,
-                        )
-                    }
-                };
-
-                // If the server has an available context to receive the message,
-                // transfer it right away.
-                if let Some(ctx_number) = ss
-                    .server_from_sidx(sidx)
-                    .expect("server couldn't be located")
-                    .take_available_context()
-                {
-                    // println!(
-                    //     "There are contexts available to handle this message.  Marking PID {} as Ready",
-                    //     server_pid
-                    // );
-                    let sender = match message {
-                        Message::Scalar(_) | Message::Move(_) => 0,
-                        Message::Borrow(_) | Message::MutableBorrow(_) => ss
-                            .remember_server_message(
-                                sidx,
-                                pid,
-                                context_nr,
-                                &message,
-                                client_address,
-                            )
-                            .or_else(|e| {
-                                ss.server_from_sidx(sidx)
-                                    .expect("server couldn't be located")
-                                    .return_available_context(context_nr);
-                                Err(e)
-                            })?,
-                    };
-                    let envelope = MessageEnvelope { sender, message };
-
-                    // Mark the server's context as "Ready". If this fails, return the context
-                    // to the blocking list.
-                    ss.ready_context(server_pid, ctx_number).or_else(|e| {
-                        ss.server_from_sidx(sidx)
-                            .expect("server couldn't be located")
-                            .return_available_context(context_nr);
-                        Err(e)
-                    })?;
-
-                    if blocking && cfg!(baremetal) {
-                        // println!("Activating Server context and switching away from Client");
-                        ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
-                            .map(|_| Ok(xous::Result::Message(envelope)))
-                            .unwrap_or(Err(xous::Error::ProcessNotFound))
-                    } else if blocking && !cfg!(baremetal) {
-                        // println!("Blocking client, since it sent a blocking message");
-                        ss.switch_to(server_pid, None)?;
-                        ss.set_context_result(
-                            server_pid,
-                            ctx_number,
-                            xous::Result::Message(envelope),
-                        )
-                        .and_then(|_| ss.switch_from(pid, context_nr, false))
-                        .map(|_| xous::Result::BlockedProcess)
-                    } else if cfg!(baremetal) {
-                        // println!("Setting the return value of the Server and returning to Client");
-                        ss.set_context_result(
-                            server_pid,
-                            ctx_number,
-                            xous::Result::Message(envelope),
-                        )
-                        .map(|_| xous::Result::Ok)
-                    } else {
-                        // println!("Setting the return value of the Server and returning to Client");
-                        // "Switch to" the server PID when not running on bare metal. This ensures
-                        // that it's "Running".
-                        ss.switch_to(server_pid, None)?;
-                        ss.set_context_result(
-                            server_pid,
-                            ctx_number,
-                            xous::Result::Message(envelope),
-                        )
-                        .map(|_| xous::Result::Ok)
-                    }
-                } else {
-                    // println!("No contexts available to handle this.  Queueing message.");
-                    // There is no server context we can use, so add the message to
-                    // the queue.
-                    let context_nr = ss.current_context_nr(pid);
-
-                    // Add this message to the queue.  If the queue is full, this
-                    // returns an error.
-                    ss.queue_server_message(sidx, pid, context_nr, message, client_address)?;
-
-                    // Park this context if it's blocking.  This is roughly
-                    // equivalent to a "Yield".
-                    if blocking {
-                        if !cfg!(baremetal) {
-                            ss.switch_from(pid, context_nr, false)?;
-                            Ok(xous::Result::BlockedProcess)
-                        } else {
-                            // println!("Returning to parent");
-                            let process = ss.get_process(pid).expect("Can't get current process");
-                            let ppid = process.ppid;
-                            unsafe { SWITCHTO_CALLER = None };
-                            ss.activate_process_context(ppid, 0, !blocking, blocking)
-                                .map(|_| Ok(xous::Result::ResumeProcess))
-                                .unwrap_or(Err(xous::Error::ProcessNotFound))
-                        }
-                    } else {
-                        // println!("Returning to Client with Ok result");
-                        Ok(xous::Result::Ok)
-                    }
-                }
-            })
+            send_message(pid, tid, cid, message)
         }
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             let context_nr = ss.current_context_nr(pid);

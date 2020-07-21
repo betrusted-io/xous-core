@@ -16,10 +16,10 @@ use std::time::Duration;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous::{MemoryAddress, Result, SysCall, PID};
+use xous::{MemoryAddress, Result, SysCall, TID, PID};
 
 enum ThreadMessage {
-    SysCall(PID, SysCall),
+    SysCall(PID, TID, SysCall),
     NewConnection(TcpStream),
 }
 
@@ -58,8 +58,12 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                         //     "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
                         //     pid, e, e
                         // );
-                        chn.send(ThreadMessage::SysCall(pid, xous::SysCall::TerminateProcess))
-                            .unwrap();
+                        chn.send(ThreadMessage::SysCall(
+                            pid,
+                            1,
+                            xous::SysCall::TerminateProcess,
+                        ))
+                        .unwrap();
                         return;
                     }
                     // std::thread::sleep(Duration::from_millis(20));
@@ -70,7 +74,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
             *word = usize::from_le_bytes(incoming_word);
         }
 
-        let _thread_id = pkt[0];
+        let thread_id = pkt[0];
         let call = xous::SysCall::from_args(
             pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
         );
@@ -90,6 +94,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                                     // println!("KERNEL({}): Read Error {}", pid, _e);
                                     chn.send(ThreadMessage::SysCall(
                                         pid,
+                                        thread_id,
                                         xous::SysCall::TerminateProcess,
                                     ))
                                     .unwrap();
@@ -110,10 +115,12 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                                 sliced_data.len(),
                                 msg.buf.len()
                             );
-                            msg.buf.addr = MemoryAddress::new(Box::into_raw(sliced_data)
-                                as *mut usize
-                                as usize)
-                            .unwrap();
+                            msg.buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
+                                                            as *mut usize
+                                                            as usize) {
+                                Some(a) => a,
+                                _ => unreachable!(),
+                            };
                         }
                         xous::Message::Scalar(_) => (),
                     }
@@ -122,7 +129,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                 //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
                 //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
                 // );
-                chn.send(ThreadMessage::SysCall(pid, call))
+                chn.send(ThreadMessage::SysCall(pid, thread_id, call))
                     .expect("couldn't make syscall");
             }
         }
@@ -253,7 +260,7 @@ pub fn idle() -> bool {
                 // one context running at a time.
                 SystemServices::with_mut(|ss| ss.switch_to(new_pid, Some(1))).unwrap();
             }
-            ThreadMessage::SysCall(pid, call) => {
+            ThreadMessage::SysCall(pid, thread_id, call) => {
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);
                 crate::arch::process::set_current_pid(pid);
                 // println!("KERNEL({}): Now running as the new process", pid);
@@ -270,47 +277,47 @@ pub fn idle() -> bool {
                     // println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
                     let mut process = Process::current();
                     let mut response_vec = Vec::new();
+                    response_vec.extend_from_slice(&thread_id.to_le_bytes());
                     for word in Result::Ok.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());
                     }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
                         // println!("Unable to send response to process: {:?} -- terminating", _e);
-                        crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
                     });
                     // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
-                let response = crate::syscall::handle(pid, call).unwrap_or_else(Result::Error);
+                let response = crate::syscall::handle(pid, thread_id, call).unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
                 // Send the response back to the target.
                 if response != Result::BlockedProcess && !is_terminate && !is_shutdown {
-                    {
-                        // The syscall may change what the current process is, but we always
-                        // want to send a response to the process where the request came from.
-                        // For this block, switch to the original PID, send the message, then
-                        // switch back.
-                        let existing_pid = crate::arch::process::current_pid();
-                        crate::arch::process::set_current_pid(pid);
+                    // The syscall may change what the current process is, but we always
+                    // want to send a response to the process where the request came from.
+                    // For this block, switch to the original PID, send the message, then
+                    // switch back.
+                    let existing_pid = crate::arch::process::current_pid();
+                    crate::arch::process::set_current_pid(pid);
 
-                        let mut process = Process::current();
-                        let mut response_vec = Vec::new();
-                        for word in response.to_args().iter_mut() {
-                            response_vec.extend_from_slice(&word.to_le_bytes());
-                        }
-                        process.send(&response_vec).unwrap_or_else(|_e| {
-                            // If we're unable to send data to the process, assume it's dead and terminate it.
-                            // println!(
-                            //     "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                            //     pid, _e
-                            // );
-                            crate::syscall::handle(pid, SysCall::TerminateProcess).ok();
-                        });
-                        crate::arch::process::set_current_pid(existing_pid);
+                    let mut process = Process::current();
+                    let mut response_vec = Vec::new();
+                    response_vec.extend_from_slice(&thread_id.to_le_bytes());
+                    for word in response.to_args().iter_mut() {
+                        response_vec.extend_from_slice(&word.to_le_bytes());
                     }
+                    process.send(&response_vec).unwrap_or_else(|_e| {
+                        // If we're unable to send data to the process, assume it's dead and terminate it.
+                        // println!(
+                        //     "KERNEL({}): Unable to send response to process: {:?} -- terminating",
+                        //     pid, _e
+                        // );
+                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
+                    });
+                    crate::arch::process::set_current_pid(existing_pid);
                     // SystemServices::with_mut(|ss| {
                     // ss.switch_from(pid, 1, true)}).unwrap();
                 }

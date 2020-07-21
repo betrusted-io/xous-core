@@ -1,20 +1,15 @@
-pub const MAX_CONTEXT: ThreadID = 31;
+pub const MAX_CONTEXT: TID = 31;
 use crate::services::ProcessInner;
 use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ContextInit, ThreadID, PID};
+use xous::{ContextInit, TID, PID};
 
 pub const INITIAL_CONTEXT: usize = 1;
 
 pub struct Process {
     pid: PID,
-
-    /// This enables the kernel to keep track of threads in the
-    /// target process, and know which threads are ready to
-    /// receive messages.
-    contexts: [Context; MAX_CONTEXT],
 }
 
 struct ProcessImpl {
@@ -26,6 +21,14 @@ struct ProcessImpl {
 
     /// Memory that may need to be returned to the caller
     memory_to_return: Option<Vec<u8>>,
+
+    /// This enables the kernel to keep track of threads in the
+    /// target process, and know which threads are ready to
+    /// receive messages.
+    contexts: [Context; MAX_CONTEXT],
+
+    /// The currently-active thread for this proces
+    current_context: TID,
 }
 
 impl PartialEq for Process {
@@ -83,7 +86,7 @@ impl ProcessInit {
 impl Process {
     pub fn current() -> Process {
         let current_pid = PROCESS_TABLE.with(|pt| pt.borrow().current);
-        Process { pid: current_pid, contexts: Default::default() }
+        Process { pid: current_pid }
     }
 
     /// Mark this process as running (on the current core?!)
@@ -122,53 +125,87 @@ impl Process {
 
     pub fn setup_context(
         &mut self,
-        _context: ThreadID,
+        context: TID,
         _setup: ContextInit,
     ) -> Result<(), xous::Error> {
-        // if context != INITIAL_CONTEXT {
-        //     return Err(xous::Error::ProcessNotFound);
-        // }
-        Ok(())
-    }
-
-    pub fn current_context(&mut self) -> ThreadID {
-        INITIAL_CONTEXT
-    }
-
-    /// Set the current context number.
-    pub fn set_context(&mut self, context: ThreadID) -> Result<(), xous::Error> {
-        if context != INITIAL_CONTEXT {
-            panic!("context was {}, not 1", context);
-        }
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn find_free_context_nr(&self) -> Option<ThreadID> {
-        for (index, context) in self.contexts.iter().enumerate() {
-            if index != 0 && context.allocated == false {
-                return Some(index as ThreadID + 1);
-            }
-        }
-        None
-    }
-
-    pub fn set_context_result(&mut self, context: ThreadID, result: xous::Result) {
-        assert!(
-            context == INITIAL_CONTEXT,
-            "context is {} and not {}",
+        println!(
+            "KERNEL({}): Setting up context {} @ {:?}",
+            self.pid,
             context,
-            INITIAL_CONTEXT
+            std::thread::current()
         );
-        let mut response = vec![];
-        for word in result.to_args().iter_mut() {
-            response.extend_from_slice(&word.to_le_bytes());
-        }
-
+        assert!(context > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+
+            assert!(!process.contexts[context - 1].allocated);
+            process.contexts[context - 1].allocated = true;
+            println!(
+                "KERNEL({}): self.contexts[{}].allocated = {}",
+                current_pid_idx,
+                context - 1,
+                process.contexts[context - 1].allocated
+            );
+        });
+        Ok(())
+    }
+
+    pub fn current_context(&mut self) -> TID {
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+            process.current_context
+        })
+    }
+
+    /// Set the current context number.
+    pub fn set_context(&mut self, context: TID) -> Result<(), xous::Error> {
+        assert!(context > 0);
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+            assert!(process.contexts[context - 1].allocated);
+            process.current_context = context;
+        });
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn find_free_context_nr(&self) -> Option<TID> {
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+            for (index, context) in process.contexts.iter().enumerate() {
+                if index != 0 && !context.allocated {
+                    return Some(index as TID + 1);
+                }
+            }
+            None
+        })
+    }
+
+    pub fn set_context_result(&mut self, context: TID, result: xous::Result) {
+        assert!(context > 0);
+        PROCESS_TABLE.with(|pt| {
+            let mut process_table = pt.borrow_mut();
+            let current_pid_idx = process_table.current.get() as usize - 1;
+            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+            assert!(
+                process.contexts[context - 1].allocated,
+                "context {} is not allocated",
+                context,
+            );
+
+            let mut response = vec![];
+            response.extend_from_slice(&context.to_le_bytes());
+            for word in result.to_args().iter_mut() {
+                response.extend_from_slice(&word.to_le_bytes());
+            }
 
             if let Some(buf) = process.memory_to_return.take() {
                 response.extend_from_slice(&buf);
@@ -199,6 +236,8 @@ impl Process {
                 inner: Default::default(),
                 conn: init_data.conn,
                 memory_to_return: None,
+                current_context: INITIAL_CONTEXT,
+                contexts: [Context {allocated: false}; MAX_CONTEXT],
             };
             if pid_idx >= process_table.table.len() {
                 process_table.table.push(Some(process));

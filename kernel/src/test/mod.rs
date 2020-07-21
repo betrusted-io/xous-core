@@ -377,7 +377,7 @@ fn measure_memory_usage() {
     {
         // Run the "shutdown" test in its own thread. This ensures that
         // any TLS is freed when the thread exits.
-        let jh = as_process(|| shutdown());
+        let jh = as_process(shutdown);
         jh.join()
             .expect("couldn't run shutdown test for measuring memory");
     }
@@ -437,8 +437,10 @@ fn server_client_same_process() {
 /// Test that one process can have multiple contexts
 #[test]
 fn multiple_contexts() {
+    // ::debug_here::debug_here!();
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
+
 
     let internal_server = as_process(|| {
         let server = xous::create_server(0x53_4534).expect("couldn't create server");
@@ -451,17 +453,24 @@ fn multiple_contexts() {
             arg4: 5,
         };
 
-        let client_thread = xous::create_thread(move || {
+        let mut server_threads = vec![];
+        for _ in 0..30 {
+            server_threads.push(xous::create_thread(move || {
             let msg = xous::receive_message(server).expect("couldn't receive message");
             assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
-        }).expect("couldn't spawn client thread");
+        }).expect("couldn't spawn client thread"));
+    }
 
-        xous::send_message(
-            connection,
-            xous::Message::Scalar(msg_contents),
-        )
-        .expect("couldn't send message");
-        xous::wait_thread(client_thread).expect("couldn't wait for thread");
+        for _ in &server_threads {
+            xous::send_message(
+                connection,
+                xous::Message::Scalar(msg_contents),
+            )
+            .expect("couldn't send message");
+        }
+        for server_thread in server_threads.into_iter() {
+            xous::wait_thread(server_thread).expect("couldn't wait for thread");
+        }
     });
 
     internal_server

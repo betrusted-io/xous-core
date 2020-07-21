@@ -1,6 +1,6 @@
 pub use crate::arch::process::Context;
 use core::mem;
-use xous::{ThreadID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
+use xous::{TID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
 pub struct SenderID {
     pub sidx: usize,
@@ -21,7 +21,7 @@ pub enum WaitingMessage {
     None,
 
     /// The memory was borrowed and should be returned to the given process.
-    BorrowedMemory(PID, ThreadID, MemoryAddress, MemoryAddress, MemorySize),
+    BorrowedMemory(PID, TID, MemoryAddress, MemoryAddress, MemorySize),
 
     /// The memory was moved, and so shouldn't be returned.
     MovedMemory,
@@ -504,7 +504,7 @@ impl Server {
     pub fn queue_message(
         &mut self,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         message: xous::Message,
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
@@ -567,7 +567,7 @@ impl Server {
     pub fn queue_address(
         &mut self,
         pid: PID,
-        context: ThreadID,
+        context: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous::Error> {
@@ -605,7 +605,7 @@ impl Server {
     /// Return a context ID that is available and blocking.  If no such context
     /// ID exists, or if this server isn't actually ready to receive packets,
     /// return None.
-    pub fn take_available_context(&mut self) -> Option<ThreadID> {
+    pub fn take_available_context(&mut self) -> Option<TID> {
         if self.ready_contexts == 0 {
             return None;
         }
@@ -635,7 +635,7 @@ impl Server {
     /// # Panics
     ///
     /// If the context cannot be returned because it is already blocking.
-    pub fn return_available_context(&mut self, ctx_number: ThreadID) {
+    pub fn return_available_context(&mut self, ctx_number: TID) {
         if self.ready_contexts & 1 << ctx_number != 0 {
             panic!(
                 "tried to return context {}, but it was already blocking",
@@ -646,7 +646,7 @@ impl Server {
     }
 
     /// Add the given context to the list of ready and waiting contexts.
-    pub fn park_context(&mut self, context: ThreadID) {
+    pub fn park_context(&mut self, context: TID) {
         // println!("KERNEL({}): Parking context: {}", self.pid, context);
         self.ready_contexts |= 1 << context;
     }
