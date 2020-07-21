@@ -102,7 +102,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         if let Some(ctx_number) = ss
             .server_from_sidx(sidx)
             .expect("server couldn't be located")
-            .take_available_context()
+            .take_available_thread()
         {
             // println!(
             //     "There are contexts available to handle this message.  Marking PID {} as Ready",
@@ -115,7 +115,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     .or_else(|e| {
                         ss.server_from_sidx(sidx)
                             .expect("server couldn't be located")
-                            .return_available_context(thread);
+                            .return_available_thread(thread);
                         Err(e)
                     })?,
             };
@@ -126,13 +126,13 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             ss.ready_context(server_pid, ctx_number).or_else(|e| {
                 ss.server_from_sidx(sidx)
                     .expect("server couldn't be located")
-                    .return_available_context(thread);
+                    .return_available_thread(thread);
                 Err(e)
             })?;
 
             if blocking && cfg!(baremetal) {
                 // println!("Activating Server context and switching away from Client");
-                ss.activate_process_context(server_pid, ctx_number, !blocking, blocking)
+                ss.activate_process_thread(server_pid, ctx_number, !blocking, blocking)
                     .map(|_| Ok(xous::Result::Message(envelope)))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
@@ -169,7 +169,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     let process = ss.get_process(pid).expect("Can't get current process");
                     let ppid = process.ppid;
                     unsafe { SWITCHTO_CALLER = None };
-                    ss.activate_process_context(ppid, 0, !blocking, blocking)
+                    ss.activate_process_thread(ppid, 0, !blocking, blocking)
                         .map(|_| Ok(xous::Result::ResumeProcess))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
                 }
@@ -209,13 +209,13 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         //     "KERNEL({}): did not have any waiting messages -- parking context {}",
         //     pid, tid
         // );
-        server.park_context(tid);
+        server.park_thread(tid);
 
         // For baremetal targets, switch away from this process.
         if cfg!(baremetal) {
             unsafe { SWITCHTO_CALLER = None };
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
-            ss.activate_process_context(ppid, 0, false, true)
+            ss.activate_process_thread(ppid, 0, false, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -366,7 +366,7 @@ pub fn handle(
                     );
                     SWITCHTO_CALLER = Some((pid, tid));
                 }
-                ss.activate_process_context(new_pid, new_context, true, false)
+                ss.activate_process_thread(new_pid, new_context, true, false)
                     .map(|_ctx| {
                         // println!("switchto ({}, {})", pid, _ctx);
                         xous::Result::ResumeProcess
@@ -388,7 +388,7 @@ pub fn handle(
                     .expect("yielded when no parent context was present")
             };
             SystemServices::with_mut(|ss| {
-                ss.activate_process_context(parent_pid, parent_ctx, true, true)
+                ss.activate_process_thread(parent_pid, parent_ctx, true, true)
                     .map(|_| Ok(xous::Result::ResumeProcess))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             })
@@ -410,7 +410,7 @@ pub fn handle(
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
             unsafe { SWITCHTO_CALLER = None };
-            ss.activate_process_context(ppid, 0, false, true)
+            ss.activate_process_thread(ppid, 0, false, true)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),

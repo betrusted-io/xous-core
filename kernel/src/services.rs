@@ -706,7 +706,7 @@ impl SystemServices {
 
     /// Resume the given process, picking up exactly where it left off. If the
     /// process is in the Setup state, set it up and then resume.
-    pub fn activate_process_context(
+    pub fn activate_process_thread(
         &mut self,
         new_pid: PID,
         mut new_context: TID,

@@ -147,7 +147,7 @@ pub struct Server {
     /// The `context mask` is a bitfield of contexts that are able to handle
     /// this message. If there are no available contexts, then messages will
     /// need to be queued.
-    ready_contexts: usize,
+    ready_threads: usize,
 }
 
 /// Convert a PID and CTX pair into a `usize` sender
@@ -191,7 +191,7 @@ impl Server {
             queue_head: 0,
             queue_tail: 0,
             queue,
-            ready_contexts: 0,
+            ready_threads: 0,
         });
         Ok(())
     }
@@ -605,8 +605,8 @@ impl Server {
     /// Return a context ID that is available and blocking.  If no such context
     /// ID exists, or if this server isn't actually ready to receive packets,
     /// return None.
-    pub fn take_available_context(&mut self) -> Option<TID> {
-        if self.ready_contexts == 0 {
+    pub fn take_available_thread(&mut self) -> Option<TID> {
+        if self.ready_threads == 0 {
             return None;
         }
         let mut test_ctx_mask = 1;
@@ -615,8 +615,8 @@ impl Server {
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.
-            if self.ready_contexts & test_ctx_mask == test_ctx_mask {
-                self.ready_contexts &= !test_ctx_mask;
+            if self.ready_threads & test_ctx_mask == test_ctx_mask {
+                self.ready_threads &= !test_ctx_mask;
                 return Some(ctx_number);
             }
             // Advance to the next slot.
@@ -635,19 +635,19 @@ impl Server {
     /// # Panics
     ///
     /// If the context cannot be returned because it is already blocking.
-    pub fn return_available_context(&mut self, ctx_number: TID) {
-        if self.ready_contexts & 1 << ctx_number != 0 {
+    pub fn return_available_thread(&mut self, tid: TID) {
+        if self.ready_threads & 1 << tid != 0 {
             panic!(
                 "tried to return context {}, but it was already blocking",
-                ctx_number
+                tid
             );
         }
-        self.ready_contexts |= 1 << ctx_number;
+        self.ready_threads |= 1 << tid;
     }
 
     /// Add the given context to the list of ready and waiting contexts.
-    pub fn park_context(&mut self, context: TID) {
+    pub fn park_thread(&mut self, tid: TID) {
         // println!("KERNEL({}): Parking context: {}", self.pid, context);
-        self.ready_contexts |= 1 << context;
+        self.ready_threads |= 1 << tid;
     }
 }
