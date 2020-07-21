@@ -181,6 +181,53 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
+fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        // See if there is a pending message.  If so, return immediately.
+        let sidx = ss.server_sidx(sid).ok_or(xous::Error::ServerNotFound)?;
+        let server = ss
+            .server_from_sidx(sidx)
+            .ok_or(xous::Error::ServerNotFound)?;
+        // server.print_queue();
+
+        // Ensure the server is for this PID
+        if server.pid != pid {
+            return Err(xous::Error::ServerNotFound);
+        }
+
+        // If there is a pending message, return it immediately.
+        if let Some(msg) = server.take_next_message(sidx) {
+            // println!("PID {} had a message ready -- returning it", pid);
+            return Ok(xous::Result::Message(msg));
+        }
+
+        // There is no pending message, so return control to the parent
+        // process and mark ourselves as awaiting an event.  When a message
+        // arrives, our return value will already be set to the
+        // MessageEnvelope of the incoming message.
+        // println!(
+        //     "KERNEL({}): did not have any waiting messages -- parking context {}",
+        //     pid, tid
+        // );
+        server.park_context(tid);
+
+        // For baremetal targets, switch away from this process.
+        if cfg!(baremetal) {
+            unsafe { SWITCHTO_CALLER = None };
+            let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
+            ss.activate_process_context(ppid, 0, false, true)
+                .map(|_| Ok(xous::Result::ResumeProcess))
+                .unwrap_or(Err(xous::Error::ProcessNotFound))
+        }
+        // For hosted targets, simply return `BlockedProcess` indicating we'll make
+        // a callback to their socket at a later time.
+        else {
+            ss.switch_from(pid, tid, false)
+                .map(|_| xous::Result::BlockedProcess)
+        }
+    })
+}
+
 pub fn handle(
     pid: PID,
     tid: TID,
@@ -358,52 +405,7 @@ pub fn handle(
             };
             Ok(xous::Result::ResumeProcess)
         }
-        SysCall::ReceiveMessage(sid) => {
-            SystemServices::with_mut(|ss| {
-                // See if there is a pending message.  If so, return immediately.
-                let sidx = ss.server_sidx(sid).ok_or(xous::Error::ServerNotFound)?;
-                let server = ss
-                    .server_from_sidx(sidx)
-                    .ok_or(xous::Error::ServerNotFound)?;
-                // server.print_queue();
-
-                // Ensure the server is for this PID
-                if server.pid != pid {
-                    return Err(xous::Error::ServerNotFound);
-                }
-
-                // If there is a pending message, return it immediately.
-                if let Some(msg) = server.take_next_message(sidx) {
-                    // println!("PID {} had a message ready -- returning it", pid);
-                    return Ok(xous::Result::Message(msg));
-                }
-
-                // There is no pending message, so return control to the parent
-                // process and mark ourselves as awaiting an event.  When a message
-                // arrives, our return value will already be set to the
-                // MessageEnvelope of the incoming message.
-                // println!(
-                //     "KERNEL({}): did not have any waiting messages -- parking context {}",
-                //     pid, tid
-                // );
-                server.park_context(tid);
-
-                // For baremetal targets, switch away from this process.
-                if cfg!(baremetal) {
-                    unsafe { SWITCHTO_CALLER = None };
-                    let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
-                    ss.activate_process_context(ppid, 0, false, true)
-                        .map(|_| Ok(xous::Result::ResumeProcess))
-                        .unwrap_or(Err(xous::Error::ProcessNotFound))
-                }
-                // For hosted targets, simply return `BlockedProcess` indicating we'll make
-                // a callback to their socket at a later time.
-                else {
-                    ss.switch_from(pid, tid, false)
-                        .map(|_| xous::Result::BlockedProcess)
-                }
-            })
-        }
+        SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid),
         SysCall::WaitEvent => SystemServices::with_mut(|ss| {
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
