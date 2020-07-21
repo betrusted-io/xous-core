@@ -181,6 +181,79 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
+fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        let sender = SenderID::from_usize(sender)?;
+
+        let server = ss
+            .server_from_sidx(sender.sidx)
+            .ok_or(xous::Error::ServerNotFound)?;
+        if server.pid != pid {
+            return Err(xous::Error::ServerNotFound);
+        }
+        let result = server.take_waiting_message(sender.tidx, buf)?;
+        let (client_pid, client_ctx, server_addr, client_addr, len) = match result {
+            WaitingMessage::BorrowedMemory(
+                client_pid,
+                client_ctx,
+                server_addr,
+                client_addr,
+                len,
+            ) => (client_pid, client_ctx, server_addr, client_addr, len),
+            WaitingMessage::MovedMemory => {
+                return Ok(xous::Result::Ok);
+            }
+            WaitingMessage::ForgetMemory(range) => {
+                let mut mm = MemoryManagerHandle::get();
+                let mut result = Ok(xous::Result::Ok);
+                let virt = range.addr.get();
+                let size = range.size.get();
+                if virt & 0xfff != 0 {
+                    return Err(xous::Error::BadAlignment);
+                }
+                for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+                    if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                        if result.is_ok() {
+                            result = Err(e);
+                        }
+                    }
+                }
+                return result;
+            }
+            WaitingMessage::None => {
+                println!("WARNING: Tried to wait on a message that didn't exist");
+                return Err(xous::Error::ProcessNotFound);
+            }
+        };
+        // println!(
+        //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+        //     len,
+        //     server_addr.get(),
+        //     pid,
+        //     client_addr.get(),
+        //     client_pid,
+        //     client_ctx
+        // );
+
+        // Return the memory to the calling process
+        ss.return_memory(
+            server_addr.get() as _,
+            client_pid,
+            client_addr.get() as _,
+            len.get(),
+        )?;
+
+        // Unblock the client context to allow it to continue.
+        // println!(
+        //     "KERNEL({}): Unblocking PID {} CTX {}",
+        //     pid, client_pid, client_ctx
+        // );
+        ss.ready_thread(client_pid, client_ctx)?;
+        ss.set_thread_result(client_pid, client_ctx, xous::Result::Ok)?;
+        ss.switch_to_thread(client_pid, Some(client_ctx))?;
+        Ok(xous::Result::Ok)
+    })
+}
 fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         // See if there is a pending message.  If so, return immediately.
@@ -426,79 +499,7 @@ pub fn handle(
             // ::debug_here::debug_here!();
             SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous::Result::ConnectionID))
         }
-        SysCall::ReturnMemory(sender, buf) => {
-            SystemServices::with_mut(|ss| {
-                let sender = SenderID::from_usize(sender)?;
-
-                let server = ss
-                    .server_from_sidx(sender.sidx)
-                    .ok_or(xous::Error::ServerNotFound)?;
-                if server.pid != pid {
-                    return Err(xous::Error::ServerNotFound);
-                }
-                let result = server.take_waiting_message(sender.tidx, buf)?;
-                let (client_pid, client_ctx, server_addr, client_addr, len) = match result {
-                    WaitingMessage::BorrowedMemory(
-                        client_pid,
-                        client_ctx,
-                        server_addr,
-                        client_addr,
-                        len,
-                    ) => (client_pid, client_ctx, server_addr, client_addr, len),
-                    WaitingMessage::MovedMemory => {
-                        return Ok(xous::Result::Ok);
-                    }
-                    WaitingMessage::ForgetMemory(range) => {
-                        let mut mm = MemoryManagerHandle::get();
-                        let mut result = Ok(xous::Result::Ok);
-                        let virt = range.addr.get();
-                        let size = range.size.get();
-                        if virt & 0xfff != 0 {
-                            return Err(xous::Error::BadAlignment);
-                        }
-                        for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
-                            if let Err(e) = mm.unmap_page(addr as *mut usize) {
-                                if result.is_ok() {
-                                    result = Err(e);
-                                }
-                            }
-                        }
-                        return result;
-                    }
-                    WaitingMessage::None => {
-                        println!("WARNING: Tried to wait on a message that didn't exist");
-                        return Err(xous::Error::ProcessNotFound);
-                    }
-                };
-                // println!(
-                //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
-                //     len,
-                //     server_addr.get(),
-                //     pid,
-                //     client_addr.get(),
-                //     client_pid,
-                //     client_ctx
-                // );
-
-                // Return the memory to the calling process
-                ss.return_memory(
-                    server_addr.get() as _,
-                    client_pid,
-                    client_addr.get() as _,
-                    len.get(),
-                )?;
-
-                // Unblock the client context to allow it to continue.
-                // println!(
-                //     "KERNEL({}): Unblocking PID {} CTX {}",
-                //     pid, client_pid, client_ctx
-                // );
-                ss.ready_thread(client_pid, client_ctx)?;
-                ss.set_thread_result(client_pid, client_ctx, xous::Result::Ok)?;
-                ss.switch_to_thread(client_pid, Some(client_ctx))?;
-                Ok(xous::Result::Ok)
-            })
-        }
+        SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, sender, buf),
         SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
