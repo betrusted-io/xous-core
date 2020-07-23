@@ -16,6 +16,15 @@ static GLOBAL: &StatsAlloc<std::alloc::System> = &INSTRUMENTED_SYSTEM;
 const SERVER_SPEC: &str = "127.0.0.1:0";
 
 fn start_kernel(server_spec: &str) -> JoinHandle<()> {
+    assert!(
+        std::env::var("XOUS_LISTEN_ADDR").is_err(),
+        "XOUS_LISTEN_ADDR environment variable must be unset to run tests"
+    );
+    assert!(
+        std::env::var("XOUS_SERVER").is_err(),
+        "XOUS_SERVER environment variable must be unset to run tests"
+    );
+
     let server_addr = server_spec
         .to_socket_addrs()
         .expect("invalid server address")
@@ -25,7 +34,6 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     // let temp_server = TcpListener::bind(server_addr).unwrap();
     // let server_addr = temp_server.local_addr().unwrap();
     // drop(temp_server);
-
 
     let (send_addr, recv_addr) = channel();
 
@@ -445,7 +453,6 @@ fn multiple_contexts() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-
     let internal_server = as_process(|| {
         let server = xous::create_server(b"multiple_context").expect("couldn't create server");
         let connection = xous::connect(server).expect("couldn't connect to our own server");
@@ -459,18 +466,18 @@ fn multiple_contexts() {
 
         let mut server_threads = vec![];
         for _ in 0..30 {
-            server_threads.push(xous::create_thread(move || {
-            let msg = xous::receive_message(server).expect("couldn't receive message");
-            assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
-        }).expect("couldn't spawn client thread"));
-    }
+            server_threads.push(
+                xous::create_thread(move || {
+                    let msg = xous::receive_message(server).expect("couldn't receive message");
+                    assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
+                })
+                .expect("couldn't spawn client thread"),
+            );
+        }
 
         for _ in &server_threads {
-            xous::send_message(
-                connection,
-                xous::Message::Scalar(msg_contents),
-            )
-            .expect("couldn't send message");
+            xous::send_message(connection, xous::Message::Scalar(msg_contents))
+                .expect("couldn't send message");
         }
         for server_thread in server_threads.into_iter() {
             xous::wait_thread(server_thread).expect("couldn't wait for thread");
