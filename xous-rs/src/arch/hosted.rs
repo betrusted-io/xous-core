@@ -2,13 +2,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::mem::size_of;
-use std::net::TcpStream;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread_local;
 
 use crate::{Result, TID};
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 pub type ThreadInit = ();
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
@@ -35,22 +34,33 @@ pub fn args_to_context(
     Ok(())
 }
 
-thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
+thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> = RefCell::new(None));
 thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
+
+fn default_xous_address() -> SocketAddr {
+    std::env::var("XOUS_SERVER")
+        .map(|s| {
+            s.to_socket_addrs()
+                .expect("invalid server address")
+                .next()
+                .expect("unable to resolve server address")
+        })
+        .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
+}
 
 /// Set the network address for this particular thread.
 pub fn set_xous_address(new_address: SocketAddr) {
     NETWORK_CONNECT_ADDRESS.with(|nca| {
         let mut address = nca.borrow_mut();
-        *address = new_address;
+        *address = Some(new_address);
         XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = None);
     });
 }
 
 /// Set the network address for this particular thread.
 pub fn xous_address() -> SocketAddr {
-    NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow())
+    NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow()).unwrap_or_else(default_xous_address)
 }
 
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
@@ -111,15 +121,29 @@ pub fn _xous_syscall(
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             if xsc.borrow().is_none() {
+                let mut have_err = false;
                 NETWORK_CONNECT_ADDRESS.with(|nca| {
-                    // println!("Opening connection to Xous server @ {}...", nca.borrow());
-                    let conn = TcpStream::connect(*nca.borrow()).unwrap();
+                    let addr = nca.borrow().unwrap_or_else(default_xous_address);
+                    // println!("Opening connection to Xous server @ {}...", addr);
+                    let conn = match TcpStream::connect(addr) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            eprintln!("Unable to connect to Xous server: {}", e);
+                            eprintln!("Ensure Xous is running, or specify this process as an argument to the kernel");
+                            *ret = Result::Error(crate::Error::InternalError);
+                            have_err = true;
+                            return;
+                        }
+                    };
                     *xsc.borrow_mut() = Some(ServerConnection {
                         send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                         recv: Arc::new(Mutex::new(conn)),
                         mailbox: Arc::new(Mutex::new(HashMap::new())),
                     });
                 });
+                if have_err {
+                    return;
+                }
             }
             _xous_syscall_to(
                 nr,
@@ -140,7 +164,7 @@ pub fn _xous_syscall(
                 xsc.borrow_mut().as_mut().unwrap(),
             );
         })
-    })
+    });
 }
 
 fn _xous_syscall_result(
@@ -163,7 +187,6 @@ fn _xous_syscall_result(
 
     // Receive the packet back
     loop {
-
         // Now that we have the Stream mutex, temporarily take the Mailbox mutex to see if
         // this thread ID is there. If it is, there's no need to read via the network.
         // Note that the mailbox mutex is released if it isn't found.
@@ -182,7 +205,7 @@ fn _xous_syscall_result(
             Err(std::sync::TryLockError::WouldBlock) => {
                 std::thread::sleep(std::time::Duration::from_millis(1));
                 continue;
-            },
+            }
             Err(e) => panic!("Receive error: {}", e),
         };
 
