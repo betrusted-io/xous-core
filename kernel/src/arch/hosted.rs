@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::env;
 use std::io::Read;
 use std::mem::size_of;
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::spawn;
 use std::thread_local;
@@ -29,7 +29,6 @@ enum BackchannelMessage {
     NewPid(PID),
 }
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
 thread_local!(static SEND_ADDR: RefCell<Option<Sender<SocketAddr>>> = RefCell::new(None));
 
@@ -51,18 +50,37 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 }
 
 /// Each client gets its own connection and its own thread, which is handled here.
-fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) {
+fn handle_connection(
+    mut conn: TcpStream,
+    pid: PID,
+    chn: Sender<ThreadMessage>,
+    should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
+) {
     loop {
         let mut pkt = [0usize; 9];
         let mut incoming_word = [0u8; size_of::<usize>()];
-        // conn.set_nonblocking(true)
-        //     .expect("couldn't enable nonblocking mode");
+        conn.set_nonblocking(false)
+            .expect("couldn't enable nonblocking mode");
+        conn.set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
         for word in pkt.iter_mut() {
             loop {
+                if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
+                    chn.send(ThreadMessage::SysCall(
+                        pid,
+                        1,
+                        xous::SysCall::TerminateProcess,
+                    ))
+                    .unwrap();
+                }
                 if let Err(e) = conn.read_exact(&mut incoming_word) {
                     // If the connection has gone away, send a `TerminateProcess` message to the main
                     // and then exit this thread.
-                    if e.kind() != std::io::ErrorKind::WouldBlock {
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut
+                    {
+                        continue;
+                    } else {
                         // println!(
                         //     "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
                         //     pid, e, e
@@ -75,8 +93,6 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                         .unwrap();
                         return;
                     }
-                    // std::thread::sleep(Duration::from_millis(20));
-                    continue;
                 }
                 break;
             }
@@ -96,8 +112,7 @@ fn handle_connection(mut conn: TcpStream, pid: PID, chn: Sender<ThreadMessage>) 
                         xous::Message::MutableBorrow(msg)
                         | xous::Message::Borrow(msg)
                         | xous::Message::Move(msg) => {
-                            let mut tmp_data = Vec::with_capacity(msg.buf.len());
-                            tmp_data.resize(msg.buf.len(), 0);
+                            let mut tmp_data = vec![0; msg.buf.len()];
                             conn.read_exact(&mut tmp_data)
                                 .map_err(|_e| {
                                     // println!("KERNEL({}): Read Error {}", pid, _e);
@@ -152,6 +167,8 @@ fn listen_thread(
     mut local_addr_sender: Option<Sender<SocketAddr>>,
     backchannel: Receiver<BackchannelMessage>,
 ) {
+    let should_exit = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+
     // println!("KERNEL(1): Starting Xous server on {}...", listen_addr);
     let listener = TcpListener::bind(listen_addr).unwrap_or_else(|e| {
         panic!("Unable to create server: {}", e);
@@ -164,20 +181,78 @@ fn listen_thread(
 
     let mut clients = vec![];
 
+    let pid1_should_exit = should_exit.clone();
     let pid1_thread = spawn(move || {
         let mut client = TcpStream::connect(client_addr).expect("couldn't connect to xous server");
-        client.set_nonblocking(true).expect("pid1: couldn't set nonblocking mode");
-        let mut buffer = [0; 32];
+        client
+            .set_nonblocking(true)
+            .expect("pid1: couldn't set nonblocking mode");
+        let mut buffer = [0; size_of::<usize>() * 9];
         // println!("KERNEL(1): Started PID1 idle thread");
         loop {
-            match client.read(&mut buffer) {
-                Ok(0) => return,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
+            if pid1_should_exit.load(core::sync::atomic::Ordering::Relaxed) {
+                return;
+            }
+            match client.read_exact(&mut buffer) {
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(100))
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return,
                 Err(e) => panic!("KERNEL(1): Unable to read buffer: {}", e),
-                Ok(x) => println!("KERNEL(1): Read {} bytes", x),
+                Ok(()) => (), //println!("KERNEL(1): Read {} bytes", x),
             }
         }
     });
+
+    fn accept_new_connection(
+        conn: TcpStream,
+        chn: &Sender<ThreadMessage>,
+        backchannel: &Receiver<BackchannelMessage>,
+        clients: &mut Vec<(std::thread::JoinHandle<()>, TcpStream)>,
+        should_exit: &std::sync::Arc<core::sync::atomic::AtomicBool>,
+    ) -> bool {
+        let thr_chn = chn.clone();
+
+        // Spawn a new process. This process will start out in the "Setup()" state.
+        chn.send(ThreadMessage::NewConnection(conn.try_clone().expect(
+            "couldn't make a copy of the network connection for the kernel",
+        )))
+        .expect("couldn't request a new PID");
+        let new_pid = match backchannel
+            .recv()
+            .expect("couldn't receive message from main thread")
+        {
+            BackchannelMessage::NewPid(p) => p,
+            BackchannelMessage::Exit => return true,
+        };
+        // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
+        let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
+        let should_exit = should_exit.clone();
+        let jh = spawn(move || handle_connection(conn, new_pid, thr_chn, should_exit));
+        clients.push((jh, conn_copy));
+        false
+    }
+
+    fn exit_server(
+        should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
+        clients: Vec<(std::thread::JoinHandle<()>, TcpStream)>,
+        pid1_thread: std::thread::JoinHandle<()>,
+    ) {
+        should_exit.store(true, core::sync::atomic::Ordering::Relaxed);
+        for (jh, conn) in clients {
+            use std::net::Shutdown;
+            conn.shutdown(Shutdown::Both)
+                .expect("couldn't shutdown client");
+            jh.join().expect("couldn't join client thread");
+        }
+        pid1_thread.join().unwrap();
+    }
+
+    let pid1 = listener.accept().unwrap();
+    if accept_new_connection(pid1.0, &chn, &backchannel, &mut clients, &should_exit) {
+        exit_server(should_exit, clients, pid1_thread);
+        return;
+    }
 
     // Use `listener` in a nonblocking setup so that we can exit when doing tests
     listener
@@ -186,27 +261,13 @@ fn listen_thread(
     loop {
         match listener.accept() {
             Ok((conn, _addr)) => {
-                let thr_chn = chn.clone();
-
-                // Spawn a new process. This process will start out in the "Setup()" state.
-                chn.send(ThreadMessage::NewConnection(conn.try_clone().expect(
-                    "couldn't make a copy of the network connection for the kernel",
-                )))
-                .expect("couldn't request a new PID");
-                let new_pid = match backchannel
-                    .recv()
-                    .expect("couldn't receive message from main thread")
-                {
-                    BackchannelMessage::NewPid(p) => p,
-                    x => panic!("unexpected backchannel message from main thread: {:?}", x),
-                };
-                // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
-                let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
-                let jh = spawn(move || handle_connection(conn, new_pid, thr_chn));
-                clients.push((jh, conn_copy));
+                if accept_new_connection(conn, &chn, &backchannel, &mut clients, &should_exit) {
+                    exit_server(should_exit, clients, pid1_thread);
+                    return;
+                }
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                match backchannel.recv_timeout(Duration::from_millis(10)) {
+                match backchannel.recv_timeout(Duration::from_millis(1)) {
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         continue;
                     }
@@ -218,13 +279,7 @@ fn listen_thread(
                         panic!("got unexpected message from main thread: new pid {}", x)
                     }
                     Ok(BackchannelMessage::Exit) => {
-                        for (jh, conn) in clients {
-                            use std::net::Shutdown;
-                            conn.shutdown(Shutdown::Both)
-                                .expect("couldn't shutdown client");
-                            jh.join().expect("couldn't join client thread");
-                        }
-                        pid1_thread.join().unwrap();
+                        exit_server(should_exit, clients, pid1_thread);
                         return;
                     }
                 }
