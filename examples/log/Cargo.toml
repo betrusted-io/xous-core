@@ -7,4 +7,5 @@ description = "Log output program"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-
+#bracket-terminal = "0.8.1"
+pancurses = "*"
