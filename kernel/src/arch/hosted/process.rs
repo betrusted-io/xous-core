@@ -257,6 +257,8 @@ impl Process {
             if pid_idx >= process_table.table.len() {
                 panic!("attempted to destroy PID that exceeds table index: {}", pid);
             }
+            let process = process_table.table[pid_idx].as_mut().unwrap();
+            process.conn.shutdown(std::net::Shutdown::Both).unwrap();
             process_table.table[pid_idx] = None;
             Ok(())
         })
