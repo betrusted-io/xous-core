@@ -6,9 +6,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread_local;
 
-use crate::{Result, TID};
+use crate::{Result, PID, TID};
 
 pub type ThreadInit = ();
+pub type ProcessInit = ();
+pub type ProcessHandle = ();
+pub type ProcessArgs = ();
+
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
 #[derive(Clone)]
@@ -18,11 +22,15 @@ struct ServerConnection {
     mailbox: Arc<Mutex<HashMap<TID, Result>>>,
 }
 
-pub fn context_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
+pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
     [call, 0, 0, 0, 0, 0, 0, 0]
 }
 
-pub fn args_to_context(
+pub fn process_to_args(call: usize, _init: &ProcessInit) -> [usize; 8] {
+    [call, 0, 0, 0, 0, 0, 0, 0]
+}
+
+pub fn args_to_thread(
     _a1: usize,
     _a2: usize,
     _a3: usize,
@@ -34,9 +42,22 @@ pub fn args_to_context(
     Ok(())
 }
 
+pub fn args_to_process(
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
+) -> core::result::Result<ProcessInit, crate::Error> {
+    Ok(())
+}
+
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> = RefCell::new(None));
 thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
+thread_local!(static PROCESS_ID: RefCell<PID> = RefCell::new(PID::new(1).unwrap()));
 
 fn default_xous_address() -> SocketAddr {
     std::env::var("XOUS_SERVER")
@@ -60,7 +81,23 @@ pub fn set_xous_address(new_address: SocketAddr) {
 
 /// Set the network address for this particular thread.
 pub fn xous_address() -> SocketAddr {
-    NETWORK_CONNECT_ADDRESS.with(|nca| *nca.borrow()).unwrap_or_else(default_xous_address)
+    NETWORK_CONNECT_ADDRESS
+        .with(|nca| *nca.borrow())
+        .unwrap_or_else(default_xous_address)
+}
+
+pub fn xous_connect() {
+    XOUS_SERVER_CONNECTION.with(|xsc| {
+        if xsc.borrow().is_none() {
+            NETWORK_CONNECT_ADDRESS.with(|nca| {
+                let addr = nca.borrow().unwrap_or_else(default_xous_address);
+                match xous_connect_impl(addr) {
+                    Ok(a) => *xsc.borrow_mut() = Some(a),
+                    Err(_) => panic!("couldn't connect to server"),
+                }
+            });
+        }
+    })
 }
 
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
@@ -84,15 +121,41 @@ where
     let server_address = xous_address();
     let server_connection =
         XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
+    let process_id = PROCESS_ID.with(|pid| *pid.borrow());
     Ok(std::thread::Builder::new()
         .spawn(move || {
             set_xous_address(server_address);
             THREAD_ID.with(|tid| *tid.borrow_mut() = thread_id);
+            PROCESS_ID.with(|pid| *pid.borrow_mut() = process_id);
             XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = Some(server_connection));
             f()
         })
         .map(WaitHandle)
         .map_err(|_| crate::Error::InternalError)?)
+}
+
+pub fn create_process_pre<F, T>(
+    _f: &F,
+    _args: ProcessArgs,
+) -> core::result::Result<ProcessInit, crate::Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    Ok(())
+}
+
+pub fn create_process_post<F, T>(
+    _f: F,
+    pid: PID,
+) -> core::result::Result<PID, crate::Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    Ok(pid)
 }
 
 pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
@@ -101,6 +164,30 @@ pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
         .join()
         .map(|_| Result::Ok)
         .map_err(|_| crate::Error::InternalError)
+}
+
+fn xous_connect_impl(addr: SocketAddr) -> core::result::Result<ServerConnection, ()> {
+    // println!("Opening connection to Xous server @ {}...", addr);
+    match TcpStream::connect(addr) {
+        Ok(mut conn) => {
+            let mut pid = [0u8; 1];
+            conn.read_exact(&mut pid).unwrap();
+            // conn.set_read_timeout(std::time::Duration::from_millis(200)).expect("couldn't set read timeout");
+            PROCESS_ID.with(|p| *p.borrow_mut() = PID::new(pid[0]).unwrap());
+            Ok(ServerConnection {
+                send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
+                recv: Arc::new(Mutex::new(conn)),
+                mailbox: Arc::new(Mutex::new(HashMap::new())),
+            })
+        }
+        Err(e) => {
+            eprintln!("Unable to connect to Xous server: {}", e);
+            eprintln!(
+                "Ensure Xous is running, or specify this process as an argument to the kernel"
+            );
+            Err(())
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -124,22 +211,13 @@ pub fn _xous_syscall(
                 let mut have_err = false;
                 NETWORK_CONNECT_ADDRESS.with(|nca| {
                     let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                    // println!("Opening connection to Xous server @ {}...", addr);
-                    let conn = match TcpStream::connect(addr) {
-                        Ok(o) => o,
-                        Err(e) => {
-                            eprintln!("Unable to connect to Xous server: {}", e);
-                            eprintln!("Ensure Xous is running, or specify this process as an argument to the kernel");
-                            *ret = Result::Error(crate::Error::InternalError);
+                    match xous_connect_impl(addr) {
+                        Ok(a) => *xsc.borrow_mut() = Some(a),
+                        Err(_) => {
                             have_err = true;
-                            return;
+                            *ret = Result::Error(crate::Error::InternalError);
                         }
-                    };
-                    *xsc.borrow_mut() = Some(ServerConnection {
-                        send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
-                        recv: Arc::new(Mutex::new(conn)),
-                        mailbox: Arc::new(Mutex::new(HashMap::new())),
-                    });
+                    }
                 });
                 if have_err {
                     return;

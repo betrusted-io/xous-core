@@ -5,7 +5,7 @@ pub mod syscall;
 
 use std::cell::RefCell;
 use std::env;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -61,7 +61,7 @@ fn handle_connection(
         let mut incoming_word = [0u8; size_of::<usize>()];
         conn.set_nonblocking(false)
             .expect("couldn't enable nonblocking mode");
-        conn.set_read_timeout(Some(Duration::from_millis(100)))
+        conn.set_read_timeout(Some(Duration::from_millis(1000)))
             .unwrap();
         for word in pkt.iter_mut() {
             loop {
@@ -184,9 +184,7 @@ fn listen_thread(
     let pid1_should_exit = should_exit.clone();
     let pid1_thread = spawn(move || {
         let mut client = TcpStream::connect(client_addr).expect("couldn't connect to xous server");
-        client
-            .set_nonblocking(true)
-            .expect("pid1: couldn't set nonblocking mode");
+        client.set_read_timeout(Some(Duration::from_millis(100))).expect("couldn't set read timeout duration");
         let mut buffer = [0; size_of::<usize>() * 9];
         // println!("KERNEL(1): Started PID1 idle thread");
         loop {
@@ -194,8 +192,8 @@ fn listen_thread(
                 return;
             }
             match client.read_exact(&mut buffer) {
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(100))
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                    continue;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return,
                 Err(e) => panic!("KERNEL(1): Unable to read buffer: {}", e),
@@ -316,7 +314,10 @@ pub fn idle() -> bool {
 
     while let Ok(msg) = receiver.recv() {
         match msg {
-            ThreadMessage::NewConnection(conn) => {
+            ThreadMessage::NewConnection(mut conn) => {
+                // TODO: Figure out how to set the parent PID
+                crate::arch::process::set_current_pid(PID::new(1).unwrap());
+
                 // Spawn a new process inside the kernel. This will assign us a PID.
                 let new_pid = SystemServices::with_mut(|ss| {
                     ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
@@ -327,6 +328,8 @@ pub fn idle() -> bool {
                 backchannel_sender
                     .send(BackchannelMessage::NewPid(new_pid))
                     .expect("couldn't send new pid to new connection");
+
+                conn.write_all(&new_pid.get().to_le_bytes()).expect("couldn't send pid to new process");
 
                 // Switch to this process immediately, which moves it from `Setup(_)` to `Running(0)`.
                 // Note that in this system, multiple processes can be active at once. This is

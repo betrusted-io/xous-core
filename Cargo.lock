@@ -139,6 +139,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cc"
+version = "1.0.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9a06fb2e53271d7c279ec1efea6ab691c35a2ae67ec0d91d7acec0caf13b518"
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -325,6 +331,7 @@ dependencies = [
 name = "log"
 version = "0.1.0"
 dependencies = [
+ "pancurses",
  "xous",
 ]
 
@@ -342,6 +349,17 @@ name = "memchr"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
+
+[[package]]
+name = "ncurses"
+version = "5.99.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15699bee2f37e9f8828c7b35b2bc70d13846db453f2d507713b758fabe536b82"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+]
 
 [[package]]
 name = "num-derive"
@@ -374,6 +392,35 @@ name = "opaque-debug"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2839e79665f131bdb5782e51f2c6c9599c133c6098982a54c794358bf432529c"
+
+[[package]]
+name = "pancurses"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3058bc37c433096b2ac7afef1c5cdfae49ede0a4ffec3dfc1df1df0959d0ff0"
+dependencies = [
+ "libc",
+ "log 0.4.8",
+ "ncurses",
+ "pdcurses-sys",
+ "winreg",
+]
+
+[[package]]
+name = "pdcurses-sys"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "084dd22796ff60f1225d4eb6329f33afaf4c85419d51d440ab6b8c6f4529166b"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "pkg-config"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d36492546b6af1463394d46f0c834346f31548646f6ba10849802c9c9a27ac33"
 
 [[package]]
 name = "ppv-lite86"
@@ -679,6 +726,15 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "winreg"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a27a759395c1195c4cc5cda607ef6f8f6498f64e78f7900f5de0a127a424704a"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "xmas-elf"

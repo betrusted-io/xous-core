@@ -375,6 +375,7 @@ pub enum Result {
     ConnectionID(CID),
     Message(MessageEnvelope),
     ThreadID(TID),
+    ProcessID(PID),
 
     /// The requested system call is unimplemented
     Unimplemented,
@@ -405,13 +406,15 @@ impl Result {
                 ]
             }
             Result::ThreadID(ctx) => [9, *ctx as usize, 0, 0, 0, 0, 0, 0],
-            Result::Unimplemented => [10, 0, 0, 0, 0, 0, 0, 0],
-            Result::BlockedProcess => [11, 0, 0, 0, 0, 0, 0, 0],
+            Result::ProcessID(pid) => [10, pid.get() as _, 0, 0, 0, 0, 0, 0],
+            Result::Unimplemented => [11, 0, 0, 0, 0, 0, 0, 0],
+            Result::BlockedProcess => [12, 0, 0, 0, 0, 0, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
         }
     }
+
     pub fn from_args(src: [usize; 8]) -> Self {
         match src[0] {
             0 => Result::Ok,
@@ -459,8 +462,9 @@ impl Result {
                 Result::Message(MessageEnvelope { sender, message })
             }
             9 => Result::ThreadID(src[1] as TID),
-            10 => Result::Unimplemented,
-            11 => Result::BlockedProcess,
+            10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
+            11 => Result::Unimplemented,
+            12 => Result::BlockedProcess,
             _ => Result::UnknownResult(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
         }
     }

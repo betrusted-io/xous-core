@@ -1,7 +1,7 @@
 use crate::{
     pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, Result, ScalarMessage,
-    SysCallResult, ThreadInit, CID, PID, SID,
+    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessInit, Result,
+    ScalarMessage, SysCallResult, ThreadInit, ProcessArgs, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -243,7 +243,7 @@ pub enum SysCall {
 
     /// Create a new process, setting the current process as the parent ID.
     /// Does not start the process immediately.
-    CreateProcess,
+    CreateProcess(ProcessInit),
 
     /// Terminate the current process, closing all server connections.
     TerminateProcess,
@@ -482,9 +482,11 @@ impl SysCall {
                 0,
             ],
             SysCall::CreateThread(init) => {
-                crate::arch::context_to_args(SysCallNumber::CreateThread as usize, init)
+                crate::arch::thread_to_args(SysCallNumber::CreateThread as usize, init)
             }
-            SysCall::CreateProcess => [SysCallNumber::CreateProcess as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::CreateProcess(init) => {
+                crate::arch::process_to_args(SysCallNumber::CreateProcess as usize, init)
+            }
             SysCall::TerminateProcess => [
                 SysCallNumber::TerminateProcess as usize,
                 0,
@@ -611,9 +613,11 @@ impl SysCall {
                 SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
             }
             Some(SysCallNumber::CreateThread) => {
-                SysCall::CreateThread(crate::arch::args_to_context(a1, a2, a3, a4, a5, a6, a7)?)
+                SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            Some(SysCallNumber::CreateProcess) => SysCall::CreateProcess,
+            Some(SysCallNumber::CreateProcess) => {
+                SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
+            },
             Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
             Some(SysCallNumber::Shutdown) => SysCall::Shutdown,
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
@@ -808,7 +812,7 @@ pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
 
-/// Create a new thread
+/// Create a new thread with the given closure.
 pub fn create_thread<F, T>(f: F) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
 where
     F: FnOnce() -> T,
@@ -828,6 +832,23 @@ where
 /// Wait for a thread to finish
 pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
     crate::arch::wait_thread(joiner)
+}
+
+/// Create a new process by ru
+pub fn create_process<F, T>(f: F, args: ProcessArgs) -> core::result::Result<PID, Error>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    let process_init = crate::arch::create_process_pre(&f, args)?;
+    rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
+        if let Result::ProcessID(pid) = result {
+            crate::arch::create_process_post(f, pid)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
 }
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {

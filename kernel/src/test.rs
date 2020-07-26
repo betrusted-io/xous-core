@@ -75,6 +75,7 @@ where
     let server_spec = xous::arch::xous_address();
     std::thread::spawn(move || {
         xous::arch::set_xous_address(server_spec);
+        xous::arch::xous_connect();
         f()
     })
 }
@@ -322,7 +323,7 @@ fn send_mutableborrow_message_repeat() {
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let loops = 50_000;
+    let loops = 50;
 
     let xous_server = as_process(move || {
         let sid = xous::create_server(b"send_mutborrow_r").expect("couldn't create test server");
@@ -496,7 +497,60 @@ fn multiple_contexts() {
 
 #[test]
 fn multiple_multiple_contexts() {
-    for _ in 0..60 {
+    for _ in 0..5 {
         multiple_contexts();
     }
+}
+
+/// Test that a server can be restarted and the kernel doesn't crash
+#[test]
+fn process_restart_server() {
+    let test_str = "Hello, world!";
+    let test_bytes = test_str.as_bytes();
+
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    fn create_destroy_server(test_bytes: &'static [u8]) {
+
+        let (server_addr_send, server_addr_recv) = channel();
+
+        let xous_server = as_process(move || {
+            let sid = xous::create_server(b"test_recreate_se").expect("couldn't create test server");
+            server_addr_send.send(sid).unwrap();
+            let thr = xous::create_thread(move || {
+                let envelope = xous::receive_message(sid).expect("couldn't receive messages");
+                // println!("Received message from {}", envelope.sender);
+                let message = envelope.message;
+                if let xous::Message::Move(m) = message {
+                    let buf = m.buf;
+                    let bt = unsafe {
+                        Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
+                    };
+                    assert_eq!(*test_bytes, *bt);
+                // let s = String::from_utf8_lossy(&bt);
+                // println!("Got message: {:?} -> \"{}\"", bt, s);
+                } else {
+                    panic!("unexpected message type");
+                }
+            }).unwrap();
+            xous::wait_thread(thr).unwrap();
+        });
+
+        // Wait for the server to start up
+        let sid = server_addr_recv.recv().unwrap();
+
+        let conn = xous::connect(sid).expect("couldn't connect to server");
+        let msg = xous::carton::Carton::from_bytes(test_bytes);
+        xous::send_message(conn, xous::Message::Move(msg.into_message(0)))
+            .expect("couldn't send a message");
+        xous_server.join().expect("couldn't join server process");
+    }
+
+    // create_destroy_server(test_bytes);
+    create_destroy_server(test_bytes);
+
+    // Any process ought to be able to shut down the system currently.
+    rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+
+    main_thread.join().expect("couldn't join kernel process");
 }

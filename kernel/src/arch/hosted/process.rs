@@ -1,10 +1,10 @@
-pub const MAX_CONTEXT: TID = 31;
+pub const MAX_THREAD: TID = 31;
 use crate::services::ProcessInner;
 use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ThreadInit, TID, PID};
+use xous::{ThreadInit, PID, TID};
 
 pub const INITIAL_TID: usize = 1;
 
@@ -25,10 +25,10 @@ struct ProcessImpl {
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
     /// receive messages.
-    contexts: [Context; MAX_CONTEXT],
+    threads: [Thread; MAX_THREAD],
 
-    /// The currently-active thread for this proces
-    current_context: TID,
+    /// The currently-active thread for this process
+    current_thread: TID,
 }
 
 impl PartialEq for Process {
@@ -61,13 +61,13 @@ pub fn set_current_pid(pid: PID) {
 #[derive(Copy, Clone, Debug)]
 /// Everything required to keep track of a single thread of execution.
 /// In a `std` environment, we can't manage threads so this is a no-op.
-pub struct Context {
+pub struct Thread {
     allocated: bool,
 }
 
-impl Default for Context {
+impl Default for Thread {
     fn default() -> Self {
-        Context { allocated: false }
+        Thread { allocated: false }
     }
 }
 
@@ -123,25 +123,25 @@ impl Process {
         })
     }
 
-    pub fn setup_thread(
-        &mut self,
-        context: TID,
-        _setup: ThreadInit,
-    ) -> Result<(), xous::Error> {
+    fn setup_thread_inner(thread: TID, process_table: &mut ProcessTable) {
+        let current_pid_idx = process_table.current.get() as usize - 1;
+        let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+
+        assert!(!process.threads[thread - 1].allocated);
+        process.threads[thread - 1].allocated = true;
+    }
+
+    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {
         // println!(
         //     "KERNEL({}): Setting up context {} @ {:?}",
         //     self.pid,
         //     context,
         //     std::thread::current()
         // );
-        assert!(context > 0);
+        assert!(thread > 0);
         PROCESS_TABLE.with(|pt| {
-            let mut process_table = pt.borrow_mut();
-            let current_pid_idx = process_table.current.get() as usize - 1;
-            let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-
-            assert!(!process.contexts[context - 1].allocated);
-            process.contexts[context - 1].allocated = true;
+            let process_table = &mut *pt.borrow_mut();
+            Self::setup_thread_inner(thread, process_table);
             // println!(
             //     "KERNEL({}): self.contexts[{}].allocated = {}",
             //     current_pid_idx,
@@ -162,26 +162,29 @@ impl Process {
     // }
 
     /// Set the current context number.
-    pub fn set_thread(&mut self, context: TID) -> Result<(), xous::Error> {
-        assert!(context > 0);
+    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous::Error> {
+        assert!(thread > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            assert!(process.contexts[context - 1].allocated);
-            process.current_context = context;
+            if !process.threads[thread - 1].allocated {
+                ::debug_here::debug_here!();
+            }
+            assert!(process.threads[thread - 1].allocated, "tried to switch to thread {} which wasn't allocated", thread);
+            process.current_thread = thread;
         });
         Ok(())
     }
 
     #[allow(dead_code)]
-    pub fn find_free_context_nr(&self) -> Option<TID> {
+    pub fn find_free_thread(&self) -> Option<TID> {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            for (index, context) in process.contexts.iter().enumerate() {
-                if index != 0 && !context.allocated {
+            for (index, thread) in process.threads.iter().enumerate() {
+                if index != 0 && !thread.allocated {
                     return Some(index as TID + 1);
                 }
             }
@@ -196,8 +199,8 @@ impl Process {
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             assert!(
-                process.contexts[tid - 1].allocated,
-                "context {} is not allocated",
+                process.threads[tid - 1].allocated,
+                "thread {} is not allocated",
                 tid,
             );
 
@@ -225,8 +228,9 @@ impl Process {
         });
     }
 
-    /// Initialize this process context with the given entrypoint and stack
-    /// addresses.
+    /// Initialize this process with the given memory space. THIS DOES NOT
+    /// INITIALIZE A MAIN THREAD. You must call `setup_thread()` in order to
+    /// select a main thread.
     pub fn create(pid: PID, init_data: ProcessInit) -> PID {
         PROCESS_TABLE.with(|process_table| {
             let mut process_table = process_table.borrow_mut();
@@ -236,9 +240,10 @@ impl Process {
                 inner: Default::default(),
                 conn: init_data.conn,
                 memory_to_return: None,
-                current_context: INITIAL_TID,
-                contexts: [Context {allocated: false}; MAX_CONTEXT],
+                current_thread: INITIAL_TID,
+                threads: [Thread { allocated: false }; MAX_THREAD],
             };
+
             if pid_idx >= process_table.table.len() {
                 process_table.table.push(Some(process));
             } else if process_table.table[pid_idx].is_none() {
@@ -275,4 +280,4 @@ impl Process {
     }
 }
 
-impl Context {}
+impl Thread {}

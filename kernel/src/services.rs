@@ -1,7 +1,7 @@
 use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
-pub use crate::arch::process::{Context, ProcessInit};
+pub use crate::arch::process::{Thread, ProcessInit};
 
 use core::cell::RefCell;
 use std::thread_local;
@@ -186,8 +186,8 @@ impl Process {
         // TODO: Free all IRQs
 
         // TODO: Free memory mapping
-        self.state = ProcessState::Free;
         crate::arch::process::Process::destroy(self.pid)?;
+        self.state = ProcessState::Free;
         Ok(())
     }
 }
@@ -299,9 +299,10 @@ impl SystemServices {
             let new_pid = pid_from_usize(idx + 1)?;
             arch::process::Process::create(new_pid, init_process);
             // #[allow(clippy::unit_arg)]
-            // println!("Creating new process for PID {}", new_pid);
+            let ppid = crate::arch::process::current_pid();
+            // println!("Creating new process for PID {} with PPID {}", new_pid, ppid);
             entry.state = ProcessState::Setup(init_context);
-            entry.ppid = crate::arch::process::current_pid();
+            entry.ppid = ppid;
             entry.pid = new_pid;
             return Ok(new_pid);
         }
@@ -550,7 +551,7 @@ impl SystemServices {
 
                         while x & (1 << new_context) == 0 {
                             new_context += 1;
-                            if new_context > arch::process::MAX_CONTEXT {
+                            if new_context > arch::process::MAX_THREAD {
                                 new_context = 0;
                             }
                         }
@@ -591,7 +592,7 @@ impl SystemServices {
 
                         while ready_threads & (1 << new_thread) == 0 {
                             new_thread += 1;
-                            if new_thread > arch::process::MAX_CONTEXT {
+                            if new_thread > arch::process::MAX_THREAD {
                                 new_thread = 0;
                             }
                         }
@@ -610,10 +611,9 @@ impl SystemServices {
                 // Remove the new thread ID from the list of thread IDs
                 let new_mask = ready_threads & !(1 << new_thread);
 
-                // No need to activate, since it's already active
-                // process.activate()?;
+                // Activate this process on this CPU
+                process.activate()?;
                 p.set_thread(new_thread)?;
-                // process.current_thread = new_thread as u8;
                 ProcessState::Running(new_mask)
             }
         };
@@ -753,7 +753,7 @@ impl SystemServices {
                         new_tid = 0;//new.current_thread as usize;
                         while x & (1 << new_tid) == 0 {
                             new_tid += 1;
-                            if new_tid > arch::process::MAX_CONTEXT {
+                            if new_tid > arch::process::MAX_THREAD {
                             //     new_tid = 0;
                             // }
                             // // If we've looped around, return an error.
@@ -1187,7 +1187,7 @@ impl SystemServices {
 
         let mut arch_process = crate::arch::process::Process::current();
         let new_tid = arch_process
-            .find_free_context_nr()
+            .find_free_thread()
             .ok_or(xous::Error::ContextNotAvailable)?;
 
         arch_process.setup_thread(new_tid, thread_init)?;
@@ -1214,7 +1214,6 @@ impl SystemServices {
             ),
         };
 
-
         Ok(new_tid)
     }
 
@@ -1237,6 +1236,7 @@ impl SystemServices {
         // TODO: Come up with a way to randomize the server ID
         let ppid = self.get_process(pid)?.ppid.get();
         if ppid != 1 {
+            debug_here::debug_here!();
             panic!("Clients cannot start servers yet");
         }
 
@@ -1254,11 +1254,7 @@ impl SystemServices {
                 // };
 
                 // Initialize the server with the given memory page.
-                Server::init(entry, pid, sid /*, addr, size*/).or_else(|x| {
-                    // let mut mm = MemoryManagerHandle::get();
-                    // mm.unmap_page(addr)?;
-                    Err(x)
-                })?;
+                Server::init(entry, pid, sid /*, addr, size*/).map_err(|x| x)?;
                 return Ok(sid);
             }
         }

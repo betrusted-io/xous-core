@@ -1,4 +1,4 @@
-#![cfg_attr(not(any(windows,unix)), no_std)]
+#![cfg_attr(not(any(windows, unix)), no_std)]
 
 #[macro_use]
 extern crate bitflags;
@@ -7,15 +7,15 @@ extern crate num_traits;
 
 pub mod arch;
 
-pub mod definitions;
-pub mod syscall;
 pub mod carton;
+pub mod definitions;
 mod messages;
+pub mod syscall;
 
+pub use arch::{ProcessInit, ThreadInit, ProcessArgs};
 pub use definitions::*;
-pub use syscall::*;
 pub use messages::*;
-pub use arch::ThreadInit;
+pub use syscall::*;
 
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]

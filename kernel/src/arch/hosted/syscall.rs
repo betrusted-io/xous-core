@@ -1,7 +1,7 @@
-use super::process::Context;
+use super::process::Thread;
 #[allow(dead_code)]
 pub fn invoke(
-    _context: &mut Context,
+    _context: &mut Thread,
     _supervisor: bool,
     _pc: usize,
     _sp: usize,

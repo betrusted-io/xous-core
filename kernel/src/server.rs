@@ -1,4 +1,4 @@
-pub use crate::arch::process::Context;
+pub use crate::arch::process::Thread;
 use core::mem;
 use xous::{TID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
@@ -198,7 +198,11 @@ impl Server {
 
     /// Take a current slot and replace it with `None`, clearing out the contents of the queue.
     pub fn destroy(current: &mut Option<Server>) -> Result<(), xous::Error> {
-        *current = None;
+        if let Some(mut server) = current.take() {
+            server.queue_head = 0;
+            server.queue_tail = 0;
+            server.ready_threads = 0;
+        }
         Ok(())
     }
 
