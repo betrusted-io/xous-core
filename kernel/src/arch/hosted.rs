@@ -320,7 +320,7 @@ pub fn idle() -> bool {
 
                 // Spawn a new process inside the kernel. This will assign us a PID.
                 let new_pid = SystemServices::with_mut(|ss| {
-                    ss.spawn_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
+                    ss.create_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
                 })
                 .unwrap();
 
@@ -345,6 +345,7 @@ pub fn idle() -> bool {
                 // If the call being made is to terminate the current process, we need to know
                 // because we won't be able to send a response.
                 let is_terminate = call == SysCall::TerminateProcess;
+                let is_shutdown = call == SysCall::Shutdown;
                 let is_shutdown = call == SysCall::Shutdown;
 
                 // For a "Shutdown" command, send the response before we issue the shutdown.

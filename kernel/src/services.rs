@@ -287,7 +287,7 @@ impl SystemServices {
 
     /// Add a new entry to the process table. This results in a new address space
     /// and a new PID, though the process is in the state `Setup()`.
-    pub fn spawn_process(
+    pub fn create_process(
         &mut self,
         init_process: ProcessInit,
         init_context: ThreadInit,

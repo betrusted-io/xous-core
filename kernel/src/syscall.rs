@@ -507,6 +507,16 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 xous::Result::ThreadID(new_tid)
             })
         }),
+        SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
+            #[allow(clippy::unit_arg)]
+            ss.create_process(process_init).map(|new_tid| {
+                if !cfg!(baremetal) {
+                    ss.switch_to_thread(pid, Some(new_tid))
+                        .expect("couldn't activate new thread");
+                }
+                xous::Result::ProcessID(new_tid)
+            })
+        }),
         SysCall::CreateServer(name) => {
             SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous::Result::ServerID))
         }

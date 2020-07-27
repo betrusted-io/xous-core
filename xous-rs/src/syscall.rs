@@ -835,20 +835,22 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by ru
-pub fn create_process<F, T>(f: F, args: ProcessArgs) -> core::result::Result<PID, Error>
-where
-    F: FnOnce() -> T,
-    F: Send + 'static,
-    T: Send + 'static,
-{
-    let process_init = crate::arch::create_process_pre(&f, args)?;
+pub fn create_process<F>(args: ProcessArgs<F>) -> core::result::Result<crate::arch::ProcessHandle, Error>
+where F: FnOnce() + Send + 'static
+ {
+    let process_init = crate::arch::create_process_pre(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
         if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post(f, pid)
+            crate::arch::create_process_post(args, pid)
         } else {
             Err(Error::InternalError)
         }
     })
+}
+
+/// Wait for a thread to finish
+pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
+    crate::arch::wait_process(joiner)
 }
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {

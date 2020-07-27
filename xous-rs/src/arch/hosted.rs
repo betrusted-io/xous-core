@@ -10,10 +10,22 @@ use crate::{Result, PID, TID};
 
 pub type ThreadInit = ();
 pub type ProcessInit = ();
-pub type ProcessHandle = ();
-pub type ProcessArgs = ();
+
+pub struct ProcessArgs<F: FnOnce()> {
+    main: Option<F>,
+}
+
+impl<F> ProcessArgs<F>
+where
+    F: FnOnce(),
+{
+    pub fn new(main: F) -> ProcessArgs<F> {
+        ProcessArgs { main: Some(main) }
+    }
+}
 
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
+pub struct ProcessHandle(std::thread::JoinHandle<()>);
 
 #[derive(Clone)]
 struct ServerConnection {
@@ -80,25 +92,25 @@ pub fn set_xous_address(new_address: SocketAddr) {
 }
 
 /// Set the network address for this particular thread.
-pub fn xous_address() -> SocketAddr {
+fn xous_address() -> SocketAddr {
     NETWORK_CONNECT_ADDRESS
         .with(|nca| *nca.borrow())
         .unwrap_or_else(default_xous_address)
 }
 
-pub fn xous_connect() {
-    XOUS_SERVER_CONNECTION.with(|xsc| {
-        if xsc.borrow().is_none() {
-            NETWORK_CONNECT_ADDRESS.with(|nca| {
-                let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                match xous_connect_impl(addr) {
-                    Ok(a) => *xsc.borrow_mut() = Some(a),
-                    Err(_) => panic!("couldn't connect to server"),
-                }
-            });
-        }
-    })
-}
+// pub fn xous_connect() {
+//     XOUS_SERVER_CONNECTION.with(|xsc| {
+//         if xsc.borrow().is_none() {
+//             NETWORK_CONNECT_ADDRESS.with(|nca| {
+//                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
+//                 match xous_connect_impl(addr) {
+//                     Ok(a) => *xsc.borrow_mut() = Some(a),
+//                     Err(_) => panic!("couldn't connect to server"),
+//                 }
+//             });
+//         }
+//     })
+// }
 
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
 where
@@ -134,31 +146,64 @@ where
         .map_err(|_| crate::Error::InternalError)?)
 }
 
-pub fn create_process_pre<F, T>(
-    _f: &F,
-    _args: ProcessArgs,
+pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
+    joiner
+        .0
+        .join()
+        .map(|_| Result::Ok)
+        .map_err(|_| crate::Error::InternalError)
+}
+
+/// If no connection exists, create a new connection to the server. This means
+/// our parent PID will be PID1. Otherwise, reuse the same connection.
+pub fn create_process_pre<F>(
+    _args: &ProcessArgs<F>,
 ) -> core::result::Result<ProcessInit, crate::Error>
 where
-    F: FnOnce() -> T,
-    F: Send + 'static,
-    T: Send + 'static,
+    F: FnOnce(),
 {
-    Ok(())
+    // Ensure there is a connection, because after this function returns
+    // we'll make a syscall with CreateProcess().
+    XOUS_SERVER_CONNECTION.with(|xsc| {
+        let mut xsc = xsc.borrow_mut();
+        if xsc.is_none() {
+            NETWORK_CONNECT_ADDRESS.with(|nca| {
+                let addr = nca.borrow().unwrap_or_else(default_xous_address);
+                match xous_connect_impl(addr) {
+                    Ok(a) => *xsc = Some(a),
+                    Err(_) => {
+                        return Err(crate::Error::InternalError);
+                    }
+                }
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    })
 }
 
-pub fn create_process_post<F, T>(
-    _f: F,
+pub fn create_process_post<F>(
+    mut args: ProcessArgs<F>,
     pid: PID,
-) -> core::result::Result<PID, crate::Error>
+) -> core::result::Result<ProcessHandle, crate::Error>
 where
-    F: FnOnce() -> T,
-    F: Send + 'static,
-    T: Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
-    Ok(pid)
+    let server_spec = xous_address();
+
+    Ok(std::thread::Builder::new()
+        .spawn(move || {
+            set_xous_address(server_spec);
+            xous_connect_impl(server_spec).unwrap();
+            PROCESS_ID.with(|p| *p.borrow_mut() = pid.unwrap());
+            (args.main.take().unwrap())();
+        })
+        .map(ProcessHandle)
+        .map_err(|_| crate::Error::InternalError)?)
 }
 
-pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
+pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
     joiner
         .0
         .join()
@@ -171,9 +216,7 @@ fn xous_connect_impl(addr: SocketAddr) -> core::result::Result<ServerConnection,
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
             let mut pid = [0u8; 1];
-            conn.read_exact(&mut pid).unwrap();
-            // conn.set_read_timeout(std::time::Duration::from_millis(200)).expect("couldn't set read timeout");
-            PROCESS_ID.with(|p| *p.borrow_mut() = PID::new(pid[0]).unwrap());
+            // conn.read_exact(&mut pid).unwrap();
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                 recv: Arc::new(Mutex::new(conn)),
@@ -208,20 +251,7 @@ pub fn _xous_syscall(
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             if xsc.borrow().is_none() {
-                let mut have_err = false;
-                NETWORK_CONNECT_ADDRESS.with(|nca| {
-                    let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                    match xous_connect_impl(addr) {
-                        Ok(a) => *xsc.borrow_mut() = Some(a),
-                        Err(_) => {
-                            have_err = true;
-                            *ret = Result::Error(crate::Error::InternalError);
-                        }
-                    }
-                });
-                if have_err {
-                    return;
-                }
+                panic!("Not connected to server!");
             }
             _xous_syscall_to(
                 nr,
