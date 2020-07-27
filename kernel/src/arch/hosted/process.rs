@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ThreadInit, PID, TID};
+use xous::{ProcessInit, ThreadInit, PID, TID};
 
 pub const INITIAL_TID: usize = 1;
 
@@ -16,8 +16,11 @@ struct ProcessImpl {
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
+    /// A 16-byte key used to register a process when it first starts
+    key: [u8; 16],
+
     /// The network connection to the client process.
-    conn: TcpStream,
+    conn: Option<TcpStream>,
 
     /// Memory that may need to be returned to the caller
     memory_to_return: Option<Vec<u8>>,
@@ -57,6 +60,21 @@ pub fn set_current_pid(pid: PID) {
     PROCESS_TABLE.with(|pt| (*pt.borrow_mut()).current = pid);
 }
 
+pub fn register_connection_for_key(conn: TcpStream, key: [u8; 16]) -> Result<PID, xous::Error> {
+    PROCESS_TABLE.with(|pt| {
+        let mut process_table = pt.borrow_mut();
+        for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
+            if let Some(process) = process.as_mut() {
+                if process.key == key && process.conn.is_none() {
+                    process.conn = Some(conn);
+                    return Ok(PID::new(pid_minus_1 as u8 + 1).unwrap());
+                }
+            }
+        }
+        Err(xous::Error::ProcessNotFound)
+    })
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 /// Everything required to keep track of a single thread of execution.
@@ -71,17 +89,17 @@ impl Default for Thread {
     }
 }
 
-/// Everything required to initialize a process on this platform
-pub struct ProcessInit {
-    /// A network connection to the client
-    conn: TcpStream,
-}
+// /// Everything required to initialize a process on this platform
+// pub struct ProcessInit {
+//     /// A network connection to the client
+//     conn: TcpStream,
+// }
 
-impl ProcessInit {
-    pub fn new(conn: TcpStream) -> ProcessInit {
-        ProcessInit { conn }
-    }
-}
+// impl ProcessInit {
+//     pub fn new(conn: TcpStream) -> ProcessInit {
+//         ProcessInit { conn }
+//     }
+// }
 
 impl Process {
     pub fn current() -> Process {
@@ -171,7 +189,11 @@ impl Process {
             if !process.threads[thread - 1].allocated {
                 ::debug_here::debug_here!();
             }
-            assert!(process.threads[thread - 1].allocated, "tried to switch to thread {} which wasn't allocated", thread);
+            assert!(
+                process.threads[thread - 1].allocated,
+                "tried to switch to thread {} which wasn't allocated",
+                thread
+            );
             process.current_thread = thread;
         });
         Ok(())
@@ -214,7 +236,12 @@ impl Process {
                 response.extend_from_slice(&buf);
             }
 
-            process.conn.write_all(&response).expect("Disconnection");
+            process
+                .conn
+                .as_mut()
+                .unwrap()
+                .write_all(&response)
+                .expect("Disconnection");
         });
     }
 
@@ -238,7 +265,8 @@ impl Process {
 
             let process = ProcessImpl {
                 inner: Default::default(),
-                conn: init_data.conn,
+                conn: None,
+                key: init_data.key,
                 memory_to_return: None,
                 current_thread: INITIAL_TID,
                 threads: [Thread { allocated: false }; MAX_THREAD],
@@ -263,7 +291,12 @@ impl Process {
                 panic!("attempted to destroy PID that exceeds table index: {}", pid);
             }
             let process = process_table.table[pid_idx].as_mut().unwrap();
-            process.conn.shutdown(std::net::Shutdown::Both).unwrap();
+            process
+                .conn
+                .as_mut()
+                .unwrap()
+                .shutdown(std::net::Shutdown::Both)
+                .unwrap();
             process_table.table[pid_idx] = None;
             Ok(())
         })
@@ -274,7 +307,7 @@ impl Process {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            process.conn.write_all(bytes).unwrap();
+            process.conn.as_mut().unwrap().write_all(bytes).unwrap();
         });
         Ok(())
     }

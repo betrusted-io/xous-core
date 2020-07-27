@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
@@ -9,7 +10,11 @@ use std::thread_local;
 use crate::{Result, PID, TID};
 
 pub type ThreadInit = ();
-pub type ProcessInit = ();
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ProcessInit {
+    pub key: [u8; 16],
+}
 
 pub struct ProcessArgs<F: FnOnce()> {
     main: Option<F>,
@@ -38,8 +43,17 @@ pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
     [call, 0, 0, 0, 0, 0, 0, 0]
 }
 
-pub fn process_to_args(call: usize, _init: &ProcessInit) -> [usize; 8] {
-    [call, 0, 0, 0, 0, 0, 0, 0]
+pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
+    [
+        call,
+        u32::from_le_bytes(init.key[0..4].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key[4..8].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key[8..12].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key[12..16].try_into().unwrap()) as _,
+        0,
+        0,
+        0,
+    ]
 }
 
 pub fn args_to_thread(
@@ -55,15 +69,24 @@ pub fn args_to_thread(
 }
 
 pub fn args_to_process(
-    _a1: usize,
-    _a2: usize,
-    _a3: usize,
-    _a4: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
     _a5: usize,
     _a6: usize,
     _a7: usize,
 ) -> core::result::Result<ProcessInit, crate::Error> {
-    Ok(())
+    let mut v = vec![];
+    v.extend_from_slice(&(a1 as u32).to_le_bytes());
+    v.extend_from_slice(&(a2 as u32).to_le_bytes());
+    v.extend_from_slice(&(a3 as u32).to_le_bytes());
+    v.extend_from_slice(&(a4 as u32).to_le_bytes());
+    let mut key = [0u8; 16];
+    key.copy_from_slice(&v);
+    Ok(ProcessInit {
+        key
+    })
 }
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
@@ -163,28 +186,34 @@ where
     F: FnOnce(),
 {
     // Ensure there is a connection, because after this function returns
-    // we'll make a syscall with CreateProcess().
+    // we'll make a syscall with CreateProcess(). This should only happen
+    // for PID1.
     XOUS_SERVER_CONNECTION.with(|xsc| {
         let mut xsc = xsc.borrow_mut();
         if xsc.is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                match xous_connect_impl(addr) {
-                    Ok(a) => *xsc = Some(a),
-                    Err(_) => {
-                        return Err(crate::Error::InternalError);
+                let pid1_key = [0u8; 16];
+                match xous_connect_impl(addr, &pid1_key) {
+                    Ok(a) => {
+                        *xsc = Some(a);
+                        Ok(())
                     }
+                    Err(_) => Err(crate::Error::InternalError),
                 }
-                Ok(())
             })
         } else {
             Ok(())
         }
+    })?;
+    Ok(ProcessInit {
+        key: [1; 16],
     })
 }
 
 pub fn create_process_post<F>(
     mut args: ProcessArgs<F>,
+    init: ProcessInit,
     pid: PID,
 ) -> core::result::Result<ProcessHandle, crate::Error>
 where
@@ -195,8 +224,8 @@ where
     Ok(std::thread::Builder::new()
         .spawn(move || {
             set_xous_address(server_spec);
-            xous_connect_impl(server_spec).unwrap();
-            PROCESS_ID.with(|p| *p.borrow_mut() = pid.unwrap());
+            xous_connect_impl(server_spec, &init.key).unwrap();
+            PROCESS_ID.with(|p| *p.borrow_mut() = pid);
             (args.main.take().unwrap())();
         })
         .map(ProcessHandle)
@@ -211,12 +240,13 @@ pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
         .map_err(|_| crate::Error::InternalError)
 }
 
-fn xous_connect_impl(addr: SocketAddr) -> core::result::Result<ServerConnection, ()> {
+fn xous_connect_impl(addr: SocketAddr, key: &[u8; 16]) -> core::result::Result<ServerConnection, ()> {
     // println!("Opening connection to Xous server @ {}...", addr);
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
-            let mut pid = [0u8; 1];
+            // let mut pid = [0u8; 1];
             // conn.read_exact(&mut pid).unwrap();
+            conn.write_all(key).unwrap(); // Send key to authenticate us as PID 1
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                 recv: Arc::new(Mutex::new(conn)),
@@ -250,9 +280,8 @@ pub fn _xous_syscall(
         THREAD_ID.with(|tid| {
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
-            if xsc.borrow().is_none() {
-                panic!("Not connected to server!");
-            }
+            let mut xsc_borrowed = xsc.borrow_mut();
+            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server!");
             _xous_syscall_to(
                 nr,
                 a1,
@@ -263,13 +292,13 @@ pub fn _xous_syscall(
                 a6,
                 a7,
                 &call,
-                &mut xsc.borrow_mut().as_mut().unwrap().send.lock().unwrap(),
+                &mut xsc_asmut.send.lock().unwrap(),
             );
             _xous_syscall_result(
                 &call,
                 ret,
                 *tid.borrow(),
-                xsc.borrow_mut().as_mut().unwrap(),
+                xsc_asmut,
             );
         })
     });
@@ -321,7 +350,6 @@ fn _xous_syscall_result(
         let mut pkt = [0usize; 8];
         let mut raw_bytes = [0u8; size_of::<usize>() * 9];
         stream.read_exact(&mut raw_bytes).expect("Server shut down");
-        use std::convert::TryInto;
 
         let mut raw_bytes_chunks = raw_bytes.chunks(size_of::<usize>());
 

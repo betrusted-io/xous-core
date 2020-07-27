@@ -415,7 +415,7 @@ fn server_client_same_process() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let internal_server = xous::create_process(xous::arch::ProcessArgs::new(Box::new(|| {
+    let internal_server = xous::create_process(xous::arch::ProcessArgs::new(|| {
         let server = xous::create_server(b"s_c_same_process").expect("couldn't create server");
         let connection = xous::connect(server).expect("couldn't connect to our own server");
         let msg_contents = xous::ScalarMessage {
@@ -432,7 +432,7 @@ fn server_client_same_process() {
         let msg = xous::receive_message(server).expect("couldn't receive message");
 
         assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
-    }))).expect("couldn't start server");
+    })).expect("couldn't start server");
 
 
     xous::wait_process(internal_server)

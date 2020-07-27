@@ -1,7 +1,7 @@
 use crate::{
     pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessInit, Result,
-    ScalarMessage, SysCallResult, ThreadInit, ProcessArgs, CID, PID, SID,
+    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
+    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -617,7 +617,7 @@ impl SysCall {
             }
             Some(SysCallNumber::CreateProcess) => {
                 SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
-            },
+            }
             Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
             Some(SysCallNumber::Shutdown) => SysCall::Shutdown,
             Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
@@ -834,14 +834,17 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
     crate::arch::wait_thread(joiner)
 }
 
-/// Create a new process by ru
-pub fn create_process<F>(args: ProcessArgs<F>) -> core::result::Result<crate::arch::ProcessHandle, Error>
-where F: FnOnce() + Send + 'static
- {
+/// Create a new process by running it in its own thread
+pub fn create_process<F>(
+    args: ProcessArgs<F>,
+) -> core::result::Result<crate::arch::ProcessHandle, Error>
+where
+    F: FnOnce() + Send + 'static,
+{
     let process_init = crate::arch::create_process_pre(&args)?;
     rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
         if let Result::ProcessID(pid) = result {
-            crate::arch::create_process_post(args, pid)
+            crate::arch::create_process_post(args, process_init, pid)
         } else {
             Err(Error::InternalError)
         }
