@@ -105,59 +105,62 @@ fn shutdown() {
     main_thread.join().expect("couldn't join main thread");
 }
 
-// #[test]
-// fn send_scalar_message() {
-//     // Start the server in another thread
-//     let main_thread = start_kernel(SERVER_SPEC);
+#[test]
+fn send_scalar_message() {
+    // Start the server in another thread
+    let main_thread = start_kernel(SERVER_SPEC);
 
-//     let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = channel();
 
-//     // Spawn the server "process" (which just lives in a separate thread)
-//     // and receive the message. Note that we need to communicate to the
-//     // "Client" what our server ID is. Normally this would be done via
-//     // an external nameserver.
-//     let xous_server = as_process(move || {
-//         let sid = xous::create_server(b"send_scalar_mesg").expect("couldn't create test server");
-//         server_addr_send.send(sid).unwrap();
-//         let envelope = xous::receive_message(sid).expect("couldn't receive messages");
-//         assert_eq!(
-//             envelope.message,
-//             xous::Message::Scalar(xous::ScalarMessage {
-//                 id: 1,
-//                 arg1: 2,
-//                 arg2: 3,
-//                 arg3: 4,
-//                 arg4: 5
-//             })
-//         );
-//     });
+    // Spawn the server "process" (which just lives in a separate thread)
+    // and receive the message. Note that we need to communicate to the
+    // "Client" what our server ID is. Normally this would be done via
+    // an external nameserver.
+    let xous_server =
+    xous::create_process(xous::ProcessArgs::new(move || {
+        let sid = xous::create_server(b"send_scalar_mesg").expect("couldn't create test server");
+        server_addr_send.send(sid).unwrap();
+        let envelope = xous::receive_message(sid).expect("couldn't receive messages");
+        assert_eq!(
+            envelope.message,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: 1,
+                arg1: 2,
+                arg2: 3,
+                arg3: 4,
+                arg4: 5
+            })
+        );
+    })).expect("couldn't spawn server process");
 
-//     // Spawn the client "process" and wait for the server address.
-//     let xous_client = as_process(move || {
-//         let sid = server_addr_recv.recv().unwrap();
-//         let conn = xous::connect(sid).expect("couldn't connect to server");
-//         xous::send_message(
-//             conn,
-//             xous::Message::Scalar(xous::ScalarMessage {
-//                 id: 1,
-//                 arg1: 2,
-//                 arg2: 3,
-//                 arg3: 4,
-//                 arg4: 5,
-//             }),
-//         )
-//         .expect("couldn't send message");
-//     });
+    // Spawn the client "process" and wait for the server address.
+    let xous_client = xous::create_process(xous::ProcessArgs::new(move || {
+        let sid = server_addr_recv.recv().unwrap();
+        let conn = xous::connect(sid).expect("couldn't connect to server");
+        xous::send_message(
+            conn,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: 1,
+                arg1: 2,
+                arg2: 3,
+                arg3: 4,
+                arg4: 5,
+            }),
+        )
+        .expect("couldn't send message");
+    })).expect("couldn't spawn client process");
 
-//     // Wait for both processes to finish
-//     xous_server.join().expect("couldn't join server process");
-//     xous_client.join().expect("couldn't join client process");
+    // Wait for both processes to finish
+    crate::wait_process(xous_server).expect("couldn't join server process");
+    crate::wait_process(xous_client).expect("couldn't join client process");
 
-//     // Any process ought to be able to shut down the system currently.
-//     rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+    // Any process ought to be able to shut down the system currently.
+    xous::create_process(xous::ProcessArgs::new(|| {
+        rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+    })).expect("couldn't shut down the kernel");
 
-//     main_thread.join().expect("couldn't join kernel process");
-// }
+    main_thread.join().expect("couldn't join kernel process");
+}
 
 // #[test]
 // fn send_move_message() {

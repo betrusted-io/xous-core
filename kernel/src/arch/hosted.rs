@@ -258,6 +258,10 @@ fn listen_thread(
             }
         }
     });
+
+    // Spawn a thread to listen for the `exit` command, and relay that
+    // to the main thread. This prevents us from needing to poll, since
+    // all messages are coalesced into a single channel.
     spawn(move || match exit_channel.recv() {
         Ok(ExitMessage::Exit) => {
             exit_sender.send(ClientMessage::Exit).unwrap()
