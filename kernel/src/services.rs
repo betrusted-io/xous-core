@@ -1180,17 +1180,15 @@ impl SystemServices {
     ///
     /// # Errors
     ///
-    /// * **ContextNotAvailable**: The process has used all of its context
+    /// * **ThreadNotAvailable**: The process has used all of its context
     ///   slots.
     pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous::Error> {
-        let mut process = self
-            .get_process_mut(pid)
-            .expect("couldn't find current process");
+        let mut process = self.get_process_mut(pid)?;
 
         let mut arch_process = crate::arch::process::Process::current();
         let new_tid = arch_process
             .find_free_thread()
-            .ok_or(xous::Error::ContextNotAvailable)?;
+            .ok_or(xous::Error::ThreadNotAvailable)?;
 
         arch_process.setup_thread(new_tid, thread_init)?;
 

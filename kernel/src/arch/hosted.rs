@@ -113,7 +113,7 @@ fn handle_connection(
         );
 
         match call {
-            Err(e) => println!("KERNEL({}): Received invalid syscall: {:?}", pid, e),
+            Err(e) => eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e),
             Ok(mut call) => {
                 if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
                     match envelope {
@@ -253,7 +253,7 @@ fn listen_thread(
                 tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
             }
             Err(e) => {
-                println!("error accepting connections: {}", e);
+                eprintln!("error accepting connections: {} ({:?})", e, e);
                 return;
             }
         }
@@ -267,7 +267,7 @@ fn listen_thread(
             exit_sender.send(ClientMessage::Exit).unwrap()
         }
         Err(std::sync::mpsc::RecvError) => {
-            println!("error receiving exit command")
+            eprintln!("error receiving exit command")
         }
     });
 
