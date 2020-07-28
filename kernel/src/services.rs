@@ -657,10 +657,13 @@ impl SystemServices {
                     ProcessState::Running(x)
                 }
             }
-            other => panic!(
-                "PID {} TID {} was not in a state to be switched from: {:?}",
-                pid, tid, other
-            ),
+            other => {
+                // ::debug_here::debug_here!();
+                panic!(
+                    "PID {} TID {} was not in a state to be switched from: {:?}",
+                    pid, tid, other
+                );
+            },
         };
         // println!(
         //     "switch_from_thread({}:{}): New state is {:?}",
@@ -1207,6 +1210,10 @@ impl SystemServices {
         // Queue the thread to run
         process.state = match process.state {
             ProcessState::Running(x) => ProcessState::Running(x | (1 << new_tid)),
+
+            // This is the initial thread in this process -- schedule it to be run.
+            ProcessState::Allocated => ProcessState::Ready(1 << new_tid),
+
             other => panic!(
                 "error spawning thread: process was in an invalid state {:?}",
                 other

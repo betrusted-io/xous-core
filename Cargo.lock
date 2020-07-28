@@ -301,6 +301,7 @@ dependencies = [
  "bitflags",
  "debug-here",
  "lazy_static",
+ "rand",
  "riscv",
  "sha3",
  "stats_alloc",

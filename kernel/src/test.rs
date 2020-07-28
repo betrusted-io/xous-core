@@ -25,6 +25,14 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
         "XOUS_SERVER environment variable must be unset to run tests"
     );
 
+    use rand::{Rng, thread_rng};
+    let mut pid1_key = [0u8; 16];
+    let mut rng = thread_rng();
+    for b in pid1_key.iter_mut() {
+        *b = rng.gen();
+    }
+    xous::arch::set_process_key(&pid1_key);
+
     let server_addr = server_spec
         .to_socket_addrs()
         .expect("invalid server address")
@@ -37,9 +45,11 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
 
     let (send_addr, recv_addr) = channel();
 
-    // Launch the main thread
+    // Launch the main thread. We pass a `send_addr` channel so that the
+    // server can notify us when it's ready to listen.
     let main_thread = std::thread::spawn(move || {
         let server_spec_server = server_addr;
+        crate::arch::set_pid1_key(pid1_key);
         crate::arch::set_send_addr(send_addr);
         crate::arch::set_listen_address(&server_spec_server);
         kmain()
@@ -80,18 +90,21 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
 //     })
 // }
 
-// #[test]
-// fn shutdown() {
-//     // Start the server in another thread.
-//     let main_thread = start_kernel(SERVER_SPEC);
+#[test]
+fn shutdown() {
+    // Start the server in another thread.
+    let main_thread = start_kernel(SERVER_SPEC);
 
-//     // Send a raw `Shutdown` message to terminate the kernel.
-//     let call_result = rsyscall(SysCall::Shutdown);
-//     println!("Call result: {:?}", call_result);
+    // Send a raw `Shutdown` message to terminate the kernel.
+    xous::create_process(xous::ProcessArgs::new(|| {
+        println!("Running in new process...");
+        let call_result = rsyscall(SysCall::Shutdown);
+        println!("Call result: {:?}", call_result);
+    })).unwrap();
 
-//     // Wait for the kernel to exit.
-//     main_thread.join().expect("couldn't join main thread");
-// }
+    // Wait for the kernel to exit.
+    main_thread.join().expect("couldn't join main thread");
+}
 
 // #[test]
 // fn send_scalar_message() {
@@ -432,11 +445,10 @@ fn server_client_same_process() {
         let msg = xous::receive_message(server).expect("couldn't receive message");
 
         assert_eq!(msg.message, xous::Message::Scalar(msg_contents));
-    })).expect("couldn't start server");
+    }))
+    .expect("couldn't start server");
 
-
-    xous::wait_process(internal_server)
-        .expect("couldn't join internal_server process");
+    xous::wait_process(internal_server).expect("couldn't join internal_server process");
 
     // Any process ought to be able to shut down the system currently.
     rsyscall(SysCall::Shutdown).expect("unable to shutdown server");

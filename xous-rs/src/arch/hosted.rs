@@ -9,7 +9,8 @@ use std::thread_local;
 
 use crate::{Result, PID, TID};
 
-pub type ThreadInit = ();
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThreadInit {}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessInit {
@@ -65,7 +66,7 @@ pub fn args_to_thread(
     _a6: usize,
     _a7: usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
-    Ok(())
+    Ok(ThreadInit {})
 }
 
 pub fn args_to_process(
@@ -84,15 +85,14 @@ pub fn args_to_process(
     v.extend_from_slice(&(a4 as u32).to_le_bytes());
     let mut key = [0u8; 16];
     key.copy_from_slice(&v);
-    Ok(ProcessInit {
-        key
-    })
+    Ok(ProcessInit { key })
 }
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> = RefCell::new(None));
 thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
 thread_local!(static PROCESS_ID: RefCell<PID> = RefCell::new(PID::new(1).unwrap()));
+thread_local!(static PROCESS_KEY: RefCell<[u8; 16]> = RefCell::new([0u8; 16]));
 
 fn default_xous_address() -> SocketAddr {
     std::env::var("XOUS_SERVER")
@@ -103,6 +103,10 @@ fn default_xous_address() -> SocketAddr {
                 .expect("unable to resolve server address")
         })
         .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
+}
+
+pub fn set_process_key(new_key: &[u8; 16]) {
+    PROCESS_KEY.with(|pk| *pk.borrow_mut() = *new_key);
 }
 
 /// Set the network address for this particular thread.
@@ -141,7 +145,7 @@ where
     F: Send + 'static,
     T: Send + 'static,
 {
-    Ok(())
+    Ok(ThreadInit {})
 }
 
 pub fn create_thread_post<F, T>(
@@ -186,14 +190,14 @@ where
     F: FnOnce(),
 {
     // Ensure there is a connection, because after this function returns
-    // we'll make a syscall with CreateProcess(). This should only happen
-    // for PID1.
+    // we'll make a syscall with CreateProcess(). This should only need
+    // to happen for PID1.
     XOUS_SERVER_CONNECTION.with(|xsc| {
         let mut xsc = xsc.borrow_mut();
         if xsc.is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                let pid1_key = [0u8; 16];
+                let pid1_key = PROCESS_KEY.with(|pk| *pk.borrow());
                 match xous_connect_impl(addr, &pid1_key) {
                     Ok(a) => {
                         *xsc = Some(a);
@@ -206,9 +210,7 @@ where
             Ok(())
         }
     })?;
-    Ok(ProcessInit {
-        key: [1; 16],
-    })
+    Ok(ProcessInit { key: PROCESS_KEY.with(|pk| *pk.borrow()) })
 }
 
 pub fn create_process_post<F>(
@@ -219,17 +221,29 @@ pub fn create_process_post<F>(
 where
     F: FnOnce() + Send + 'static,
 {
-    let server_spec = xous_address();
+    let server_address = xous_address();
 
-    Ok(std::thread::Builder::new()
+    let thread_main = std::thread::Builder::new()
         .spawn(move || {
-            set_xous_address(server_spec);
-            xous_connect_impl(server_spec, &init.key).unwrap();
+            set_xous_address(server_address);
+            THREAD_ID.with(|tid| *tid.borrow_mut() = 1);
             PROCESS_ID.with(|p| *p.borrow_mut() = pid);
-            (args.main.take().unwrap())();
+            XOUS_SERVER_CONNECTION.with(|xsc| {
+                let mut xsc = xsc.borrow_mut();
+                match xous_connect_impl(server_address, &init.key) {
+                    Ok(a) => {
+                        *xsc = Some(a);
+                        Ok(())
+                    }
+                    Err(_) => Err(crate::Error::InternalError),
+                }
+            })?;
+
+            crate::create_thread(args.main.take().unwrap())
         })
-        .map(ProcessHandle)
-        .map_err(|_| crate::Error::InternalError)?)
+        .map_err(|_| crate::Error::InternalError)?.join().unwrap().unwrap();
+
+    Ok(ProcessHandle(thread_main.0))
 }
 
 pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
@@ -240,12 +254,14 @@ pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
         .map_err(|_| crate::Error::InternalError)
 }
 
-fn xous_connect_impl(addr: SocketAddr, key: &[u8; 16]) -> core::result::Result<ServerConnection, ()> {
-    // println!("Opening connection to Xous server @ {}...", addr);
+fn xous_connect_impl(
+    addr: SocketAddr,
+    key: &[u8; 16],
+) -> core::result::Result<ServerConnection, ()> {
+    eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
+    assert_ne!(key, &[0u8; 16]);
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
-            // let mut pid = [0u8; 1];
-            // conn.read_exact(&mut pid).unwrap();
             conn.write_all(key).unwrap(); // Send key to authenticate us as PID 1
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
@@ -294,12 +310,7 @@ pub fn _xous_syscall(
                 &call,
                 &mut xsc_asmut.send.lock().unwrap(),
             );
-            _xous_syscall_result(
-                &call,
-                ret,
-                *tid.borrow(),
-                xsc_asmut,
-            );
+            _xous_syscall_result(&call, ret, *tid.borrow(), xsc_asmut);
         })
     });
 }
@@ -363,7 +374,7 @@ fn _xous_syscall_result(
 
         let response = Result::from_args(pkt);
 
-        // println!("   Response: {:?}", response);
+        println!("   Response: {:?}", response);
         if Result::BlockedProcess == response {
             // println!("   Waiting again");
             continue;
@@ -444,10 +455,10 @@ fn _xous_syscall_to(
     call: &crate::SysCall,
     xsc: &mut TcpStream,
 ) {
-    // println!(
-    //     "Making Syscall: {:?}",
-    //     crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
-    // );
+    println!(
+        "Making Syscall: {:?}",
+        crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
+    );
 
     // Send the packet to the server
     let mut pkt = vec![];

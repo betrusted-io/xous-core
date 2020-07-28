@@ -27,3 +27,6 @@ lazy_static = "1.4"
 [features]
 debug-print = []
 report-memory = ["stats_alloc"]
+
+[target.'cfg(any(windows, unix))'.dependencies]
+rand = "0.7"

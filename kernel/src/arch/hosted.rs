@@ -5,7 +5,7 @@ pub mod syscall;
 
 use std::cell::RefCell;
 use std::env;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -24,9 +24,13 @@ enum ThreadMessage {
 }
 
 #[derive(Debug)]
-enum BackchannelMessage {
-    Exit,
+enum NewPidMessage {
     NewPid(PID),
+}
+
+#[derive(Debug)]
+enum ExitMessage {
+    Exit,
 }
 
 thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
@@ -65,8 +69,6 @@ fn handle_connection(
     loop {
         let mut pkt = [0usize; 9];
         let mut incoming_word = [0u8; size_of::<usize>()];
-        conn.set_nonblocking(false)
-            .expect("couldn't enable nonblocking mode");
         conn.set_read_timeout(Some(Duration::from_millis(1000)))
             .unwrap();
         for word in pkt.iter_mut() {
@@ -171,7 +173,8 @@ fn listen_thread(
     listen_addr: SocketAddr,
     chn: Sender<ThreadMessage>,
     mut local_addr_sender: Option<Sender<SocketAddr>>,
-    backchannel: Receiver<BackchannelMessage>,
+    new_pid_channel: Receiver<NewPidMessage>,
+    exit_channel: Receiver<ExitMessage>
 ) {
     let should_exit = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
 
@@ -186,36 +189,16 @@ fn listen_thread(
 
     let mut clients = vec![];
 
-    // let pid1_should_exit = should_exit.clone();
-    // let pid1_thread = spawn(move || {
-    //     let mut client = TcpStream::connect(client_addr).expect("couldn't connect to xous server");
-    //     client.set_read_timeout(Some(Duration::from_millis(100))).expect("couldn't set read timeout duration");
-    //     let mut buffer = [0; size_of::<usize>() * 9];
-    //     // println!("KERNEL(1): Started PID1 idle thread");
-    //     loop {
-    //         if pid1_should_exit.load(core::sync::atomic::Ordering::Relaxed) {
-    //             return;
-    //         }
-    //         match client.read_exact(&mut buffer) {
-    //             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-    //                 continue;
-    //             }
-    //             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return,
-    //             Err(e) => panic!("KERNEL(1): Unable to read buffer: {}", e),
-    //             Ok(()) => (), //println!("KERNEL(1): Read {} bytes", x),
-    //         }
-    //     }
-    // });
-
     fn accept_new_connection(
         mut conn: TcpStream,
         chn: &Sender<ThreadMessage>,
-        backchannel: &Receiver<BackchannelMessage>,
+        new_pid_channel: &Receiver<NewPidMessage>,
         clients: &mut Vec<(std::thread::JoinHandle<()>, TcpStream)>,
         should_exit: &std::sync::Arc<core::sync::atomic::AtomicBool>,
     ) -> bool {
         let thr_chn = chn.clone();
 
+        // Read the challenge access key from the client
         let mut access_key = [0u8; 16];
         conn.read_exact(&mut access_key).unwrap();
 
@@ -226,13 +209,8 @@ fn listen_thread(
             access_key,
         ))
         .expect("couldn't request a new PID");
-        let new_pid = match backchannel
-            .recv()
-            .expect("couldn't receive message from main thread")
-        {
-            BackchannelMessage::NewPid(p) => p,
-            BackchannelMessage::Exit => return true,
-        };
+        let NewPidMessage::NewPid(new_pid) = new_pid_channel.recv()
+            .expect("couldn't receive message from main thread");
         // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
         let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
         let should_exit = should_exit.clone();
@@ -263,10 +241,11 @@ fn listen_thread(
     // Use `listener` in a nonblocking setup so that we can exit when doing tests
     enum ClientMessage {
         NewConnection(TcpStream),
-        // BackChannel(BackchannelMessage),
+        Exit,
     };
     let (sender, receiver) = channel();
     let tcp_sender = sender.clone();
+    let exit_sender = sender;
     spawn(move || loop {
         match listener.accept() {
             Ok((conn, _addr)) => {
@@ -278,31 +257,30 @@ fn listen_thread(
             }
         }
     });
-    // spawn(move || loop {
-    //     match backchannel.recv() {
-    //         Err(e) => panic!(
-    //             "KERNEL: got error when trying to receive quit timeout: {:?} ({})",
-    //             e, e
-    //         ),
-    //         Ok(msg) => sender.send(ClientMessage::BackChannel(msg)).unwrap(),
-    //     }
-    // });
+    spawn(move || loop {
+        match exit_channel.recv() {
+            Ok(ExitMessage::Exit) => {
+                exit_sender.send(ClientMessage::Exit).unwrap();
+            }
+            Err(e) => {
+                println!("error receiving exit command: {}", e);
+                return;
+            }
+        }
+    });
 
     for msg in receiver {
         match msg {
             ClientMessage::NewConnection(conn) => {
-                if accept_new_connection(conn, &chn, &backchannel, &mut clients, &should_exit) {
+                if accept_new_connection(conn, &chn, &new_pid_channel, &mut clients, &should_exit) {
                     exit_server(should_exit, clients);
                     return;
                 }
+            },
+            ClientMessage::Exit => {
+                exit_server(should_exit, clients);
+                return;
             }
-            // ClientMessage::BackChannel(BackchannelMessage::NewPid(x)) => {
-            //     panic!("got unexpected message from main thread: new pid {}", x)
-            // }
-            // ClientMessage::BackChannel(BackchannelMessage::Exit) => {
-            //     exit_server(should_exit, clients);
-            //     return;
-            // }
         }
     }
 }
@@ -313,10 +291,11 @@ fn listen_thread(
 pub fn idle() -> bool {
     // Start listening.
     let (sender, receiver) = channel();
-    let (backchannel_sender, backchannel_receiver) = channel();
+    let (new_pid_sender, new_pid_receiver) = channel();
+    let (exit_sender, exit_receiver) = channel();
 
     // Allocate PID1 with the key we were passed.
-    let pid1_key = PID1_KEY.with(|p1k| p1k.borrow().clone());
+    let pid1_key = PID1_KEY.with(|p1k| *p1k.borrow());
     let pid1_init = ProcessInit { key: pid1_key };
     let new_pid = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
     assert_eq!(new_pid.get(), 1);
@@ -332,7 +311,7 @@ pub fn idle() -> bool {
 
     let listen_thread_handle = SEND_ADDR.with(|sa| {
         let sa = sa.borrow_mut().take();
-        spawn(move || listen_thread(listen_addr, sender, sa, backchannel_receiver))
+        spawn(move || listen_thread(listen_addr, sender, sa, new_pid_receiver, exit_receiver))
     });
 
     while let Ok(msg) = receiver.recv() {
@@ -340,27 +319,16 @@ pub fn idle() -> bool {
             ThreadMessage::NewConnection(conn, access_key) => {
                 // The new process should already have a PID registered. Convert its access key
                 // into a PID, and register the connection with the server.
-                println!("KERNEL: Attempting to look up access key {:?}", access_key);
                 let new_pid =
                     crate::arch::process::register_connection_for_key(conn, access_key).unwrap();
-                println!(
-                    "KERNEL: Access key {:?} mapped to PID {}",
-                    access_key, new_pid
-                );
-
-                // // On the initial connection, set the parent PID to 1. In the future
-                // // there may be some sort of security token check here.
-                // crate::arch::process::set_current_pid(PID::new(1).unwrap());
-
-                // // Spawn a new process inside the kernel. This will assign us a PID.
-                // let new_pid = SystemServices::with_mut(|ss| {
-                //     ss.create_process(process::ProcessInit::new(conn.try_clone().unwrap()), ())
-                // })
-                // .unwrap();
+                // println!(
+                //     "KERNEL: Access key {:?} mapped to PID {}",
+                //     access_key, new_pid
+                // );
 
                 // Inform the backchannel of the new process ID.
-                backchannel_sender
-                    .send(BackchannelMessage::NewPid(new_pid))
+                new_pid_sender
+                    .send(NewPidMessage::NewPid(new_pid))
                     .expect("couldn't send new pid to new connection");
 
                 // conn.write_all(&new_pid.get().to_le_bytes())
@@ -380,13 +348,12 @@ pub fn idle() -> bool {
                 // because we won't be able to send a response.
                 let is_terminate = call == SysCall::TerminateProcess;
                 let is_shutdown = call == SysCall::Shutdown;
-                let is_shutdown = call == SysCall::Shutdown;
 
                 // For a "Shutdown" command, send the response before we issue the shutdown.
                 // This is because the "process" will be "terminated" (the network socket will be closed),
                 // and we won't be able to send the response after we're done.
                 if is_shutdown {
-                    // println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
+                    println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
                     let mut process = Process::current();
                     let mut response_vec = Vec::new();
                     response_vec.extend_from_slice(&thread_id.to_le_bytes());
@@ -395,10 +362,10 @@ pub fn idle() -> bool {
                     }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        // println!("Unable to send response to process: {:?} -- terminating", _e);
+                        println!("Unable to send response to process: {:?} -- terminating", _e);
                         crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
                     });
-                    // println!("KERNEL: Done sending");
+                    println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
@@ -436,8 +403,8 @@ pub fn idle() -> bool {
                 }
 
                 if is_shutdown {
-                    backchannel_sender
-                        .send(BackchannelMessage::Exit)
+                    exit_sender
+                        .send(ExitMessage::Exit)
                         .expect("couldn't send shutdown signal");
                     break;
                 }
@@ -445,11 +412,11 @@ pub fn idle() -> bool {
         }
     }
 
-    // println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
+    println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
     listen_thread_handle
         .join()
         .expect("error waiting for listen thread to return");
 
-    // println!("Thank you for using Xous!");
+    println!("Thank you for using Xous!");
     false
 }

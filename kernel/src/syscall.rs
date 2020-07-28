@@ -509,7 +509,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
             ss.create_process(process_init)
-                .map(|new_pid| xous::Result::ProcessID(new_pid))
+                .map(xous::Result::ProcessID)
         }),
         SysCall::CreateServer(name) => {
             SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous::Result::ServerID))

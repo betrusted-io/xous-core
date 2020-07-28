@@ -819,8 +819,8 @@ where
     F: Send + 'static,
     T: Send + 'static,
 {
-    let ctx_info = crate::arch::create_thread_pre(&f)?;
-    rsyscall(SysCall::CreateThread(ctx_info)).and_then(|result| {
+    let thread_info = crate::arch::create_thread_pre(&f)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
         if let Result::ThreadID(thread_id) = result {
             crate::arch::create_thread_post(f, thread_id)
         } else {
