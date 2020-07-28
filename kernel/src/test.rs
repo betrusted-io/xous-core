@@ -486,7 +486,7 @@ fn multiple_contexts() {
         };
 
         let mut server_threads = vec![];
-        for _ in 0..30 {
+        for _ in 0..crate::arch::process::MAX_THREAD {
             server_threads.push(
                 xous::create_thread(move || {
                     let msg = xous::receive_message(server).expect("couldn't receive message");

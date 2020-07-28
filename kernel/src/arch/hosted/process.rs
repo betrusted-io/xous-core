@@ -28,7 +28,7 @@ struct ProcessImpl {
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
     /// receive messages.
-    threads: [Thread; MAX_THREAD],
+    threads: [Thread; MAX_THREAD + 1],
 
     /// The currently-active thread for this process
     current_thread: TID,
@@ -151,9 +151,9 @@ impl Process {
 
     pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {
         // println!(
-        //     "KERNEL({}): Setting up context {} @ {:?}",
+        //     "KERNEL({}): Setting up thread {} @ {:?}",
         //     self.pid,
-        //     context,
+        //     thread,
         //     std::thread::current()
         // );
         assert!(thread > 0);
@@ -206,7 +206,7 @@ impl Process {
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             for (index, thread) in process.threads.iter().enumerate() {
-                if index != 0 && !thread.allocated {
+                if !thread.allocated {
                     return Some(index as TID + 1);
                 }
             }
@@ -269,7 +269,7 @@ impl Process {
                 key: init_data.key,
                 memory_to_return: None,
                 current_thread: INITIAL_TID,
-                threads: [Thread { allocated: false }; MAX_THREAD],
+                threads: [Thread { allocated: false }; MAX_THREAD + 1],
             };
 
             if pid_idx >= process_table.table.len() {
