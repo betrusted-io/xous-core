@@ -174,7 +174,7 @@ fn listen_thread(
     chn: Sender<ThreadMessage>,
     mut local_addr_sender: Option<Sender<SocketAddr>>,
     new_pid_channel: Receiver<NewPidMessage>,
-    exit_channel: Receiver<ExitMessage>
+    exit_channel: Receiver<ExitMessage>,
 ) {
     let should_exit = std::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
 
@@ -209,7 +209,8 @@ fn listen_thread(
             access_key,
         ))
         .expect("couldn't request a new PID");
-        let NewPidMessage::NewPid(new_pid) = new_pid_channel.recv()
+        let NewPidMessage::NewPid(new_pid) = new_pid_channel
+            .recv()
             .expect("couldn't receive message from main thread");
         // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
         let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
@@ -257,15 +258,12 @@ fn listen_thread(
             }
         }
     });
-    spawn(move || loop {
-        match exit_channel.recv() {
-            Ok(ExitMessage::Exit) => {
-                exit_sender.send(ClientMessage::Exit).unwrap();
-            }
-            Err(e) => {
-                println!("error receiving exit command: {}", e);
-                return;
-            }
+    spawn(move || match exit_channel.recv() {
+        Ok(ExitMessage::Exit) => {
+            exit_sender.send(ClientMessage::Exit).unwrap()
+        }
+        Err(std::sync::mpsc::RecvError) => {
+            println!("error receiving exit command")
         }
     });
 
@@ -276,7 +274,7 @@ fn listen_thread(
                     exit_server(should_exit, clients);
                     return;
                 }
-            },
+            }
             ClientMessage::Exit => {
                 exit_server(should_exit, clients);
                 return;
@@ -353,7 +351,7 @@ pub fn idle() -> bool {
                 // This is because the "process" will be "terminated" (the network socket will be closed),
                 // and we won't be able to send the response after we're done.
                 if is_shutdown {
-                    println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
+                    // println!("KERNEL: Detected shutdown -- sending final \"Ok\" to the client");
                     let mut process = Process::current();
                     let mut response_vec = Vec::new();
                     response_vec.extend_from_slice(&thread_id.to_le_bytes());
@@ -362,10 +360,13 @@ pub fn idle() -> bool {
                     }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        println!("Unable to send response to process: {:?} -- terminating", _e);
+                        println!(
+                            "Unable to send response to process: {:?} -- terminating",
+                            _e
+                        );
                         crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
                     });
-                    println!("KERNEL: Done sending");
+                    // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
@@ -412,11 +413,11 @@ pub fn idle() -> bool {
         }
     }
 
-    println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
+    // println!("Exiting Xous because the listen thread channel has closed. Waiting for thread to finish...");
     listen_thread_handle
         .join()
         .expect("error waiting for listen thread to return");
 
-    println!("Thank you for using Xous!");
+    // println!("Thank you for using Xous!");
     false
 }

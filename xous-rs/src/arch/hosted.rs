@@ -258,7 +258,7 @@ fn xous_connect_impl(
     addr: SocketAddr,
     key: &[u8; 16],
 ) -> core::result::Result<ServerConnection, ()> {
-    eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
+    // eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
     assert_ne!(key, &[0u8; 16]);
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
@@ -374,7 +374,7 @@ fn _xous_syscall_result(
 
         let response = Result::from_args(pkt);
 
-        println!("   Response: {:?}", response);
+        // println!("   Response: {:?}", response);
         if Result::BlockedProcess == response {
             // println!("   Waiting again");
             continue;
@@ -455,10 +455,10 @@ fn _xous_syscall_to(
     call: &crate::SysCall,
     xsc: &mut TcpStream,
 ) {
-    println!(
-        "Making Syscall: {:?}",
-        crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
-    );
+    // println!(
+    //     "Making Syscall: {:?}",
+    //     crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
+    // );
 
     // Send the packet to the server
     let mut pkt = vec![];

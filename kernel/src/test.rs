@@ -25,7 +25,7 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
         "XOUS_SERVER environment variable must be unset to run tests"
     );
 
-    use rand::{Rng, thread_rng};
+    use rand::{thread_rng, Rng};
     let mut pid1_key = [0u8; 16];
     let mut rng = thread_rng();
     for b in pid1_key.iter_mut() {
@@ -97,10 +97,9 @@ fn shutdown() {
 
     // Send a raw `Shutdown` message to terminate the kernel.
     xous::create_process(xous::ProcessArgs::new(|| {
-        println!("Running in new process...");
-        let call_result = rsyscall(SysCall::Shutdown);
-        println!("Call result: {:?}", call_result);
-    })).unwrap();
+        rsyscall(SysCall::Shutdown).unwrap();
+    }))
+    .unwrap();
 
     // Wait for the kernel to exit.
     main_thread.join().expect("couldn't join main thread");
