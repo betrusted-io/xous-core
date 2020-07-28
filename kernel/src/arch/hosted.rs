@@ -31,7 +31,7 @@ enum ExitMessage {
     Exit,
 }
 
-thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)));
+thread_local!(static NETWORK_LISTEN_ADDRESS: RefCell<SocketAddr> = RefCell::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
 thread_local!(static SEND_ADDR: RefCell<Option<Sender<SocketAddr>>> = RefCell::new(None));
 thread_local!(static PID1_KEY: RefCell<[u8; 16]> = RefCell::new([0u8; 16]));
 
@@ -50,7 +50,6 @@ pub fn set_listen_address(new_address: &SocketAddr) {
 }
 
 /// Set the network address for this particular thread.
-#[cfg(test)]
 pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
     SEND_ADDR.with(|sa| {
         *sa.borrow_mut() = Some(send_addr);
@@ -367,7 +366,7 @@ fn listen_thread(
 /// thread that handles network communications, and this function never returns.
 pub fn idle() -> bool {
     // Start listening.
-    let (sender, receiver) = channel();
+    let (sender, message_receiver) = channel();
     let (new_pid_sender, new_pid_receiver) = channel();
     let (exit_sender, exit_receiver) = channel();
 
@@ -386,6 +385,13 @@ pub fn idle() -> bool {
         })
         .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
+    #[cfg(not(test))]
+    let address_receiver = {
+        let (sender, receiver) = channel();
+        set_send_addr(sender);
+        receiver
+    };
+
     let listen_thread_handle = SEND_ADDR.with(|sa| {
         let sa = sa.borrow_mut().take();
         std::thread::Builder::new()
@@ -394,7 +400,19 @@ pub fn idle() -> bool {
             .expect("couldn't spawn listen thread")
     });
 
-    while let Ok(msg) = receiver.recv() {
+    #[cfg(not(test))]
+    {
+        let address = address_receiver.recv().unwrap();
+        println!("KERNEL: Xous server listening on {}", address);
+        println!("KERNEL: Starting initial processes:");
+        let mut args = std::env::args();
+        args.next();
+        for arg in args {
+            println!("    {}", arg);
+        }
+    }
+
+    while let Ok(msg) = message_receiver.recv() {
         match msg {
             ThreadMessage::NewConnection(conn, access_key) => {
                 // The new process should already have a PID registered. Convert its access key
