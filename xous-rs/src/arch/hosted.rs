@@ -19,14 +19,18 @@ pub struct ProcessInit {
 
 pub struct ProcessArgs<F: FnOnce()> {
     main: Option<F>,
+    name: String,
 }
 
 impl<F> ProcessArgs<F>
 where
     F: FnOnce(),
 {
-    pub fn new(main: F) -> ProcessArgs<F> {
-        ProcessArgs { main: Some(main) }
+    pub fn new(name: &str, main: F) -> ProcessArgs<F> {
+        ProcessArgs {
+            main: Some(main),
+            name: name.to_owned(),
+        }
     }
 }
 
@@ -125,20 +129,6 @@ fn xous_address() -> SocketAddr {
         .unwrap_or_else(default_xous_address)
 }
 
-// pub fn xous_connect() {
-//     XOUS_SERVER_CONNECTION.with(|xsc| {
-//         if xsc.borrow().is_none() {
-//             NETWORK_CONNECT_ADDRESS.with(|nca| {
-//                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
-//                 match xous_connect_impl(addr) {
-//                     Ok(a) => *xsc.borrow_mut() = Some(a),
-//                     Err(_) => panic!("couldn't connect to server"),
-//                 }
-//             });
-//         }
-//     })
-// }
-
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
 where
     F: FnOnce() -> T,
@@ -210,7 +200,9 @@ where
             Ok(())
         }
     })?;
-    Ok(ProcessInit { key: PROCESS_KEY.with(|pk| *pk.borrow()) })
+    Ok(ProcessInit {
+        key: PROCESS_KEY.with(|pk| *pk.borrow()),
+    })
 }
 
 pub fn create_process_post<F>(
@@ -223,7 +215,9 @@ where
 {
     let server_address = xous_address();
 
+    let f = args.main.take().unwrap();
     let thread_main = std::thread::Builder::new()
+        .name(args.name)
         .spawn(move || {
             set_xous_address(server_address);
             THREAD_ID.with(|tid| *tid.borrow_mut() = 1);
@@ -239,19 +233,21 @@ where
                 }
             })?;
 
-            crate::create_thread(args.main.take().unwrap())
+            crate::create_thread(f)
         })
-        .map_err(|_| crate::Error::InternalError)?.join().unwrap().unwrap();
+        .map_err(|_| crate::Error::InternalError)?
+        .join()
+        .unwrap()
+        .unwrap();
 
     Ok(ProcessHandle(thread_main.0))
 }
 
 pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
-    joiner
-        .0
-        .join()
-        .map(|_| Result::Ok)
-        .map_err(|_| crate::Error::InternalError)
+    joiner.0.join().map(|_| Result::Ok).map_err(|_x| {
+        // panic!("wait error: {:?}", x);
+        crate::Error::InternalError
+    })
 }
 
 fn xous_connect_impl(
@@ -351,11 +347,22 @@ fn _xous_syscall_result(
         let mut stream = match server_connection.recv.try_lock() {
             Ok(lk) => lk,
             Err(std::sync::TryLockError::WouldBlock) => {
-                std::thread::sleep(std::time::Duration::from_millis(1));
+                std::thread::sleep(std::time::Duration::from_millis(10));
                 continue;
             }
             Err(e) => panic!("Receive error: {}", e),
         };
+
+        // One more check, in case something came in while we waited for the receiver above.
+        {
+            let mut mailbox = server_connection.mailbox.lock().unwrap();
+            if let Some(entry) = mailbox.remove(&thread_id) {
+                if Result::BlockedProcess != entry {
+                    *ret = entry;
+                    return;
+                }
+            }
+        }
 
         // This thread_id doesn't exist in the mailbox, so read additional data.
         let mut pkt = [0usize; 8];

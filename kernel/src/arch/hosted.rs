@@ -4,14 +4,12 @@ pub mod process;
 pub mod syscall;
 
 use std::cell::RefCell;
+use std::convert::TryInto;
 use std::env;
 use std::io::Read;
-use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread::spawn;
 use std::thread_local;
-use std::time::Duration;
 
 use crate::arch::process::Process;
 use crate::services::SystemServices;
@@ -61,112 +59,164 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 
 /// Each client gets its own connection and its own thread, which is handled here.
 fn handle_connection(
-    mut conn: TcpStream,
+    conn: TcpStream,
     pid: PID,
     chn: Sender<ThreadMessage>,
     should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
 ) {
-    loop {
-        let mut pkt = [0usize; 9];
-        let mut incoming_word = [0u8; size_of::<usize>()];
-        conn.set_read_timeout(Some(Duration::from_millis(1000)))
-            .unwrap();
-        for word in pkt.iter_mut() {
-            loop {
-                if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
-                    chn.send(ThreadMessage::SysCall(
-                        pid,
-                        1,
-                        xous::SysCall::TerminateProcess,
-                    ))
-                    .unwrap();
-                }
-                if let Err(e) = conn.read_exact(&mut incoming_word) {
-                    // If the connection has gone away, send a `TerminateProcess` message to the main
-                    // and then exit this thread.
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::TimedOut
-                    {
-                        continue;
-                    } else {
-                        // println!(
-                        //     "KERNEL({}): Client disconnected: {} ({:?}). Shutting down virtual process.",
-                        //     pid, e, e
-                        // );
-                        chn.send(ThreadMessage::SysCall(
-                            pid,
-                            1,
-                            xous::SysCall::TerminateProcess,
-                        ))
-                        .unwrap();
-                        return;
-                    }
-                }
-                break;
-            }
-            *word = usize::from_le_bytes(incoming_word);
-        }
+    enum ServerMessage {
+        Exit,
+        ServerPacket([usize; 9]),
+        ServerPacketWithData([usize; 9], Vec<u8>),
+    }
 
-        let thread_id = pkt[0];
-        let call = xous::SysCall::from_args(
-            pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
-        );
-
-        match call {
-            Err(e) => eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e),
-            Ok(mut call) => {
-                if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
-                    match envelope {
-                        xous::Message::MutableBorrow(msg)
-                        | xous::Message::Borrow(msg)
-                        | xous::Message::Move(msg) => {
-                            let mut tmp_data = vec![0; msg.buf.len()];
-                            conn.read_exact(&mut tmp_data)
-                                .map_err(|_e| {
-                                    // println!("KERNEL({}): Read Error {}", pid, _e);
-                                    chn.send(ThreadMessage::SysCall(
-                                        pid,
-                                        thread_id,
-                                        xous::SysCall::TerminateProcess,
-                                    ))
-                                    .unwrap();
-                                })
-                                .unwrap();
-                            // Update the address pointer. This will get turned back into a
-                            // usable pointer by casting it back into a &[T] on the other
-                            // side. This is just a pointer to the start of data
-                            // as well as the index into the data it points at. The lengths
-                            // should still be equal once we reconstitute the data in the
-                            // other process.
-                            // ::debug_here::debug_here!();
-                            let sliced_data = tmp_data.into_boxed_slice();
-                            assert_eq!(
-                                sliced_data.len(),
-                                msg.buf.len(),
-                                "deconstructed data {} != message buf length {}",
-                                sliced_data.len(),
-                                msg.buf.len()
-                            );
-                            msg.buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
-                                as *mut usize
-                                as usize)
-                            {
-                                Some(a) => a,
-                                _ => unreachable!(),
-                            };
-                        }
-                        xous::Message::Scalar(_) => (),
-                    }
-                }
+    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>) {
+        loop {
+            let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
+            if let Err(_e) = conn.read_exact(&mut raw_data) {
                 // println!(
-                //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
-                //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
+                //     "KERNEL(?): Client disconnected: {} ({:?}). Shutting down virtual process.",
+                //     _e, _e
                 // );
-                chn.send(ThreadMessage::SysCall(pid, thread_id, call))
-                    .expect("couldn't make syscall");
+                sender.send(ServerMessage::Exit).ok();
+                return;
+            }
+
+            let mut packet_data = [0usize; 9];
+            for (bytes, word) in raw_data
+                .chunks_exact(std::mem::size_of::<usize>())
+                .zip(packet_data.iter_mut())
+            {
+                *word = usize::from_le_bytes(bytes.try_into().unwrap());
+            }
+
+            if packet_data[1] == 16
+                && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
+            {
+                let mut v = vec![0; packet_data[6]];
+                if conn.read_exact(&mut v).is_err() {
+                    sender.send(ServerMessage::Exit).ok();
+                    return;
+                }
+                sender
+                    .send(ServerMessage::ServerPacketWithData(packet_data, v))
+                    .unwrap();
+            } else {
+                sender
+                    .send(ServerMessage::ServerPacket(packet_data))
+                    .unwrap();
             }
         }
     }
+
+    let (sender, receiver) = channel();
+    let conn_sender = sender.clone();
+    std::thread::Builder::new()
+        .name(format!("PID {}: client connection thread", pid))
+        .spawn(move || {
+            conn_thread(conn, conn_sender);
+        })
+        .unwrap();
+
+    std::thread::Builder::new()
+        .name(format!("PID {}: client should_exit thread", pid))
+        .spawn(move || loop {
+            if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
+                // eprintln!("KERNEL: should_exit == 1");
+                sender.send(ServerMessage::Exit).ok();
+                return;
+            }
+            std::thread::park_timeout(std::time::Duration::from_secs(1));
+        })
+        .unwrap();
+
+    for msg in receiver {
+        match msg {
+            ServerMessage::Exit => break,
+            ServerMessage::ServerPacket(pkt) => {
+                let thread_id = pkt[0];
+                let call = xous::SysCall::from_args(
+                    pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
+                );
+                match call {
+                    Err(e) => {
+                        eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
+                        eprintln!(
+                            "Raw packet: {:08x} {} {} {} {} {} {} {}",
+                            pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
+                        );
+                    }
+                    Ok(call) => chn
+                        .send(ThreadMessage::SysCall(pid, thread_id, call))
+                        .expect("couldn't make syscall"),
+                }
+            }
+            ServerMessage::ServerPacketWithData(pkt, data) => {
+                let thread_id = pkt[0];
+                let call = xous::SysCall::from_args(
+                    pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
+                );
+                match call {
+                    Err(e) => {
+                        eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
+                        eprintln!(
+                            "Raw packet: {:08x} {} {} {} {} {} {} {}",
+                            pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
+                        );
+                    }
+                    Ok(mut call) => {
+                        // eprintln!(
+                        //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
+                        //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
+                        // );
+                        if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
+                            match envelope {
+                                xous::Message::MutableBorrow(msg)
+                                | xous::Message::Borrow(msg)
+                                | xous::Message::Move(msg) => {
+                                    // Update the address pointer. This will get turned back into a
+                                    // usable pointer by casting it back into a &[T] on the other
+                                    // side. This is just a pointer to the start of data
+                                    // as well as the index into the data it points at. The lengths
+                                    // should still be equal once we reconstitute the data in the
+                                    // other process.
+                                    // ::debug_here::debug_here!();
+                                    let sliced_data = data.into_boxed_slice();
+                                    assert_eq!(
+                                        sliced_data.len(),
+                                        msg.buf.len(),
+                                        "deconstructed data {} != message buf length {}",
+                                        sliced_data.len(),
+                                        msg.buf.len()
+                                    );
+                                    msg.buf.addr =
+                                        match MemoryAddress::new(Box::into_raw(sliced_data)
+                                            as *mut usize
+                                            as usize)
+                                        {
+                                            Some(a) => a,
+                                            _ => unreachable!(),
+                                        };
+                                }
+                                xous::Message::Scalar(_) => (),
+                            }
+                        } else {
+                            panic!("unsupported message type");
+                        }
+                        chn.send(ThreadMessage::SysCall(pid, thread_id, call))
+                            .expect("couldn't make syscall");
+                    }
+                }
+            }
+        }
+    }
+    // eprintln!("KERNEL({}): Finished the thread so sending TerminateProcess", pid);
+    chn.send(ThreadMessage::SysCall(
+        pid,
+        1,
+        xous::SysCall::TerminateProcess,
+    ))
+    .unwrap();
 }
 
 fn listen_thread(
@@ -215,7 +265,10 @@ fn listen_thread(
         // println!("KERNEL({}): New client connected from {}", new_pid, _addr);
         let conn_copy = conn.try_clone().expect("couldn't duplicate connection");
         let should_exit = should_exit.clone();
-        let jh = spawn(move || handle_connection(conn, new_pid, thr_chn, should_exit));
+        let jh = std::thread::Builder::new()
+            .name(format!("kernel PID {} listener", new_pid))
+            .spawn(move || handle_connection(conn, new_pid, thr_chn, should_exit))
+            .expect("couldn't spawn listen thread");
         clients.push((jh, conn_copy));
         false
     }
@@ -233,12 +286,6 @@ fn listen_thread(
         }
     }
 
-    // let pid1 = listener.accept().unwrap();
-    // if accept_new_connection(pid1.0, &chn, &backchannel, &mut clients, &should_exit) {
-    //     exit_server(should_exit, clients);
-    //     return;
-    // }
-
     // Use `listener` in a nonblocking setup so that we can exit when doing tests
     enum ClientMessage {
         NewConnection(TcpStream),
@@ -247,44 +294,72 @@ fn listen_thread(
     let (sender, receiver) = channel();
     let tcp_sender = sender.clone();
     let exit_sender = sender;
-    spawn(move || loop {
-        match listener.accept() {
-            Ok((conn, _addr)) => {
-                tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
+
+    let (shutdown_listener, shutdown_listener_receiver) = channel();
+
+    // `listener.accept()` has no way to break, so we must put it in nonblocking mode
+    listener.set_nonblocking(true).unwrap();
+
+    std::thread::Builder::new()
+        .name("kernel accept thread".to_owned())
+        .spawn(move || loop {
+            match listener.accept() {
+                Ok((conn, _addr)) => {
+                    conn.set_nonblocking(false).unwrap();
+                    tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    match shutdown_listener_receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                        Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                            return;
+                        },
+                    }
+                }
+                Err(e) => {
+                    // Windows generates this error -- WSACancelBlockingCall -- when a
+                    // connection is shut down while `accept()` is running. This should
+                    // only happen when the system is shutting down, so ignore it.
+                    if cfg!(windows) {
+                        if let Some(10004) = e.raw_os_error() {
+                            return;
+                        }
+                    }
+                    eprintln!(
+                        "error accepting connections: {} ({:?}) ({:?})",
+                        e,
+                        e,
+                        e.kind()
+                    );
+                    return;
+                }
             }
-            Err(e) => {
-                eprintln!("error accepting connections: {} ({:?})", e, e);
-                return;
-            }
-        }
-    });
+        })
+        .unwrap();
 
     // Spawn a thread to listen for the `exit` command, and relay that
     // to the main thread. This prevents us from needing to poll, since
     // all messages are coalesced into a single channel.
-    spawn(move || match exit_channel.recv() {
-        Ok(ExitMessage::Exit) => {
-            exit_sender.send(ClientMessage::Exit).unwrap()
-        }
-        Err(std::sync::mpsc::RecvError) => {
-            eprintln!("error receiving exit command")
-        }
-    });
+    std::thread::Builder::new()
+        .name("kernel exit listener".to_owned())
+        .spawn(move || match exit_channel.recv() {
+            Ok(ExitMessage::Exit) => exit_sender.send(ClientMessage::Exit).unwrap(),
+            Err(std::sync::mpsc::RecvError) => eprintln!("error receiving exit command"),
+        })
+        .unwrap();
 
     for msg in receiver {
         match msg {
             ClientMessage::NewConnection(conn) => {
                 if accept_new_connection(conn, &chn, &new_pid_channel, &mut clients, &should_exit) {
-                    exit_server(should_exit, clients);
-                    return;
+                    break;
                 }
             }
-            ClientMessage::Exit => {
-                exit_server(should_exit, clients);
-                return;
-            }
+            ClientMessage::Exit => break,
         }
     }
+    shutdown_listener.send(()).unwrap();
+    exit_server(should_exit, clients);
 }
 
 /// The idle function is run when there are no directly-runnable processes
@@ -313,7 +388,10 @@ pub fn idle() -> bool {
 
     let listen_thread_handle = SEND_ADDR.with(|sa| {
         let sa = sa.borrow_mut().take();
-        spawn(move || listen_thread(listen_addr, sender, sa, new_pid_receiver, exit_receiver))
+        std::thread::Builder::new()
+            .name("kernel network listener".to_owned())
+            .spawn(move || listen_thread(listen_addr, sender, sa, new_pid_receiver, exit_receiver))
+            .expect("couldn't spawn listen thread")
     });
 
     while let Ok(msg) = receiver.recv() {
@@ -396,10 +474,10 @@ pub fn idle() -> bool {
                     }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
-                        // println!(
-                        //     "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                        //     pid, _e
-                        // );
+                        eprintln!(
+                            "KERNEL({}): Unable to send response to process: {:?} -- terminating",
+                            pid, _e
+                        );
                         crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
