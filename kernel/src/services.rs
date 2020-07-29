@@ -526,7 +526,7 @@ impl SystemServices {
                 // ensure it's the INITIAL_TID. Otherwise it's not valid.
                 if let Some(ctx) = tid {
                     if ctx != INITIAL_TID {
-                        return Err(xous::Error::InvalidContext);
+                        return Err(xous::Error::InvalidThread);
                     }
                 }
 
@@ -557,7 +557,7 @@ impl SystemServices {
                     Some(ctx) => {
                         // Ensure the specified context is ready to run
                         if x & (1 << ctx) == 0 {
-                            return Err(xous::Error::InvalidContext);
+                            return Err(xous::Error::InvalidThread);
                         }
                         ctx
                     }
@@ -601,7 +601,7 @@ impl SystemServices {
                         if ready_threads & (1 << ctx) == 0
                         /*&& ctx != current_thread*/
                         {
-                            return Err(xous::Error::InvalidContext);
+                            return Err(xous::Error::InvalidThread);
                         }
                         ctx
                     }

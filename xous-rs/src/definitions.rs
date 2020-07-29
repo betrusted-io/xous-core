@@ -1,3 +1,4 @@
+use core::convert::TryInto;
 use core::num::{NonZeroU8, NonZeroUsize};
 
 pub type MemoryAddress = NonZeroUsize;
@@ -10,7 +11,45 @@ pub type MessageSender = usize;
 pub type Connection = usize;
 
 /// Server ID
-pub type SID = (u32, u32, u32, u32);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct SID((u32, u32, u32, u32));
+impl SID {
+    pub fn from_bytes(b: &[u8]) -> Option<SID> {
+        if b.len() > 16 {
+            None
+        } else {
+            let mut sid = (0, 0, 0, 0);
+            let mut byte_iter = b.chunks_exact(4);
+            if let Some(val) = byte_iter.next() {
+                sid.0 = u32::from_le_bytes(val.try_into().ok()?);
+            }
+            if let Some(val) = byte_iter.next() {
+                sid.1 = u32::from_le_bytes(val.try_into().ok()?);
+            }
+            if let Some(val) = byte_iter.next() {
+                sid.2 = u32::from_le_bytes(val.try_into().ok()?);
+            }
+            if let Some(val) = byte_iter.next() {
+                sid.3 = u32::from_le_bytes(val.try_into().ok()?);
+            }
+            Some(SID(sid))
+        }
+    }
+    pub fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID {
+        SID((a0, a1, a2, a3))
+    }
+    pub fn to_u32(&self) -> (u32, u32, u32, u32) {
+        ((self.0).0, (self.0).1, (self.0).2, (self.0).3)
+    }
+}
+
+impl std::str::FromStr for SID {
+    type Err = ();
+
+    fn from_str(s: &str) -> core::result::Result<SID, ()> {
+        Self::from_bytes(s.as_bytes()).ok_or(())
+    }
+}
 
 /// Connection ID
 pub type CID = usize;
@@ -81,7 +120,7 @@ pub enum Error {
     UnhandledSyscall = 17,
     InvalidSyscall = 18,
     ShareViolation = 19,
-    InvalidContext = 20,
+    InvalidThread = 20,
     InvalidPID = 21,
     UnknownError = 22,
 }
@@ -110,7 +149,7 @@ impl Error {
             17 => UnhandledSyscall,
             18 => InvalidSyscall,
             19 => ShareViolation,
-            20 => InvalidContext,
+            20 => InvalidThread,
             21 => InvalidPID,
             _ => UnknownError,
         }
@@ -138,7 +177,7 @@ impl Error {
             UnhandledSyscall => 17,
             InvalidSyscall => 18,
             ShareViolation => 19,
-            InvalidContext => 20,
+            InvalidThread => 20,
             InvalidPID => 21,
             UnknownError => usize::MAX,
         }
@@ -397,7 +436,10 @@ impl Result {
                 [4, *count, *pid0, *ctx0, *pid1, *ctx1, *pid2, *ctx2]
             }
             Result::ResumeProcess => [5, 0, 0, 0, 0, 0, 0, 0],
-            Result::ServerID(sid) => [6, sid.0 as _, sid.1 as _, sid.2 as _, sid.3 as _, 0, 0, 0],
+            Result::ServerID(sid) => {
+                let s = sid.to_u32();
+                [6, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
+            }
             Result::ConnectionID(cid) => [7, *cid, 0, 0, 0, 0, 0, 0],
             Result::Message(me) => {
                 let me_enc = me.to_usize();
@@ -437,7 +479,12 @@ impl Result {
             }
             4 => Result::ReadyThreads(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
             5 => Result::ResumeProcess,
-            6 => Result::ServerID((src[1] as _, src[2] as _, src[3] as _, src[4] as _)),
+            6 => Result::ServerID(SID::from_u32(
+                src[1] as _,
+                src[2] as _,
+                src[3] as _,
+                src[4] as _,
+            )),
             7 => Result::ConnectionID(src[1] as CID),
             8 => {
                 let sender = src[1];

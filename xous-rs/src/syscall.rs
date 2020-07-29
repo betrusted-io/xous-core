@@ -315,16 +315,19 @@ impl SysCall {
             ],
             SysCall::Yield => [SysCallNumber::Yield as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::WaitEvent => [SysCallNumber::WaitEvent as usize, 0, 0, 0, 0, 0, 0, 0],
-            SysCall::ReceiveMessage(sid) => [
-                SysCallNumber::ReceiveMessage as usize,
-                sid.0 as _,
-                sid.1 as _,
-                sid.2 as _,
-                sid.3 as _,
-                0,
-                0,
-                0,
-            ],
+            SysCall::ReceiveMessage(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::ReceiveMessage as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
             SysCall::ReturnToParentI(a1, a2) => [
                 SysCallNumber::ReturnToParentI as usize,
                 a1.get() as usize,
@@ -409,26 +412,32 @@ impl SysCall {
                 0,
             ],
 
-            SysCall::CreateServer(a1) => [
-                SysCallNumber::CreateServer as usize,
-                a1.0 as _,
-                a1.1 as _,
-                a1.2 as _,
-                a1.3 as _,
-                0,
-                0,
-                0,
-            ],
-            SysCall::Connect(sid) => [
-                SysCallNumber::Connect as usize,
-                sid.0 as _,
-                sid.1 as _,
-                sid.2 as _,
-                sid.3 as _,
-                0,
-                0,
-                0,
-            ],
+            SysCall::CreateServer(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::CreateServer as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::Connect(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::Connect as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
             SysCall::SendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) => [
                     SysCallNumber::SendMessage as usize,
@@ -536,7 +545,7 @@ impl SysCall {
             Some(SysCallNumber::Yield) => SysCall::Yield,
             Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
             Some(SysCallNumber::ReceiveMessage) => {
-                SysCall::ReceiveMessage((a1 as _, a2 as _, a3 as _, a4 as _))
+                SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
             Some(SysCallNumber::ReturnToParentI) => {
                 SysCall::ReturnToParentI(pid_from_usize(a1)?, a2)
@@ -566,9 +575,9 @@ impl SysCall {
                 a4,
             ),
             Some(SysCallNumber::CreateServer) => {
-                SysCall::CreateServer((a1 as _, a2 as _, a3 as _, a4 as _))
+                SysCall::CreateServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            Some(SysCallNumber::Connect) => SysCall::Connect((a1 as _, a2 as _, a3 as _, a4 as _)),
+            Some(SysCallNumber::Connect) => SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _)),
             Some(SysCallNumber::SendMessage) => match a2 {
                 1 => SysCall::SendMessage(
                     a1,
@@ -731,14 +740,7 @@ pub fn claim_interrupt(
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
-    use std::convert::TryInto;
-    let mut sid = (0, 0, 0, 0);
-    let mut byte_iter = name_bytes.chunks_exact(4);
-    sid.0 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
-    sid.1 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
-    sid.2 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
-    sid.3 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
-    assert!(byte_iter.next().is_none());
+    let sid = SID::from_bytes(name_bytes).ok_or(Error::InvalidString)?;
 
     let result = rsyscall(SysCall::CreateServer(sid))?;
     if let Result::ServerID(sid) = result {

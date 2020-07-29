@@ -122,7 +122,7 @@ impl MemoryManager {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
         assert!(
-            self.extra.len() == 0,
+            self.extra.is_empty(),
             "mm: self.extra.len() was {}, not 0",
             self.extra.len()
         );
