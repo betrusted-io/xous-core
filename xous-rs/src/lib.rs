@@ -12,7 +12,7 @@ pub mod definitions;
 mod messages;
 pub mod syscall;
 
-pub use arch::{ProcessInit, ThreadInit, ProcessArgs};
+pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;

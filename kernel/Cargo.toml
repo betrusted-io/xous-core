@@ -30,3 +30,4 @@ report-memory = ["stats_alloc"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 rand = "0.7"
+hex = "0.4"

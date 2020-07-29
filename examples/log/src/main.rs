@@ -272,7 +272,7 @@ fn reader_thread(output: &mut implementation::OutputWriter) {
 fn main() -> Result<(), xous::Error> {
     let mut output = implementation::init();
     let mut writer = output.get_writer();
-
+    xous::arch::ensure_connection().unwrap();
     xous::create_thread(move || reader_thread(&mut writer)).unwrap();
 
     output.run();

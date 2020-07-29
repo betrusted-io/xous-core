@@ -9,12 +9,20 @@ use std::thread_local;
 
 use crate::{Result, PID, TID};
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct ProcessKey([u8; 16]);
+impl ProcessKey {
+    pub fn new(key: [u8; 16]) -> ProcessKey {
+        ProcessKey(key)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessInit {
-    pub key: [u8; 16],
+    pub key: ProcessKey,
 }
 
 pub struct ProcessArgs<F: FnOnce()> {
@@ -51,10 +59,10 @@ pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
 pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
     [
         call,
-        u32::from_le_bytes(init.key[0..4].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key[4..8].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key[8..12].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key[12..16].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key.0[8..12].try_into().unwrap()) as _,
+        u32::from_le_bytes(init.key.0[12..16].try_into().unwrap()) as _,
         0,
         0,
         0,
@@ -89,14 +97,16 @@ pub fn args_to_process(
     v.extend_from_slice(&(a4 as u32).to_le_bytes());
     let mut key = [0u8; 16];
     key.copy_from_slice(&v);
-    Ok(ProcessInit { key })
+    Ok(ProcessInit {
+        key: ProcessKey(key),
+    })
 }
 
 thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
 thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> = RefCell::new(None));
 thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
 thread_local!(static PROCESS_ID: RefCell<PID> = RefCell::new(PID::new(1).unwrap()));
-thread_local!(static PROCESS_KEY: RefCell<[u8; 16]> = RefCell::new([0u8; 16]));
+thread_local!(static PROCESS_KEY: RefCell<Option<ProcessKey>> = RefCell::new(None));
 
 fn default_xous_address() -> SocketAddr {
     std::env::var("XOUS_SERVER")
@@ -109,8 +119,18 @@ fn default_xous_address() -> SocketAddr {
         .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
 }
 
+fn default_process_key() -> ProcessKey {
+    std::env::var("XOUS_PROCESS_KEY")
+        .map(|s| {
+            let mut base = ProcessKey([0u8; 16]);
+            hex::decode_to_slice(s, &mut base.0).unwrap();
+            base
+        })
+        .unwrap_or(ProcessKey([0u8; 16]))
+}
+
 pub fn set_process_key(new_key: &[u8; 16]) {
-    PROCESS_KEY.with(|pk| *pk.borrow_mut() = *new_key);
+    PROCESS_KEY.with(|pk| *pk.borrow_mut() = Some(ProcessKey(*new_key)));
 }
 
 /// Set the network address for this particular thread.
@@ -171,23 +191,15 @@ pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
         .map_err(|_| crate::Error::InternalError)
 }
 
-/// If no connection exists, create a new connection to the server. This means
-/// our parent PID will be PID1. Otherwise, reuse the same connection.
-pub fn create_process_pre<F>(
-    _args: &ProcessArgs<F>,
-) -> core::result::Result<ProcessInit, crate::Error>
-where
-    F: FnOnce(),
-{
-    // Ensure there is a connection, because after this function returns
-    // we'll make a syscall with CreateProcess(). This should only need
-    // to happen for PID1.
+pub fn ensure_connection() -> core::result::Result<(), crate::Error> {
     XOUS_SERVER_CONNECTION.with(|xsc| {
         let mut xsc = xsc.borrow_mut();
         if xsc.is_none() {
             NETWORK_CONNECT_ADDRESS.with(|nca| {
                 let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                let pid1_key = PROCESS_KEY.with(|pk| *pk.borrow());
+                let pid1_key = PROCESS_KEY
+                    .with(|pk| *pk.borrow())
+                    .unwrap_or_else(default_process_key);
                 match xous_connect_impl(addr, &pid1_key) {
                     Ok(a) => {
                         *xsc = Some(a);
@@ -199,9 +211,26 @@ where
         } else {
             Ok(())
         }
-    })?;
+    })
+}
+
+/// If no connection exists, create a new connection to the server. This means
+/// our parent PID will be PID1. Otherwise, reuse the same connection.
+pub fn create_process_pre<F>(
+    _args: &ProcessArgs<F>,
+) -> core::result::Result<ProcessInit, crate::Error>
+where
+    F: FnOnce(),
+{
+    ensure_connection()?;
+
+    // Ensure there is a connection, because after this function returns
+    // we'll make a syscall with CreateProcess(). This should only need
+    // to happen for PID1.
     Ok(ProcessInit {
-        key: PROCESS_KEY.with(|pk| *pk.borrow()),
+        key: PROCESS_KEY
+            .with(|pk| *pk.borrow())
+            .unwrap_or_else(default_process_key),
     })
 }
 
@@ -252,13 +281,13 @@ pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
 
 fn xous_connect_impl(
     addr: SocketAddr,
-    key: &[u8; 16],
+    key: &ProcessKey,
 ) -> core::result::Result<ServerConnection, ()> {
     // eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
-    assert_ne!(key, &[0u8; 16]);
+    assert_ne!(&key.0, &[0u8; 16]);
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
-            conn.write_all(key).unwrap(); // Send key to authenticate us as PID 1
+            conn.write_all(&key.0).unwrap(); // Send key to authenticate us as PID 1
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                 recv: Arc::new(Mutex::new(conn)),

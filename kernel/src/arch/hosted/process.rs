@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ProcessInit, ThreadInit, PID, TID};
+use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 pub const INITIAL_TID: usize = 1;
 
@@ -12,12 +12,13 @@ pub struct Process {
     pid: PID,
 }
 
+#[derive(Debug)]
 struct ProcessImpl {
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
     /// A 16-byte key used to register a process when it first starts
-    key: [u8; 16],
+    key: ProcessKey,
 
     /// The network connection to the client process.
     conn: Option<TcpStream>,
@@ -41,13 +42,20 @@ impl PartialEq for Process {
 }
 
 struct ProcessTable {
+    /// The process upon which the current syscall is operating
     current: PID,
+
+    /// The number of processes that exist
+    total: usize,
+
+    /// The actual table contents
     table: Vec<Option<ProcessImpl>>,
 }
 
 thread_local!(
     static PROCESS_TABLE: RefCell<ProcessTable> = RefCell::new(ProcessTable {
         current: unsafe { PID::new_unchecked(1) },
+        total: 0,
         table: Vec::new(),
     })
 );
@@ -57,10 +65,28 @@ pub fn current_pid() -> PID {
 }
 
 pub fn set_current_pid(pid: PID) {
-    PROCESS_TABLE.with(|pt| (*pt.borrow_mut()).current = pid);
+    PROCESS_TABLE.with(|pt| {
+        let pid_idx = (pid.get() - 1) as usize;
+        let mut pt = pt.borrow_mut();
+
+        // // If the PID doesn't exist, only allow it if the table is
+        // // currently empty.
+        // for (idx, i) in pt.table.iter().enumerate() {
+        //     println!("pt.table[{}]: {:?}", idx, i);
+        // }
+        match pt.table.get_mut(pid_idx) {
+            None | Some(None) => {
+                // if pid.get() != 1 || pt.total > 0 {
+                panic!("PID {} does not exist", pid);
+                // }
+            }
+            Some(_) => {}
+        }
+        pt.current = pid
+    });
 }
 
-pub fn register_connection_for_key(conn: TcpStream, key: [u8; 16]) -> Result<PID, xous::Error> {
+pub fn register_connection_for_key(conn: TcpStream, key: ProcessKey) -> Result<PID, xous::Error> {
     PROCESS_TABLE.with(|pt| {
         let mut process_table = pt.borrow_mut();
         for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
@@ -272,6 +298,7 @@ impl Process {
                 threads: [Thread { allocated: false }; MAX_THREAD + 1],
             };
 
+            process_table.total += 1;
             if pid_idx >= process_table.table.len() {
                 process_table.table.push(Some(process));
             } else if process_table.table[pid_idx].is_none() {
@@ -298,6 +325,7 @@ impl Process {
                 .shutdown(std::net::Shutdown::Both)
                 .unwrap();
             process_table.table[pid_idx] = None;
+            process_table.total -= 1;
             Ok(())
         })
     }

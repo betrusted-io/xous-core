@@ -18,8 +18,6 @@ default-features = false
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4"
-
-[target.'cfg(unix)'.dependencies]
-lazy_static = "1.4"
+hex = "0.4"

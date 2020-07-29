@@ -299,7 +299,6 @@ impl SystemServices {
             }
             let new_pid = pid_from_usize(idx + 1)?;
             arch::process::Process::create(new_pid, init_process);
-            // #[allow(clippy::unit_arg)]
             let ppid = crate::arch::process::current_pid();
             // println!("Creating new process for PID {} with PPID {}", new_pid, ppid);
             entry.state = ProcessState::Allocated;

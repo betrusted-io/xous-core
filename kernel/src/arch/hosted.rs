@@ -14,11 +14,11 @@ use std::thread_local;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous::{MemoryAddress, ProcessInit, Result, SysCall, PID, TID};
+use xous::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
-    NewConnection(TcpStream, [u8; 16] /* access key */),
+    NewConnection(TcpStream, ProcessKey),
 }
 
 #[derive(Debug)]
@@ -54,6 +54,16 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
     SEND_ADDR.with(|sa| {
         *sa.borrow_mut() = Some(send_addr);
     });
+}
+
+fn generate_pid_key() -> [u8; 16] {
+    use rand::{thread_rng, Rng};
+    let mut process_key = [0u8; 16];
+    let mut rng = thread_rng();
+    for b in process_key.iter_mut() {
+        *b = rng.gen();
+    }
+    process_key
 }
 
 /// Each client gets its own connection and its own thread, which is handled here.
@@ -255,7 +265,7 @@ fn listen_thread(
         chn.send(ThreadMessage::NewConnection(
             conn.try_clone()
                 .expect("couldn't make a copy of the network connection for the kernel"),
-            access_key,
+            ProcessKey::new(access_key),
         ))
         .expect("couldn't request a new PID");
         let NewPidMessage::NewPid(new_pid) = new_pid_channel
@@ -308,11 +318,13 @@ fn listen_thread(
                     tcp_sender.send(ClientMessage::NewConnection(conn)).unwrap();
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    match shutdown_listener_receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+                    match shutdown_listener_receiver
+                        .recv_timeout(std::time::Duration::from_millis(500))
+                    {
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
                         Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                             return;
-                        },
+                        }
                     }
                 }
                 Err(e) => {
@@ -372,9 +384,9 @@ pub fn idle() -> bool {
 
     // Allocate PID1 with the key we were passed.
     let pid1_key = PID1_KEY.with(|p1k| *p1k.borrow());
-    let pid1_init = ProcessInit { key: pid1_key };
-    let new_pid = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
-    assert_eq!(new_pid.get(), 1);
+    let pid1_init = ProcessInit { key: ProcessKey::new(pid1_key) };
+    let pid1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
+    assert_eq!(pid1.get(), 1);
 
     let listen_addr = env::var("XOUS_LISTEN_ADDR")
         .map(|s| {
@@ -407,8 +419,29 @@ pub fn idle() -> bool {
         println!("KERNEL: Starting initial processes:");
         let mut args = std::env::args();
         args.next();
+
+        // Set the current PID to 1, which was created above. This ensures all init processes
+        // are owned by PID1.
+        crate::arch::process::set_current_pid(pid1);
+
+        println!("  PID  |  Command");
+        println!("-------+------------------");
         for arg in args {
-            println!("    {}", arg);
+
+            let process_key = generate_pid_key();
+            let init = xous::ProcessInit { key: ProcessKey::new(process_key) };
+            let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
+            println!(" {:^5} |  {}", new_pid, arg);
+
+            use std::process::Command;
+            let server_env = format!("{}", address);
+            let process_key_env = hex::encode(process_key);
+            let cmd = Command::new("cmd")
+                                .args(&["/C", &arg])
+                                .env("XOUS_SERVER", server_env)
+                                .env("XOUS_PROCESS_KEY", process_key_env)
+                                .spawn()
+                                .expect("couldn't start command");
         }
     }
 
