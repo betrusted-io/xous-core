@@ -25,12 +25,22 @@ use core::fmt::Write;
 #[cfg_attr(baremetal, no_mangle)]
 fn main() {
     println!("Starting to initialize the timer");
+    xous::arch::ensure_connection().unwrap();
     timer::init();
 
     let mut connection = None;
+
+    use std::convert::TryInto;
+    let mut sid = (0, 0, 0, 0);
+    let mut byte_iter = b"xous-logs-output".chunks_exact(4);
+    sid.0 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
+    sid.1 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
+    sid.2 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
+    sid.3 = u32::from_le_bytes(byte_iter.next().unwrap().try_into().unwrap());
+
     println!("Attempting to connect to server...");
     while connection.is_none() {
-        if let Ok(cid) = xous::syscall::connect((1, 2_626_920_432, 1, 2_626_920_432)) {
+        if let Ok(cid) = xous::syscall::connect(sid) {
             connection = Some(cid);
         } else {
             xous::syscall::yield_slice();
@@ -58,6 +68,7 @@ fn main() {
             println!("Loop {}", counter);
         }
         counter += 1;
+        std::thread::sleep(std::time::Duration::from_millis(500));
         // if counter & 2 == 0 {
         //     xous::syscall::yield_slice();
         // }
