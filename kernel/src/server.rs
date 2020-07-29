@@ -221,8 +221,8 @@ impl Server {
     /// giving it back to the previous process space.
     pub fn discard_messages_for_pid(&mut self, pid: PID) {
         for entry in self.queue.iter_mut() {
-            match entry {
-                &mut QueuedMessage::MemoryMessageROLend(
+            match *entry {
+                QueuedMessage::MemoryMessageROLend(
                     msg_pid,
                     ctx,
                     arg1,
@@ -238,7 +238,7 @@ impl Server {
                         );
                     }
                 }
-                &mut QueuedMessage::MemoryMessageRWLend(
+                QueuedMessage::MemoryMessageRWLend(
                     msg_pid,
                     ctx,
                     arg1,

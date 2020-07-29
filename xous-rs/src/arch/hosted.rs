@@ -180,7 +180,7 @@ mod process {
                 eprintln!("couldn't start command: {}", e);
                 crate::Error::InternalError
             });
-            println!("Process result: {:?}", result);
+            // println!("Process result: {:?}", result);
             result
     }
 

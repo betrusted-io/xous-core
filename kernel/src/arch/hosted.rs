@@ -202,7 +202,7 @@ fn handle_connection(
                                     );
                                     msg.buf.addr =
                                         match MemoryAddress::new(Box::into_raw(sliced_data)
-                                            as *mut usize
+                                            as *mut u8
                                             as usize)
                                         {
                                             Some(a) => a,

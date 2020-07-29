@@ -48,7 +48,7 @@ pub enum ProcessState {
 
     /// This is a brand-new process that hasn't been run yet, and needs its
     /// initial context set up.
-    Setup(ThreadInit),
+    // Setup(ThreadInit),
 
     /// This process is able to be run.  The context bitmask describes contexts
     /// that are ready.
@@ -161,7 +161,7 @@ impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
         match self.state {
-            ProcessState::Setup(_) | ProcessState::Ready(_) => true,
+            /*ProcessState::Setup(_) | */ProcessState::Ready(_) => true,
             _ => false,
         }
     }
@@ -517,7 +517,7 @@ impl SystemServices {
         process.state = match process.state {
             ProcessState::Free => return Err(xous::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
-            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound),
+            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound),/*
             ProcessState::Setup(setup) => {
                 // Activate the process, which enables its memory mapping
                 process.activate()?;
@@ -537,7 +537,7 @@ impl SystemServices {
 
                 // Mark the current proces state as "running, and no waiting contexts"
                 ProcessState::Running(0)
-            }
+            }*/
             ProcessState::Ready(0) => {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
             }
@@ -737,7 +737,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
+                /*ProcessState::Setup(_) | */ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
@@ -784,7 +784,7 @@ impl SystemServices {
             // Set up the new process, if necessary.  Remove the new context from
             // the list of ready contexts.
             new.state = match new.state {
-                ProcessState::Setup(_init_context) => {
+                /*ProcessState::Setup(_init_context) => {
                     // entrypoint, stack, stack_size) => {
                     // let mut process = ProcessHandle::get();
                     // println!(
@@ -803,7 +803,7 @@ impl SystemServices {
                     //     )
                     //     .expect("couldn't reserve stack");
                     ProcessState::Running(0)
-                }
+                }*/
                 ProcessState::Allocated => ProcessState::Running(0),
                 ProcessState::Free => panic!("process was suddenly Free"),
                 ProcessState::Ready(x) | ProcessState::Running(x) => {

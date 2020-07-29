@@ -139,7 +139,7 @@ impl MemoryManager {
         for tag in args_iter {
             if tag.name == make_type!("MREx") {
                 assert!(
-                    self.extra.len() == 0,
+                    self.extra.is_empty(),
                     "mm: MREx tag appears twice!  self.extra.len() is {}, not 0",
                     self.extra.len()
                 );
