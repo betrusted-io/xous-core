@@ -115,27 +115,27 @@ mod process {
 #[cfg(not(feature = "processes-as-threads"))]
 mod process {
     pub use super::*;
-    pub struct ProcessArgs<F> {
+    pub struct ProcessArgs {
         command: String,
         name: String,
-        _ign: std::marker::PhantomData<F>,
     }
 
-    impl<F> ProcessArgs<F> {
-        pub fn new(name: &str, command: String) -> ProcessArgs<F> {
+    impl ProcessArgs {
+        pub fn new(name: &str, command: String) -> ProcessArgs {
             ProcessArgs {
                 command,
                 name: name.to_owned(),
-                _ign: std::marker::PhantomData,
             }
         }
     }
+
+    #[derive(Debug)]
     pub struct ProcessHandle(std::process::Child);
 
     /// If no connection exists, create a new connection to the server. This means
     /// our parent PID will be PID1. Otherwise, reuse the same connection.
-    pub fn create_process_pre<F>(
-        _args: &ProcessArgs<F>,
+    pub fn create_process_pre(
+        _args: &ProcessArgs,
     ) -> core::result::Result<ProcessInit, crate::Error> {
         ensure_connection()?;
 
@@ -149,8 +149,8 @@ mod process {
         })
     }
 
-    pub fn create_process_post<F>(
-        args: ProcessArgs<F>,
+    pub fn create_process_post(
+        args: ProcessArgs,
         init: ProcessInit,
         pid: PID,
     ) -> core::result::Result<ProcessHandle, crate::Error> {
@@ -167,7 +167,8 @@ mod process {
             panic!("unrecognized platform -- don't know how to shell out");
         };
 
-        Command::new(shell)
+        println!("Launching process...");
+        let result = Command::new(shell)
             .args(&args)
             .env("XOUS_SERVER", server_env)
             .env("XOUS_PID", pid_env)
@@ -178,7 +179,9 @@ mod process {
             .map_err(|e| {
                 eprintln!("couldn't start command: {}", e);
                 crate::Error::InternalError
-            })
+            });
+            println!("Process result: {:?}", result);
+            result
     }
 
     pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {

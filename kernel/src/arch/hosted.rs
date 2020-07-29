@@ -50,12 +50,14 @@ pub fn set_listen_address(new_address: &SocketAddr) {
 }
 
 /// Set the network address for this particular thread.
+#[allow(dead_code)]
 pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
     SEND_ADDR.with(|sa| {
         *sa.borrow_mut() = Some(send_addr);
     });
 }
 
+#[cfg(not(feature = "testing"))]
 fn generate_pid_key() -> [u8; 16] {
     use rand::{thread_rng, Rng};
     let mut process_key = [0u8; 16];
@@ -384,7 +386,9 @@ pub fn idle() -> bool {
 
     // Allocate PID1 with the key we were passed.
     let pid1_key = PID1_KEY.with(|p1k| *p1k.borrow());
-    let pid1_init = ProcessInit { key: ProcessKey::new(pid1_key) };
+    let pid1_init = ProcessInit {
+        key: ProcessKey::new(pid1_key),
+    };
     let pid1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
     assert_eq!(pid1.get(), 1);
 
@@ -397,7 +401,7 @@ pub fn idle() -> bool {
         })
         .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
-    #[cfg(not(test))]
+    #[cfg(not(feature = "testing"))]
     let address_receiver = {
         let (sender, receiver) = channel();
         set_send_addr(sender);
@@ -412,9 +416,10 @@ pub fn idle() -> bool {
             .expect("couldn't spawn listen thread")
     });
 
-    #[cfg(not(test))]
+    #[cfg(not(feature = "testing"))]
     {
         let address = address_receiver.recv().unwrap();
+        xous::arch::set_xous_address(address);
         println!("KERNEL: Xous server listening on {}", address);
         println!("KERNEL: Starting initial processes:");
         let mut args = std::env::args();
@@ -424,24 +429,19 @@ pub fn idle() -> bool {
         // are owned by PID1.
         crate::arch::process::set_current_pid(pid1);
 
+        // Go through each arg and spawn it as a new process. Failures here will
+        // halt the entire system.
         println!("  PID  |  Command");
         println!("-------+------------------");
         for arg in args {
-
             let process_key = generate_pid_key();
-            let init = xous::ProcessInit { key: ProcessKey::new(process_key) };
+            let init = xous::ProcessInit {
+                key: ProcessKey::new(process_key),
+            };
             let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
             println!(" {:^5} |  {}", new_pid, arg);
-
-            use std::process::Command;
-            let server_env = format!("{}", address);
-            let process_key_env = hex::encode(process_key);
-            let cmd = Command::new("cmd")
-                                .args(&["/C", &arg])
-                                .env("XOUS_SERVER", server_env)
-                                .env("XOUS_PROCESS_KEY", process_key_env)
-                                .spawn()
-                                .expect("couldn't start command");
+            let process_args = xous::ProcessArgs::new("program", arg);
+            xous::arch::create_process_post(process_args, init, new_pid).expect("couldn't spawn");
         }
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "tests"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 description = "Core kernel for Xous, including task switching and memory management"
@@ -9,6 +9,10 @@ description = "Core kernel for Xous, including task switching and memory managem
 name = "kernel"
 path = "../kernel/src/main.rs"
 test = true
+
+[features]
+testing = []
+default = ["testing"]
 
 [dependencies]
 bitflags = "1.2.1"

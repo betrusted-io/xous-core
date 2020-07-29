@@ -112,22 +112,22 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 Message::Scalar(_) | Message::Move(_) => 0,
                 Message::Borrow(_) | Message::MutableBorrow(_) => ss
                     .remember_server_message(sidx, pid, thread, &message, client_address)
-                    .or_else(|e| {
+                    .map_err(|e| {
                         ss.server_from_sidx(sidx)
                             .expect("server couldn't be located")
                             .return_available_thread(thread);
-                        Err(e)
+                        e
                     })?,
             };
             let envelope = MessageEnvelope { sender, message };
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
-            ss.ready_thread(server_pid, server_tid).or_else(|e| {
+            ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx(sidx)
                     .expect("server couldn't be located")
                     .return_available_thread(thread);
-                Err(e)
+                e
             })?;
 
             if blocking && cfg!(baremetal) {
