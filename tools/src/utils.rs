@@ -46,8 +46,7 @@ pub fn get_base(value: &str) -> (&str, u32) {
 
 pub fn parse_u32(value: &str) -> Result<u32, ConfigError> {
     let (value, base) = get_base(value);
-    u32::from_str_radix(value, base)
-        .or_else(|e| Err(ConfigError::NumberParseError(value.to_owned(), e)))
+    u32::from_str_radix(value, base).map_err(|e| ConfigError::NumberParseError(value.to_owned(), e))
 }
 
 pub fn parse_csr_csv(filename: &str) -> Result<CsrConfig, ConfigError> {
