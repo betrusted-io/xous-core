@@ -1,25 +1,21 @@
 [package]
-name = "kernel"
+name = "tests"
 version = "0.1.0"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 description = "Core kernel for Xous, including task switching and memory management"
 
+[lib]
+name = "kernel"
+path = "../kernel/src/main.rs"
+test = true
+
 [dependencies]
 bitflags = "1.2.1"
-xous = { path = "../xous-rs", features = ["forget-memory-messages"] }
-debug-here = "0.2.2"
-stats_alloc = { version = "0.1.8", optional = true }
 sha3 = { default-features = false, version = "0.8.2" }
-
-[target.'cfg(target_arch = "riscv32")'.dependencies]
-riscv = "0.5.6"
-
-[features]
-debug-print = []
-report-memory = ["stats_alloc"]
+xous = { path = "../xous-rs", features = ["forget-memory-messages", "processes-as-threads"] }
 
 [target.'cfg(any(windows, unix))'.dependencies]
-lazy_static = "1.4"
 rand = "0.7"
 hex = "0.4"
+lazy_static = "1.4"

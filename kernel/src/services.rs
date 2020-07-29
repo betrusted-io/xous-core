@@ -1239,7 +1239,6 @@ impl SystemServices {
         // TODO: Come up with a way to randomize the server ID
         let ppid = self.get_process(pid)?.ppid.get();
         if ppid != 1 {
-            debug_here::debug_here!();
             panic!("Clients cannot start servers yet");
         }
 

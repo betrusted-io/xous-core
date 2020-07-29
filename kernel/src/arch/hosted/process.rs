@@ -212,9 +212,6 @@ impl Process {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            if !process.threads[thread - 1].allocated {
-                ::debug_here::debug_here!();
-            }
             assert!(
                 process.threads[thread - 1].allocated,
                 "tried to switch to thread {} which wasn't allocated",

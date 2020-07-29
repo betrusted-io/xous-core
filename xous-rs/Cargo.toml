@@ -18,6 +18,10 @@ default-features = false
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
 
+# If this is set, create_process() will instead create a thread in
+# the current process. This is used by the test suite.
+processes-as-threads = []
+
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4"
 hex = "0.4"

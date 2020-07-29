@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "kernel",
+    "tests",
     "loader",
     "tools",
     "xous-rs",
