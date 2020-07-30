@@ -29,7 +29,7 @@ pub struct ProcessInit {
 mod process {
     pub use super::*;
     pub struct ProcessArgs<F: FnOnce()> {
-        main: Option<F>,
+        main: F,
         name: String,
     }
 
@@ -39,7 +39,7 @@ mod process {
     {
         pub fn new(name: &str, main: F) -> ProcessArgs<F> {
             ProcessArgs {
-                main: Some(main),
+                main,
                 name: name.to_owned(),
             }
         }
@@ -67,7 +67,7 @@ mod process {
     }
 
     pub fn create_process_post<F>(
-        mut args: ProcessArgs<F>,
+        args: ProcessArgs<F>,
         init: ProcessInit,
         pid: PID,
     ) -> core::result::Result<ProcessHandle, crate::Error>
@@ -76,7 +76,7 @@ mod process {
     {
         let server_address = xous_address();
 
-        let f = args.main.take().unwrap();
+        let f = args.main;
         let thread_main = std::thread::Builder::new()
             .name(args.name)
             .spawn(move || {
