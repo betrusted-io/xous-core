@@ -26,180 +26,174 @@ pub struct ProcessInit {
 }
 
 #[cfg(feature = "processes-as-threads")]
-mod process {
-    pub use super::*;
-    pub struct ProcessArgs<F: FnOnce()> {
-        main: F,
-        name: String,
-    }
+pub struct ProcessArgsAsThread<F: FnOnce()> {
+    main: F,
+    name: String,
+}
 
-    impl<F> ProcessArgs<F>
-    where
-        F: FnOnce(),
-    {
-        pub fn new(name: &str, main: F) -> ProcessArgs<F> {
-            ProcessArgs {
-                main,
-                name: name.to_owned(),
-            }
+#[cfg(feature = "processes-as-threads")]
+impl<F> ProcessArgsAsThread<F>
+where
+    F: FnOnce(),
+{
+    pub fn new(name: &str, main: F) -> ProcessArgsAsThread<F> {
+        ProcessArgsAsThread {
+            main,
+            name: name.to_owned(),
         }
     }
-    pub struct ProcessHandle(std::thread::JoinHandle<()>);
+}
+#[cfg(feature = "processes-as-threads")]
+pub struct ProcessHandleAsThread(std::thread::JoinHandle<()>);
 
-    /// If no connection exists, create a new connection to the server. This means
-    /// our parent PID will be PID1. Otherwise, reuse the same connection.
-    pub fn create_process_pre<F>(
-        _args: &ProcessArgs<F>,
-    ) -> core::result::Result<ProcessInit, crate::Error>
-    where
-        F: FnOnce(),
-    {
-        ensure_connection()?;
+/// If no connection exists, create a new connection to the server. This means
+/// our parent PID will be PID1. Otherwise, reuse the same connection.
+#[cfg(feature = "processes-as-threads")]
+pub fn create_process_pre_as_thread<F>(
+    _args: &ProcessArgsAsThread<F>,
+) -> core::result::Result<ProcessInit, crate::Error>
+where
+    F: FnOnce(),
+{
+    ensure_connection()?;
 
-        // Ensure there is a connection, because after this function returns
-        // we'll make a syscall with CreateProcess(). This should only need
-        // to happen for PID1.
-        Ok(ProcessInit {
-            key: PROCESS_KEY
-                .with(|pk| *pk.borrow())
-                .unwrap_or_else(default_process_key),
-        })
-    }
+    // Ensure there is a connection, because after this function returns
+    // we'll make a syscall with CreateProcess(). This should only need
+    // to happen for PID1.
+    Ok(ProcessInit {
+        key: PROCESS_KEY
+            .with(|pk| *pk.borrow())
+            .unwrap_or_else(default_process_key),
+    })
+}
 
-    pub fn create_process_post<F>(
-        args: ProcessArgs<F>,
-        init: ProcessInit,
-        pid: PID,
-    ) -> core::result::Result<ProcessHandle, crate::Error>
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let server_address = xous_address();
+#[cfg(feature = "processes-as-threads")]
+pub fn create_process_post_as_thread<F>(
+    args: ProcessArgsAsThread<F>,
+    init: ProcessInit,
+    pid: PID,
+) -> core::result::Result<ProcessHandleAsThread, crate::Error>
+where
+    F: FnOnce() + Send + 'static,
+{
+    let server_address = xous_address();
 
-        let f = args.main;
-        let thread_main = std::thread::Builder::new()
-            .name(args.name)
-            .spawn(move || {
-                set_xous_address(server_address);
-                THREAD_ID.with(|tid| *tid.borrow_mut() = 1);
-                PROCESS_ID.with(|p| *p.borrow_mut() = pid);
-                XOUS_SERVER_CONNECTION.with(|xsc| {
-                    let mut xsc = xsc.borrow_mut();
-                    match xous_connect_impl(server_address, &init.key) {
-                        Ok(a) => {
-                            *xsc = Some(a);
-                            Ok(())
-                        }
-                        Err(_) => Err(crate::Error::InternalError),
+    let f = args.main;
+    let thread_main = std::thread::Builder::new()
+        .name(args.name)
+        .spawn(move || {
+            set_xous_address(server_address);
+            THREAD_ID.with(|tid| *tid.borrow_mut() = 1);
+            PROCESS_ID.with(|p| *p.borrow_mut() = pid);
+            XOUS_SERVER_CONNECTION.with(|xsc| {
+                let mut xsc = xsc.borrow_mut();
+                match xous_connect_impl(server_address, &init.key) {
+                    Ok(a) => {
+                        *xsc = Some(a);
+                        Ok(())
                     }
-                })?;
+                    Err(_) => Err(crate::Error::InternalError),
+                }
+            })?;
 
-                crate::create_thread(f)
-            })
-            .map_err(|_| crate::Error::InternalError)?
-            .join()
-            .unwrap()
-            .unwrap();
-
-        Ok(ProcessHandle(thread_main.0))
-    }
-
-    pub fn wait_process(joiner: ProcessHandle) -> crate::SysCallResult {
-        joiner.0.join().map(|_| Result::Ok).map_err(|_x| {
-            // panic!("wait error: {:?}", x);
-            crate::Error::InternalError
+            crate::create_thread(f)
         })
-    }
+        .map_err(|_| crate::Error::InternalError)?
+        .join()
+        .unwrap()
+        .unwrap();
+
+    Ok(ProcessHandleAsThread(thread_main.0))
 }
 
-#[cfg(not(feature = "processes-as-threads"))]
-mod process {
-    pub use super::*;
-    pub struct ProcessArgs {
-        command: String,
-        name: String,
-    }
+#[cfg(feature = "processes-as-threads")]
+pub fn wait_process_as_thread(joiner: ProcessHandleAsThread) -> crate::SysCallResult {
+    joiner.0.join().map(|_| Result::Ok).map_err(|_x| {
+        // panic!("wait error: {:?}", x);
+        crate::Error::InternalError
+    })
+}
 
-    impl ProcessArgs {
-        pub fn new(name: &str, command: String) -> ProcessArgs {
-            ProcessArgs {
-                command,
-                name: name.to_owned(),
-            }
+pub struct ProcessArgs {
+    command: String,
+    name: String,
+}
+
+impl ProcessArgs {
+    pub fn new(name: &str, command: String) -> ProcessArgs {
+        ProcessArgs {
+            command,
+            name: name.to_owned(),
         }
     }
-
-    #[derive(Debug)]
-    pub struct ProcessHandle(std::process::Child);
-
-    /// If no connection exists, create a new connection to the server. This means
-    /// our parent PID will be PID1. Otherwise, reuse the same connection.
-    pub fn create_process_pre(
-        _args: &ProcessArgs,
-    ) -> core::result::Result<ProcessInit, crate::Error> {
-        ensure_connection()?;
-
-        // Ensure there is a connection, because after this function returns
-        // we'll make a syscall with CreateProcess(). This should only need
-        // to happen for PID1.
-        Ok(ProcessInit {
-            key: PROCESS_KEY
-                .with(|pk| *pk.borrow())
-                .unwrap_or_else(default_process_key),
-        })
-    }
-
-    pub fn create_process_post(
-        args: ProcessArgs,
-        init: ProcessInit,
-        pid: PID,
-    ) -> core::result::Result<ProcessHandle, crate::Error> {
-        use std::process::Command;
-        let server_env = format!("{}", xous_address());
-        let pid_env = format!("{}", pid);
-        let process_name_env = args.name.to_string();
-        let process_key_env = hex::encode(&init.key.0);
-        let (shell, args) = if cfg!(windows) {
-            ("cmd", ["/C", &args.command])
-        } else if cfg!(unix) {
-            ("sh", ["-c", &args.command])
-        } else {
-            panic!("unrecognized platform -- don't know how to shell out");
-        };
-
-        println!("Launching process...");
-        let result = Command::new(shell)
-            .args(&args)
-            .env("XOUS_SERVER", server_env)
-            .env("XOUS_PID", pid_env)
-            .env("XOUS_PROCESS_NAME", process_name_env)
-            .env("XOUS_PROCESS_KEY", process_key_env)
-            .spawn()
-            .map(ProcessHandle)
-            .map_err(|e| {
-                eprintln!("couldn't start command: {}", e);
-                crate::Error::InternalError
-            });
-            // println!("Process result: {:?}", result);
-            result
-    }
-
-    pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
-        joiner
-            .0
-            .wait()
-            .or(Err(crate::Error::InternalError))
-            .and_then(|e| {
-                if e.success() {
-                    Ok(crate::Result::Ok)
-                } else {
-                    Err(crate::Error::UnknownError)
-                }
-            })
-    }
 }
 
-pub use process::*;
+#[derive(Debug)]
+pub struct ProcessHandle(std::process::Child);
+
+/// If no connection exists, create a new connection to the server. This means
+/// our parent PID will be PID1. Otherwise, reuse the same connection.
+pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> {
+    ensure_connection()?;
+
+    // Ensure there is a connection, because after this function returns
+    // we'll make a syscall with CreateProcess(). This should only need
+    // to happen for PID1.
+    Ok(ProcessInit {
+        key: PROCESS_KEY
+            .with(|pk| *pk.borrow())
+            .unwrap_or_else(default_process_key),
+    })
+}
+
+pub fn create_process_post(
+    args: ProcessArgs,
+    init: ProcessInit,
+    pid: PID,
+) -> core::result::Result<ProcessHandle, crate::Error> {
+    use std::process::Command;
+    let server_env = format!("{}", xous_address());
+    let pid_env = format!("{}", pid);
+    let process_name_env = args.name.to_string();
+    let process_key_env = hex::encode(&init.key.0);
+    let (shell, args) = if cfg!(windows) {
+        ("cmd", ["/C", &args.command])
+    } else if cfg!(unix) {
+        ("sh", ["-c", &args.command])
+    } else {
+        panic!("unrecognized platform -- don't know how to shell out");
+    };
+
+    println!("Launching process...");
+    let result = Command::new(shell)
+        .args(&args)
+        .env("XOUS_SERVER", server_env)
+        .env("XOUS_PID", pid_env)
+        .env("XOUS_PROCESS_NAME", process_name_env)
+        .env("XOUS_PROCESS_KEY", process_key_env)
+        .spawn()
+        .map(ProcessHandle)
+        .map_err(|e| {
+            eprintln!("couldn't start command: {}", e);
+            crate::Error::InternalError
+        });
+    // println!("Process result: {:?}", result);
+    result
+}
+
+pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
+    joiner
+        .0
+        .wait()
+        .or(Err(crate::Error::InternalError))
+        .and_then(|e| {
+            if e.success() {
+                Ok(crate::Result::Ok)
+            } else {
+                Err(crate::Error::UnknownError)
+            }
+        })
+}
 
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 

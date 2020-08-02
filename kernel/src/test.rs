@@ -78,8 +78,8 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
 
 fn shutdown_kernel() {
     // Any process ought to be able to shut down the system currently.
-    xous::wait_process(
-        xous::create_process(xous::ProcessArgs::new("shutdown", || {
+    xous::wait_process_as_thread(
+        xous::create_process_as_thread(xous::ProcessArgsAsThread::new("shutdown", || {
             rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
         }))
         .expect("couldn't shut down the kernel"),
@@ -126,7 +126,7 @@ fn send_scalar_message() {
     // and receive the message. Note that we need to communicate to the
     // "Client" what our server ID is. Normally this would be done via
     // an external nameserver.
-    let xous_server = xous::create_process(xous::ProcessArgs::new(
+    let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
             let sid =
@@ -148,7 +148,7 @@ fn send_scalar_message() {
     .expect("couldn't spawn server process");
 
     // Spawn the client "process" and wait for the server address.
-    let xous_client = xous::create_process(xous::ProcessArgs::new(
+    let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_scalar_message client",
         move || {
             let sid = server_addr_recv.recv().unwrap();
@@ -169,8 +169,8 @@ fn send_scalar_message() {
     .expect("couldn't spawn client process");
 
     // Wait for both processes to finish
-    crate::wait_process(xous_server).expect("couldn't join server process");
-    crate::wait_process(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
     shutdown_kernel();
 
     main_thread.join().expect("couldn't join kernel process");
@@ -185,7 +185,7 @@ fn send_move_message() {
 
     let (server_addr_send, server_addr_recv) = channel();
 
-    let xous_server = xous::create_process(xous::ProcessArgs::new(
+    let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_move_message server",
         move || {
             // println!("SERVER: Creating server...");
@@ -212,7 +212,7 @@ fn send_move_message() {
     ))
     .expect("couldn't start server");
 
-    let xous_client = xous::create_process(xous::ProcessArgs::new(
+    let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_move_message client",
         move || {
             // println!("CLIENT: Waiting for server address...");
@@ -228,8 +228,8 @@ fn send_move_message() {
     .expect("couldn't start client");
 
     // Wait for both processes to finish
-    crate::wait_process(xous_server).expect("couldn't join server process");
-    crate::wait_process(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -244,7 +244,7 @@ fn send_borrow_message() {
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let xous_server = xous::create_process(xous::ProcessArgs::new(
+    let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_borrow_message server",
         move || {
             // println!("SERVER: Creating server...");
@@ -272,7 +272,7 @@ fn send_borrow_message() {
     ))
     .expect("couldn't start server");
 
-    let xous_client = xous::create_process(xous::ProcessArgs::new(
+    let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_borrow_message client",
         move || {
             // Get the server address (out of band) so we know what to connect to
@@ -299,8 +299,8 @@ fn send_borrow_message() {
     .expect("couldn't start client");
 
     // Wait for both processes to finish
-    crate::wait_process(xous_server).expect("couldn't join server process");
-    crate::wait_process(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -315,7 +315,7 @@ fn send_mutableborrow_message() {
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
-    let xous_server = xous::create_process(xous::ProcessArgs::new(
+    let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_mutableborrow_message server",
         move || {
             let sid =
@@ -340,7 +340,7 @@ fn send_mutableborrow_message() {
     ))
     .expect("couldn't start server");
 
-    let xous_client = xous::create_process(xous::ProcessArgs::new(
+    let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_mutableborrow_message client",
         move || {
             // Get the server address (out of band) so we know what to connect to
@@ -368,8 +368,8 @@ fn send_mutableborrow_message() {
     .expect("couldn't start client");
 
     // Wait for both processes to finish
-    crate::wait_process(xous_server).expect("couldn't join server process");
-    crate::wait_process(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -386,7 +386,7 @@ fn send_mutableborrow_message_repeat() {
 
     let loops = 50;
 
-    let xous_server = xous::create_process(xous::ProcessArgs::new(
+    let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_mutableborrow_message_repeat server",
         move || {
             let sid =
@@ -413,7 +413,7 @@ fn send_mutableborrow_message_repeat() {
     ))
     .expect("couldn't start server");
 
-    let xous_client = xous::create_process(xous::ProcessArgs::new(
+    let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "send_mutableborrow_message_repeat client",
         move || {
             // Get the server address (out of band) so we know what to connect to
@@ -443,8 +443,8 @@ fn send_mutableborrow_message_repeat() {
     .expect("couldn't start client");
 
     // Wait for both processes to finish
-    crate::wait_process(xous_server).expect("couldn't join server process");
-    crate::wait_process(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -486,7 +486,7 @@ fn server_client_same_process() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let internal_server = xous::create_process(xous::arch::ProcessArgs::new(
+    let internal_server = xous::create_process_as_thread(xous::arch::ProcessArgsAsThread::new(
         "server_client_same_process process",
         || {
             let server = xous::create_server(b"s_c_same_process").expect("couldn't create server");
@@ -509,7 +509,7 @@ fn server_client_same_process() {
     ))
     .expect("couldn't start server");
 
-    xous::wait_process(internal_server).expect("couldn't join internal_server process");
+    xous::wait_process_as_thread(internal_server).expect("couldn't join internal_server process");
 
     // Any process ought to be able to shut down the system currently.
     rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
@@ -524,7 +524,7 @@ fn multiple_contexts() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let internal_server = xous::create_process(xous::ProcessArgs::new(
+    let internal_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
         "multiple_contexts process",
         move || {
             let server = xous::create_server(b"multiple_context").expect("couldn't create server");
@@ -559,7 +559,7 @@ fn multiple_contexts() {
     ))
     .expect("couldn't create internal server");
 
-    xous::wait_process(internal_server).expect("couldn't join internal_server process");
+    xous::wait_process_as_thread(internal_server).expect("couldn't join internal_server process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -585,7 +585,7 @@ fn process_restart_server() {
     fn create_destroy_server(test_bytes: &'static [u8]) {
         let (server_addr_send, server_addr_recv) = channel();
 
-        let xous_server = xous::create_process(xous::ProcessArgs::new(
+        let xous_server = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
             "process_restart_server server",
             move || {
                 let sid =
@@ -617,7 +617,7 @@ fn process_restart_server() {
         .expect("couldn't spawn server process");
 
         // Wait for the server to start up
-        let xous_client = xous::create_process(xous::ProcessArgs::new(
+        let xous_client = xous::create_process_as_thread(xous::ProcessArgsAsThread::new(
             "process_restart_server client",
             move || {
                 let sid = server_addr_recv.recv().unwrap();
@@ -629,8 +629,8 @@ fn process_restart_server() {
         ))
         .expect("couldn't start client process");
 
-        xous::wait_process(xous_server).expect("couldn't join server process");
-        xous::wait_process(xous_client).expect("couldn't join client process");
+        xous::wait_process_as_thread(xous_server).expect("couldn't join server process");
+        xous::wait_process_as_thread(xous_client).expect("couldn't join client process");
     }
 
     // create_destroy_server(test_bytes);

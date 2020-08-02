@@ -158,7 +158,7 @@ pub extern "C" fn kmain() {
 
 /// The main entrypoint when run in hosted mode. When running in embedded mode,
 /// this function does not exist.
-#[cfg(all(not(baremetal),not(feature = "testing")))]
+#[cfg(all(not(baremetal)))]
 fn main() {
     kmain();
 }

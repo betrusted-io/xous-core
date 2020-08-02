@@ -1,6 +1,6 @@
-#[cfg(not(any(windows,unix)))]
+#[cfg(baremetal)]
 pub mod native;
-#[cfg(not(any(windows,unix)))]
+#[cfg(baremetal)]
 pub use native::*;
 
 #[cfg(any(windows,unix))]

@@ -6,6 +6,9 @@ use crate::{
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+#[cfg(feature = "processes-as-threads")]
+use crate::ProcessArgsAsThread;
+
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
     /// Allocates pages of memory, equal to a total of `size` bytes.  A physical
@@ -577,7 +580,9 @@ impl SysCall {
             Some(SysCallNumber::CreateServer) => {
                 SysCall::CreateServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            Some(SysCallNumber::Connect) => SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _)),
+            Some(SysCallNumber::Connect) => {
+                SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            }
             Some(SysCallNumber::SendMessage) => match a2 {
                 1 => SysCall::SendMessage(
                     a1,
@@ -776,7 +781,6 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
-        println!("Unexpected return value: {:?}", result);
         Err(Error::InternalError)
     }
 }
@@ -838,54 +842,45 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 
 /// Create a new process by running it in its own thread
 #[cfg(feature = "processes-as-threads")]
-mod process {
-    use super::*;
-    pub fn create_process<F>(
-        args: ProcessArgs<F>,
-    ) -> core::result::Result<crate::arch::ProcessHandle, Error>
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let process_init = crate::arch::create_process_pre(&args)?;
-        rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-            if let Result::ProcessID(pid) = result {
-                crate::arch::create_process_post(args, process_init, pid)
-            } else {
-                Err(Error::InternalError)
-            }
-        })
-    }
-
-    /// Wait for a thread to finish
-    pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
-        crate::arch::wait_process(joiner)
-    }
+pub fn create_process_as_thread<F>(
+    args: ProcessArgsAsThread<F>,
+) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
+where
+    F: FnOnce() + Send + 'static,
+{
+    let process_init = crate::arch::create_process_pre_as_thread(&args)?;
+    rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
+        if let Result::ProcessID(pid) = result {
+            crate::arch::create_process_post_as_thread(args, process_init, pid)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
 }
 
-#[cfg(not(feature = "processes-as-threads"))]
-mod process {
-    use super::*;
-    pub fn create_process(
-        args: ProcessArgs,
-    ) -> core::result::Result<crate::arch::ProcessHandle, Error>
-    {
-        let process_init = crate::arch::create_process_pre(&args)?;
-        rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
-            if let Result::ProcessID(pid) = result {
-                crate::arch::create_process_post(args, process_init, pid)
-            } else {
-                Err(Error::InternalError)
-            }
-        })
-    }
-
-    /// Wait for a thread to finish
-    pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
-        crate::arch::wait_process(joiner)
-    }
+/// Wait for a thread to finish
+#[cfg(feature = "processes-as-threads")]
+pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
+    crate::arch::wait_process_as_thread(joiner)
 }
 
-pub use process::*;
+pub fn create_process(
+    args: ProcessArgs,
+) -> core::result::Result<crate::arch::ProcessHandle, Error> {
+    let process_init = crate::arch::create_process_pre(&args)?;
+    rsyscall(SysCall::CreateProcess(process_init)).and_then(|result| {
+        if let Result::ProcessID(pid) = result {
+            crate::arch::create_process_post(args, process_init, pid)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Wait for a thread to finish
+pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
+    crate::arch::wait_process(joiner)
+}
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;

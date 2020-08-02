@@ -43,7 +43,7 @@ impl SID {
     }
 }
 
-impl std::str::FromStr for SID {
+impl core::str::FromStr for SID {
     type Err = ();
 
     fn from_str(s: &str) -> core::result::Result<SID, ()> {
@@ -322,8 +322,8 @@ impl MessageEnvelope {
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
         match &self.message {
-            Message::ImmutableBorrow(x) | Message::MutableBorrow(x) => {
-                crate::syscall::return_memory(self.sender, x.buf.addr.get(), x.buf.size.get())
+            Message::Borrow(x) | Message::MutableBorrow(x) => {
+                crate::syscall::return_memory(self.sender, x.buf)
                     .expect("couldn't return memory")
             }
             Message::Move(msg) => crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)

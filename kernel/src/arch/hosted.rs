@@ -57,7 +57,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
     });
 }
 
-#[cfg(not(feature = "testing"))]
+#[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {
     use rand::{thread_rng, Rng};
     let mut process_key = [0u8; 16];
@@ -401,7 +401,7 @@ pub fn idle() -> bool {
         })
         .unwrap_or_else(|_| NETWORK_LISTEN_ADDRESS.with(|nla| *nla.borrow()));
 
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(test))]
     let address_receiver = {
         let (sender, receiver) = channel();
         set_send_addr(sender);
@@ -416,7 +416,7 @@ pub fn idle() -> bool {
             .expect("couldn't spawn listen thread")
     });
 
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(test))]
     {
         let address = address_receiver.recv().unwrap();
         xous::arch::set_xous_address(address);

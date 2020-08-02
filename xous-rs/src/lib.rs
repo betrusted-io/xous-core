@@ -17,6 +17,9 @@ pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;
 
+#[cfg(feature = "processes-as-threads")]
+pub use arch::ProcessArgsAsThread;
+
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]
 macro_rules! make_name {
