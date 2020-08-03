@@ -701,6 +701,7 @@ pub fn map_memory(
     size: usize,
     flags: MemoryFlags,
 ) -> core::result::Result<MemoryRange, Error> {
+    crate::arch::map_memory_pre(&phys, &virt, size, flags)?;
     let result = rsyscall(SysCall::MapMemory(
         phys,
         virt,
@@ -708,7 +709,7 @@ pub fn map_memory(
         flags,
     ))?;
     if let Result::MemoryRange(range) = result {
-        Ok(range)
+        Ok(crate::arch::map_memory_post(phys, virt, size, flags, range)?)
     } else if let Result::Error(e) = result {
         Err(e)
     } else {
@@ -719,8 +720,10 @@ pub fn map_memory(
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
 pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
+    crate::arch::unmap_memory_pre(&range)?;
     let result = rsyscall(SysCall::UnmapMemory(range))?;
     if let Result::Ok = result {
+        crate::arch::unmap_memory_post(range)?;
         Ok(())
     } else if let Result::Error(e) = result {
         Err(e)

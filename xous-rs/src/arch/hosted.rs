@@ -9,6 +9,9 @@ use std::thread_local;
 
 use crate::{Result, PID, TID};
 
+mod mem;
+pub use mem::*;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 16]);
 impl ProcessKey {

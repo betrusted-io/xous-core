@@ -1,7 +1,5 @@
 //! A Carton is an object that wraps another object for shipping across the kernel
 //! boundary. Structs that are stored in Cartons can be sent as messages.
-// extern crate alloc;
-// use alloc::alloc::{alloc, dealloc, Layout};
 
 use crate::{Error, MemoryMessage, MemoryRange, Message, CID};
 
@@ -15,7 +13,6 @@ impl<'a> Carton<'a> {
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let src_mem = bytes.as_ptr();
         let size = bytes.len();
-        // let layout = Layout::from_size_align(size, 4096).unwrap();
         let new_mem = crate::map_memory(
             None,
             None,
@@ -23,11 +20,9 @@ impl<'a> Carton<'a> {
             crate::MemoryFlags::R | crate::MemoryFlags::W,
         )
         .unwrap();
-        // unsafe {
-        //         let new_mem = alloc(layout);
-        //         core::ptr::copy(src_mem, new_mem, size);
-        //         new_mem
-        //     };
+        unsafe {
+            core::ptr::copy(src_mem, new_mem.as_mut_ptr(), new_mem.len());
+        };
         Carton {
             range: new_mem,
             slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), new_mem.len()) },
@@ -81,8 +76,6 @@ impl<'a> AsRef<[u8]> for Carton<'a> {
 
 impl<'a> Drop for Carton<'a> {
     fn drop(&mut self) {
-        // let layout = Layout::from_size_align(self.range.len(), 4096).unwrap();
-        // let ptr = self.range.as_mut_ptr();
-        // unsafe { dealloc(ptr, layout) };
+        crate::unmap_memory(self.range).unwrap();
     }
 }
