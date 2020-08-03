@@ -168,7 +168,7 @@ pub fn create_process_post(
     };
 
     // println!("Launching process...");
-    let result = Command::new(shell)
+    Command::new(shell)
         .args(&args)
         .env("XOUS_SERVER", server_env)
         .env("XOUS_PID", pid_env)
@@ -176,12 +176,10 @@ pub fn create_process_post(
         .env("XOUS_PROCESS_KEY", process_key_env)
         .spawn()
         .map(ProcessHandle)
-        .map_err(|e| {
+        .map_err(|_| {
             // eprintln!("couldn't start command: {}", e);
             crate::Error::InternalError
-        });
-    // println!("Process result: {:?}", result);
-    result
+        })
 }
 
 pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
@@ -407,8 +405,8 @@ fn xous_connect_impl(
                 mailbox: Arc::new(Mutex::new(HashMap::new())),
             })
         }
-        Err(e) => {
-            // eprintln!("Unable to connect to Xous server: {}", e);
+        Err(_e) => {
+            // eprintln!("Unable to connect to Xous server: {}", _e);
             // eprintln!(
             //     "Ensure Xous is running, or specify this process as an argument to the kernel"
             // );

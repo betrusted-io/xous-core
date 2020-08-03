@@ -1,6 +1,9 @@
 use crate::{MemoryAddress, PID, TID};
 use core::convert::TryInto;
 
+mod mem;
+pub use mem::*;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProcessArgs {
     name: [u8; 16],
@@ -30,7 +33,7 @@ pub struct ProcessInit {
 pub struct WaitHandle<T>(core::marker::PhantomData<T>);
 pub struct ProcessHandle(());
 
-pub fn thread_to_args(call: usize, init: ThreadInit) -> [usize; 8] {
+pub fn thread_to_args(call: usize, init: &ThreadInit) -> [usize; 8] {
     [
         call as usize,
         init.call as usize,
@@ -151,8 +154,8 @@ where
 pub fn create_thread_simple_post<T, U>(
     _f: fn(T) -> U,
     _arg: T,
-    thread_id: TID,
-) -> core::result::Result<WaitHandle<T>, crate::Error>
+    _thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
     T: Send + 'static,
     U: Send + 'static,
