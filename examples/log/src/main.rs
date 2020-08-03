@@ -80,7 +80,7 @@ mod implementation {
 mod implementation {
     use core::fmt::{Error, Write};
     use pancurses::{endwin, initscr, Window};
-    use std::sync::mpsc::{channel, Sender, Receiver};
+    use std::sync::mpsc::{channel, Receiver, Sender};
 
     enum ControlMessage {
         Text(String),
@@ -109,15 +109,13 @@ mod implementation {
         pub fn run(&mut self) {
             loop {
                 match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {
-                    Ok(msg) => {
-                        match msg {
-                            ControlMessage::Exit => break,
-                            ControlMessage::Text(s) => {
-                                self.window.as_ref().unwrap().printw(s);
-                                self.window.as_ref().unwrap().refresh();
-                            }
+                    Ok(msg) => match msg {
+                        ControlMessage::Exit => break,
+                        ControlMessage::Text(s) => {
+                            self.window.as_ref().unwrap().printw(s);
+                            self.window.as_ref().unwrap().refresh();
                         }
-                    }
+                    },
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         // Calling `getch` refreshes the screen
                         self.window.as_ref().unwrap().getch();
@@ -128,7 +126,9 @@ mod implementation {
         }
 
         pub fn get_writer(&self) -> OutputWriter {
-            OutputWriter { tx: self.tx.clone() }
+            OutputWriter {
+                tx: self.tx.clone(),
+            }
         }
     }
 
@@ -142,9 +142,7 @@ mod implementation {
     impl Write for Output {
         fn write_str(&mut self, s: &str) -> Result<(), Error> {
             // It would be nice if this worked with &str
-            self.tx
-                .send(ControlMessage::Text(s.to_owned()))
-                .unwrap();
+            self.tx.send(ControlMessage::Text(s.to_owned())).unwrap();
             Ok(())
         }
     }
@@ -156,9 +154,7 @@ mod implementation {
     impl Write for OutputWriter {
         fn write_str(&mut self, s: &str) -> Result<(), Error> {
             // It would be nice if this worked with &str
-            self.tx
-                .send(ControlMessage::Text(s.to_owned()))
-                .unwrap();
+            self.tx.send(ControlMessage::Text(s.to_owned())).unwrap();
             Ok(())
         }
     }
@@ -166,8 +162,58 @@ mod implementation {
 
 #[cfg(baremetal)]
 mod implementation {
+    use core::fmt::{Error, Write};
+
     pub struct Output {
-        addr: *mut u32,
+        addr: usize,
+    }
+
+    pub fn init() -> Output {
+        let uart = xous::syscall::map_memory(
+            xous::MemoryAddress::new(0xf000_4000),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map serial port");
+        unsafe { crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
+        println!("Mapped UART @ {:08x}", uart.addr.get());
+
+        println!("Process: map success!");
+        crate::debug::DEFAULT.enable_rx();
+
+        println!("Allocating IRQ...");
+        xous::syscall::claim_interrupt(4, handle_irq, core::ptr::null_mut::<usize>())
+            .expect("couldn't claim interrupt");
+        Output {
+            addr: uart.as_mut_ptr() as usize,
+        }
+    }
+
+    impl Output {
+        pub fn get_writer(&self) -> OutputWriter {
+            OutputWriter {  }
+        }
+
+        pub fn run(&mut self) {
+            loop {
+                xous::wait_event();
+                // match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                //     Ok(msg) => match msg {
+                //         ControlMessage::Exit => break,
+                //         ControlMessage::Text(s) => {
+                //             self.window.as_ref().unwrap().printw(s);
+                //             self.window.as_ref().unwrap().refresh();
+                //         }
+                //     },
+                //     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                //         // Calling `getch` refreshes the screen
+                //         self.window.as_ref().unwrap().getch();
+                //     }
+                //     Err(e) => panic!("Error: {}", e),
+                // }
+            }
+        }
     }
 
     use core::panic::PanicInfo;
@@ -189,29 +235,33 @@ mod implementation {
         println!();
     }
 
-    pub fn init() -> Output {
-        let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0xf000_4000),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map serial port");
-        unsafe { crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() };
-        println!("Mapped UART @ {:08x}", uart.addr.get());
+    pub struct OutputWriter {
+    }
 
-        println!("Process: map success!");
-        crate::debug::DEFAULT.enable_rx();
+    impl OutputWriter {
+        pub fn putc(&self, c: u8) {
+            unsafe {
+                let base = crate::debug::DEFAULT_UART_ADDR;
+                // Wait until TXFULL is `0`
+                while base.add(1).read_volatile() != 0 {}
+                base.add(0).write_volatile(c as usize)
+            };
+        }
+    }
 
-        println!("Allocating IRQ...");
-        xous::syscall::claim_interrupt(4, handle_irq, core::ptr::null_mut::<usize>())
-            .expect("couldn't claim interrupt");
+    impl Write for OutputWriter {
+        fn write_str(&mut self, s: &str) -> Result<(), Error> {
+            for c in s.bytes() {
+                self.putc(c);
+            }
+            Ok(())
+        }
     }
 }
 
-fn reader_thread(output: &mut implementation::OutputWriter) {
+fn reader_thread(mut output: implementation::OutputWriter) {
     writeln!(output, "Xous Logging Server starting up...").unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    // std::thread::sleep(std::time::Duration::from_secs(1));
 
     writeln!(output, "Starting log server...").unwrap();
     let server_addr = xous::create_server(b"xous-logs-output").unwrap();
@@ -229,12 +279,7 @@ fn reader_thread(output: &mut implementation::OutputWriter) {
         writeln!(output, "Got message envelope: {:?}", envelope).unwrap();
         match &mut envelope.message {
             xous::Message::Scalar(msg) => {
-                writeln!(
-                    output,
-                    "Scalar message from {}: {:?}",
-                    envelope.sender, msg
-                )
-                .unwrap();
+                writeln!(output, "Scalar message from {}: {:?}", envelope.sender, msg).unwrap();
             }
             xous::Message::Move(msg) => {
                 let log_entry = LogString::from_message(msg);
@@ -269,12 +314,11 @@ fn reader_thread(output: &mut implementation::OutputWriter) {
 }
 
 #[cfg_attr(baremetal, no_mangle)]
-fn main() -> Result<(), xous::Error> {
+fn main() {
     let mut output = implementation::init();
-    let mut writer = output.get_writer();
-    xous::arch::ensure_connection().unwrap();
-    xous::create_thread(move || reader_thread(&mut writer)).unwrap();
+    let writer = output.get_writer();
+    // xous::arch::ensure_connection().unwrap();
+    xous::create_thread_simple(reader_thread, writer).unwrap();
 
     output.run();
-    Ok(())
 }

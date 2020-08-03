@@ -164,7 +164,7 @@ pub fn create_process_post(
         panic!("unrecognized platform -- don't know how to shell out");
     };
 
-    println!("Launching process...");
+    // println!("Launching process...");
     let result = Command::new(shell)
         .args(&args)
         .env("XOUS_SERVER", server_env)
@@ -174,7 +174,7 @@ pub fn create_process_post(
         .spawn()
         .map(ProcessHandle)
         .map_err(|e| {
-            eprintln!("couldn't start command: {}", e);
+            // eprintln!("couldn't start command: {}", e);
             crate::Error::InternalError
         });
     // println!("Process result: {:?}", result);
@@ -301,6 +301,29 @@ fn xous_address() -> SocketAddr {
         .unwrap_or_else(default_xous_address)
 }
 
+pub fn create_thread_simple_pre<T, U>(
+    _f: &fn(T) -> U,
+    _arg: &T,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+
+pub fn create_thread_simple_post<T, U>(
+    f: fn(T) -> U,
+    arg: T,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    create_thread_post(move || f(arg), thread_id)
+}
+
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
 where
     F: FnOnce() -> T,
@@ -310,14 +333,14 @@ where
     Ok(ThreadInit {})
 }
 
-pub fn create_thread_post<F, T>(
+pub fn create_thread_post<F, U>(
     f: F,
     thread_id: TID,
-) -> core::result::Result<WaitHandle<T>, crate::Error>
+) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
-    F: FnOnce() -> T,
+    F: FnOnce() -> U,
     F: Send + 'static,
-    T: Send + 'static,
+    U: Send + 'static,
 {
     let server_address = xous_address();
     let server_connection =
@@ -382,10 +405,10 @@ fn xous_connect_impl(
             })
         }
         Err(e) => {
-            eprintln!("Unable to connect to Xous server: {}", e);
-            eprintln!(
-                "Ensure Xous is running, or specify this process as an argument to the kernel"
-            );
+            // eprintln!("Unable to connect to Xous server: {}", e);
+            // eprintln!(
+            //     "Ensure Xous is running, or specify this process as an argument to the kernel"
+            // );
             Err(())
         }
     }

@@ -3,8 +3,8 @@ use crate::{
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
     Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
+// use num_derive::FromPrimitive;
+// use num_traits::FromPrimitive;
 
 #[cfg(feature = "processes-as-threads")]
 use crate::ProcessArgsAsThread;
@@ -37,8 +37,7 @@ pub enum SysCall {
     /// # Errors
     ///
     UnmapMemory(
-        MemoryAddress, /* virt */
-        MemorySize,    /* region size */
+        MemoryRange
     ),
 
     /// Sets the offset and size of a given memory region.  This call may only
@@ -259,7 +258,7 @@ pub enum SysCall {
     Invalid(usize, usize, usize, usize, usize, usize, usize),
 }
 
-#[derive(FromPrimitive)]
+// #[derive(FromPrimitive)]
 enum SysCallNumber {
     MapMemory = 2,
     Yield = 3,
@@ -286,6 +285,37 @@ enum SysCallNumber {
     Invalid,
 }
 
+impl SysCallNumber {
+    pub fn from(val: usize) -> SysCallNumber {
+        use SysCallNumber::*;
+        match val {
+            2 => MapMemory,
+            3 => Yield,
+            4 => ReturnToParentI,
+            5 => ClaimInterrupt,
+            6 => FreeInterrupt,
+            7 => SwitchTo,
+            8 => ReadyThreads,
+            9 => WaitEvent,
+            10 => IncreaseHeap,
+            11 => DecreaseHeap,
+            12 => UpdateMemoryFlags,
+            13 => SetMemRegion,
+            14 => CreateServer,
+            15 => ReceiveMessage,
+            16 => SendMessage,
+            17 => Connect,
+            18 => CreateThread,
+            19 => UnmapMemory,
+            20 => ReturnMemory,
+            21 => CreateProcess,
+            22 => TerminateProcess,
+            23 => Shutdown,
+            _ => Invalid,
+        }
+    }
+}
+
 impl SysCall {
     /// Convert the SysCall into an array of eight `usize` elements,
     /// suitable for passing to the kernel.
@@ -306,10 +336,10 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::UnmapMemory(a1, a2) => [
+            SysCall::UnmapMemory(range) => [
                 SysCallNumber::UnmapMemory as usize,
-                a1.get(),
-                a2.get(),
+                range.as_ptr() as usize,
+                range.len(),
                 0,
                 0,
                 0,
@@ -534,61 +564,60 @@ impl SysCall {
         a6: usize,
         a7: usize,
     ) -> core::result::Result<Self, Error> {
-        Ok(match FromPrimitive::from_usize(a0) {
-            Some(SysCallNumber::MapMemory) => SysCall::MapMemory(
+        Ok(match SysCallNumber::from(a0) {
+            SysCallNumber::MapMemory => SysCall::MapMemory(
                 MemoryAddress::new(a1),
                 MemoryAddress::new(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
-            Some(SysCallNumber::UnmapMemory) => SysCall::UnmapMemory(
-                MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
-                MemorySize::new(a2).ok_or(Error::InvalidSyscall)?,
+            SysCallNumber::UnmapMemory => SysCall::UnmapMemory(
+                MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?,
             ),
-            Some(SysCallNumber::Yield) => SysCall::Yield,
-            Some(SysCallNumber::WaitEvent) => SysCall::WaitEvent,
-            Some(SysCallNumber::ReceiveMessage) => {
+            SysCallNumber::Yield => SysCall::Yield,
+            SysCallNumber::WaitEvent => SysCall::WaitEvent,
+            SysCallNumber::ReceiveMessage => {
                 SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            Some(SysCallNumber::ReturnToParentI) => {
+            SysCallNumber::ReturnToParentI => {
                 SysCall::ReturnToParentI(pid_from_usize(a1)?, a2)
             }
-            Some(SysCallNumber::ClaimInterrupt) => SysCall::ClaimInterrupt(
+            SysCallNumber::ClaimInterrupt => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
                 MemoryAddress::new(a3),
             ),
-            Some(SysCallNumber::FreeInterrupt) => SysCall::FreeInterrupt(a1),
-            Some(SysCallNumber::SwitchTo) => SysCall::SwitchTo(pid_from_usize(a1)?, a2 as usize),
-            Some(SysCallNumber::ReadyThreads) => SysCall::ReadyThreads(pid_from_usize(a1)?),
-            Some(SysCallNumber::IncreaseHeap) => SysCall::IncreaseHeap(
+            SysCallNumber::FreeInterrupt => SysCall::FreeInterrupt(a1),
+            SysCallNumber::SwitchTo => SysCall::SwitchTo(pid_from_usize(a1)?, a2 as usize),
+            SysCallNumber::ReadyThreads => SysCall::ReadyThreads(pid_from_usize(a1)?),
+            SysCallNumber::IncreaseHeap => SysCall::IncreaseHeap(
                 a1 as usize,
                 MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
             ),
-            Some(SysCallNumber::DecreaseHeap) => SysCall::DecreaseHeap(a1 as usize),
-            Some(SysCallNumber::UpdateMemoryFlags) => SysCall::UpdateMemoryFlags(
+            SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1 as usize),
+            SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 a2 as usize,
                 MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
-            Some(SysCallNumber::SetMemRegion) => SysCall::SetMemRegion(
+            SysCallNumber::SetMemRegion => SysCall::SetMemRegion(
                 pid_from_usize(a1)?,
                 MemoryType::from(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 a4,
             ),
-            Some(SysCallNumber::CreateServer) => {
+            SysCallNumber::CreateServer => {
                 SysCall::CreateServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            Some(SysCallNumber::Connect) => {
+            SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            Some(SysCallNumber::SendMessage) => match a2 {
+            SysCallNumber::SendMessage => match a2 {
                 1 => SysCall::SendMessage(
                     a1,
                     Message::MutableBorrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5),
+                        buf: MemoryRange::new(a4, a5)?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -597,7 +626,7 @@ impl SysCall {
                     a1,
                     Message::Borrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5),
+                        buf: MemoryRange::new(a4, a5)?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -606,7 +635,7 @@ impl SysCall {
                     a1,
                     Message::Move(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5),
+                        buf: MemoryRange::new(a4, a5)?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -623,19 +652,18 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            Some(SysCallNumber::ReturnMemory) => {
-                SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3))
+            SysCallNumber::ReturnMemory => {
+                SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?)
             }
-            Some(SysCallNumber::CreateThread) => {
+            SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            Some(SysCallNumber::CreateProcess) => {
+            SysCallNumber::CreateProcess => {
                 SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            Some(SysCallNumber::TerminateProcess) => SysCall::TerminateProcess,
-            Some(SysCallNumber::Shutdown) => SysCall::Shutdown,
-            Some(SysCallNumber::Invalid) => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
-            None => return Err(Error::InvalidSyscall),
+            SysCallNumber::TerminateProcess => SysCall::TerminateProcess,
+            SysCallNumber::Shutdown => SysCall::Shutdown,
+            SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
 }
@@ -690,8 +718,8 @@ pub fn map_memory(
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn unmap_memory(virt: MemoryAddress, size: MemorySize) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::UnmapMemory(virt, size))?;
+pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::UnmapMemory(range))?;
     if let Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -816,6 +844,24 @@ pub fn yield_slice() {
 /// Return execution to the kernel and wait for a message or an interrupt.
 pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
+}
+
+pub fn create_thread_simple<T, U>(
+    f: fn(T) -> U,
+    arg: T,
+) -> core::result::Result<crate::arch::WaitHandle<U>, Error>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_simple_pre(&f, &arg)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_simple_post(f, arg, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
 }
 
 /// Create a new thread with the given closure.

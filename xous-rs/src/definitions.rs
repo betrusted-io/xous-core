@@ -326,7 +326,7 @@ impl Drop for MessageEnvelope {
                 crate::syscall::return_memory(self.sender, x.buf)
                     .expect("couldn't return memory")
             }
-            Message::Move(msg) => crate::syscall::unmap_memory(msg.buf.addr, msg.buf.size)
+            Message::Move(msg) => crate::syscall::unmap_memory(msg.buf)
                 .expect("couldn't free memory message"),
             _ => (),
         }
@@ -334,15 +334,15 @@ impl Drop for MessageEnvelope {
 }
 
 impl MemoryRange {
-    pub fn new(addr: usize, size: usize) -> MemoryRange {
+    pub fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         assert!(
             addr != 0,
             "tried to construct a memory range with a null pointer"
         );
-        MemoryRange {
-            addr: MemoryAddress::new(addr).unwrap(),
-            size: MemorySize::new(size).unwrap(),
-        }
+        Ok(MemoryRange {
+            addr: MemoryAddress::new(addr).ok_or(Error::BadAddress)?,
+            size: MemorySize::new(size).ok_or(Error::BadAddress)?,
+        })
     }
 
     pub fn from_parts(addr: MemoryAddress, size: MemorySize) -> MemoryRange {

@@ -342,7 +342,7 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        Ok(xous::MemoryRange::new(virt_ptr as usize, size))
+        Ok(xous::MemoryRange::new(virt_ptr as usize, size)?)
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -440,7 +440,7 @@ impl MemoryManager {
             }
         }
 
-        Ok(MemoryRange::new(virt as usize, size))
+        Ok(MemoryRange::new(virt as usize, size)?)
     }
 
     /// Attempt to map the given physical address into the virtual address space

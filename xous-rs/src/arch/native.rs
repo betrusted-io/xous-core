@@ -1,4 +1,4 @@
-use crate::{Error, MemoryAddress, PID, TID};
+use crate::{MemoryAddress, PID, TID};
 use core::convert::TryInto;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,13 +47,13 @@ pub fn thread_to_args(call: usize, init: ThreadInit) -> [usize; 8] {
 /// that were passed via registers and converts them into a `ThreadInit`
 /// struct with enough information to start the new thread.
 pub fn args_to_thread(
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
+    _a5: usize,
+    _a6: usize,
+    _a7: usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
     todo!()
     // let call = unsafe { core::mem::transmute::<usize, fn(usize) -> usize;
@@ -126,14 +126,37 @@ pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
 }
 
 pub fn args_to_process(
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
+    _a1: usize,
+    _a2: usize,
+    _a3: usize,
+    _a4: usize,
     _a5: usize,
     _a6: usize,
     _a7: usize,
 ) -> core::result::Result<ProcessInit, crate::Error> {
+    todo!()
+}
+
+pub fn create_thread_simple_pre<T, U>(
+    _f: &fn(T) -> U,
+    _arg: &T,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    todo!()
+}
+
+pub fn create_thread_simple_post<T, U>(
+    _f: fn(T) -> U,
+    _arg: T,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<T>, crate::Error>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
     todo!()
 }
 

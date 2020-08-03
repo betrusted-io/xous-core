@@ -44,7 +44,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 (
                     Message::Move(MemoryMessage {
                         id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
                         offset: msg.offset,
                         valid: msg.valid,
                     }),
@@ -62,7 +62,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 (
                     Message::MutableBorrow(MemoryMessage {
                         id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
                         offset: msg.offset,
                         valid: msg.valid,
                     }),
@@ -88,7 +88,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 (
                     Message::Borrow(MemoryMessage {
                         id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len()),
+                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
                         offset: msg.offset,
                         valid: msg.valid,
                     }),
@@ -381,11 +381,11 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
 
             Ok(xous::Result::MemoryRange(range))
         }
-        SysCall::UnmapMemory(virt, size) => {
+        SysCall::UnmapMemory(range) => {
             let mut mm = MemoryManagerHandle::get();
             let mut result = Ok(xous::Result::Ok);
-            let virt = virt.get();
-            let size = size.get();
+            let virt = range.as_ptr() as usize;
+            let size = range.len();
             if virt & 0xfff != 0 {
                 return Err(xous::Error::BadAlignment);
             }

@@ -299,7 +299,7 @@ impl Server {
             return Ok(WaitingMessage::ForgetMemory(MemoryRange::new(
                 server_addr,
                 len,
-            )));
+            )?));
         }
 
         // If a `move` address somehow ends up here, indicate the memory has been moved.
@@ -353,7 +353,7 @@ impl Server {
                     sender: self.queue_tail | (server_idx << 16),
                     message: xous::Message::Borrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryRange::new(buf, buf_size),
+                        buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -379,7 +379,7 @@ impl Server {
                     sender: self.queue_tail | (server_idx << 16),
                     message: xous::Message::MutableBorrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryRange::new(buf, buf_size),
+                        buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -405,7 +405,7 @@ impl Server {
                     sender: self.queue_tail | (server_idx << 16),
                     message: xous::Message::Borrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryRange::new(buf, buf_size),
+                        buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -431,7 +431,7 @@ impl Server {
                     sender: self.queue_tail | (server_idx << 16),
                     message: xous::Message::MutableBorrow(xous::MemoryMessage {
                         id,
-                        buf: MemoryRange::new(buf, buf_size),
+                        buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
@@ -457,7 +457,7 @@ impl Server {
                     sender: make_sender(pid, ctx),
                     message: xous::Message::Move(xous::MemoryMessage {
                         id,
-                        buf: MemoryRange::new(buf, buf_size),
+                        buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
                         valid: MemorySize::new(valid),
                     }),
