@@ -84,6 +84,7 @@ impl<'a> MemoryManagerHandle<'a> {
             MM_HANDLE_COUNT - 1
         };
         if count != 0 {
+            ::debug_here::debug_here!();
             panic!("Multiple users of MemoryManagerHandle!");
         }
         MemoryManagerHandle {
@@ -529,6 +530,17 @@ impl MemoryManager {
 
     /// Claim the given memory for the given process, or release the memory
     /// back to the free pool.
+    #[cfg(not(baremetal))]
+    fn claim_or_release(
+        &mut self,
+        _addr: *mut usize,
+        _pid: PID,
+        _action: ClaimOrRelease,
+    ) -> Result<(), xous::Error> {
+        Ok(())
+    }
+
+    #[cfg(baremetal)]
     fn claim_or_release(
         &mut self,
         addr: *mut usize,

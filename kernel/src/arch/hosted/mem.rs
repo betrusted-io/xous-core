@@ -19,7 +19,7 @@ impl MemoryMapping {
     /// Get the currently active memory mapping.  Note that the actual root pages
     /// may be found at virtual address `PAGE_TABLE_ROOT_OFFSET`.
     pub fn current() -> MemoryMapping {
-        unimplemented!()
+        MemoryMapping { pid: 0 }
     }
 
     /// Get the "PID" (actually, ASID) from the current mapping
@@ -32,7 +32,7 @@ impl MemoryMapping {
     /// kernel, which should be mapped into every possible address space.
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
-    pub fn activate(self) -> Result<(), xous::Error>{
+    pub fn activate(self) -> Result<(), xous::Error> {
         // This is a no-op on hosted environments
         Ok(())
     }
@@ -43,13 +43,13 @@ impl MemoryMapping {
         _addr: usize,
         _flags: MemoryFlags,
     ) -> Result<(), Error> {
-        unimplemented!()
+        Ok(())
     }
 }
 
 /// Determine whether a virtual address has been mapped
 pub fn address_available(_virt: usize) -> bool {
-    unimplemented!()
+    true
 }
 
 pub fn map_page_inner(
@@ -97,14 +97,14 @@ pub fn return_page_inner(
     unimplemented!()
 }
 
-pub fn unmap_page_inner(_mm: &mut MemoryManager, _virt: usize) -> Result<usize, Error> {
-    unimplemented!()
+pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, Error> {
+    Ok(virt)
 }
 
 pub fn hand_page_to_user(_virt: *mut usize) -> Result<(), Error> {
     unimplemented!()
 }
 
-pub fn virt_to_phys(_virt: usize) -> Result<usize, Error> {
-    unimplemented!()
+pub fn virt_to_phys(virt: usize) -> Result<usize, Error> {
+    Ok(virt)
 }
