@@ -13,10 +13,6 @@ bitflags = "1.2.1"
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
 
-# If this is set, create_process() will instead create a thread in
-# the current process. This is used by the test suite.
-processes-as-threads = []
-
 default = []
 
 [target.'cfg(any(windows,unix))'.dependencies]

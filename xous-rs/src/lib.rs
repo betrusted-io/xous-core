@@ -15,7 +15,7 @@ pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;
 
-#[cfg(feature = "processes-as-threads")]
+#[cfg(not(baremetal))]
 pub use arch::ProcessArgsAsThread;
 
 /// Convert a four-letter string into a 32-bit int.

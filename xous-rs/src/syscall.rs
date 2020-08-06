@@ -6,7 +6,7 @@ use crate::{
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
-#[cfg(feature = "processes-as-threads")]
+#[cfg(not(baremetal))]
 use crate::ProcessArgsAsThread;
 
 #[derive(Debug, PartialEq)]
@@ -890,7 +890,7 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by running it in its own thread
-#[cfg(feature = "processes-as-threads")]
+#[cfg(not(baremetal))]
 pub fn create_process_as_thread<F>(
     args: ProcessArgsAsThread<F>,
 ) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
@@ -908,7 +908,7 @@ where
 }
 
 /// Wait for a thread to finish
-#[cfg(feature = "processes-as-threads")]
+#[cfg(not(baremetal))]
 pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
     crate::arch::wait_process_as_thread(joiner)
 }
