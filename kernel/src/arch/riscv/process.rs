@@ -1,10 +1,9 @@
 use core::mem;
 static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
-pub const MAX_CONTEXT: ThreadID = 31;
+pub const MAX_THREAD: TID = 31;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous;
-use xous::ThreadID;
+use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 use crate::args::KernelArguments;
 const DEFAULT_STACK_SIZE: usize = 131072;
@@ -17,11 +16,6 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 pub const EXIT_THREAD: usize = 0xff80_3000;
 pub const IRQ_CONTEXT: usize = 1;
 
-pub type ContextInit = (
-    usize, /* entrypoint */
-    usize, /* stack */
-    usize, /* stack size */
-);
 
 #[repr(C)]
 #[cfg(baremetal)]
@@ -48,22 +42,22 @@ pub struct Process {
 
     /// The index into the `contexts` list.  This must never be 0. The interrupt
     /// handler writes to this field, so it must not be moved.
-    context_nr: ThreadID,
+    context_nr: TID,
 
     _hash: [usize; 8],
 
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
-    /// The interrupt handler will save the current process to this Context when
+    /// The interrupt handler will save the current process to this Thread when
     /// the trap handler is entered.
-    contexts: [Context; MAX_CONTEXT],
+    contexts: [Thread; MAX_THREAD],
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 /// Everything required to keep track of a single thread of execution.
-pub struct Context {
+pub struct Thread {
     /// Storage for all RISC-V registers, minus $zero
     pub registers: [usize; 31],
 
@@ -74,20 +68,43 @@ pub struct Context {
     pub sepc: usize,
 }
 
-pub struct ContextInit {
-    entrypoint: usize,
-    stack: usize,
-    context: usize,
-}
-
 impl Process {
-    pub fn current_context(&mut self) -> &mut Context {
+
+    /// Calls the provided function with the current inner process state.
+    pub fn with_inner<F, R>(f: F) -> R
+    where
+        F: FnOnce(&ProcessInner) -> R,
+    {
+        todo!();
+        // PROCESS_TABLE.with(|pt| {
+        //     let process_table = pt.borrow();
+        //     let current = &process_table.table[process_table.current.get() as usize - 1]
+        //         .as_ref()
+        //         .unwrap();
+        //     f(&current.inner)
+        // })
+    }
+
+    pub fn with_inner_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut ProcessInner) -> R,
+    {
+        todo!();
+        // PROCESS_TABLE.with(|pt| {
+        //     let mut process_table = pt.borrow_mut();
+        //     let current_pid_idx = process_table.current.get() as usize - 1;
+        //     let current = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+        //     f(&mut current.inner)
+        // })
+    }
+
+    pub fn current_thread(&mut self) -> &mut Thread {
         assert!(self.context_nr != 0, "context number was 0");
         &mut self.contexts[self.context_nr - 1]
     }
 
     /// Set the current context number.
-    pub fn set_context(&mut self, context: ThreadID) {
+    pub fn set_thread(&mut self, context: TID) {
         assert!(
             context > 0 && context <= self.contexts.len(),
             "attempt to switch to an invalid context {}",
@@ -96,7 +113,7 @@ impl Process {
         self.context_nr = context;
     }
 
-    pub fn context(&mut self, context_nr: ThreadID) -> &mut Context {
+    pub fn context(&mut self, context_nr: TID) -> &mut Thread {
         assert!(
             context_nr > 0 && context_nr <= self.contexts.len(),
             "attempt to retrieve an invalid context {}",
@@ -105,16 +122,16 @@ impl Process {
         &mut self.contexts[context_nr - 1]
     }
 
-    pub fn find_free_context_nr(&self) -> Option<ThreadID> {
+    pub fn find_free_context_nr(&self) -> Option<TID> {
         for (index, context) in self.contexts.iter().enumerate() {
             if index != 0 && context.sepc == 0 {
-                return Some(index as ThreadID + 1);
+                return Some(index as TID + 1);
             }
         }
         None
     }
 
-    pub fn set_context_result(&mut self, context_nr: ThreadID, result: xous::Result) {
+    pub fn set_context_result(&mut self, context_nr: TID, result: xous::Result) {
         let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
         let context = self.context(context_nr);
         for (idx, reg) in vals.iter().enumerate() {
@@ -148,7 +165,7 @@ impl Process {
             *context = Default::default();
         }
 
-        let mut context = self.current_context();
+        let mut context = self.current_thread();
 
         context.registers = Default::default();
         context.sepc = entrypoint;
@@ -158,37 +175,37 @@ impl Process {
     }
 }
 
-impl Context {
+impl Thread {
     /// The current stack pointer for this context
     pub fn stack_pointer(&self) -> usize {
         self.registers[1]
     }
 }
 
-pub struct ProcessHandle<'a> {
-    process: &'a mut Process,
-}
+// pub struct ProcessHandle<'a> {
+//     process: &'a mut Process,
+// }
 
-/// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-/// to the Memory Manager should only be made during interrupt contexts.
-impl<'a> ProcessHandle<'a> {
-    /// Get the singleton Process.
-    pub fn get() -> ProcessHandle<'a> {
-        ProcessHandle {
-            process: unsafe { &mut *PROCESS },
-        }
-    }
-}
+// /// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
+// /// to the Memory Manager should only be made during interrupt contexts.
+// impl<'a> ProcessHandle<'a> {
+//     /// Get the singleton Process.
+//     pub fn get() -> ProcessHandle<'a> {
+//         ProcessHandle {
+//             process: unsafe { &mut *PROCESS },
+//         }
+//     }
+// }
 
-use core::ops::{Deref, DerefMut};
-impl Deref for ProcessHandle<'_> {
-    type Target = Process;
-    fn deref(&self) -> &Process {
-        &*self.process
-    }
-}
-impl DerefMut for ProcessHandle<'_> {
-    fn deref_mut(&mut self) -> &mut Process {
-        &mut *self.process
-    }
-}
+// use core::ops::{Deref, DerefMut};
+// impl Deref for ProcessHandle<'_> {
+//     type Target = Process;
+//     fn deref(&self) -> &Process {
+//         &*self.process
+//     }
+// }
+// impl DerefMut for ProcessHandle<'_> {
+//     fn deref_mut(&mut self) -> &mut Process {
+//         &mut *self.process
+//     }
+// }

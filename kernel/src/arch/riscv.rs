@@ -10,7 +10,7 @@ pub mod syscall;
 pub use process::Context;
 
 pub fn current_pid() -> PID {
-    satp::read().asid() as PID
+    PID::new(satp::read().asid() as _).unwrap()
 }
 
 pub fn init() {
@@ -21,6 +21,9 @@ pub fn init() {
     }
 }
 
-pub fn idle() {
+/// Put the core to sleep until an interrupt hits. Returns `true`
+/// to indicate the kernel should not exit.
+pub fn idle() -> bool {
     unsafe { riscv::asm::wfi() };
+    true
 }

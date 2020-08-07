@@ -9,7 +9,7 @@ extern crate bitflags;
 #[macro_use]
 mod debug;
 
-#[cfg(test)]
+#[cfg(all(test, not(baremetal)))]
 mod test;
 
 mod arch;
