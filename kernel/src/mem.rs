@@ -1,34 +1,15 @@
 use crate::args::KernelArguments;
+use core::cell::RefCell;
 use core::fmt;
 use core::mem;
 use core::slice;
 use core::str;
-use core::cell::RefCell;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
 
 use xous::{MemoryFlags, MemoryRange, PID};
 
-
-// Fake macro to implement "thread local" on baremetal as a simple static variable.
-// The kernel is single-threaded so it's really just one thread.
-#[cfg(baremetal)]
-macro_rules! thread_local {
-    // empty (base case for the recursion)
-    () => {};
-
-    // process multiple declarations
-    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr; $($rest:tt)*) => (
-        $(#[$attr])* $vis static $name: $t = $init;
-        $crate::services::thread_local!($($rest)*);
-    );
-
-    // handle a single declaration
-    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr) => (
-        $(#[$attr])* $vis static $name: $t = $init;
-    );
-}
 #[cfg(not(baremetal))]
 use std::thread_local;
 
@@ -69,22 +50,27 @@ impl fmt::Display for MemoryRangeExtra {
 }
 
 pub struct MemoryManager {
-    allocations: &'static mut [Option<PID>],
-    extra: &'static [MemoryRangeExtra],
     ram_start: usize,
     ram_size: usize,
     ram_name: u32,
     last_ram_page: usize,
 }
 
-thread_local!(static MEMORY_MANAGER: RefCell<MemoryManager> = RefCell::new(MemoryManager {
-    allocations: &mut [],
-    extra: &[],
-    ram_start: 0,
-    ram_size: 0,
-    ram_name: 0,
-    last_ram_page: 0,
-}));
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::default_hack()
+    }
+}
+
+#[cfg(not(baremetal))]
+thread_local!(static MEMORY_MANAGER: RefCell<MemoryManager> = RefCell::new(MemoryManager::default()));
+
+#[cfg(baremetal)]
+static mut MEMORY_MANAGER: MemoryManager = MemoryManager::default_hack();
+#[cfg(baremetal)]
+static mut MEMORY_ALLOCATIONS: &mut [Option<PID>] = &mut [];
+#[cfg(baremetal)]
+static mut EXTRA_REGIONS: &[MemoryRangeExtra] = &[];
 
 /// Initialize the memory map.
 /// This will go through memory and map anything that the kernel is
@@ -92,16 +78,25 @@ thread_local!(static MEMORY_MANAGER: RefCell<MemoryManager> = RefCell::new(Memor
 /// and place it at the usual offset.  The MMU will not be enabled yet,
 /// as the process entry has not yet been created.
 impl MemoryManager {
+    const fn default_hack() -> Self {
+        MemoryManager {
+            ram_start: 0,
+            ram_size: 0,
+            ram_name: 0,
+            last_ram_page: 0,
+        }
+    }
+
     /// Calls the provided function with the current inner process state.
     pub fn with<F, R>(f: F) -> R
     where
         F: FnOnce(&MemoryManager) -> R,
     {
         #[cfg(baremetal)]
-        {
-            let ss = unsafe { MEMORY_MANAGER }.borrow();
-            f(&*ss)
+        unsafe {
+            f(&MEMORY_MANAGER)
         }
+
         #[cfg(not(baremetal))]
         MEMORY_MANAGER.with(|ss| f(&ss.borrow()))
     }
@@ -111,9 +106,8 @@ impl MemoryManager {
         F: FnOnce(&mut MemoryManager) -> R,
     {
         #[cfg(baremetal)]
-        {
-            let mut ss = unsafe { MEMORY_MANAGER }.borrow_mut();
-            f(&mut *ss)
+        unsafe {
+            f(&mut MEMORY_MANAGER)
         }
 
         #[cfg(not(baremetal))]
@@ -121,14 +115,20 @@ impl MemoryManager {
     }
 
     #[cfg(baremetal)]
-    pub fn init_from_memory(&mut self, base: *mut u32, args: &KernelArguments) -> Result<(), xous::Error> {
+    pub fn init_from_memory(
+        &mut self,
+        base: *mut u32,
+        args: &KernelArguments,
+    ) -> Result<(), xous::Error> {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
-        assert!(
-            self.extra.is_empty(),
-            "mm: self.extra.len() was {}, not 0",
-            self.extra.len()
-        );
+        unsafe {
+            assert!(
+                EXTRA_REGIONS.is_empty(),
+                "mm: self.extra.len() was {}, not 0",
+                EXTRA_REGIONS.len()
+            );
+        }
         assert!(
             xarg_def.name == make_type!("XArg"),
             "mm: first tag wasn't XArg"
@@ -141,14 +141,14 @@ impl MemoryManager {
         let mut mem_size = self.ram_size / PAGE_SIZE;
         for tag in args_iter {
             if tag.name == make_type!("MREx") {
-                assert!(
-                    self.extra.is_empty(),
-                    "mm: MREx tag appears twice!  self.extra.len() is {}, not 0",
-                    self.extra.len()
-                );
-                let ptr = tag.data.as_ptr() as *mut MemoryRangeExtra;
-                self.extra = unsafe {
-                    slice::from_raw_parts_mut(
+                unsafe {
+                    assert!(
+                        EXTRA_REGIONS.is_empty(),
+                        "mm: MREx tag appears twice!  self.extra.len() is {}, not 0",
+                        EXTRA_REGIONS.len()
+                    );
+                    let ptr = tag.data.as_ptr() as *mut MemoryRangeExtra;
+                    EXTRA_REGIONS = slice::from_raw_parts_mut(
                         ptr,
                         tag.data.len() * 4 / mem::size_of::<MemoryRangeExtra>(),
                     )
@@ -156,15 +156,19 @@ impl MemoryManager {
             }
         }
 
-        for range in self.extra.iter() {
-            mem_size += range.mem_size as usize / PAGE_SIZE;
+        unsafe {
+            for range in EXTRA_REGIONS.iter() {
+                mem_size += range.mem_size as usize / PAGE_SIZE;
+            }
         }
 
-        self.allocations = unsafe { slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size) };
+        unsafe {
+            MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size)
+        };
         Ok(())
     }
 
-    #[allow(dead_code)]
+    #[cfg(baremetal)]
     pub fn print_ownership(&self) {
         println!("Ownership ({} bytes in all):", self.allocations.len());
 
@@ -184,12 +188,14 @@ impl MemoryManager {
             );
         };
         for o in 0..self.ram_size / PAGE_SIZE {
-            if let Some(allocation) = self.allocations[offset + o] {
-                println!(
-                    "        {:08x} => {}",
-                    self.ram_size + o * PAGE_SIZE,
-                    allocation.get()
-                );
+            unsafe {
+                if let Some(allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                    println!(
+                        "        {:08x} => {}",
+                        self.ram_size + o * PAGE_SIZE,
+                        allocation.get()
+                    );
+                }
             }
         }
 
@@ -197,44 +203,50 @@ impl MemoryManager {
 
         // Go through additional regions looking for this address, and claim it
         // if it's not in use.
-        for region in self.extra {
-            println!("    Region {}:", region);
-            for o in 0..(region.mem_size as usize) / PAGE_SIZE {
-                if let Some(allocation) = self.allocations[offset + o] {
-                    println!(
-                        "        {:08x} => {}",
-                        (region.mem_start as usize) + o * PAGE_SIZE,
-                        allocation.get()
-                    )
+        unsafe {
+            for region in EXTRA_REGIONS {
+                println!("    Region {}:", region);
+                for o in 0..(region.mem_size as usize) / PAGE_SIZE {
+                    unsafe {
+                        if let Some(allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                            println!(
+                                "        {:08x} => {}",
+                                (region.mem_start as usize) + o * PAGE_SIZE,
+                                allocation.get()
+                            )
+                        }
+                    }
                 }
+                offset += region.mem_size as usize / PAGE_SIZE;
             }
-            offset += region.mem_size as usize / PAGE_SIZE;
         }
     }
 
     /// Allocate a single page to the given process. DOES NOT ZERO THE PAGE!!!
     /// This function CANNOT zero the page, as it hasn't been mapped yet.
-    #[allow(dead_code)]
+    #[cfg(baremetal)]
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous::Error> {
         // Go through all RAM pages looking for a free page.
         // Optimization: start from the previous address.
         // println!("Allocating page for PID {}", pid);
-        for index in self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE) {
-            // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-            if self.allocations[index].is_none() {
-                self.allocations[index] = Some(pid);
-                self.last_ram_page = index + 1;
-                let page = index * PAGE_SIZE + self.ram_start;
-                return Ok(page);
+        unsafe {
+            for index in self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE) {
+                // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
+                if MEMORY_ALLOCATIONS[index].is_none() {
+                    MEMORY_ALLOCATIONS[index] = Some(pid);
+                    self.last_ram_page = index + 1;
+                    let page = index * PAGE_SIZE + self.ram_start;
+                    return Ok(page);
+                }
             }
-        }
-        for index in 0..self.last_ram_page {
-            // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-            if self.allocations[index].is_none() {
-                self.allocations[index] = Some(pid);
-                self.last_ram_page = index + 1;
-                let page = index * PAGE_SIZE + self.ram_start;
-                return Ok(page);
+            for index in 0..self.last_ram_page {
+                // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
+                if MEMORY_ALLOCATIONS[index].is_none() {
+                    MEMORY_ALLOCATIONS[index] = Some(pid);
+                    self.last_ram_page = index + 1;
+                    let page = index * PAGE_SIZE + self.ram_start;
+                    return Ok(page);
+                }
             }
         }
         Err(xous::Error::OutOfMemory)
@@ -289,8 +301,12 @@ impl MemoryManager {
                 }
                 if all_free {
                     match kind {
-                        xous::MemoryType::Default => process_inner.mem_default_last = potential_start,
-                        xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        xous::MemoryType::Default => {
+                            process_inner.mem_default_last = potential_start
+                        }
+                        xous::MemoryType::Messages => {
+                            process_inner.mem_message_last = potential_start
+                        }
                         other => panic!("invalid kind: {:?}", other),
                     }
                     return Ok(potential_start as *mut u8);
@@ -308,8 +324,12 @@ impl MemoryManager {
                 }
                 if all_free {
                     match kind {
-                        xous::MemoryType::Default => process_inner.mem_default_last = potential_start,
-                        xous::MemoryType::Messages => process_inner.mem_message_last = potential_start,
+                        xous::MemoryType::Default => {
+                            process_inner.mem_default_last = potential_start
+                        }
+                        xous::MemoryType::Messages => {
+                            process_inner.mem_message_last = potential_start
+                        }
                         other => panic!("invalid kind: {:?}", other),
                     }
                     return Ok(potential_start as *mut u8);
@@ -350,7 +370,7 @@ impl MemoryManager {
 
     /// Attempt to allocate a single page from the default section.
     /// Note that this will be backed by a real page.
-    #[allow(dead_code)]
+    #[cfg(baremetal)]
     pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous::Error> {
         let virt =
             self.find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous::MemoryType::Default)?
@@ -549,7 +569,6 @@ impl MemoryManager {
         pid: PID,
         action: ClaimOrRelease,
     ) -> Result<(), xous::Error> {
-
         /// Modify the memory tracking table to note which process owns
         /// the specified address.
         fn action_inner(
@@ -583,20 +602,22 @@ impl MemoryManager {
         // Happy path: The address is in main RAM
         if addr >= self.ram_start && addr < self.ram_start + self.ram_size {
             offset += (addr - self.ram_start) / PAGE_SIZE;
-            return action_inner(&mut self.allocations[offset], pid, action);
+            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
         }
 
         offset += self.ram_size / PAGE_SIZE;
         // Go through additional regions looking for this address, and claim it
         // if it's not in use.
-        for region in self.extra {
-            if addr >= (region.mem_start as usize)
-                && addr < (region.mem_start + region.mem_size) as usize
-            {
-                offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
-                return action_inner(&mut self.allocations[offset], pid, action);
+        unsafe {
+            for region in EXTRA_REGIONS {
+                if addr >= (region.mem_start as usize)
+                    && addr < (region.mem_start + region.mem_size) as usize
+                {
+                    offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
+                    return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
+                }
+                offset += region.mem_size as usize / PAGE_SIZE;
             }
-            offset += region.mem_size as usize / PAGE_SIZE;
         }
         println!(
             "mem: unable to claim or release physical address {:08x}",

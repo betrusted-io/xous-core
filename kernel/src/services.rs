@@ -781,7 +781,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                /*ProcessState::Setup(_) | */
+                ProcessState::Setup(_) |
                 ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
@@ -829,7 +829,7 @@ impl SystemServices {
             // Set up the new process, if necessary.  Remove the new context from
             // the list of ready contexts.
             new.state = match new.state {
-                /*ProcessState::Setup(_init_context) => {
+                ProcessState::Setup(_init_context) => {
                     // entrypoint, stack, stack_size) => {
                     // let mut process = ProcessHandle::get();
                     // println!(
@@ -848,7 +848,7 @@ impl SystemServices {
                     //     )
                     //     .expect("couldn't reserve stack");
                     ProcessState::Running(0)
-                }*/
+                }
                 ProcessState::Allocated => ProcessState::Running(0),
                 ProcessState::Free => panic!("process was suddenly Free"),
                 ProcessState::Ready(x) | ProcessState::Running(x) => {
