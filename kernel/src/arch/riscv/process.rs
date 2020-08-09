@@ -1,5 +1,5 @@
-use core::mem;
 use core::cell::RefCell;
+use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
 pub const INITIAL_TID: TID = 1;
@@ -93,7 +93,9 @@ pub struct Thread {
 
 impl Process {
     pub fn current() -> Process {
-        Process { pid: unsafe { PROCESS_TABLE.borrow().current } }
+        Process {
+            pid: unsafe { PROCESS_TABLE.borrow().current },
+        }
     }
 
     /// Mark this process as running on the current core
@@ -171,7 +173,7 @@ impl Process {
         &mut process.threads[thread - 1]
     }
 
-    pub fn find_free_thread_nr(&self) -> Option<TID> {
+    pub fn find_free_thread(&self) -> Option<TID> {
         let mut process = unsafe { &mut *PROCESS };
         for (index, thread) in process.threads.iter().enumerate() {
             if index != 0 && thread.sepc == 0 {
@@ -223,6 +225,27 @@ impl Process {
         thread.registers[1] = stack;
 
         process.inner = Default::default();
+    }
+
+    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {
+        todo!();
+    }
+
+    pub fn create(pid: PID, init_data: ProcessInit) -> PID {
+        todo!();
+    }
+
+    pub fn destroy(pid: PID) -> Result<(), xous::Error> {
+        todo!();
+        // let mut process_table = unsafe { &mut *PROCESS };
+        // let pid_idx = pid.get() as usize - 1;
+        // if pid_idx >= process_table.table.len() {
+        //     panic!("attempted to destroy PID that exceeds table index: {}", pid);
+        // }
+        // let process = process_table.table[pid_idx].as_mut().unwrap();
+        // process_table.table[pid_idx] = None;
+        // process_table.total -= 1;
+        // Ok(())
     }
 }
 

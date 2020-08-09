@@ -3,6 +3,7 @@ use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
 use xous::MemoryRange;
+use crate::mem::MemoryManager;
 
 use core::cell::RefCell;
 
@@ -287,7 +288,12 @@ impl SystemServices {
                     init_count += 1;
                 }
             }
-            unsafe { core::slice::from_raw_parts(base as *const crate::arch::process::InitialProcess, init_count) }
+            unsafe {
+                core::slice::from_raw_parts(
+                    base as *const crate::arch::process::InitialProcess,
+                    init_count,
+                )
+            }
         };
 
         // Copy over the initial process list.  The pid is encoded in the SATP
@@ -312,7 +318,11 @@ impl SystemServices {
             if pid == 1 {
                 process.state = ProcessState::Running(0);
             } else {
-                process.state = ProcessState::Setup(init.entrypoint, init.sp, crate::arch::process::DEFAULT_STACK_SIZE);
+                process.state = ProcessState::Setup(
+                    init.entrypoint,
+                    init.sp,
+                    crate::arch::process::DEFAULT_STACK_SIZE,
+                );
             }
         }
 
@@ -987,7 +997,6 @@ impl SystemServices {
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         crate::mem::MemoryManager::with_mut(|mm| {
-
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
             let dest_virt = mm
@@ -1003,8 +1012,8 @@ impl SystemServices {
             let mut error = None;
 
             // Lend each subsequent page.
-            for offset in
-                (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
+            for offset in (0..(len / core::mem::size_of::<usize>()))
+                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
             {
                 mm.move_page(
                     &src_mapping,
@@ -1080,38 +1089,39 @@ impl SystemServices {
         let current_pid = self.current_pid();
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
-        let mut mm = MemoryManagerHandle::get();
+        MemoryManager::with_mut(|mm| {
 
-        // Locate an address to fit the new memory.
-        dest_mapping.activate();
-        let dest_virt = mm
-            .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
-            .or_else(|e| {
-                src_mapping.activate();
-                Err(e)
-            })?;
-        src_mapping.activate();
+            // Locate an address to fit the new memory.
+            dest_mapping.activate();
+            let dest_virt = mm
+                .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
+                .or_else(|e| {
+                    src_mapping.activate();
+                    Err(e)
+                })?;
+            src_mapping.activate();
 
-        let mut error = None;
+            let mut error = None;
 
-        // Lend each subsequent page.
-        for offset in
-            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
-        {
-            mm.lend_page(
-                &src_mapping,
-                src_virt.wrapping_add(offset),
-                dest_pid,
-                &dest_mapping,
-                dest_virt.wrapping_add(offset),
-                mutable,
-            )
-            .unwrap_or_else(|e| {
-                error = Some(e);
-                0
-            });
-        }
-        error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to lend: {:?}", e))
+            // Lend each subsequent page.
+            for offset in (0..(len / core::mem::size_of::<usize>()))
+                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
+            {
+                mm.lend_page(
+                    &src_mapping,
+                    src_virt.wrapping_add(offset),
+                    dest_pid,
+                    &dest_mapping,
+                    dest_virt.wrapping_add(offset),
+                    mutable,
+                )
+                .unwrap_or_else(|e| {
+                    error = Some(e);
+                    0
+                });
+            }
+            error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to lend: {:?}", e))
+        })
     }
 
     #[cfg(not(baremetal))]
@@ -1161,26 +1171,27 @@ impl SystemServices {
         let current_pid = self.current_pid();
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
-        let mut mm = MemoryManagerHandle::get();
-        let mut error = None;
+        MemoryManager::with_mut(|mm| {
+            let mut error = None;
 
-        // Lend each subsequent page.
-        for offset in
-            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
-        {
-            mm.unlend_page(
-                &src_mapping,
-                src_virt.wrapping_add(offset),
-                dest_pid,
-                &dest_mapping,
-                dest_virt.wrapping_add(offset),
-            )
-            .unwrap_or_else(|e| {
-                error = Some(e);
-                0
-            });
-        }
-        error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+            // Lend each subsequent page.
+            for offset in (0..(len / core::mem::size_of::<usize>()))
+                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
+            {
+                mm.unlend_page(
+                    &src_mapping,
+                    src_virt.wrapping_add(offset),
+                    dest_pid,
+                    &dest_mapping,
+                    dest_virt.wrapping_add(offset),
+                )
+                .unwrap_or_else(|e| {
+                    error = Some(e);
+                    0
+                });
+            }
+            error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+        })
     }
 
     #[cfg(not(baremetal))]
@@ -1281,8 +1292,12 @@ impl SystemServices {
             if entry == &None {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
-                let backing = crate::mem::MemoryManager::with_mut(|mm| 
-                    MemoryRange::new(mm.map_zeroed_page(pid, false)? as _, crate::arch::mem::PAGE_SIZE))?;
+                let backing = crate::mem::MemoryManager::with_mut(|mm| {
+                    MemoryRange::new(
+                        mm.map_zeroed_page(pid, false)? as _,
+                        crate::arch::mem::PAGE_SIZE,
+                    )
+                })?;
 
                 #[cfg(not(baremetal))]
                 let backing = MemoryRange::new(4096, 4096).unwrap();
@@ -1290,7 +1305,6 @@ impl SystemServices {
                 //     "KERNEL({}): Found a free slot for a server -- allocating an entry",
                 //     self.pid.get()
                 // );
-
 
                 // Initialize the server with the given memory page.
                 Server::init(entry, pid, sid, backing).map_err(|x| x)?;
