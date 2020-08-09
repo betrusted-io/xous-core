@@ -80,12 +80,12 @@ pub struct Process {
     /// manipulate this process.
     pub ppid: PID,
 
-    /// The current context (i.e. thread)
-    // current_thread: u8,
+    /// The current thread ID
+    current_thread: TID,
 
     /// The context number that was active before this process was switched
     /// away.
-    previous_context: u8,
+    previous_thread: TID,
 }
 
 impl Default for Process {
@@ -198,8 +198,8 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        // current_thread: 0,
-        previous_context: INITIAL_TID as u8,
+        current_thread: 0 as TID,
+        previous_thread: INITIAL_TID as TID,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -215,8 +215,8 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        // current_thread: 0,
-        previous_context: INITIAL_TID as u8,
+        current_thread: 0 as TID,
+        previous_thread: INITIAL_TID as TID,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -438,10 +438,7 @@ impl SystemServices {
         Ok(())
     }
 
-    /// Create a stack frame in the specified process and jump to it.
-    /// 1. Pause the current process and switch to the new one
-    /// 2. Save the process state, if it hasn't already been saved
-    /// 3. Run the new process, returning to an illegal instruction
+    #[cfg(not(baremetal))]
     pub fn make_callback_to(
         &mut self,
         _pid: PID,
@@ -449,64 +446,78 @@ impl SystemServices {
         _irq_no: usize,
         _arg: *mut usize,
     ) -> Result<(), xous::Error> {
-        todo!();
         Err(xous::Error::UnhandledSyscall)
-        // // Get the current process (which was just interrupted) and mark it as
-        // // "ready to run".  If this function is called when the current process
-        // // isn't running, that means the system has gotten into an invalid
-        // // state.
-        // {
-        //     let current_pid = self.current_pid();
-        //     let mut current = self
-        //         .get_process_mut(current_pid)
-        //         .expect("couldn't get current PID");
-        //     current.state = match current.state {
-        //         ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_context)),
-        //         y => panic!("current process was {:?}, not 'Running(_)'", y),
-        //     };
-        //     println!("Making PID {} state {:?}", current_pid, current.state);
-        // }
+    }
 
-        // // Get the new process, and ensure that it is in a state where it's fit
-        // // to run.  Again, if the new process isn't fit to run, then the system
-        // // is in a very bad state.
-        // {
-        //     let mut process = self.get_process_mut(pid)?;
-        //     let available_threads = match process.state {
-        //         ProcessState::Ready(x) | ProcessState::Running(x) => x,
-        //         ProcessState::Sleeping => 0,
-        //         ProcessState::Free => panic!("process was not allocated"),
-        //         ProcessState::Setup(_, _, _) => panic!("process hasn't been set up yet"),
-        //     };
-        //     process.state = ProcessState::Running(available_threads);
-        //     process.previous_context = process.current_context;
-        //     process.current_context = IRQ_CONTEXT as u8;
-        //     process.mapping.activate();
-        // }
+    /// Create a stack frame in the specified process and jump to it.
+    /// 1. Pause the current process and switch to the new one
+    /// 2. Save the process state, if it hasn't already been saved
+    /// 3. Run the new process, returning to an illegal instruction
+    #[cfg(baremetal)]
+    pub fn make_callback_to(
+        &mut self,
+        pid: PID,
+        pc: *const usize,
+        irq_no: usize,
+        arg: *mut usize,
+    ) -> Result<(), xous::Error> {
+        // Get the current process (which was just interrupted) and mark it as
+        // "ready to run".  If this function is called when the current process
+        // isn't running, that means the system has gotten into an invalid
+        // state.
+        {
+            let current_pid = self.current_pid();
+            let mut current = self
+                .get_process_mut(current_pid)
+                .expect("couldn't get current PID");
+            current.state = match current.state {
+                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
+                y => panic!("current process was {:?}, not 'Running(_)'", y),
+            };
+            println!("Making PID {} state {:?}", current_pid, current.state);
+        }
 
-        // // Switch to new process memory space, allowing us to save the context
-        // // if necessary.
+        // Get the new process, and ensure that it is in a state where it's fit
+        // to run.  Again, if the new process isn't fit to run, then the system
+        // is in a very bad state.
+        {
+            let mut process = self.get_process_mut(pid)?;
+            let available_threads = match process.state {
+                ProcessState::Ready(x) | ProcessState::Running(x) => x,
+                ProcessState::Sleeping => 0,
+                ProcessState::Free => panic!("process was not allocated"),
+                ProcessState::Setup(_) | ProcessState::Allocated => panic!("process hasn't been set up yet"),
+            };
+            process.state = ProcessState::Running(available_threads);
+            process.previous_thread = process.current_thread;
+            process.current_thread = arch::process::IRQ_CONTEXT as TID;
+            process.mapping.activate()?;
+        }
+
+        // Switch to new process memory space, allowing us to save the context
+        // if necessary.
         // self.pid = pid;
 
-        // // Invoke the syscall, but use the current stack pointer.  When this
-        // // function returns, it will jump to the RETURN_FROM_ISR address,
-        // // causing an instruction fault and exiting the interrupt.
-        // let mut arch_process = ProcessHandle::get();
-        // let sp = arch_process.current_context().stack_pointer();
+        // Invoke the syscall, but use the current stack pointer.  When this
+        // function returns, it will jump to the RETURN_FROM_ISR address,
+        // causing an instruction fault and exiting the interrupt.
+        ArchProcess::with_current_mut(|arch_process| {
+            let sp = arch_process.current_thread().stack_pointer();
 
-        // // Activate the current context
-        // arch_process.set_context(IRQ_CONTEXT);
+            // Activate the current context
+            arch_process.set_thread(arch::process::IRQ_CONTEXT).unwrap();
 
-        // // Construct the new frame
-        // arch::syscall::invoke(
-        //     arch_process.current_context(),
-        //     pid == 1,
-        //     pc as usize,
-        //     sp,
-        //     RETURN_FROM_ISR,
-        //     &[irq_no, arg as usize],
-        // );
-        // Ok(())
+            // Construct the new frame
+            arch::syscall::invoke(
+                arch_process.current_thread(),
+                pid.get() == 1,
+                pc as usize,
+                sp,
+                arch::process::RETURN_FROM_ISR,
+                &[irq_no, arg as usize],
+            );
+        });
+        Ok(())
     }
 
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
@@ -1081,14 +1092,14 @@ impl SystemServices {
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         MemoryManager::with_mut(|mm| {
             // Locate an address to fit the new memory.
-            dest_mapping.activate();
+            dest_mapping.activate()?;
             let dest_virt = mm
                 .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
                 .or_else(|e| {
-                    src_mapping.activate();
+                    src_mapping.activate().unwrap();
                     Err(e)
                 })?;
-            src_mapping.activate();
+            src_mapping.activate().unwrap();
 
             let mut error = None;
 

@@ -1,6 +1,4 @@
-use crate::args::KernelArguments;
 use core::fmt;
-use core::mem;
 use core::slice;
 use core::str;
 
@@ -114,7 +112,7 @@ impl MemoryManager {
     pub fn init_from_memory(
         &mut self,
         base: *mut u32,
-        args: &KernelArguments,
+        args: &crate::args::KernelArguments,
     ) -> Result<(), xous::Error> {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
@@ -146,7 +144,7 @@ impl MemoryManager {
                     let ptr = tag.data.as_ptr() as *mut MemoryRangeExtra;
                     EXTRA_REGIONS = slice::from_raw_parts_mut(
                         ptr,
-                        tag.data.len() * 4 / mem::size_of::<MemoryRangeExtra>(),
+                        tag.data.len() * 4 / core::mem::size_of::<MemoryRangeExtra>(),
                     )
                 };
             }
@@ -389,7 +387,7 @@ impl MemoryManager {
         let virt = virt as *mut usize;
 
         // Zero-out the page
-        unsafe { virt.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
+        unsafe { virt.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
@@ -608,7 +606,7 @@ impl MemoryManager {
                     && addr < (region.mem_start + region.mem_size) as usize
                 {
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
-                    return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
+                    return action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action);
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;
             }
