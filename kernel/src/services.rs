@@ -14,10 +14,9 @@ use xous::{
     pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
 };
 
-const MAX_PROCESS_COUNT: usize = 32;
 const MAX_SERVER_COUNT: usize = 32;
 
-pub use crate::arch::process::INITIAL_TID;
+pub use crate::arch::process::{INITIAL_TID, MAX_PROCESS_COUNT};
 
 /// A big unifying struct containing all of the system state.
 /// This is inherited from the stage 1 bootloader.
@@ -197,8 +196,25 @@ impl Process {
     }
 }
 
+#[cfg(baremetal)]
+static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
+    processes: [Process {
+        state: ProcessState::Free,
+        ppid: unsafe { PID::new_unchecked(1) },
+        pid: unsafe { PID::new_unchecked(1) },
+        mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
+        // current_thread: 0,
+        previous_context: INITIAL_TID as u8,
+    }; MAX_PROCESS_COUNT],
+    // Note we can't use MAX_SERVER_COUNT here because of how Rust's
+    // macro tokenization works
+    servers: filled_array![None; 32],
+    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
+    _syscall_depth: 0,
+});
+
+#[cfg(not(baremetal))]
 thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
-    // pid: unsafe { PID::new_unchecked(1) },
     processes: [Process {
         state: ProcessState::Free,
         ppid: unsafe { PID::new_unchecked(1) },

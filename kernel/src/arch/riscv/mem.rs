@@ -102,7 +102,7 @@ impl MemoryMapping {
 
     /// Get the "PID" (actually, ASID) from the current mapping
     pub fn get_pid(&self) -> PID {
-        (self.satp >> 22 & ((1 << 9) - 1)) as PID
+        PID::new((self.satp >> 22 & ((1 << 9) - 1)) as _).unwrap()
     }
 
     /// Set this mapping as the systemwide mapping.
@@ -110,8 +110,9 @@ impl MemoryMapping {
     /// kernel, which should be mapped into every possible address space.
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
-    pub fn activate(&self) {
+    pub fn activate(self) -> Result<(), xous::Error> {
         satp::write(self.satp);
+        Ok(())
     }
 
     pub fn print_map(&self) {
@@ -132,7 +133,7 @@ impl MemoryMapping {
 
             // Page 1023 is only available to PID1
             if i == 1023 {
-                if self.get_pid() != 1 {
+                if self.get_pid().get() != 1 {
                     println!("        <unavailable>");
                     continue;
                 }
@@ -439,7 +440,7 @@ pub fn move_page_inner(
     let phys = previous_entry >> 10 << 12;
     let flags = untranslate_flags(previous_entry);
 
-    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid != 1);
+    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid.get() != 1);
 
     // Switch back to the original address space and return
     src_space.activate();
@@ -493,7 +494,7 @@ pub fn lend_page_inner(
             phys,
             dest_addr as usize,
             MemoryFlags::R | MemoryFlags::W,
-            dest_pid != 1,
+            dest_pid.get() != 1,
         )
     } else {
         // Page is immutably shared.  Mark the page as read-only in this
@@ -520,7 +521,7 @@ pub fn lend_page_inner(
             phys,
             dest_addr as usize,
             MemoryFlags::R,
-            dest_pid != 1,
+            dest_pid.get() != 1,
         )
     };
     unsafe { flush_mmu() };

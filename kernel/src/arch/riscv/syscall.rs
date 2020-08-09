@@ -1,4 +1,4 @@
-use crate::services::Context;
+use crate::services::Thread;
 use riscv::register::{sepc, sstatus};
 
 extern "C" {
@@ -6,7 +6,7 @@ extern "C" {
 }
 
 pub fn invoke(
-    context: &mut Context,
+    Thread: &mut Thread,
     supervisor: bool,
     pc: usize,
     sp: usize,
@@ -14,13 +14,13 @@ pub fn invoke(
     args: &[usize],
 ) {
     set_supervisor(supervisor);
-    context.registers[0] = ret_addr;
-    context.registers[1] = sp;
+    Thread.registers[0] = ret_addr;
+    Thread.registers[1] = sp;
     assert!(args.len() <= 8, "too many arguments to invoke()");
     for (idx, arg) in args.iter().enumerate() {
-        context.registers[9 + idx] = *arg;
+        Thread.registers[9 + idx] = *arg;
     }
-    context.sepc = pc;
+    Thread.sepc = pc;
 }
 
 fn set_supervisor(supervisor: bool) {
@@ -31,8 +31,8 @@ fn set_supervisor(supervisor: bool) {
     }
 }
 
-pub fn resume(supervisor: bool, context: &Context) -> ! {
-    sepc::write(context.sepc);
+pub fn resume(supervisor: bool, Thread: &Thread) -> ! {
+    sepc::write(Thread.sepc);
 
     // Return to the appropriate CPU mode
     set_supervisor(supervisor);
@@ -40,8 +40,8 @@ pub fn resume(supervisor: bool, context: &Context) -> ! {
     // println!(
     //     "Switching to PID {}, SP: {:08x}, PC: {:08x}",
     //     crate::arch::current_pid(),
-    //     context.registers[1],
-    //     context.sepc,
+    //     Thread.registers[1],
+    //     Thread.sepc,
     // );
-    unsafe { _xous_resume_context(context.registers.as_ptr()) };
+    unsafe { _xous_resume_context(Thread.registers.as_ptr()) };
 }

@@ -7,6 +7,7 @@ use std::thread_local;
 use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 pub const INITIAL_TID: usize = 1;
+pub const MAX_PROCESS_COUNT: usize = 32;
 
 pub struct Process {
     pid: PID,

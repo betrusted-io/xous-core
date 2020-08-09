@@ -84,7 +84,6 @@ impl<'a> MemoryManagerHandle<'a> {
             MM_HANDLE_COUNT - 1
         };
         if count != 0 {
-            ::debug_here::debug_here!();
             panic!("Multiple users of MemoryManagerHandle!");
         }
         MemoryManagerHandle {
@@ -497,10 +496,10 @@ impl MemoryManager {
         crate::arch::mem::lend_page_inner(
             self,
             &src_mapping,
-            src_addr,
+            src_addr as _,
             dest_pid,
             &dest_mapping,
-            dest_addr,
+            dest_addr as _,
             mutable,
         )
     }
