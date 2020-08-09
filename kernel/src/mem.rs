@@ -3,11 +3,34 @@ use core::fmt;
 use core::mem;
 use core::slice;
 use core::str;
+use core::cell::RefCell;
 
 pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
 
 use xous::{MemoryFlags, MemoryRange, PID};
+
+
+// Fake macro to implement "thread local" on baremetal as a simple static variable.
+// The kernel is single-threaded so it's really just one thread.
+#[cfg(baremetal)]
+macro_rules! thread_local {
+    // empty (base case for the recursion)
+    () => {};
+
+    // process multiple declarations
+    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr; $($rest:tt)*) => (
+        $(#[$attr])* $vis static $name: $t = $init;
+        $crate::services::thread_local!($($rest)*);
+    );
+
+    // handle a single declaration
+    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr) => (
+        $(#[$attr])* $vis static $name: $t = $init;
+    );
+}
+#[cfg(not(baremetal))]
+use std::thread_local;
 
 #[derive(Debug)]
 enum ClaimOrRelease {
@@ -54,62 +77,14 @@ pub struct MemoryManager {
     last_ram_page: usize,
 }
 
-static mut MEMORY_MANAGER: MemoryManager = MemoryManager {
+thread_local!(static MEMORY_MANAGER: RefCell<MemoryManager> = RefCell::new(MemoryManager {
     allocations: &mut [],
     extra: &[],
     ram_start: 0,
     ram_size: 0,
     ram_name: 0,
     last_ram_page: 0,
-};
-
-/// How many people have checked out the handle object.
-/// This should be replaced by an AtomicUsize when we get
-/// multicore support.
-/// For now, we can get away with this since the memory manager
-/// should only be accessed in an IRQ context.
-static mut MM_HANDLE_COUNT: usize = 0;
-
-pub struct MemoryManagerHandle<'a> {
-    manager: &'a mut MemoryManager,
-}
-
-/// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-/// to the Memory Manager should only be made during interrupt contexts.
-impl<'a> MemoryManagerHandle<'a> {
-    /// Get the singleton memory manager.
-    pub fn get() -> MemoryManagerHandle<'a> {
-        let count = unsafe {
-            MM_HANDLE_COUNT += 1;
-            MM_HANDLE_COUNT - 1
-        };
-        if count != 0 {
-            panic!("Multiple users of MemoryManagerHandle!");
-        }
-        MemoryManagerHandle {
-            manager: unsafe { &mut MEMORY_MANAGER },
-        }
-    }
-}
-
-impl Drop for MemoryManagerHandle<'_> {
-    fn drop(&mut self) {
-        unsafe { MM_HANDLE_COUNT -= 1 };
-    }
-}
-
-use core::ops::{Deref, DerefMut};
-impl Deref for MemoryManagerHandle<'_> {
-    type Target = MemoryManager;
-    fn deref(&self) -> &MemoryManager {
-        &*self.manager
-    }
-}
-impl DerefMut for MemoryManagerHandle<'_> {
-    fn deref_mut(&mut self) -> &mut MemoryManager {
-        &mut *self.manager
-    }
-}
+}));
 
 /// Initialize the memory map.
 /// This will go through memory and map anything that the kernel is
@@ -117,7 +92,35 @@ impl DerefMut for MemoryManagerHandle<'_> {
 /// and place it at the usual offset.  The MMU will not be enabled yet,
 /// as the process entry has not yet been created.
 impl MemoryManager {
-    #[allow(dead_code)]
+    /// Calls the provided function with the current inner process state.
+    pub fn with<F, R>(f: F) -> R
+    where
+        F: FnOnce(&MemoryManager) -> R,
+    {
+        #[cfg(baremetal)]
+        {
+            let ss = unsafe { MEMORY_MANAGER }.borrow();
+            f(&*ss)
+        }
+        #[cfg(not(baremetal))]
+        MEMORY_MANAGER.with(|ss| f(&ss.borrow()))
+    }
+
+    pub fn with_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut MemoryManager) -> R,
+    {
+        #[cfg(baremetal)]
+        {
+            let mut ss = unsafe { MEMORY_MANAGER }.borrow_mut();
+            f(&mut *ss)
+        }
+
+        #[cfg(not(baremetal))]
+        MEMORY_MANAGER.with(|ss| f(&mut ss.borrow_mut()))
+    }
+
+    #[cfg(baremetal)]
     pub fn init_from_memory(&mut self, base: *mut u32, args: &KernelArguments) -> Result<(), xous::Error> {
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
@@ -374,7 +377,7 @@ impl MemoryManager {
         // Zero-out the page
         unsafe { virt.write_bytes(0, PAGE_SIZE / mem::size_of::<usize>()) };
         if is_user {
-            crate::arch::mem::hand_page_to_user(virt)?;
+            crate::arch::mem::hand_page_to_user(virt as _)?;
         }
         println!(
             "Mapped {:08x} -> {:08x} (user? {})",
@@ -461,10 +464,10 @@ impl MemoryManager {
     pub fn move_page(
         &mut self,
         src_mapping: &MemoryMapping,
-        src_addr: *mut usize,
+        src_addr: *mut u8,
         dest_pid: PID,
         dest_mapping: &MemoryMapping,
-        dest_addr: *mut usize,
+        dest_addr: *mut u8,
     ) -> Result<(), xous::Error> {
         crate::arch::mem::move_page_inner(
             self,
@@ -509,10 +512,10 @@ impl MemoryManager {
     pub fn unlend_page(
         &mut self,
         src_mapping: &MemoryMapping,
-        src_addr: *mut usize,
+        src_addr: *mut u8,
         dest_pid: PID,
         dest_mapping: &MemoryMapping,
-        dest_addr: *mut usize,
+        dest_addr: *mut u8,
     ) -> Result<usize, xous::Error> {
         // If this page is to be writable, detach it from this process.
         // Otherwise, mark it as read-only to prevent a process from modifying

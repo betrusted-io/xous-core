@@ -312,7 +312,7 @@ impl SystemServices {
             if pid == 1 {
                 process.state = ProcessState::Running(0);
             } else {
-                process.state = ProcessState::Setup(init.entrypoint, init.sp, DEFAULT_STACK_SIZE);
+                process.state = ProcessState::Setup(init.entrypoint, init.sp, crate::arch::process::DEFAULT_STACK_SIZE);
             }
         }
 
@@ -969,7 +969,7 @@ impl SystemServices {
         dest_pid: PID,
         dest_virt: *mut u8,
         len: usize,
-    ) -> Result<*mut usize, xous::Error> {
+    ) -> Result<*mut u8, xous::Error> {
         if len == 0 {
             return Err(xous::Error::BadAddress);
         }
@@ -986,36 +986,37 @@ impl SystemServices {
         let current_pid = self.current_pid();
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
-        let mut mm = MemoryManagerHandle::get();
+        crate::mem::MemoryManager::with_mut(|mm| {
 
-        // Locate an address to fit the new memory.
-        dest_mapping.activate()?;
-        let dest_virt = mm
-            .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
-            .or_else(|e| {
-                src_mapping.activate().expect("couldn't undo mapping");
-                Err(e)
-            })?;
-        src_mapping
-            .activate()
-            .expect("Couldn't switch back to source mapping");
+            // Locate an address to fit the new memory.
+            dest_mapping.activate()?;
+            let dest_virt = mm
+                .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
+                .or_else(|e| {
+                    src_mapping.activate().expect("couldn't undo mapping");
+                    Err(e)
+                })?;
+            src_mapping
+                .activate()
+                .expect("Couldn't switch back to source mapping");
 
-        let mut error = None;
+            let mut error = None;
 
-        // Lend each subsequent page.
-        for offset in
-            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
-        {
-            mm.move_page(
-                &src_mapping,
-                src_virt.wrapping_add(offset),
-                dest_pid,
-                &dest_mapping,
-                dest_virt.wrapping_add(offset),
-            )
-            .unwrap_or_else(|e| error = Some(e));
-        }
-        error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to send: {:?}", e))
+            // Lend each subsequent page.
+            for offset in
+                (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
+            {
+                mm.move_page(
+                    &src_mapping,
+                    src_virt.wrapping_add(offset),
+                    dest_pid,
+                    &dest_mapping,
+                    dest_virt.wrapping_add(offset),
+                )
+                .unwrap_or_else(|e| error = Some(e));
+            }
+            error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to send: {:?}", e))
+        })
     }
 
     #[cfg(not(baremetal))]
@@ -1280,10 +1281,8 @@ impl SystemServices {
             if entry == &None {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
-                let backing = {
-                    let mut mm = MemoryManagerHandle::get();
-                    (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
-                };
+                let backing = crate::mem::MemoryManager::with_mut(|mm| 
+                    MemoryRange::new(mm.map_zeroed_page(pid, false)? as _, crate::arch::mem::PAGE_SIZE))?;
 
                 #[cfg(not(baremetal))]
                 let backing = MemoryRange::new(4096, 4096).unwrap();

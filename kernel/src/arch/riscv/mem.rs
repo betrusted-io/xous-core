@@ -255,7 +255,7 @@ impl fmt::Display for LeafPageTable {
 
 /// When we allocate pages, they are owned by the kernel so we can zero
 /// them out.  After that is done, hand the page to the user.
-pub fn hand_page_to_user(virt: *mut usize) -> Result<(), xous::Error> {
+pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous::Error> {
     let virt = virt as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
@@ -422,10 +422,10 @@ pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, x
 pub fn move_page_inner(
     mm: &mut MemoryManager,
     src_space: &MemoryMapping,
-    src_addr: *mut usize,
+    src_addr: *mut u8,
     dest_pid: PID,
     dest_space: &MemoryMapping,
-    dest_addr: *mut usize,
+    dest_addr: *mut u8,
 ) -> Result<(), xous::Error> {
     let entry = pagetable_entry(src_addr as usize)?;
     if *entry & MMUFlags::VALID.bits() == 0 {
@@ -465,10 +465,10 @@ pub fn move_page_inner(
 pub fn lend_page_inner(
     mm: &mut MemoryManager,
     src_space: &MemoryMapping,
-    src_addr: *mut usize,
+    src_addr: *mut u8,
     dest_pid: PID,
     dest_space: &MemoryMapping,
-    dest_addr: *mut usize,
+    dest_addr: *mut u8,
     mutable: bool,
 ) -> Result<usize, xous::Error> {
     let entry = pagetable_entry(src_addr as usize)?;
@@ -534,10 +534,10 @@ pub fn lend_page_inner(
 pub fn return_page_inner(
     _mm: &mut MemoryManager,
     src_space: &MemoryMapping,
-    src_addr: *mut usize,
+    src_addr: *mut u8,
     _dest_pid: PID,
     dest_space: &MemoryMapping,
-    dest_addr: *mut usize,
+    dest_addr: *mut u8,
 ) -> Result<usize, xous::Error> {
     let src_entry = pagetable_entry(src_addr as usize)?;
     let phys = (*src_entry >> 10) << 12;

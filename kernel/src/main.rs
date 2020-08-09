@@ -46,14 +46,13 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     unsafe { args::KernelArguments::init(arg_offset) };
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
-    {
-        use mem::MemoryManagerHandle;
-        let mut memory_manager = MemoryManagerHandle::get();
-        memory_manager
-            .init_from_memory(rpt_offset, &args)
-            .expect("couldn't initialize memory manager");
-    }
-    SystemServices::with_mut(|system_services| system_services.init_from_memory(init_offset, &args));
+    crate::mem::MemoryManager::with_mut(|mm| {
+        mm.init_from_memory(rpt_offset, &args)
+            .expect("couldn't initialize memory manager")
+    });
+    SystemServices::with_mut(|system_services| {
+        system_services.init_from_memory(init_offset, &args)
+    });
 
     // Now that the memory manager is set up, perform any arch-specific initializations.
     arch::init();
@@ -87,7 +86,8 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         for arg in args.iter() {
             println!("    {}", arg);
         }
-    }}
+    }
+}
 
 /// Loop through the SystemServices list to determine the next PID to be run.
 /// If no process is ready, return `None`.
@@ -95,7 +95,7 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
     // PIDs are 1-indexed but arrays are 0-indexed.  By not subtracting
     // 1 from the PID when we use it as an array index, we automatically
     // pick the next process in the list.
-    let current_pid = last_pid.unwrap_or(unsafe { PID::new_unchecked(1)}).get() as usize;
+    let current_pid = last_pid.unwrap_or(unsafe { PID::new_unchecked(1) }).get() as usize;
 
     SystemServices::with(|system_services| {
         for test_idx in current_pid..system_services.processes.len() {
@@ -131,7 +131,6 @@ fn next_pid_to_run(last_pid: Option<PID>) -> Option<PID> {
 /// Common main function for baremetal and hosted environments.
 #[no_mangle]
 pub extern "C" fn kmain() {
-
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
@@ -148,7 +147,7 @@ pub extern "C" fn kmain() {
             None => {
                 // println!("No runnable tasks found.  Entering idle state...");
                 // Special case for testing: idle can return `false` to indicate exit
-                if ! arch::idle() {
+                if !arch::idle() {
                     return;
                 }
             }

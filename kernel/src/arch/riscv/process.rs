@@ -8,7 +8,7 @@ use crate::services::ProcessInner;
 use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 use crate::args::KernelArguments;
-const DEFAULT_STACK_SIZE: usize = 131072;
+pub const DEFAULT_STACK_SIZE: usize = 131072;
 pub const MAX_PROCESS_COUNT: usize = 32;
 // pub use crate::arch::mem::DEFAULT_STACK_TOP;
 

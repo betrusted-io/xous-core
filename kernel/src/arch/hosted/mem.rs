@@ -66,10 +66,10 @@ pub fn map_page_inner(
 pub fn move_page_inner(
     _mm: &mut MemoryManager,
     _src_space: &MemoryMapping,
-    _src_addr: *mut usize,
+    _src_addr: *mut u8,
     _dest_pid: PID,
     _dest_space: &MemoryMapping,
-    _dest_addr: *mut usize,
+    _dest_addr: *mut u8,
 ) -> Result<(), Error> {
     unimplemented!()
 }
@@ -89,10 +89,10 @@ pub fn lend_page_inner(
 pub fn return_page_inner(
     _mm: &mut MemoryManager,
     _src_space: &MemoryMapping,
-    _src_addr: *mut usize,
+    _src_addr: *mut u8,
     _dest_pid: PID,
     _dest_space: &MemoryMapping,
-    _dest_addr: *mut usize,
+    _dest_addr: *mut u8,
 ) -> Result<usize, Error> {
     unimplemented!()
 }
@@ -101,7 +101,7 @@ pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, E
     Ok(virt)
 }
 
-pub fn hand_page_to_user(_virt: *mut usize) -> Result<(), Error> {
+pub fn hand_page_to_user(_virt: *mut u8) -> Result<(), Error> {
     unimplemented!()
 }
 

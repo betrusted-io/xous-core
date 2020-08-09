@@ -1,7 +1,7 @@
 use crate::arch;
 use crate::arch::process::Process as ArchProcess;
 use crate::irq::interrupt_claim;
-use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::server::{SenderID, WaitingMessage};
 use crate::services::SystemServices;
 use core::mem;
@@ -204,21 +204,22 @@ fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -
                 return Ok(xous::Result::Ok);
             }
             WaitingMessage::ForgetMemory(range) => {
-                let mut mm = MemoryManagerHandle::get();
-                let mut result = Ok(xous::Result::Ok);
-                let virt = range.addr.get();
-                let size = range.size.get();
-                if virt & 0xfff != 0 {
-                    return Err(xous::Error::BadAlignment);
-                }
-                for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
-                    if let Err(e) = mm.unmap_page(addr as *mut usize) {
-                        if result.is_ok() {
-                            result = Err(e);
+                return MemoryManager::with_mut(|mm| {
+                    let mut result = Ok(xous::Result::Ok);
+                    let virt = range.addr.get();
+                    let size = range.size.get();
+                    if virt & 0xfff != 0 {
+                        return Err(xous::Error::BadAlignment);
+                    }
+                    for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+                        if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                            if result.is_ok() {
+                                result = Err(e);
+                            }
                         }
                     }
-                }
-                return result;
+                    result
+                })
             }
             WaitingMessage::None => {
                 println!("WARNING: Tried to wait on a message that didn't exist");
@@ -319,70 +320,70 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
 
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
-            let mut mm = MemoryManagerHandle::get();
-            let phys_ptr = phys
-                .map(|x| x.get() as *mut u8)
-                .unwrap_or(core::ptr::null_mut());
-            let virt_ptr = virt
-                .map(|x| x.get() as *mut u8)
-                .unwrap_or(core::ptr::null_mut());
+            MemoryManager::with_mut(|mm| {
+                let phys_ptr = phys
+                    .map(|x| x.get() as *mut u8)
+                    .unwrap_or(core::ptr::null_mut());
+                let virt_ptr = virt
+                    .map(|x| x.get() as *mut u8)
+                    .unwrap_or(core::ptr::null_mut());
 
-            // Don't let the address exceed the user area (unless it's PID 1)
-            if pid.get() != 1
-                && virt
-                    .map(|x| x.get() >= arch::mem::USER_AREA_END)
-                    .unwrap_or(false)
-            {
-                return Err(xous::Error::BadAddress);
-
-            // Don't allow mapping non-page values
-            } else if size.get() & (PAGE_SIZE - 1) != 0 {
-                // println!("map: bad alignment of size {:08x}", size);
-                return Err(xous::Error::BadAlignment);
-            }
-            // println!(
-            //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
-            //     phys as u32, virt as u32, size, req_flags
-            // );
-            let range = mm.map_range(
-                phys_ptr,
-                virt_ptr,
-                size.get(),
-                pid,
-                req_flags,
-                MemoryType::Default,
-            )?;
-
-            // If we're handing back an address in main RAM, zero it out. If
-            // phys is 0, then the page will be lazily allocated, so we
-            // don't need to do this.
-            if phys.is_some() {
-                if mm.is_main_memory(phys_ptr) {
-                    println!(
-                        "Going to zero out {} bytes @ {:08x}",
-                        range.size.get(),
-                        range.addr.get()
-                    );
-                    unsafe {
-                        range
-                            .as_mut_ptr()
-                            .write_bytes(0, range.size.get() / mem::size_of::<usize>())
-                    };
-                    // println!("Done zeroing out");
-                }
-                for offset in
-                    (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
+                // Don't let the address exceed the user area (unless it's PID 1)
+                if pid.get() != 1
+                    && virt
+                        .map(|x| x.get() >= arch::mem::USER_AREA_END)
+                        .unwrap_or(false)
                 {
-                    // println!("Handing page to user");
-                    crate::arch::mem::hand_page_to_user(offset as *mut usize)
-                        .expect("couldn't hand page to user");
-                }
-            }
+                    return Err(xous::Error::BadAddress);
 
-            Ok(xous::Result::MemoryRange(range))
+                // Don't allow mapping non-page values
+                } else if size.get() & (PAGE_SIZE - 1) != 0 {
+                    // println!("map: bad alignment of size {:08x}", size);
+                    return Err(xous::Error::BadAlignment);
+                }
+                // println!(
+                //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
+                //     phys as u32, virt as u32, size, req_flags
+                // );
+                let range = mm.map_range(
+                    phys_ptr,
+                    virt_ptr,
+                    size.get(),
+                    pid,
+                    req_flags,
+                    MemoryType::Default,
+                )?;
+
+                // If we're handing back an address in main RAM, zero it out. If
+                // phys is 0, then the page will be lazily allocated, so we
+                // don't need to do this.
+                if phys.is_some() {
+                    if mm.is_main_memory(phys_ptr) {
+                        println!(
+                            "Going to zero out {} bytes @ {:08x}",
+                            range.size.get(),
+                            range.addr.get()
+                        );
+                        unsafe {
+                            range
+                                .as_mut_ptr()
+                                .write_bytes(0, range.size.get() / mem::size_of::<usize>())
+                        };
+                        // println!("Done zeroing out");
+                    }
+                    for offset in
+                        (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
+                    {
+                        // println!("Handing page to user");
+                        crate::arch::mem::hand_page_to_user(offset as *mut u8)
+                            .expect("couldn't hand page to user");
+                    }
+                }
+
+                Ok(xous::Result::MemoryRange(range))
+            })
         }
-        SysCall::UnmapMemory(range) => {
-            let mut mm = MemoryManagerHandle::get();
+        SysCall::UnmapMemory(range) => MemoryManager::with_mut(|mm| {
             let mut result = Ok(xous::Result::Ok);
             let virt = range.as_ptr() as usize;
             let size = range.len();
@@ -397,7 +398,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 }
             }
             result
-        }
+        }),
         SysCall::IncreaseHeap(delta, flags) => {
             if delta & 0xfff != 0 {
                 return Err(xous::Error::BadAlignment);
@@ -413,10 +414,11 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                     Ok(start as *mut u8)
                 })?
             };
-            let mut mm = MemoryManagerHandle::get();
-            Ok(xous::Result::MemoryRange(
-                mm.reserve_range(start, delta, flags)?,
-            ))
+            MemoryManager::with_mut(|mm| {
+                Ok(xous::Result::MemoryRange(
+                    mm.reserve_range(start, delta, flags)?,
+                ))
+            })
         }
         SysCall::DecreaseHeap(delta) => {
             if delta & 0xfff != 0 {
@@ -431,11 +433,12 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 process_inner.mem_heap_size -= delta;
                 Ok(start)
             })?;
-            let mut mm = MemoryManagerHandle::get();
-            for page in ((start - delta)..start).step_by(crate::arch::mem::PAGE_SIZE) {
-                mm.unmap_page(page as *mut usize)
-                    .expect("unable to unmap page");
-            }
+            MemoryManager::with_mut(|mm| {
+                for page in ((start - delta)..start).step_by(crate::arch::mem::PAGE_SIZE) {
+                    mm.unmap_page(page as *mut usize)
+                        .expect("unable to unmap page");
+                }
+            });
             Ok(xous::Result::Ok)
         }
         SysCall::SwitchTo(new_pid, new_context) => {
@@ -508,8 +511,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             })
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
-            ss.create_process(process_init)
-                .map(xous::Result::ProcessID)
+            ss.create_process(process_init).map(xous::Result::ProcessID)
         }),
         SysCall::CreateServer(name) => {
             SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous::Result::ServerID))

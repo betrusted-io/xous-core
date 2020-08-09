@@ -2,7 +2,7 @@ use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
-use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::mem::{MemoryManager, PAGE_SIZE};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID, TID};
 use crate::services::SystemServices;
@@ -127,10 +127,7 @@ pub extern "C" fn trap_handler(
                 // the page isn't shared, then this is a reserved page. Allocate
                 // a real page to back it and resume execution.
                 if flags & 1 == 0 && flags != 0 && flags & (1 << 8) == 0 {
-                    let new_page = {
-                        let mut mm = MemoryManagerHandle::get();
-                        mm.alloc_page(pid).expect("Couldn't allocate new page")
-                    };
+                    let new_page = MemoryManager::with_mut(|mm| mm.alloc_page(pid).expect("Couldn't allocate new page"));
                     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
                     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
                     unsafe {
