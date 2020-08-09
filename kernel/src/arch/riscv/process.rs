@@ -1,7 +1,7 @@
 use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
-pub const INITIAL_TID: TID = 2;
+pub const INITIAL_TID: TID = 1;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous::{ProcessInit, ThreadInit, PID, TID};
@@ -16,25 +16,29 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
 const EXIT_THREAD: usize = 0xff80_3000;
-pub const IRQ_CONTEXT: usize = 1;
+pub const IRQ_THREAD: usize = 0;
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 struct ProcessImpl {
     /// Used by the interrupt handler to calculate offsets
     scratch: usize,
 
+    /// The currently-active thread for this process
+    current_thread: usize,
+
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
+
+    /// Pad everything to 128 bytes, so the Thread slice starts at
+    /// offset 128.
+    _padding: [u32; 14],
 
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
     /// receive messages.
     threads: [Thread; MAX_THREAD],
 
-    /// The currently-active thread for this process
-    current_thread: TID,
-
-    _padding: [u32; 14],
 }
 
 /// Singleton process table. Each process in the system gets allocated from this table.
@@ -218,15 +222,17 @@ impl Process {
             thread + 1 < process.threads.len(),
             "tried to init a thread that's out of range"
         );
-        assert!(thread != 1, "tried to init using the irq thread");
-        assert!(thread != 0, "tried to init using a thread of 0");
+        assert!(thread != IRQ_THREAD, "tried to init using the irq thread");
         assert!(
-            thread == 2,
-            "tried to init using a thread that wasn't 2. This probably isn't what you want."
+            thread == INITIAL_TID,
+            "tried to init using a thread {} that wasn't {}. This probably isn't what you want.",
+            thread,
+            INITIAL_TID
         );
-        // By convention, thread 0 is the trap thread. Therefore, thread 1 is
-        // the first default thread.
-        process.current_thread = thread;
+        // By convention, thread 1 is the trap thread. Therefore, thread 2 is
+        // the first default thread. Thread 0 is unused. There is an offset of
+        // 1 due to how the interrupt handler functions.
+        process.current_thread = thread + 1;
         for thread in process.threads.iter_mut() {
             *thread = Default::default();
         }

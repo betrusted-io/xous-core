@@ -98,7 +98,7 @@ pub extern "C" fn trap_handler(
         let response =
             crate::syscall::handle(pid, tid, call).unwrap_or_else(|e| xous::Result::Error(e));
 
-        println!("Syscall Result: {:?}", response);
+        // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
             let thread = p.current_thread();
             // If we're resuming a process that was previously sleeping, restore the
@@ -107,7 +107,10 @@ pub extern "C" fn trap_handler(
             if response == xous::Result::ResumeProcess {
                 crate::arch::syscall::resume(current_pid().get() == 1, thread);
             } else {
-                // println!("Returning to address {:08x}", tid.sepc);
+                println!(
+                    "Returning to address {:08x}",
+                    ArchProcess::with_current_mut(|p| p.current_thread().sepc)
+                );
                 unsafe { _xous_syscall_return_result(&response, thread) };
             }
         });

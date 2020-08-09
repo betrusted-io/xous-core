@@ -156,7 +156,7 @@ impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
         match self.state {
-            /*ProcessState::Setup(_) | */ ProcessState::Ready(_) => true,
+            ProcessState::Setup(_) | ProcessState::Ready(_) => true,
             _ => false,
         }
     }
@@ -492,7 +492,7 @@ impl SystemServices {
             };
             process.state = ProcessState::Running(available_threads);
             process.previous_thread = process.current_thread;
-            process.current_thread = arch::process::IRQ_CONTEXT as TID;
+            process.current_thread = arch::process::IRQ_THREAD;
             process.mapping.activate()?;
         }
 
@@ -507,7 +507,7 @@ impl SystemServices {
             let sp = arch_process.current_thread().stack_pointer();
 
             // Activate the current context
-            arch_process.set_thread(arch::process::IRQ_CONTEXT).unwrap();
+            arch_process.set_thread(arch::process::IRQ_THREAD).unwrap();
 
             // Construct the new frame
             arch::syscall::invoke(
