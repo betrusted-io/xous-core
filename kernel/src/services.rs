@@ -129,7 +129,7 @@ impl Default for Process {
 /// all possible processes.
 /// Note that this data is only available when the current process is active.
 #[repr(C)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 /// Default virtual address when MapMemory is called with no `virt`
 pub struct ProcessInner {
     pub mem_default_base: usize,

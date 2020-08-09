@@ -1,11 +1,10 @@
-use core::cell::RefCell;
 use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
 pub const INITIAL_TID: TID = 1;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
+use xous::{ProcessInit, ThreadInit, PID, TID};
 
 use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
@@ -19,7 +18,7 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 pub const EXIT_THREAD: usize = 0xff80_3000;
 pub const IRQ_CONTEXT: usize = 1;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct ProcessImpl {
     /// Used by the interrupt handler to calculate offsets
     scratch: usize,
@@ -48,11 +47,11 @@ struct ProcessTable {
     table: [Option<ProcessImpl>; MAX_PROCESS_COUNT],
 }
 
-static PROCESS_TABLE: RefCell<ProcessTable> = RefCell::new(ProcessTable {
+static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     current: unsafe { PID::new_unchecked(1) },
     total: 0,
     table: [None; MAX_PROCESS_COUNT],
-});
+};
 
 #[repr(C)]
 #[cfg(baremetal)]
@@ -94,7 +93,7 @@ pub struct Thread {
 impl Process {
     pub fn current() -> Process {
         Process {
-            pid: unsafe { PROCESS_TABLE.borrow().current },
+            pid: unsafe { PROCESS_TABLE.current },
         }
     }
 
@@ -141,13 +140,13 @@ impl Process {
     }
 
     pub fn current_thread(&mut self) -> &mut Thread {
-        let mut process = unsafe { &mut *PROCESS };
+        let process = unsafe { &mut *PROCESS };
         assert!(process.current_thread != 0, "thread number was 0");
         &mut process.threads[process.current_thread - 1]
     }
 
     pub fn current_tid(&self) -> TID {
-        let mut process = unsafe { &mut *PROCESS };
+        let process = unsafe { &*PROCESS };
         process.current_thread
     }
 
@@ -164,7 +163,7 @@ impl Process {
     }
 
     pub fn thread(&mut self, thread: TID) -> &mut Thread {
-        let mut process = unsafe { &mut *PROCESS };
+        let process = unsafe { &mut *PROCESS };
         assert!(
             thread > 0 && thread <= process.threads.len(),
             "attempt to retrieve an invalid thread {}",
@@ -174,7 +173,7 @@ impl Process {
     }
 
     pub fn find_free_thread(&self) -> Option<TID> {
-        let mut process = unsafe { &mut *PROCESS };
+        let process = unsafe { &mut *PROCESS };
         for (index, thread) in process.threads.iter().enumerate() {
             if index != 0 && thread.sepc == 0 {
                 return Some(index as TID + 1);
@@ -259,7 +258,7 @@ impl Thread {
 pub fn set_current_pid(pid: PID) {
     let pid_idx = (pid.get() - 1) as usize;
     unsafe {
-        let mut pt = PROCESS_TABLE.get_mut();
+        let mut pt = &mut PROCESS_TABLE;
 
         match pt.table.get_mut(pid_idx) {
             None | Some(None) => {
@@ -272,7 +271,7 @@ pub fn set_current_pid(pid: PID) {
 }
 
 pub fn current_pid() -> PID {
-    unsafe { PROCESS_TABLE.borrow().current }
+    unsafe { PROCESS_TABLE.current }
 }
 
 pub fn current_tid() -> TID {
