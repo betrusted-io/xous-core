@@ -62,18 +62,18 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     #[cfg(feature = "debug-print")]
     {
         // Map the serial port so println!() works as expected.
-        use mem::MemoryManagerHandle;
-        let mut memory_manager = MemoryManagerHandle::get();
-        memory_manager
-            .map_range(
-                0xF0002000 as *mut usize,
-                ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut usize,
-                4096,
-                1,
-                MemoryFlags::R | MemoryFlags::W,
-                MemoryType::Default,
-            )
-            .expect("unable to map serial port");
+        mem::MemoryManager::with_mut(|memory_manager| {
+            memory_manager
+                .map_range(
+                    0xF0002000 as *mut u8,
+                    ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut u8,
+                    4096,
+                    PID::new(1).unwrap(),
+                    MemoryFlags::R | MemoryFlags::W,
+                    MemoryType::Default,
+                )
+                .expect("unable to map serial port")
+        });
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
         println!("Claiming IRQ 3 via syscall...");

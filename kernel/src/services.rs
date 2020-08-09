@@ -131,7 +131,8 @@ pub struct ProcessInner {
     /// A copy of this process' ID
     pub pid: PID,
 
-    pub _reserved: [u8; 27],
+    /// Some reserved data to pad this out to a multiple of 32 bytes.
+    pub _reserved: [u8; 1],
 }
 
 impl Default for ProcessInner {
@@ -146,7 +147,7 @@ impl Default for ProcessInner {
             mem_heap_max: 524_288,
             connection_map: [0; 32],
             pid: unsafe { PID::new_unchecked(1) },
-            _reserved: [0; 27],
+            _reserved: [0; 1],
         }
     }
 }
@@ -311,7 +312,7 @@ impl SystemServices {
                     unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
                     MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap(),
                     None,
-                    [0u8; 16],
+                    [0u8; 12],
                 ));
             }
         }
@@ -319,6 +320,7 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
+        ArchProcess::with_current_mut(|process| process.init(0, 0, INITIAL_TID));
         // ProcessHandle::get().init(0, 0, INITIAL_TID);
         // self.processes[0].current_thread = INITIAL_TID as u8;
     }

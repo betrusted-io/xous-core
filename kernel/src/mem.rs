@@ -162,9 +162,9 @@ impl MemoryManager {
         Ok(())
     }
 
-    #[cfg(baremetal)]
+    #[cfg(all(baremetal, feature = "print-debug"))]
     pub fn print_ownership(&self) {
-        println!("Ownership ({} bytes in all):", self.allocations.len());
+        println!("Ownership ({} bytes in all):", unsafe { MEMORY_ALLOCATIONS.len() });
 
         let mut offset = 0;
         unsafe {

@@ -36,9 +36,7 @@ pub enum SysCall {
     ///
     /// # Errors
     ///
-    UnmapMemory(
-        MemoryRange
-    ),
+    UnmapMemory(MemoryRange),
 
     /// Sets the offset and size of a given memory region.  This call may only
     /// be made by processes that have not yet started, or processes that have a
@@ -323,7 +321,9 @@ impl SysCall {
         use core::mem;
         assert!(
             mem::size_of::<SysCall>() == mem::size_of::<usize>() * 8,
-            "SysCall is not the expected size"
+            "SysCall is not the expected size (expected {}, got {})",
+            mem::size_of::<usize>() * 8,
+            mem::size_of::<SysCall>()
         );
         match self {
             SysCall::MapMemory(a1, a2, a3, a4) => [
@@ -571,17 +571,15 @@ impl SysCall {
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
-            SysCallNumber::UnmapMemory => SysCall::UnmapMemory(
-                MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?,
-            ),
+            SysCallNumber::UnmapMemory => {
+                SysCall::UnmapMemory(MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?)
+            }
             SysCallNumber::Yield => SysCall::Yield,
             SysCallNumber::WaitEvent => SysCall::WaitEvent,
             SysCallNumber::ReceiveMessage => {
                 SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            SysCallNumber::ReturnToParentI => {
-                SysCall::ReturnToParentI(pid_from_usize(a1)?, a2)
-            }
+            SysCallNumber::ReturnToParentI => SysCall::ReturnToParentI(pid_from_usize(a1)?, a2),
             SysCallNumber::ClaimInterrupt => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
@@ -652,9 +650,7 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnMemory => {
-                SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?)
-            }
+            SysCallNumber::ReturnMemory => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?),
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -709,7 +705,9 @@ pub fn map_memory(
         flags,
     ))?;
     if let Result::MemoryRange(range) = result {
-        Ok(crate::arch::map_memory_post(phys, virt, size, flags, range)?)
+        Ok(crate::arch::map_memory_post(
+            phys, virt, size, flags, range,
+        )?)
     } else if let Result::Error(e) = result {
         Err(e)
     } else {

@@ -1,7 +1,7 @@
 use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
-pub const INITIAL_TID: TID = 1;
+pub const INITIAL_TID: TID = 2;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous::{ProcessInit, ThreadInit, PID, TID};
@@ -29,10 +29,12 @@ struct ProcessImpl {
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
     /// receive messages.
-    threads: [Thread; MAX_THREAD + 1],
+    threads: [Thread; MAX_THREAD],
 
     /// The currently-active thread for this process
     current_thread: TID,
+
+    _padding: [u32; 14],
 }
 
 /// Singleton process table. Each process in the system gets allocated from this table.
@@ -204,10 +206,13 @@ impl Process {
     pub fn init(&mut self, entrypoint: usize, stack: usize, thread: usize) {
         let mut process = unsafe { &mut *PROCESS };
         assert!(
-            mem::size_of::<Process>() == PAGE_SIZE,
-            "Process size is {}, not PAGE_SIZE ({})",
-            mem::size_of::<Process>(),
-            PAGE_SIZE
+            mem::size_of::<ProcessImpl>() == PAGE_SIZE,
+            "Process size is {}, not PAGE_SIZE ({}) (Thread size: {}, array: {}, Inner: {})",
+            mem::size_of::<ProcessImpl>(),
+            PAGE_SIZE,
+            mem::size_of::<Thread>(),
+            mem::size_of::<[Thread; MAX_THREAD + 1]>(),
+            mem::size_of::<ProcessInner>(),
         );
         assert!(
             thread + 1 < process.threads.len(),

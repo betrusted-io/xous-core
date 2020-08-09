@@ -14,7 +14,7 @@ pub struct ThreadInit {
     pub call: fn(data: *const usize) -> usize,
     pub stack: MemoryRange,
     pub arg: Option<MemoryAddress>,
-    pub name: [u8; 16],
+    pub name: [u8; 12],
 }
 
 impl ThreadInit {
@@ -22,7 +22,7 @@ impl ThreadInit {
         call: fn(data: *const usize) -> usize,
         stack: MemoryRange,
         arg: Option<MemoryAddress>,
-        name: [u8; 16],
+        name: [u8; 12],
     ) -> Self {
         ThreadInit {
             call,
@@ -34,9 +34,9 @@ impl ThreadInit {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct ProcessKey([u8; 16]);
+pub struct ProcessKey([u8; 8]);
 impl ProcessKey {
-    pub fn new(key: [u8; 16]) -> ProcessKey {
+    pub fn new(key: [u8; 8]) -> ProcessKey {
         ProcessKey(key)
     }
 }
