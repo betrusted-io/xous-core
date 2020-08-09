@@ -168,7 +168,7 @@ impl Server {
         new: &mut Option<Server>,
         pid: PID,
         sid: SID,
-        // memory_page: MemoryPage,
+        _backing: MemoryRange,
     ) -> Result<(), xous::Error> {
         if new != &None {
             return Err(xous::Error::MemoryInUse);
@@ -177,8 +177,8 @@ impl Server {
         #[cfg(baremetal)]
         let mut queue = unsafe {
             core::slice::from_raw_parts_mut(
-                queue_addr as *mut QueuedMessage,
-                queue_size / mem::size_of::<QueuedMessage>(),
+                _backing.as_mut_ptr() as *mut QueuedMessage,
+                _backing.len() / mem::size_of::<QueuedMessage>(),
             )
         };
 

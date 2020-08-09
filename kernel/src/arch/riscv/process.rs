@@ -96,6 +96,11 @@ impl Process {
         Process { pid: unsafe { PROCESS_TABLE.borrow().current } }
     }
 
+    /// Mark this process as running on the current core
+    pub fn activate(&mut self) -> Result<(), xous::Error> {
+        Ok(())
+    }
+
     /// Calls the provided function with the current inner process state.
     pub fn with_inner<F, R>(f: F) -> R
     where

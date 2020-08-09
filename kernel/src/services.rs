@@ -2,6 +2,7 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
+use xous::MemoryRange;
 
 use core::cell::RefCell;
 
@@ -1277,19 +1278,23 @@ impl SystemServices {
 
         for entry in self.servers.iter_mut() {
             if entry == &None {
+                #[cfg(baremetal)]
+                // Allocate a single page for the server queue
+                let backing = {
+                    let mut mm = MemoryManagerHandle::get();
+                    (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
+                };
+
+                #[cfg(not(baremetal))]
+                let backing = MemoryRange::new(4096, 4096).unwrap();
                 // println!(
                 //     "KERNEL({}): Found a free slot for a server -- allocating an entry",
                 //     self.pid.get()
                 // );
 
-                // // Allocate a single page for the server queue
-                // let (addr, size) = {
-                //     let mut mm = MemoryManagerHandle::get();
-                //     (mm.map_zeroed_page(pid, false)?, PAGE_SIZE)
-                // };
 
                 // Initialize the server with the given memory page.
-                Server::init(entry, pid, sid /*, addr, size*/).map_err(|x| x)?;
+                Server::init(entry, pid, sid, backing).map_err(|x| x)?;
                 return Ok(sid);
             }
         }
