@@ -1,5 +1,4 @@
 use crate::args::KernelArguments;
-use core::cell::RefCell;
 use core::fmt;
 use core::mem;
 use core::slice;
@@ -9,9 +8,6 @@ pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
 
 use xous::{MemoryFlags, MemoryRange, PID};
-
-#[cfg(not(baremetal))]
-use std::thread_local;
 
 #[derive(Debug)]
 enum ClaimOrRelease {
@@ -63,7 +59,7 @@ impl Default for MemoryManager {
 }
 
 #[cfg(not(baremetal))]
-thread_local!(static MEMORY_MANAGER: RefCell<MemoryManager> = RefCell::new(MemoryManager::default()));
+std::thread_local!(static MEMORY_MANAGER: core::cell::RefCell<MemoryManager> = core::cell::RefCell::new(MemoryManager::default()));
 
 #[cfg(baremetal)]
 static mut MEMORY_MANAGER: MemoryManager = MemoryManager::default_hack();
@@ -189,11 +185,11 @@ impl MemoryManager {
         };
         for o in 0..self.ram_size / PAGE_SIZE {
             unsafe {
-                if let Some(allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                if let Some(_allocation) = MEMORY_ALLOCATIONS[offset + o] {
                     println!(
                         "        {:08x} => {}",
                         self.ram_size + o * PAGE_SIZE,
-                        allocation.get()
+                        _allocation.get()
                     );
                 }
             }
@@ -207,14 +203,12 @@ impl MemoryManager {
             for region in EXTRA_REGIONS {
                 println!("    Region {}:", region);
                 for o in 0..(region.mem_size as usize) / PAGE_SIZE {
-                    unsafe {
-                        if let Some(allocation) = MEMORY_ALLOCATIONS[offset + o] {
-                            println!(
-                                "        {:08x} => {}",
-                                (region.mem_start as usize) + o * PAGE_SIZE,
-                                allocation.get()
-                            )
-                        }
+                    if let Some(_allocation) = MEMORY_ALLOCATIONS[offset + o] {
+                        println!(
+                            "        {:08x} => {}",
+                            (region.mem_start as usize) + o * PAGE_SIZE,
+                            _allocation.get()
+                        )
                     }
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;

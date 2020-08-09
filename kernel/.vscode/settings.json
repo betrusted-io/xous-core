@@ -37,5 +37,10 @@
         "vmim",
         "vmip",
         "xous"
+    ],
+    "rust-analyzer.checkOnSave.allTargets": false,
+    "rust-analyzer.checkOnSave.extraArgs": [
+        "--target",
+        "riscv32imac-unknown-none-elf"
     ]
 }

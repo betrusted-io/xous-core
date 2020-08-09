@@ -11,10 +11,10 @@ pub struct ProcessArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
-    call: fn(data: *const usize) -> usize,
-    stack: MemoryRange,
-    arg: Option<MemoryAddress>,
-    name: [u8; 16],
+    pub call: fn(data: *const usize) -> usize,
+    pub stack: MemoryRange,
+    pub arg: Option<MemoryAddress>,
+    pub name: [u8; 16],
 }
 
 impl ThreadInit {

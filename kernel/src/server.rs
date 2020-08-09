@@ -175,7 +175,7 @@ impl Server {
         }
 
         #[cfg(baremetal)]
-        let mut queue = unsafe {
+        let queue = unsafe {
             core::slice::from_raw_parts_mut(
                 _backing.as_mut_ptr() as *mut QueuedMessage,
                 _backing.len() / mem::size_of::<QueuedMessage>(),

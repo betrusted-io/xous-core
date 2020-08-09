@@ -6,7 +6,7 @@ use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous::{ProcessInit, ThreadInit, PID, TID};
 
-use crate::args::KernelArguments;
+// use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
 pub const MAX_PROCESS_COUNT: usize = 32;
 // pub use crate::arch::mem::DEFAULT_STACK_TOP;
@@ -15,7 +15,7 @@ pub const MAX_PROCESS_COUNT: usize = 32;
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
-pub const EXIT_THREAD: usize = 0xff80_3000;
+const EXIT_THREAD: usize = 0xff80_3000;
 pub const IRQ_CONTEXT: usize = 1;
 
 #[derive(Debug, Copy, Clone)]
@@ -117,14 +117,14 @@ impl Process {
         // })
     }
 
-    /// Calls the provided function with the current inner process state.
-    pub fn with_current<F, R>(f: F) -> R
-    where
-        F: FnOnce(&Process) -> R,
-    {
-        let process = Self::current();
-        f(&process)
-    }
+    // /// Calls the provided function with the current inner process state.
+    // pub fn with_current<F, R>(f: F) -> R
+    // where
+    //     F: FnOnce(&Process) -> R,
+    // {
+    //     let process = Self::current();
+    //     f(&process)
+    // }
 
     /// Calls the provided function with the current inner process state.
     pub fn with_current_mut<F, R>(f: F) -> R
@@ -235,8 +235,20 @@ impl Process {
         process.inner = Default::default();
     }
 
-    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {
-        todo!();
+    pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous::Error> {
+        let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
+        // Create the new context and set it to run in the new address space.
+        let pid = self.pid.get();
+        let thread = self.thread(new_tid);
+        crate::arch::syscall::invoke(
+            thread,
+            pid == 1,
+            entrypoint,
+            setup.stack.as_ptr() as usize,
+            EXIT_THREAD,
+            &[setup.arg.map(|x| x.get() as usize).unwrap_or_default()],
+        );
+        Ok(())
     }
 
     pub fn create(pid: PID, init_data: ProcessInit) -> PID {

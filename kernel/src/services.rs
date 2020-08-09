@@ -5,30 +5,6 @@ pub use crate::arch::process::Thread;
 use crate::mem::MemoryManager;
 use xous::MemoryRange;
 
-use core::cell::RefCell;
-
-// Fake macro to implement "thread local" on baremetal as a simple static variable.
-// The kernel is single-threaded so it's really just one thread.
-#[cfg(baremetal)]
-macro_rules! thread_local {
-    // empty (base case for the recursion)
-    () => {};
-
-    // process multiple declarations
-    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr; $($rest:tt)*) => (
-        $(#[$attr])* $vis static $name: $t = $init;
-        $crate::services::thread_local!($($rest)*);
-    );
-
-    // handle a single declaration
-    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr) => (
-        $(#[$attr])* $vis static $name: $t = $init;
-    );
-}
-
-#[cfg(not(baremetal))]
-use std::thread_local;
-
 use crate::filled_array;
 use crate::server::Server;
 // use core::mem;
@@ -216,7 +192,7 @@ impl Process {
 }
 
 #[cfg(not(baremetal))]
-thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
+std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> = core::cell::RefCell::new(SystemServices {
     processes: [Process {
         state: ProcessState::Free,
         ppid: unsafe { PID::new_unchecked(1) },
@@ -473,6 +449,7 @@ impl SystemServices {
         _irq_no: usize,
         _arg: *mut usize,
     ) -> Result<(), xous::Error> {
+        todo!();
         Err(xous::Error::UnhandledSyscall)
         // // Get the current process (which was just interrupted) and mark it as
         // // "ready to run".  If this function is called when the current process
@@ -1248,17 +1225,6 @@ impl SystemServices {
             .ok_or(xous::Error::ThreadNotAvailable)?;
 
         arch_process.setup_thread(new_tid, thread_init)?;
-
-        // // Create the new context and set it to run in the new address space.
-        // let context = process.context(new_context_nr);
-        // arch::syscall::invoke(
-        //     context,
-        //     self.pid == 1,
-        //     entrypoint.get() as usize,
-        //     stack_pointer.get() as usize,
-        //     EXIT_THREAD,
-        //     &[arg.map(|x| x.get()).unwrap_or_default() as usize],
-        // );
 
         // println!("KERNEL({}): Created new context {}", pid, new_context_nr);
 

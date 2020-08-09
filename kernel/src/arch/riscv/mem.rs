@@ -436,14 +436,14 @@ pub fn move_page_inner(
     *entry = 0;
     unsafe { flush_mmu() };
 
-    dest_space.activate();
+    dest_space.activate()?;
     let phys = previous_entry >> 10 << 12;
     let flags = untranslate_flags(previous_entry);
 
     let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid.get() != 1);
 
     // Switch back to the original address space and return
-    src_space.activate();
+    src_space.activate().unwrap();
     result
 }
 
@@ -487,7 +487,7 @@ pub fn lend_page_inner(
         *entry = (*entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
         unsafe { flush_mmu() };
 
-        dest_space.activate();
+        dest_space.activate()?;
         map_page_inner(
             mm,
             dest_pid,
@@ -514,7 +514,7 @@ pub fn lend_page_inner(
         );
         unsafe { flush_mmu() };
 
-        dest_space.activate();
+        dest_space.activate()?;
         map_page_inner(
             mm,
             dest_pid,
@@ -526,7 +526,7 @@ pub fn lend_page_inner(
     };
     unsafe { flush_mmu() };
 
-    src_space.activate();
+    src_space.activate().unwrap();
     result.map(|_| phys)
 }
 
@@ -549,7 +549,7 @@ pub fn return_page_inner(
     *src_entry = 0;
     unsafe { flush_mmu() };
 
-    dest_space.activate();
+    dest_space.activate()?;
     let dest_entry =
         pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
     if *dest_entry & MMUFlags::S.bits() == 0 {
@@ -571,7 +571,7 @@ pub fn return_page_inner(
     }
     unsafe { flush_mmu() };
 
-    src_space.activate();
+    src_space.activate().unwrap();
     Ok(phys)
 }
 

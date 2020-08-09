@@ -6,7 +6,7 @@ extern "C" {
 }
 
 pub fn invoke(
-    Thread: &mut Thread,
+    thread: &mut Thread,
     supervisor: bool,
     pc: usize,
     sp: usize,
@@ -14,13 +14,13 @@ pub fn invoke(
     args: &[usize],
 ) {
     set_supervisor(supervisor);
-    Thread.registers[0] = ret_addr;
-    Thread.registers[1] = sp;
+    thread.registers[0] = ret_addr;
+    thread.registers[1] = sp;
     assert!(args.len() <= 8, "too many arguments to invoke()");
     for (idx, arg) in args.iter().enumerate() {
-        Thread.registers[9 + idx] = *arg;
+        thread.registers[9 + idx] = *arg;
     }
-    Thread.sepc = pc;
+    thread.sepc = pc;
 }
 
 fn set_supervisor(supervisor: bool) {
@@ -31,8 +31,8 @@ fn set_supervisor(supervisor: bool) {
     }
 }
 
-pub fn resume(supervisor: bool, Thread: &Thread) -> ! {
-    sepc::write(Thread.sepc);
+pub fn resume(supervisor: bool, thread: &Thread) -> ! {
+    sepc::write(thread.sepc);
 
     // Return to the appropriate CPU mode
     set_supervisor(supervisor);
@@ -43,5 +43,5 @@ pub fn resume(supervisor: bool, Thread: &Thread) -> ! {
     //     Thread.registers[1],
     //     Thread.sepc,
     // );
-    unsafe { _xous_resume_context(Thread.registers.as_ptr()) };
+    unsafe { _xous_resume_context(thread.registers.as_ptr()) };
 }
