@@ -2,8 +2,8 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
-use xous::MemoryRange;
 use crate::mem::MemoryManager;
+use xous::MemoryRange;
 
 use core::cell::RefCell;
 
@@ -69,7 +69,7 @@ pub enum ProcessState {
 
     /// This is a brand-new process that hasn't been run yet, and needs its
     /// initial context set up.
-    // Setup(ThreadInit),
+    Setup(ThreadInit),
 
     /// This process is able to be run.  The context bitmask describes contexts
     /// that are ready.
@@ -318,11 +318,12 @@ impl SystemServices {
             if pid == 1 {
                 process.state = ProcessState::Running(0);
             } else {
-                process.state = ProcessState::Setup(
-                    init.entrypoint,
-                    init.sp,
-                    crate::arch::process::DEFAULT_STACK_SIZE,
-                );
+                process.state = ProcessState::Setup(ThreadInit::new(
+                    unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
+                    MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap(),
+                    None,
+                    [0u8; 16],
+                ));
             }
         }
 
@@ -560,27 +561,27 @@ impl SystemServices {
         process.state = match process.state {
             ProcessState::Free => return Err(xous::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
-            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound), /*
+            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound),
             ProcessState::Setup(setup) => {
-            // Activate the process, which enables its memory mapping
-            process.activate()?;
+                // Activate the process, which enables its memory mapping
+                process.activate()?;
 
-            // If a context is specified for a Setup task to switch to,
-            // ensure it's the INITIAL_TID. Otherwise it's not valid.
-            if let Some(ctx) = tid {
-            if ctx != INITIAL_TID {
-            return Err(xous::Error::InvalidThread);
+                // If a context is specified for a Setup task to switch to,
+                // ensure it's the INITIAL_TID. Otherwise it's not valid.
+                if let Some(tid) = tid {
+                    if tid != INITIAL_TID {
+                        return Err(xous::Error::InvalidThread);
+                    }
+                }
+
+                let mut p = crate::arch::process::Process::current();
+                p.setup_thread(INITIAL_TID, setup)?;
+                p.set_thread(INITIAL_TID)?;
+                // process.current_thread = INITIAL_TID as u8;
+
+                // Mark the current proces state as "running, and no waiting contexts"
+                ProcessState::Running(0)
             }
-            }
-
-            let mut p = crate::arch::process::Process::current();
-            p.setup_thread(INITIAL_TID, setup)?;
-            p.set_thread(INITIAL_TID)?;
-            // process.current_thread = INITIAL_TID as u8;
-
-            // Mark the current proces state as "running, and no waiting contexts"
-            ProcessState::Running(0)
-            }*/
             ProcessState::Ready(0) => {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
             }
@@ -1090,7 +1091,6 @@ impl SystemServices {
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         MemoryManager::with_mut(|mm| {
-
             // Locate an address to fit the new memory.
             dest_mapping.activate();
             let dest_virt = mm

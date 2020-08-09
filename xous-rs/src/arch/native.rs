@@ -1,4 +1,4 @@
-use crate::{MemoryAddress, PID, TID};
+use crate::{MemoryAddress, MemoryRange, PID, TID};
 use core::convert::TryInto;
 
 mod mem;
@@ -12,9 +12,25 @@ pub struct ProcessArgs {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
     call: fn(data: *const usize) -> usize,
-    stack: MemoryAddress,
+    stack: MemoryRange,
     arg: Option<MemoryAddress>,
     name: [u8; 16],
+}
+
+impl ThreadInit {
+    pub fn new(
+        call: fn(data: *const usize) -> usize,
+        stack: MemoryRange,
+        arg: Option<MemoryAddress>,
+        name: [u8; 16],
+    ) -> Self {
+        ThreadInit {
+            call,
+            stack,
+            arg,
+            name,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -37,7 +53,7 @@ pub fn thread_to_args(call: usize, init: &ThreadInit) -> [usize; 8] {
     [
         call as usize,
         init.call as usize,
-        init.stack.get(),
+        init.stack.as_ptr() as _,
         init.arg.map(|x| x.get()).unwrap_or_default(),
         0,
         0,
