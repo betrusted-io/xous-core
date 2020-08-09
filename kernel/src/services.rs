@@ -4,10 +4,31 @@ pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
 
 use core::cell::RefCell;
+
+// Fake macro to implement "thread local" on baremetal as a simple static variable.
+// The kernel is single-threaded so it's really just one thread.
+#[cfg(baremetal)]
+macro_rules! thread_local {
+    // empty (base case for the recursion)
+    () => {};
+
+    // process multiple declarations
+    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr; $($rest:tt)*) => (
+        $(#[$attr])* $vis static $name: $t = $init;
+        $crate::services::thread_local!($($rest)*);
+    );
+
+    // handle a single declaration
+    ($(#[$attr:meta])* $vis:vis static $name:ident: $t:ty = $init:expr) => (
+        $(#[$attr])* $vis static $name: $t = $init;
+    );
+}
+
+#[cfg(not(baremetal))]
 use std::thread_local;
 
 use crate::filled_array;
-// use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
+use crate::mem::PAGE_SIZE;
 use crate::server::Server;
 // use core::mem;
 use xous::{
@@ -160,7 +181,7 @@ impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
         match self.state {
-            /*ProcessState::Setup(_) | */ProcessState::Ready(_) => true,
+            /*ProcessState::Setup(_) | */ ProcessState::Ready(_) => true,
             _ => false,
         }
     }
@@ -196,24 +217,6 @@ impl Process {
     }
 }
 
-#[cfg(baremetal)]
-static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
-    processes: [Process {
-        state: ProcessState::Free,
-        ppid: unsafe { PID::new_unchecked(1) },
-        pid: unsafe { PID::new_unchecked(1) },
-        mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        // current_thread: 0,
-        previous_context: INITIAL_TID as u8,
-    }; MAX_PROCESS_COUNT],
-    // Note we can't use MAX_SERVER_COUNT here because of how Rust's
-    // macro tokenization works
-    servers: filled_array![None; 32],
-    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    _syscall_depth: 0,
-});
-
-#[cfg(not(baremetal))]
 thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
     processes: [Process {
         state: ProcessState::Free,
@@ -248,6 +251,12 @@ impl SystemServices {
     where
         F: FnOnce(&SystemServices) -> R,
     {
+        #[cfg(baremetal)]
+        {
+            let ss = unsafe { SYSTEM_SERVICES }.borrow();
+            f(&*ss)
+        }
+        #[cfg(not(baremetal))]
         SYSTEM_SERVICES.with(|ss| f(&ss.borrow()))
     }
 
@@ -255,6 +264,13 @@ impl SystemServices {
     where
         F: FnOnce(&mut SystemServices) -> R,
     {
+        #[cfg(baremetal)]
+        {
+            let mut ss = unsafe { SYSTEM_SERVICES }.borrow_mut();
+            f(&mut *ss)
+        }
+
+        #[cfg(not(baremetal))]
         SYSTEM_SERVICES.with(|ss| f(&mut ss.borrow_mut()))
     }
 
@@ -262,7 +278,7 @@ impl SystemServices {
     /// kernel. These arguments decide where the memory spaces are located, as
     /// well as where the stack and program counter should initially go.
     #[cfg(baremetal)]
-    pub fn init_from_memory(&mut self, base: *const u32, args: &KernelArguments) {
+    pub fn init_from_memory(&mut self, base: *const u32, args: &crate::args::KernelArguments) {
         // Look through the kernel arguments and create a new process for each.
         let init_offsets = {
             let mut init_count = 1;
@@ -271,7 +287,7 @@ impl SystemServices {
                     init_count += 1;
                 }
             }
-            unsafe { slice::from_raw_parts(base as *const InitialProcess, init_count) }
+            unsafe { core::slice::from_raw_parts(base as *const crate::arch::process::InitialProcess, init_count) }
         };
 
         // Copy over the initial process list.  The pid is encoded in the SATP
@@ -289,12 +305,13 @@ impl SystemServices {
             //     init.sp,
             //     pid - 1
             // );
-            unsafe { process.mapping.from_raw(init.satp) };
+            unsafe {
+                process.mapping.from_raw(init.satp);
+                process.ppid = PID::new_unchecked(1);
+            };
             if pid == 1 {
-                process.ppid = 0;
                 process.state = ProcessState::Running(0);
             } else {
-                process.ppid = 1;
                 process.state = ProcessState::Setup(init.entrypoint, init.sp, DEFAULT_STACK_SIZE);
             }
         }
@@ -533,26 +550,26 @@ impl SystemServices {
         process.state = match process.state {
             ProcessState::Free => return Err(xous::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
-            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound),/*
+            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound), /*
             ProcessState::Setup(setup) => {
-                // Activate the process, which enables its memory mapping
-                process.activate()?;
+            // Activate the process, which enables its memory mapping
+            process.activate()?;
 
-                // If a context is specified for a Setup task to switch to,
-                // ensure it's the INITIAL_TID. Otherwise it's not valid.
-                if let Some(ctx) = tid {
-                    if ctx != INITIAL_TID {
-                        return Err(xous::Error::InvalidThread);
-                    }
-                }
+            // If a context is specified for a Setup task to switch to,
+            // ensure it's the INITIAL_TID. Otherwise it's not valid.
+            if let Some(ctx) = tid {
+            if ctx != INITIAL_TID {
+            return Err(xous::Error::InvalidThread);
+            }
+            }
 
-                let mut p = crate::arch::process::Process::current();
-                p.setup_thread(INITIAL_TID, setup)?;
-                p.set_thread(INITIAL_TID)?;
-                // process.current_thread = INITIAL_TID as u8;
+            let mut p = crate::arch::process::Process::current();
+            p.setup_thread(INITIAL_TID, setup)?;
+            p.set_thread(INITIAL_TID)?;
+            // process.current_thread = INITIAL_TID as u8;
 
-                // Mark the current proces state as "running, and no waiting contexts"
-                ProcessState::Running(0)
+            // Mark the current proces state as "running, and no waiting contexts"
+            ProcessState::Running(0)
             }*/
             ProcessState::Ready(0) => {
                 panic!("ProcessState was `Ready(0)`, which is invalid!");
@@ -753,7 +770,8 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                /*ProcessState::Setup(_) | */ProcessState::Allocated => new_tid = INITIAL_TID,
+                /*ProcessState::Setup(_) | */
+                ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin

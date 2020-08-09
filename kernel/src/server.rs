@@ -141,7 +141,9 @@ pub struct Server {
     queue_tail: usize,
 
     /// Where data will appear
-    // queue: &'static mut [QueuedMessage],
+    #[cfg(baremetal)]
+    queue: &'static mut [QueuedMessage],
+    #[cfg(not(baremetal))]
     queue: Vec<QueuedMessage>,
 
     /// The `context mask` is a bitfield of contexts that are able to handle
@@ -172,18 +174,24 @@ impl Server {
             return Err(xous::Error::MemoryInUse);
         }
 
-        let mut queue = vec![]; /* = unsafe {
-                                    slice::from_raw_parts_mut(
-                                        queue_addr as *mut QueuedMessage,
-                                        queue_size / mem::size_of::<QueuedMessage>(),
-                                    )
-                                };*/
+        #[cfg(baremetal)]
+        let mut queue = unsafe {
+            core::slice::from_raw_parts_mut(
+                queue_addr as *mut QueuedMessage,
+                queue_size / mem::size_of::<QueuedMessage>(),
+            )
+        };
 
-        // TODO: Replace this with a direct operation on a passed-in page
-        queue.resize_with(
-            crate::arch::mem::PAGE_SIZE / mem::size_of::<QueuedMessage>(),
-            || QueuedMessage::Empty,
-        );
+        #[cfg(not(baremetal))]
+        let queue = {
+            let mut queue = vec![];
+            // TODO: Replace this with a direct operation on a passed-in page
+            queue.resize_with(
+                crate::arch::mem::PAGE_SIZE / mem::size_of::<QueuedMessage>(),
+                || QueuedMessage::Empty,
+            );
+            queue
+        };
 
         *new = Some(Server {
             sid,

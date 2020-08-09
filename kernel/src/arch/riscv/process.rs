@@ -9,7 +9,7 @@ use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 use crate::args::KernelArguments;
 const DEFAULT_STACK_SIZE: usize = 131072;
-const MAX_PROCESS_COUNT: usize = 32;
+pub const MAX_PROCESS_COUNT: usize = 32;
 // pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
 /// This is the address a program will jump to in order to return from an ISR.
@@ -59,7 +59,7 @@ static PROCESS_TABLE: RefCell<ProcessTable> = RefCell::new(ProcessTable {
 pub struct InitialProcess {
     /// The RISC-V SATP value, which includes the offset of the root page
     /// table plus the process ID.
-    satp: usize,
+    pub satp: usize,
 
     /// Where execution begins
     entrypoint: usize,
@@ -244,7 +244,7 @@ pub fn set_current_pid(pid: PID) {
 }
 
 pub fn current_pid() -> PID {
-    unsafe { PROCESS_TABLE.get().current }
+    unsafe { PROCESS_TABLE.borrow().current }
 }
 
 
