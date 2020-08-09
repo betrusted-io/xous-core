@@ -28,7 +28,6 @@ macro_rules! thread_local {
 use std::thread_local;
 
 use crate::filled_array;
-use crate::mem::PAGE_SIZE;
 use crate::server::Server;
 // use core::mem;
 use xous::{
@@ -320,7 +319,7 @@ impl SystemServices {
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
         // ProcessHandle::get().init(0, 0, INITIAL_TID);
-        self.processes[0].current_context = INITIAL_TID as u8;
+        // self.processes[0].current_thread = INITIAL_TID as u8;
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -991,7 +990,7 @@ impl SystemServices {
         // Locate an address to fit the new memory.
         dest_mapping.activate()?;
         let dest_virt = mm
-            .find_virtual_address(dest_virt, len, MemoryType::Messages)
+            .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
             .or_else(|e| {
                 src_mapping.activate().expect("couldn't undo mapping");
                 Err(e)
@@ -1004,7 +1003,7 @@ impl SystemServices {
 
         // Lend each subsequent page.
         for offset in
-            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
         {
             mm.move_page(
                 &src_mapping,
@@ -1084,7 +1083,7 @@ impl SystemServices {
         // Locate an address to fit the new memory.
         dest_mapping.activate();
         let dest_virt = mm
-            .find_virtual_address(dest_virt, len, MemoryType::Messages)
+            .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
             .or_else(|e| {
                 src_mapping.activate();
                 Err(e)
@@ -1095,7 +1094,7 @@ impl SystemServices {
 
         // Lend each subsequent page.
         for offset in
-            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
         {
             mm.lend_page(
                 &src_mapping,
@@ -1165,7 +1164,7 @@ impl SystemServices {
 
         // Lend each subsequent page.
         for offset in
-            (0..(len / mem::size_of::<usize>())).step_by(PAGE_SIZE / mem::size_of::<usize>())
+            (0..(len / core::mem::size_of::<usize>())).step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
         {
             mm.unlend_page(
                 &src_mapping,

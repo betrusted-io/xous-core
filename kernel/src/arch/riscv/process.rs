@@ -1,6 +1,6 @@
 use core::mem;
 use core::cell::RefCell;
-static mut PROCESS: *mut Process = 0xff80_1000 as *mut Process;
+static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
 pub const INITIAL_TID: TID = 1;
 use crate::arch::mem::PAGE_SIZE;
@@ -21,6 +21,9 @@ pub const IRQ_CONTEXT: usize = 1;
 
 #[derive(Debug)]
 struct ProcessImpl {
+    /// Used by the interrupt handler to calculate offsets
+    scratch: usize,
+
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
@@ -62,30 +65,16 @@ pub struct InitialProcess {
     pub satp: usize,
 
     /// Where execution begins
-    entrypoint: usize,
+    pub entrypoint: usize,
 
     /// Address of the top of the stack
-    sp: usize,
+    pub sp: usize,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct Process {
-    /// Used by the interrupt handler to calculate offsets
-    scratch: usize,
-
-    /// The index into the `contexts` list.  This must never be 0. The interrupt
-    /// handler writes to this field, so it must not be moved.
-    thread_nr: TID,
-
-    _hash: [usize; 8],
-
-    /// Global parameters used by the operating system
-    pub inner: ProcessInner,
-
-    /// The interrupt handler will save the current process to this Thread when
-    /// the trap handler is entered.
-    contexts: [Thread; MAX_THREAD],
+    pid: PID,
 }
 
 #[repr(C)]
@@ -103,6 +92,10 @@ pub struct Thread {
 }
 
 impl Process {
+    pub fn current() -> Process {
+        Process { pid: unsafe { PROCESS_TABLE.borrow().current } }
+    }
+
     /// Calls the provided function with the current inner process state.
     pub fn with_inner<F, R>(f: F) -> R
     where
@@ -123,8 +116,8 @@ impl Process {
     where
         F: FnOnce(&Process) -> R,
     {
-        let mut process = unsafe { &mut *PROCESS };
-        f(process)
+        let process = Self::current();
+        f(&process)
     }
 
     pub fn with_inner_mut<F, R>(f: F) -> R
@@ -141,35 +134,41 @@ impl Process {
     }
 
     pub fn current_thread(&mut self) -> &mut Thread {
-        assert!(self.thread_nr != 0, "thread number was 0");
-        &mut self.contexts[self.thread_nr - 1]
+        let mut process = unsafe { &mut *PROCESS };
+        assert!(process.current_thread != 0, "thread number was 0");
+        &mut process.threads[process.current_thread - 1]
     }
 
     pub fn current_tid(&self) -> TID {
-        self.thread_nr
+        let mut process = unsafe { &mut *PROCESS };
+        process.current_thread
     }
 
     /// Set the current thread number.
-    pub fn set_thread(&mut self, thread: TID) {
+    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous::Error> {
+        let mut process = unsafe { &mut *PROCESS };
         assert!(
-            thread > 0 && thread <= self.contexts.len(),
+            thread > 0 && thread <= process.threads.len(),
             "attempt to switch to an invalid thread {}",
             thread
         );
-        self.thread_nr = thread;
+        process.current_thread = thread;
+        Ok(())
     }
 
-    pub fn thread(&mut self, thread_nr: TID) -> &mut Thread {
+    pub fn thread(&mut self, thread: TID) -> &mut Thread {
+        let mut process = unsafe { &mut *PROCESS };
         assert!(
-            thread_nr > 0 && thread_nr <= self.contexts.len(),
+            thread > 0 && thread <= process.threads.len(),
             "attempt to retrieve an invalid thread {}",
-            thread_nr
+            thread
         );
-        &mut self.contexts[thread_nr - 1]
+        &mut process.threads[thread - 1]
     }
 
-    pub fn find_free_context_nr(&self) -> Option<TID> {
-        for (index, thread) in self.contexts.iter().enumerate() {
+    pub fn find_free_thread_nr(&self) -> Option<TID> {
+        let mut process = unsafe { &mut *PROCESS };
+        for (index, thread) in process.threads.iter().enumerate() {
             if index != 0 && thread.sepc == 0 {
                 return Some(index as TID + 1);
             }
@@ -188,6 +187,7 @@ impl Process {
     /// Initialize this process thread with the given entrypoint and stack
     /// addresses.
     pub fn init(&mut self, entrypoint: usize, stack: usize, thread: usize) {
+        let mut process = unsafe { &mut *PROCESS };
         assert!(
             mem::size_of::<Process>() == PAGE_SIZE,
             "Process size is {}, not PAGE_SIZE ({})",
@@ -195,7 +195,7 @@ impl Process {
             PAGE_SIZE
         );
         assert!(
-            thread + 1 < self.contexts.len(),
+            thread + 1 < process.threads.len(),
             "tried to init a thread that's out of range"
         );
         assert!(thread != 1, "tried to init using the irq thread");
@@ -206,8 +206,8 @@ impl Process {
         );
         // By convention, thread 0 is the trap thread. Therefore, thread 1 is
         // the first default thread.
-        self.thread_nr = thread;
-        for thread in self.contexts.iter_mut() {
+        process.current_thread = thread;
+        for thread in process.threads.iter_mut() {
             *thread = Default::default();
         }
 
@@ -217,7 +217,7 @@ impl Process {
         thread.sepc = entrypoint;
         thread.registers[1] = stack;
 
-        self.inner = Default::default();
+        process.inner = Default::default();
     }
 }
 
@@ -247,6 +247,9 @@ pub fn current_pid() -> PID {
     unsafe { PROCESS_TABLE.borrow().current }
 }
 
+pub fn current_tid() -> TID {
+    unsafe { (*PROCESS).current_thread }
+}
 
 // pub struct ProcessHandle<'a> {
 //     process: &'a mut Process,

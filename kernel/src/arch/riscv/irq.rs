@@ -5,6 +5,7 @@ use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManagerHandle, PAGE_SIZE};
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID, TID};
+use crate::services::SystemServices;
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous::Result, context: &Thread) -> !;
@@ -173,11 +174,10 @@ pub extern "C" fn trap_handler(
                     previous_pid, previous_context
                 );
                 // Switch to the previous process' address space.
-                {
-                    let mut ss = SystemServicesHandle::get();
+                SystemServices::with_mut(|ss| {
                     ss.finish_callback_and_resume(previous_pid, previous_context)
-                        .expect("unable to resume previous PID");
-                }
+                        .expect("unable to resume previous PID")
+                });
 
                 // Re-enable interrupts now that they're handled
                 enable_all_irqs();
@@ -197,9 +197,9 @@ pub extern "C" fn trap_handler(
         // when this function runs.
         unsafe {
             if PREVIOUS_PAIR.is_none() {
-                let context_nr = SystemServicesHandle::get().current_context_nr();
-                PREVIOUS_PAIR = Some((pid, context_nr));
-                println!("ISR: Setting previous pair to ({}, {})", pid, context_nr);
+                let tid = crate::arch::process::current_tid();
+                PREVIOUS_PAIR = Some((pid, tid));
+                println!("ISR: Setting previous pair to ({}, {})", pid, tid);
             } else {
                 println!("ISR: Previous pair is not None");
             }
