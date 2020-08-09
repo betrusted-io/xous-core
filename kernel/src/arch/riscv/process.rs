@@ -126,6 +126,15 @@ impl Process {
         f(&process)
     }
 
+    /// Calls the provided function with the current inner process state.
+    pub fn with_current_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut Process) -> R,
+    {
+        let mut process = Self::current();
+        f(&mut process)
+    }
+
     pub fn with_inner_mut<F, R>(f: F) -> R
     where
         F: FnOnce(&mut ProcessInner) -> R,

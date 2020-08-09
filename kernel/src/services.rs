@@ -43,9 +43,6 @@ pub use crate::arch::process::{INITIAL_TID, MAX_PROCESS_COUNT};
 /// A big unifying struct containing all of the system state.
 /// This is inherited from the stage 1 bootloader.
 pub struct SystemServices {
-    /// Current PID.
-    // pid: PID,
-
     /// A table of all processes in the system
     pub processes: [Process; MAX_PROCESS_COUNT],
 
@@ -218,6 +215,7 @@ impl Process {
     }
 }
 
+#[cfg(not(baremetal))]
 thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(SystemServices {
     processes: [Process {
         state: ProcessState::Free,
@@ -233,6 +231,23 @@ thread_local!(static SYSTEM_SERVICES: RefCell<SystemServices> = RefCell::new(Sys
     _syscall_stack: [(0, 0), (0, 0), (0, 0)],
     _syscall_depth: 0,
 }));
+
+#[cfg(baremetal)]
+static mut SYSTEM_SERVICES: SystemServices = SystemServices {
+    processes: [Process {
+        state: ProcessState::Free,
+        ppid: unsafe { PID::new_unchecked(1) },
+        pid: unsafe { PID::new_unchecked(1) },
+        mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
+        // current_thread: 0,
+        previous_context: INITIAL_TID as u8,
+    }; MAX_PROCESS_COUNT],
+    // Note we can't use MAX_SERVER_COUNT here because of how Rust's
+    // macro tokenization works
+    servers: filled_array![None; 32],
+    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
+    _syscall_depth: 0,
+};
 
 impl core::fmt::Debug for Process {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
@@ -253,9 +268,8 @@ impl SystemServices {
         F: FnOnce(&SystemServices) -> R,
     {
         #[cfg(baremetal)]
-        {
-            let ss = unsafe { SYSTEM_SERVICES }.borrow();
-            f(&*ss)
+        unsafe {
+            f(&SYSTEM_SERVICES)
         }
         #[cfg(not(baremetal))]
         SYSTEM_SERVICES.with(|ss| f(&ss.borrow()))
@@ -266,9 +280,8 @@ impl SystemServices {
         F: FnOnce(&mut SystemServices) -> R,
     {
         #[cfg(baremetal)]
-        {
-            let mut ss = unsafe { SYSTEM_SERVICES }.borrow_mut();
-            f(&mut *ss)
+        unsafe {
+            f(&mut SYSTEM_SERVICES)
         }
 
         #[cfg(not(baremetal))]
@@ -781,8 +794,7 @@ impl SystemServices {
             // Ensure the new process can be run.
             match new.state {
                 ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-                ProcessState::Setup(_) |
-                ProcessState::Allocated => new_tid = INITIAL_TID,
+                ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin

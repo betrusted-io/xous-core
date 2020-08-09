@@ -3,9 +3,9 @@ use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManager, PAGE_SIZE};
+use crate::services::SystemServices;
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous::{SysCall, PID, TID};
-use crate::services::SystemServices;
 
 extern "Rust" {
     fn _xous_syscall_return_result(result: &xous::Result, context: &Thread) -> !;
@@ -82,27 +82,35 @@ pub extern "C" fn trap_handler(
         // will want to adjust the return value of the current process prior to
         // performing the switch in order to avoid constantly executing the same
         // instruction.
-        let (tid, thread) = ArchProcess::with_current(|p| (p.current_tid(), p.current_thread()));
-        thread.sepc += 4;
-        let call = SysCall::from_args(a0, a1, a2, a3, a4, a5, a6, a7).unwrap_or_else(|_| unsafe {
-            _xous_syscall_return_result(&xous::Result::Error(xous::Error::UnhandledSyscall), thread)
+        let tid = ArchProcess::with_current_mut(|p| {
+            p.current_thread().sepc += 4;
+            p.current_tid()
+        });
+        let call = SysCall::from_args(a0, a1, a2, a3, a4, a5, a6, a7).unwrap_or_else(|_| {
+            ArchProcess::with_current_mut(|p| unsafe {
+                _xous_syscall_return_result(
+                    &xous::Result::Error(xous::Error::UnhandledSyscall),
+                    p.current_thread(),
+                )
+            })
         });
 
         let response =
             crate::syscall::handle(pid, tid, call).unwrap_or_else(|e| xous::Result::Error(e));
 
         println!("Syscall Result: {:?}", response);
-        let thread = ArchProcess::with_current(|p| p.current_thread());
-
-        // If we're resuming a process that was previously sleeping, restore the
-        // context. Otherwise, keep the context the same but pass the return
-        // values in 8 return registers.
-        if response == xous::Result::ResumeProcess {
-            crate::arch::syscall::resume(current_pid().get() == 1, thread);
-        } else {
-            // println!("Returning to address {:08x}", tid.sepc);
-            unsafe { _xous_syscall_return_result(&response, thread) };
-        }
+        ArchProcess::with_current_mut(|p| {
+            let thread = p.current_thread();
+            // If we're resuming a process that was previously sleeping, restore the
+            // context. Otherwise, keep the context the same but pass the return
+            // values in 8 return registers.
+            if response == xous::Result::ResumeProcess {
+                crate::arch::syscall::resume(current_pid().get() == 1, thread);
+            } else {
+                // println!("Returning to address {:08x}", tid.sepc);
+                unsafe { _xous_syscall_return_result(&response, thread) };
+            }
+        });
     }
 
     use crate::arch::exception::RiscvException;
@@ -127,7 +135,9 @@ pub extern "C" fn trap_handler(
                 // the page isn't shared, then this is a reserved page. Allocate
                 // a real page to back it and resume execution.
                 if flags & 1 == 0 && flags != 0 && flags & (1 << 8) == 0 {
-                    let new_page = MemoryManager::with_mut(|mm| mm.alloc_page(pid).expect("Couldn't allocate new page"));
+                    let new_page = MemoryManager::with_mut(|mm| {
+                        mm.alloc_page(pid).expect("Couldn't allocate new page")
+                    });
                     let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
                     let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
                     unsafe {
@@ -149,7 +159,7 @@ pub extern "C" fn trap_handler(
                         flush_mmu();
                     };
 
-                    ArchProcess::with_current(|process| {
+                    ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(
                             current_pid().get() == 1,
                             process.current_thread(),
@@ -179,7 +189,7 @@ pub extern "C" fn trap_handler(
                 // Re-enable interrupts now that they're handled
                 enable_all_irqs();
 
-                ArchProcess::with_current(|process| {
+                ArchProcess::with_current_mut(|process| {
                     crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                 });
             }
@@ -202,7 +212,7 @@ pub extern "C" fn trap_handler(
             }
         }
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");
-        ArchProcess::with_current(|process| {
+        ArchProcess::with_current_mut(|process| {
             crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
         })
     }
