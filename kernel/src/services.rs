@@ -487,7 +487,9 @@ impl SystemServices {
                 ProcessState::Ready(x) | ProcessState::Running(x) => x,
                 ProcessState::Sleeping => 0,
                 ProcessState::Free => panic!("process was not allocated"),
-                ProcessState::Setup(_) | ProcessState::Allocated => panic!("process hasn't been set up yet"),
+                ProcessState::Setup(_) | ProcessState::Allocated => {
+                    panic!("process hasn't been set up yet")
+                }
             };
             process.state = ProcessState::Running(available_threads);
             process.previous_thread = process.current_thread;
@@ -763,14 +765,17 @@ impl SystemServices {
     /// process is in the Setup state, set it up and then resume.
     pub fn activate_process_thread(
         &mut self,
+        previous_tid: TID,
         new_pid: PID,
         mut new_tid: TID,
         can_resume: bool,
     ) -> Result<TID, xous::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_tid);
         let previous_pid = self.current_pid();
-        // let previous_tid = self.current_thread(previous_pid);
-        println!("KERNEL({}): Activating process {} thread {}", previous_pid, new_pid, new_tid);
+        println!(
+            "KERNEL({}): Activating process {} thread {}",
+            previous_pid, new_pid, new_tid
+        );
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -779,7 +784,10 @@ impl SystemServices {
 
             // Ensure the new process can be run.
             match new.state {
-                ProcessState::Free => return Err(xous::Error::ProcessNotFound),
+                ProcessState::Free => {
+                    println!("PID {} was free", new_pid);
+                    return Err(xous::Error::ProcessNotFound);
+                }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
@@ -810,13 +818,16 @@ impl SystemServices {
                     // println!(" -- picked context {}", new_context);
                     } else if x & (1 << new_tid) == 0 {
                         println!(
-                            "context is {:?}, which is not valid for new context {}",
+                            "thread is {:?}, which is not valid for new thread {}",
                             new.state, new_tid
                         );
                         return Err(xous::Error::ProcessNotFound);
                     }
                 }
-                ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
+                ProcessState::Sleeping => {
+                    println!("PID {} was sleeping", new_pid);
+                    return Err(xous::Error::ProcessNotFound);
+                }
             }
 
             // Perform the actual switch to the new memory space.  From this
@@ -853,11 +864,11 @@ impl SystemServices {
                 // we will either need to Sleep this process, or mark it as
                 // being Ready to run.
                 ProcessState::Running(x) if x == 0 => {
-                    // if can_resume {
-                    //     ProcessState::Ready(1 << previous_tid)
-                    // } else {
-                    ProcessState::Sleeping
-                    // }
+                    if can_resume {
+                        ProcessState::Ready(1 << previous_tid)
+                    } else {
+                        ProcessState::Sleeping
+                    }
                 }
                 // Otherwise, there are additional threads that can be run.
                 // Convert the previous process into "Ready", and include the
@@ -1213,9 +1224,7 @@ impl SystemServices {
     /// * **ThreadNotAvailable**: The process has used all of its context
     ///   slots.
     pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous::Error> {
-        println!("Creating thread for PID {}", pid);
         let mut process = self.get_process_mut(pid)?;
-        println!("Process PID for {}: {}", pid, process.pid);
         process.activate()?;
 
         let mut arch_process = crate::arch::process::Process::current();
@@ -1225,7 +1234,7 @@ impl SystemServices {
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
-        println!("KERNEL({}): Created new thread {}", pid, new_tid);
+        // println!("KERNEL({}): Created new thread {}", pid, new_tid);
 
         // Queue the thread to run
         process.state = match process.state {

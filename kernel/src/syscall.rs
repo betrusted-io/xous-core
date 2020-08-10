@@ -132,7 +132,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
             if blocking && cfg!(baremetal) {
                 // println!("Activating Server context and switching away from Client");
-                ss.activate_process_thread(server_pid, server_tid, !blocking)
+                ss.activate_process_thread(thread, server_pid, server_tid, !blocking)
                     .map(|_| Ok(xous::Result::Message(envelope)))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
@@ -166,7 +166,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     let process = ss.get_process(pid).expect("Can't get current process");
                     let ppid = process.ppid;
                     unsafe { SWITCHTO_CALLER = None };
-                    ss.activate_process_thread(ppid, 0, !blocking)
+                    ss.activate_process_thread(thread, ppid, 0, !blocking)
                         .map(|_| Ok(xous::Result::ResumeProcess))
                         .unwrap_or(Err(xous::Error::ProcessNotFound))
                 } else {
@@ -295,7 +295,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
             unsafe { SWITCHTO_CALLER = None };
             let ppid = ss.get_process(pid).expect("Can't get current process").ppid;
             // TODO: Advance thread
-            ss.activate_process_thread(ppid, 0, false)
+            ss.activate_process_thread(tid, ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }
@@ -450,7 +450,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                     );
                     SWITCHTO_CALLER = Some((pid, tid));
                 }
-                ss.activate_process_thread(new_pid, new_context, true)
+                ss.activate_process_thread(tid, new_pid, new_context, true)
                     .map(|_ctx| {
                         // println!("switchto ({}, {})", pid, _ctx);
                         xous::Result::ResumeProcess
@@ -473,7 +473,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             };
             SystemServices::with_mut(|ss| {
                 // TODO: Advance thread
-                ss.activate_process_thread(parent_pid, parent_ctx, true)
+                ss.activate_process_thread(tid, parent_pid, parent_ctx, true)
                     .map(|_| Ok(xous::Result::ResumeProcess))
                     .unwrap_or(Err(xous::Error::ProcessNotFound))
             })
@@ -496,7 +496,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             let ppid = process.ppid;
             unsafe { SWITCHTO_CALLER = None };
             // TODO: Advance thread
-            ss.activate_process_thread(ppid, 0, false)
+            ss.activate_process_thread(tid, ppid, 0, false)
                 .map(|_| Ok(xous::Result::ResumeProcess))
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),

@@ -2,7 +2,7 @@ use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
 pub const INITIAL_TID: TID = 1;
-pub const IRQ_TID: usize = 0;
+pub const IRQ_TID: TID = 0;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
 use xous::{ProcessInit, ThreadInit, PID, TID};
@@ -18,14 +18,36 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 /// This is the address a thread will return to when it exits.
 const EXIT_THREAD: usize = 0xff80_3000;
 
+// Thread IDs have three possible meaning:
+// Logical Thread ID: What the user sees
+// Thread Context Index: An index into the thread slice
+// Hardware Thread ID: The index that the ISR uses
+//
+// The Hardware Thread ID is always equal to the Thread Context
+// Index, minus one. For example, the default thread ID is
+// Hardware Thread ID 1 is Thread Context Index 0.
+// The Logical Thread ID is equal to the Hardware Thread ID
+// plus one again. This is because the ISR context is Thread
+// Context Index 0.
+// Therefore, the first Logical Thread ID is 1, which maps
+// to Hardware Thread ID 2, which is Thread Context Index 1.
+//
+// +----------------+---------------+------------------+
+// | Logical Thread | Context Index | Hardware Thread  |
+// +================+===============+==================+
+// |  ISR Context   |       0       |        1         |
+// |        1       |       1       |        2         |
+// |        2       |       2       |        3         |
+
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 struct ProcessImpl {
     /// Used by the interrupt handler to calculate offsets
     scratch: usize,
 
-    /// The currently-active thread for this process
-    current_thread: usize,
+    /// The currently-active thread for this process. This must
+    /// be the 2nd item, because the ISR directly writes this value.
+    hardware_thread: usize,
 
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
@@ -46,7 +68,7 @@ struct ProcessTable {
     current: PID,
 
     /// The number of processes that exist
-    total: usize,
+    // total: usize,
 
     /// The actual table contents
     table: [bool; MAX_PROCESS_COUNT],
@@ -54,7 +76,7 @@ struct ProcessTable {
 
 static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     current: unsafe { PID::new_unchecked(1) },
-    total: 0,
+    // total: 0,
     table: [false; MAX_PROCESS_COUNT],
 };
 
@@ -144,18 +166,19 @@ impl Process {
 
     pub fn current_thread_mut(&mut self) -> &mut Thread {
         let process = unsafe { &mut *PROCESS };
-        assert!(process.current_thread != 0, "thread number was 0");
-        &mut process.threads[process.current_thread - 1]
+        assert!(process.hardware_thread != 0, "thread number was 0");
+        &mut process.threads[process.hardware_thread - 1]
     }
 
     pub fn current_thread(&self) -> &Thread {
         let process = unsafe { &mut *PROCESS };
-        self.thread(process.current_thread)
+        &mut process.threads[process.hardware_thread - 1]
+        // self.thread(process.hardware_thread - 1)
     }
 
     pub fn current_tid(&self) -> TID {
         let process = unsafe { &*PROCESS };
-        process.current_thread
+        process.hardware_thread - 1
     }
 
     /// Set the current thread number.
@@ -166,7 +189,7 @@ impl Process {
             "attempt to switch to an invalid thread {}",
             thread
         );
-        process.current_thread = thread + 1;
+        process.hardware_thread = thread + 1;
         Ok(())
     }
 
@@ -177,18 +200,18 @@ impl Process {
             "attempt to retrieve an invalid thread {}",
             thread
         );
-        &mut process.threads[thread - 1]
+        &mut process.threads[thread]
     }
 
-    pub fn thread(&self, thread: TID) -> &Thread {
-        let process = unsafe { &mut *PROCESS };
-        assert!(
-            thread > 0 && thread <= process.threads.len(),
-            "attempt to retrieve an invalid thread {}",
-            thread
-        );
-        &process.threads[thread - 1]
-    }
+    // pub fn thread(&self, thread: TID) -> &Thread {
+    //     let process = unsafe { &mut *PROCESS };
+    //     assert!(
+    //         thread > 0 && thread <= process.threads.len(),
+    //         "attempt to retrieve an invalid thread {}",
+    //         thread
+    //     );
+    //     &process.threads[thread]
+    // }
 
     pub fn find_free_thread(&self) -> Option<TID> {
         let process = unsafe { &mut *PROCESS };
@@ -225,7 +248,7 @@ impl Process {
             mem::size_of::<ProcessInner>(),
         );
         assert!(
-            tid + 1 < process.threads.len(),
+            tid - 1 < process.threads.len(),
             "tried to init a thread that's out of range"
         );
         assert!(
@@ -248,7 +271,7 @@ impl Process {
         // By convention, thread 0 is the trap thread. Therefore, thread 1 is
         // the first default thread. There is an offset of 1 due to how the
         // interrupt handler functions.
-        process.current_thread = tid + 1;
+        process.hardware_thread = tid + 1;
 
         // Reset the thread state, since it's possibly uninitialized memory
         for thread in process.threads.iter_mut() {
@@ -306,50 +329,50 @@ impl Process {
     }
 
     pub fn print_thread(&self) {
-        let thread = self.current_thread();
+        let _thread = self.current_thread();
         println!(
             "PC:{:08x}   SP:{:08x}   RA:{:08x}",
-            thread.sepc, thread.registers[1], thread.registers[0]
+            _thread.sepc, _thread.registers[1], _thread.registers[0]
         );
         println!(
             "GP:{:08x}   TP:{:08x}",
-            thread.registers[2], thread.registers[3]
+            _thread.registers[2], _thread.registers[3]
         );
         println!(
             "T0:{:08x}   T1:{:08x}   T2:{:08x}",
-            thread.registers[4], thread.registers[5], thread.registers[6]
+            _thread.registers[4], _thread.registers[5], _thread.registers[6]
         );
         println!(
             "T3:{:08x}   T4:{:08x}   T5:{:08x}   T6:{:08x}",
-            thread.registers[27], thread.registers[28], thread.registers[29], thread.registers[30]
+            _thread.registers[27], _thread.registers[28], _thread.registers[29], _thread.registers[30]
         );
         println!(
             "S0:{:08x}   S1:{:08x}   S2:{:08x}   S3:{:08x}",
-            thread.registers[7], thread.registers[8], thread.registers[17], thread.registers[18]
+            _thread.registers[7], _thread.registers[8], _thread.registers[17], _thread.registers[18]
         );
         println!(
             "S4:{:08x}   S5:{:08x}   S6:{:08x}   S7:{:08x}",
-            thread.registers[19], thread.registers[20], thread.registers[21], thread.registers[22]
+            _thread.registers[19], _thread.registers[20], _thread.registers[21], _thread.registers[22]
         );
         println!(
             "S8:{:08x}   S9:{:08x}  S10:{:08x}  S11:{:08x}",
-            thread.registers[23], thread.registers[24], thread.registers[25], thread.registers[26]
+            _thread.registers[23], _thread.registers[24], _thread.registers[25], _thread.registers[26]
         );
         println!(
             "A0:{:08x}   A1:{:08x}   A2:{:08x}   A3:{:08x}",
-            thread.registers[9], thread.registers[10], thread.registers[11], thread.registers[12]
+            _thread.registers[9], _thread.registers[10], _thread.registers[11], _thread.registers[12]
         );
         println!(
             "A4:{:08x}   A5:{:08x}   A6:{:08x}   A7:{:08x}",
-            thread.registers[13], thread.registers[14], thread.registers[15], thread.registers[16]
+            _thread.registers[13], _thread.registers[14], _thread.registers[15], _thread.registers[16]
         );
     }
 
-    pub fn create(pid: PID, init_data: ProcessInit) -> PID {
+    pub fn create(_pid: PID, _init_data: ProcessInit) -> PID {
         todo!();
     }
 
-    pub fn destroy(pid: PID) -> Result<(), xous::Error> {
+    pub fn destroy(_pid: PID) -> Result<(), xous::Error> {
         todo!();
         // let mut process_table = unsafe { &mut *PROCESS };
         // let pid_idx = pid.get() as usize - 1;
@@ -371,7 +394,6 @@ impl Thread {
 }
 
 pub fn set_current_pid(pid: PID) {
-    println!("ARCH: Setting current PID to {}", pid);
     let pid_idx = (pid.get() - 1) as usize;
     unsafe {
         let mut pt = &mut PROCESS_TABLE;
@@ -389,7 +411,7 @@ pub fn current_pid() -> PID {
 }
 
 pub fn current_tid() -> TID {
-    unsafe { (*PROCESS).current_thread }
+    unsafe { ((*PROCESS).hardware_thread) + 1 }
 }
 
 // pub struct ProcessHandle<'a> {
