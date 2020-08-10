@@ -320,9 +320,7 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ArchProcess::with_current_mut(|process| process.init(0, 0, INITIAL_TID));
-        // ProcessHandle::get().init(0, 0, INITIAL_TID);
-        // self.processes[0].current_thread = INITIAL_TID as u8;
+        ArchProcess::with_current_mut(|process| process.setup_process(ThreadInit::default()));
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -492,7 +490,7 @@ impl SystemServices {
             };
             process.state = ProcessState::Running(available_threads);
             process.previous_thread = process.current_thread;
-            process.current_thread = arch::process::IRQ_THREAD;
+            process.current_thread = arch::process::IRQ_TID;
             process.mapping.activate()?;
         }
 
@@ -507,11 +505,11 @@ impl SystemServices {
             let sp = arch_process.current_thread().stack_pointer();
 
             // Activate the current context
-            arch_process.set_thread(arch::process::IRQ_THREAD).unwrap();
+            arch_process.set_thread(arch::process::IRQ_TID).unwrap();
 
             // Construct the new frame
             arch::syscall::invoke(
-                arch_process.current_thread(),
+                arch_process.current_thread_mut(),
                 pid.get() == 1,
                 pc as usize,
                 sp,
@@ -573,7 +571,7 @@ impl SystemServices {
                 // ensure it's the INITIAL_TID. Otherwise it's not valid.
                 if let Some(tid) = tid {
                     if tid != INITIAL_TID {
-                        return Err(xous::Error::InvalidThread);
+                        panic!("switched to an incorrect thread");
                     }
                 }
 
@@ -768,14 +766,11 @@ impl SystemServices {
         mut new_tid: TID,
         can_resume: bool,
     ) -> Result<TID, xous::Error> {
-        // println!("Activating PID {}, context {}", new_pid, new_context);
+        // println!("Activating PID {}, context {}", new_pid, new_tid);
         let previous_pid = self.current_pid();
         // let previous_tid = self.current_thread(previous_pid);
-        // println!("KERNEL({}): Activating process {} context {}", previous_pid, new_pid, new_context);
+        println!("KERNEL({}): Activating process {} thread {}", previous_pid, new_pid, new_tid);
 
-        if !cfg!(baremetal) {
-            panic!("Not running on bare metal");
-        }
         // Save state if the PID has changed.  This will activate the new memory
         // space.
         if new_pid != previous_pid {
@@ -831,24 +826,16 @@ impl SystemServices {
             // Set up the new process, if necessary.  Remove the new context from
             // the list of ready contexts.
             new.state = match new.state {
-                ProcessState::Setup(_init_context) => {
-                    // entrypoint, stack, stack_size) => {
+                ProcessState::Setup(thread_init) => {
+                    println!("Setting up new process...");
+                    ArchProcess::current().setup_process(thread_init);
                     // let mut process = ProcessHandle::get();
                     // println!(
                     //     "Initializing new process with stack size of {} bytes",
                     //     stack_size
                     // );
                     // // process.init(entrypoint, stack, INITIAL_TID);
-                    // // Mark the stack as "unallocated-but-free"
-                    // let init_sp = stack & !0xfff;
-                    // let mut memory_manager = MemoryManagerHandle::get();
-                    // memory_manager
-                    //     .reserve_range(
-                    //         (init_sp - stack_size) as *mut usize,
-                    //         stack_size + 4096,
-                    //         MemoryFlags::R | MemoryFlags::W,
-                    //     )
-                    //     .expect("couldn't reserve stack");
+
                     ProcessState::Running(0)
                 }
                 ProcessState::Allocated => ProcessState::Running(0),

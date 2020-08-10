@@ -83,7 +83,7 @@ pub extern "C" fn trap_handler(
         // performing the switch in order to avoid constantly executing the same
         // instruction.
         let tid = ArchProcess::with_current_mut(|p| {
-            p.current_thread().sepc += 4;
+            p.current_thread_mut().sepc += 4;
             p.current_tid()
         });
         let call = SysCall::from_args(a0, a1, a2, a3, a4, a5, a6, a7).unwrap_or_else(|_| {
@@ -199,6 +199,10 @@ pub extern "C" fn trap_handler(
             _ => (),
         }
         println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
+        ArchProcess::with_current(|process| {
+            println!("Current thread {}:", process.current_tid());
+            process.print_thread();
+        });
         MemoryMapping::current().print_map();
         loop {}
     } else {

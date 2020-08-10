@@ -309,9 +309,9 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
 }
 
 pub fn handle(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
-    // print!("KERNEL({}:{}): Syscall {:?}", pid, tid, call);
+    print!("KERNEL({}:{}): Syscall {:?}", pid, tid, call);
     let result = handle_inner(pid, tid, call);
-    // println!(" -> {:?}", result);
+    println!(" -> {:?}", result);
     result
 }
 

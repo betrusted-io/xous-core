@@ -116,7 +116,7 @@ impl MemoryMapping {
     }
 
     pub fn print_map(&self) {
-        println!("Memory Maps:");
+        println!("Memory Maps for PID {}:", self.get_pid());
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
         for (i, l1_entry) in l1_pt.entries.iter().enumerate() {
             if *l1_entry == 0 {

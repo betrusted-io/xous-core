@@ -33,6 +33,17 @@ impl ThreadInit {
     }
 }
 
+impl Default for ThreadInit {
+    fn default() -> Self {
+        ThreadInit {
+            call: unsafe { core::mem::transmute::<usize, fn(data: *const usize) -> usize>(4) },
+            stack: MemoryRange::new(4, 4).unwrap(),
+            arg: None,
+            name: [0; 12],
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 8]);
 impl ProcessKey {
