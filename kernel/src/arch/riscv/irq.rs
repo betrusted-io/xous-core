@@ -107,10 +107,7 @@ pub extern "C" fn trap_handler(
             if response == xous::Result::ResumeProcess {
                 crate::arch::syscall::resume(current_pid().get() == 1, thread);
             } else {
-                println!(
-                    "Returning to address {:08x}",
-                    ArchProcess::with_current_mut(|p| p.current_thread().sepc)
-                );
+                println!("Returning to address {:08x}", thread.sepc);
                 unsafe { _xous_syscall_return_result(&response, thread) };
             }
         });

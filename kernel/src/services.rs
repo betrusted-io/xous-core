@@ -304,6 +304,7 @@ impl SystemServices {
             unsafe {
                 process.mapping.from_raw(init.satp);
                 process.ppid = PID::new_unchecked(1);
+                process.pid = PID::new(pid as _).unwrap();
             };
             if pid == 1 {
                 process.state = ProcessState::Running(0);
@@ -320,7 +321,7 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ArchProcess::with_current_mut(|process| process.setup_process(ThreadInit::default()));
+        ArchProcess::setup_process(PID::new(1).unwrap(), ThreadInit::default());
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -828,13 +829,7 @@ impl SystemServices {
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
                     println!("Setting up new process...");
-                    ArchProcess::current().setup_process(thread_init);
-                    // let mut process = ProcessHandle::get();
-                    // println!(
-                    //     "Initializing new process with stack size of {} bytes",
-                    //     stack_size
-                    // );
-                    // // process.init(entrypoint, stack, INITIAL_TID);
+                    ArchProcess::setup_process(new_pid, thread_init);
 
                     ProcessState::Running(0)
                 }
@@ -845,6 +840,7 @@ impl SystemServices {
                 }
                 ProcessState::Sleeping => ProcessState::Running(0),
             };
+            new.activate()?;
 
             // Mark the previous process as ready to run, since we just switched
             // away
@@ -1217,7 +1213,10 @@ impl SystemServices {
     /// * **ThreadNotAvailable**: The process has used all of its context
     ///   slots.
     pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous::Error> {
+        println!("Creating thread for PID {}", pid);
         let mut process = self.get_process_mut(pid)?;
+        println!("Process PID for {}: {}", pid, process.pid);
+        process.activate()?;
 
         let mut arch_process = crate::arch::process::Process::current();
         let new_tid = arch_process
@@ -1226,7 +1225,7 @@ impl SystemServices {
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
-        // println!("KERNEL({}): Created new context {}", pid, new_context_nr);
+        println!("KERNEL({}): Created new thread {}", pid, new_tid);
 
         // Queue the thread to run
         process.state = match process.state {

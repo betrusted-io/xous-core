@@ -49,13 +49,13 @@ struct ProcessTable {
     total: usize,
 
     /// The actual table contents
-    table: [Option<ProcessImpl>; MAX_PROCESS_COUNT],
+    table: [bool; MAX_PROCESS_COUNT],
 }
 
 static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     current: unsafe { PID::new_unchecked(1) },
     total: 0,
-    table: [None; MAX_PROCESS_COUNT],
+    table: [false; MAX_PROCESS_COUNT],
 };
 
 #[repr(C)]
@@ -166,7 +166,7 @@ impl Process {
             "attempt to switch to an invalid thread {}",
             thread
         );
-        process.current_thread = thread;
+        process.current_thread = thread + 1;
         Ok(())
     }
 
@@ -193,8 +193,8 @@ impl Process {
     pub fn find_free_thread(&self) -> Option<TID> {
         let process = unsafe { &mut *PROCESS };
         for (index, thread) in process.threads.iter().enumerate() {
-            if index != 0 && thread.sepc == 0 {
-                return Some(index as TID + 1);
+            if index != IRQ_TID && thread.sepc == 0 {
+                return Some(index as TID);
             }
         }
         None
@@ -210,10 +210,11 @@ impl Process {
 
     /// Initialize this process thread with the given entrypoint and stack
     /// addresses.
-    pub fn setup_process(&mut self, thread_init: ThreadInit) {
-        let tid = INITIAL_TID;
-        assert!(tid != IRQ_TID, "tried to init using the irq thread");
+    pub fn setup_process(pid: PID, thread_init: ThreadInit) {
         let mut process = unsafe { &mut *PROCESS };
+        let tid = INITIAL_TID;
+
+        assert!(tid != IRQ_TID, "tried to init using the irq thread");
         assert!(
             mem::size_of::<ProcessImpl>() == PAGE_SIZE,
             "Process size is {}, not PAGE_SIZE ({}) (Thread size: {}, array: {}, Inner: {})",
@@ -233,18 +234,31 @@ impl Process {
             tid,
             INITIAL_TID
         );
-        // By convention, thread 1 is the trap thread. Therefore, thread 2 is
-        // the first default thread. Thread 0 is unused. There is an offset of
-        // 1 due to how the interrupt handler functions.
-        process.current_thread = tid;
+
+        unsafe {
+            let pid_idx = (pid.get() as usize) - 1;
+            assert!(
+                !PROCESS_TABLE.table[pid_idx],
+                "process {} is already allocated",
+                pid
+            );
+            PROCESS_TABLE.table[pid_idx] = true;
+        }
+
+        // By convention, thread 0 is the trap thread. Therefore, thread 1 is
+        // the first default thread. There is an offset of 1 due to how the
+        // interrupt handler functions.
+        process.current_thread = tid + 1;
+
+        // Reset the thread state, since it's possibly uninitialized memory
         for thread in process.threads.iter_mut() {
             *thread = Default::default();
         }
 
-        let pid = self.pid.get();
-        let mut thread = self.current_thread_mut();
+        let pid = pid.get();
+        let process = unsafe { &mut *PROCESS };
+        let mut thread = &mut process.threads[tid];
 
-        thread.registers = Default::default();
         thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
         thread.registers[9] = thread_init.arg.map(|x| x.get()).unwrap_or_default();
@@ -262,7 +276,6 @@ impl Process {
         let init_sp = (thread_init.stack.as_ptr() as usize) & !0xfff;
         if init_sp != 0 {
             let stack_size = thread_init.stack.len();
-            println!("Reserving stack {:08x} - {:08x} ({})", init_sp, init_sp + stack_size, stack_size);
             crate::mem::MemoryManager::with_mut(|memory_manager| {
                 memory_manager
                     .reserve_range(
@@ -280,6 +293,7 @@ impl Process {
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
+        println!("Setting up thread {}, pid {}", new_tid, pid);
         crate::arch::syscall::invoke(
             thread,
             pid == 1,
@@ -357,15 +371,14 @@ impl Thread {
 }
 
 pub fn set_current_pid(pid: PID) {
+    println!("ARCH: Setting current PID to {}", pid);
     let pid_idx = (pid.get() - 1) as usize;
     unsafe {
         let mut pt = &mut PROCESS_TABLE;
 
-        match pt.table.get_mut(pid_idx) {
-            None | Some(None) => {
-                panic!("PID {} does not exist", pid);
-            }
-            Some(_) => {}
+        match pt.table.get(pid_idx) {
+            None | Some(false) => panic!("PID {} does not exist", pid),
+            _ => (),
         }
         pt.current = pid;
     }

@@ -176,8 +176,9 @@ impl Process {
         process.threads[thread - 1].allocated = true;
     }
 
-    pub fn setup_process(&mut self, setup: ThreadInit) -> Result<(), xous::Error> {
-        self.setup_thread(INITIAL_TID, setup)
+    pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous::Error> {
+        let mut tmp = Process { pid };
+        tmp.setup_thread(INITIAL_TID, setup)
     }
 
     pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {

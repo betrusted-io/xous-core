@@ -11,7 +11,7 @@ pub struct ProcessArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
-    pub call: fn(data: *const usize) -> usize,
+    pub call: fn(data: usize) -> usize,
     pub stack: MemoryRange,
     pub arg: Option<MemoryAddress>,
     pub name: [u8; 12],
@@ -19,7 +19,7 @@ pub struct ThreadInit {
 
 impl ThreadInit {
     pub fn new(
-        call: fn(data: *const usize) -> usize,
+        call: fn(data: usize) -> usize,
         stack: MemoryRange,
         arg: Option<MemoryAddress>,
         name: [u8; 12],
@@ -36,7 +36,7 @@ impl ThreadInit {
 impl Default for ThreadInit {
     fn default() -> Self {
         ThreadInit {
-            call: unsafe { core::mem::transmute::<usize, fn(data: *const usize) -> usize>(4) },
+            call: unsafe { core::mem::transmute::<usize, fn(data: usize) -> usize>(4) },
             stack: MemoryRange::new(4, 4).unwrap(),
             arg: None,
             name: [0; 12],
@@ -65,8 +65,8 @@ pub fn thread_to_args(call: usize, init: &ThreadInit) -> [usize; 8] {
         call as usize,
         init.call as usize,
         init.stack.as_ptr() as _,
+        init.stack.len(),
         init.arg.map(|x| x.get()).unwrap_or_default(),
-        0,
         0,
         0,
         0,
@@ -77,24 +77,23 @@ pub fn thread_to_args(call: usize, init: &ThreadInit) -> [usize; 8] {
 /// that were passed via registers and converts them into a `ThreadInit`
 /// struct with enough information to start the new thread.
 pub fn args_to_thread(
-    _a1: usize,
-    _a2: usize,
-    _a3: usize,
-    _a4: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
     _a5: usize,
     _a6: usize,
     _a7: usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
-    todo!()
-    // let call = unsafe { core::mem::transmute::<usize, fn(usize) -> usize;
-    // let stack = MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?;
-    // let arg = MemoryAddress::new(a2);
-    // Ok(ThreadInit {
-    //     call,
-    //     stack,
-    //     arg,
-    //     name: [8u8; 16],
-    // })
+    let call = unsafe { core::mem::transmute(a1) };
+    let stack = MemoryRange::new(a2, a3).map_err(|_| crate::Error::InvalidSyscall)?;
+    let arg = MemoryAddress::new(a4);
+    Ok(ThreadInit {
+        call,
+        stack,
+        arg,
+        name: [0; 12],
+    })
 }
 
 pub fn create_thread_pre<F, T>(_f: &F) -> core::result::Result<ThreadInit, crate::Error>
@@ -168,14 +167,22 @@ pub fn args_to_process(
 }
 
 pub fn create_thread_simple_pre<T, U>(
-    _f: &fn(T) -> U,
-    _arg: &T,
+    f: &fn(T) -> U,
+    arg: &T,
 ) -> core::result::Result<ThreadInit, crate::Error>
 where
     T: Send + 'static,
     U: Send + 'static,
 {
-    todo!()
+    let stack = crate::map_memory(
+        None,
+        None,
+        131_072,
+        crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE,
+    )?;
+    let start = unsafe { core::mem::transmute(*f) };
+    let arg = unsafe { core::mem::transmute(arg) };
+    Ok(ThreadInit::new(start, stack, Some(arg), [0; 12]))
 }
 
 pub fn create_thread_simple_post<T, U>(
@@ -187,7 +194,7 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    todo!()
+    Ok(WaitHandle(core::marker::PhantomData))
 }
 
 /// If no connection exists, create a new connection to the server. This means
@@ -205,5 +212,7 @@ pub fn create_process_post(
 }
 
 pub fn wait_process(_joiner: ProcessHandle) -> crate::SysCallResult {
-    todo!()
+    loop {
+        crate::wait_event();
+    }
 }

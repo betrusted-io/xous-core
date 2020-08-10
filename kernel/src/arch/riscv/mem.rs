@@ -141,7 +141,7 @@ impl MemoryMapping {
             // let l0_pt_addr = ((l1_entry >> 10) << 12) as *const u32;
             let l0_pt = unsafe { &mut (*((PAGE_TABLE_OFFSET + i * 4096) as *mut LeafPageTable)) };
             for (j, l0_entry) in l0_pt.entries.iter().enumerate() {
-                if *l0_entry & 1 == 0 {
+                if *l0_entry & 0x7 == 0 {
                     continue;
                 }
                 let _page_addr = j as u32 * (1 << 12);
@@ -169,6 +169,7 @@ impl MemoryMapping {
         let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
         let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
 
+        // println!("Reserving memory address {:08x} with flags {:?}", addr, flags);
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt.entries[vpn1] & MMUFlags::VALID.bits() == 0 {
             let pid = crate::arch::current_pid();

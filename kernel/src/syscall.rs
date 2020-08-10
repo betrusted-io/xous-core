@@ -343,7 +343,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 }
                 // println!(
                 //     "Mapping {:08x} -> {:08x} ({} bytes, flags: {:?})",
-                //     phys as u32, virt as u32, size, req_flags
+                //     phys_ptr as u32, virt_ptr as u32, size, req_flags
                 // );
                 let range = mm.map_range(
                     phys_ptr,
@@ -501,7 +501,6 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 .unwrap_or(Err(xous::Error::ProcessNotFound))
         }),
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
-            #[allow(clippy::unit_arg)]
             ss.create_thread(pid, thread_init).map(|new_tid| {
                 if !cfg!(baremetal) {
                     ss.switch_to_thread(pid, Some(new_tid))

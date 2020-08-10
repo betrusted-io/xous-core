@@ -185,6 +185,7 @@ mod implementation {
         println!("Allocating IRQ...");
         xous::syscall::claim_interrupt(4, handle_irq, core::ptr::null_mut::<usize>())
             .expect("couldn't claim interrupt");
+        println!("Claimed IRQ 4");
         Output {
             addr: uart.as_mut_ptr() as usize,
         }
@@ -318,7 +319,8 @@ fn main() {
     let mut output = implementation::init();
     let writer = output.get_writer();
     // xous::arch::ensure_connection().unwrap();
+    println!("Creating the reader thread");
     xous::create_thread_simple(reader_thread, writer).unwrap();
-
+    println!("Running the output");
     output.run();
 }
