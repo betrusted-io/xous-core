@@ -165,7 +165,7 @@ mod implementation {
     use core::fmt::{Error, Write};
 
     pub struct Output {
-        addr: usize,
+        // addr: usize,
     }
 
     pub fn init() -> Output {
@@ -187,7 +187,7 @@ mod implementation {
             .expect("couldn't claim interrupt");
         println!("Claimed IRQ 4");
         Output {
-            addr: uart.as_mut_ptr() as usize,
+            // addr: uart.as_mut_ptr() as usize,
         }
     }
 
