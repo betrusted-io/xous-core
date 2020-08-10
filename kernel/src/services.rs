@@ -397,7 +397,7 @@ impl SystemServices {
     /// 1. Pause the current process and switch to the new one
     /// 2. Save the process state, if it hasn't already been saved
     /// 3. Run the new process, returning to an illegal instruction
-    #[allow(dead_code)]
+    #[cfg(baremetal)]
     pub fn finish_callback_and_resume(&mut self, pid: PID, tid: TID) -> Result<(), xous::Error> {
         // Get the current process (which was the interrupt handler) and mark it
         // as Ready.  Note that the new PID may very well be the same PID.
@@ -406,6 +406,7 @@ impl SystemServices {
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
+            println!("Finishing callback in PID {}", current_pid);
             current.state = match current.state {
                 ProcessState::Running(0) => ProcessState::Sleeping,
                 ProcessState::Running(x) => ProcessState::Ready(x),
@@ -423,13 +424,14 @@ impl SystemServices {
             let available_contexts = match process.state {
                 ProcessState::Ready(x) if x & 1 << tid != 0 => x & !(1 << tid),
                 other => panic!(
-                    "process was in an invalid state {:?} -- thread {} not available to run",
-                    other, tid
+                    "process {} was in an invalid state {:?} -- thread {} not available to run",
+                    pid, other, tid
                 ),
             };
             process.state = ProcessState::Running(available_contexts);
             // process.current_thread = tid as u8;
             process.mapping.activate()?;
+            process.activate()?;
 
             // Activate the current context
             let mut arch_process = crate::arch::process::Process::current();
@@ -472,7 +474,7 @@ impl SystemServices {
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
             current.state = match current.state {
-                ProcessState::Running(x) => ProcessState::Ready(x | (1 << current.current_thread)),
+                ProcessState::Running(x) => ProcessState::Ready(x | (1 << arch::process::current_tid())),
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
             println!("Making PID {} state {:?}", current_pid, current.state);
@@ -495,6 +497,7 @@ impl SystemServices {
             process.previous_thread = process.current_thread;
             process.current_thread = arch::process::IRQ_TID;
             process.mapping.activate()?;
+            process.activate()?;
         }
 
         // Switch to new process memory space, allowing us to save the context

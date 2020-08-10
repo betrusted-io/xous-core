@@ -119,8 +119,11 @@ pub struct Thread {
 
 impl Process {
     pub fn current() -> Process {
+        let pid = unsafe { PROCESS_TABLE.current };
+        let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
+        assert!((pid.get() as usize) == hardware_pid);
         Process {
-            pid: unsafe { PROCESS_TABLE.current },
+            pid,
         }
     }
 
@@ -184,8 +187,9 @@ impl Process {
     /// Set the current thread number.
     pub fn set_thread(&mut self, thread: TID) -> Result<(), xous::Error> {
         let mut process = unsafe { &mut *PROCESS };
+        // println!("KERNEL({}:{}): Switching to thread {}", self.pid, process.hardware_thread - 1, thread);
         assert!(
-            thread > 0 && thread <= process.threads.len(),
+            thread <= process.threads.len(),
             "attempt to switch to an invalid thread {}",
             thread
         );
@@ -196,7 +200,7 @@ impl Process {
     pub fn thread_mut(&mut self, thread: TID) -> &mut Thread {
         let process = unsafe { &mut *PROCESS };
         assert!(
-            thread > 0 && thread <= process.threads.len(),
+            thread <= process.threads.len(),
             "attempt to retrieve an invalid thread {}",
             thread
         );
@@ -206,7 +210,7 @@ impl Process {
     // pub fn thread(&self, thread: TID) -> &Thread {
     //     let process = unsafe { &mut *PROCESS };
     //     assert!(
-    //         thread > 0 && thread <= process.threads.len(),
+    //         thread <= process.threads.len(),
     //         "attempt to retrieve an invalid thread {}",
     //         thread
     //     );
@@ -316,7 +320,7 @@ impl Process {
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
-        println!("Setting up thread {}, pid {}", new_tid, pid);
+        // println!("Setting up thread {}, pid {}", new_tid, pid);
         crate::arch::syscall::invoke(
             thread,
             pid == 1,
@@ -411,7 +415,7 @@ pub fn current_pid() -> PID {
 }
 
 pub fn current_tid() -> TID {
-    unsafe { ((*PROCESS).hardware_thread) + 1 }
+    unsafe { ((*PROCESS).hardware_thread) - 1 }
 }
 
 // pub struct ProcessHandle<'a> {

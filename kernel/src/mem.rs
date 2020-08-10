@@ -81,19 +81,19 @@ impl MemoryManager {
         }
     }
 
-    /// Calls the provided function with the current inner process state.
-    pub fn with<F, R>(f: F) -> R
-    where
-        F: FnOnce(&MemoryManager) -> R,
-    {
-        #[cfg(baremetal)]
-        unsafe {
-            f(&MEMORY_MANAGER)
-        }
+    // /// Calls the provided function with the current inner process state.
+    // pub fn with<F, R>(f: F) -> R
+    // where
+    //     F: FnOnce(&MemoryManager) -> R,
+    // {
+    //     #[cfg(baremetal)]
+    //     unsafe {
+    //         f(&MEMORY_MANAGER)
+    //     }
 
-        #[cfg(not(baremetal))]
-        MEMORY_MANAGER.with(|ss| f(&ss.borrow()))
-    }
+    //     #[cfg(not(baremetal))]
+    //     MEMORY_MANAGER.with(|ss| f(&ss.borrow()))
+    // }
 
     pub fn with_mut<F, R>(f: F) -> R
     where

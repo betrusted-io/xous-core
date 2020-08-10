@@ -4,7 +4,7 @@ use xous::{MemoryAddress, PID};
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
 
-#[allow(dead_code)]
+#[cfg(baremetal)]
 pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
     // Unsafe is required here because we're accessing a static
     // mutable value, and it could be modified from various threads.
