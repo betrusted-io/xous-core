@@ -37,5 +37,6 @@
         "vmim",
         "vmip",
         "xous"
-    ]
+    ],
+    "git.ignoreLimitWarning": true
 }

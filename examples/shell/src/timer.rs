@@ -9,7 +9,7 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!(">>> Timer tick");
     let ptr = TIMER_BASE as *mut usize;
 
-    xous::rsyscall(xous::SysCall::ReturnToParentI(0, 0)).expect("couldn't return to parent");
+    xous::rsyscall(xous::SysCall::ReturnToParentI(xous::PID::new(1).unwrap(), 0)).expect("couldn't return to parent");
 
     // acknowledge the timer
     unsafe { ptr.add(6).write_volatile(1) };
@@ -49,25 +49,28 @@ pub fn init() {
 #[cfg(not(baremetal))]
 pub fn init() {}
 
-// pub fn load(value: u32) {
-//     let ptr = TIMER_BASE as *mut usize;
-//     unsafe {
-//         ptr.add(0).write_volatile(value as usize);
-//     }
-// }
+#[cfg(baremetal)]
+pub fn load(value: u32) {
+    let ptr = TIMER_BASE as *mut usize;
+    unsafe {
+        ptr.add(0).write_volatile(value as usize);
+    }
+}
 
-// pub fn reload(value: u32) {
-//     let ptr = TIMER_BASE as *mut usize;
-//     unsafe {
-//         ptr.add(1).write_volatile(value as usize);
-//     }
-// }
+#[cfg(baremetal)]
+pub fn reload(value: u32) {
+    let ptr = TIMER_BASE as *mut usize;
+    unsafe {
+        ptr.add(1).write_volatile(value as usize);
+    }
+}
 
-// pub fn en(en: bool) {
-//     let ptr = TIMER_BASE as *mut usize;
-//     if en {
-//         unsafe { ptr.add(2).write_volatile(1) };
-//     } else {
-//         unsafe { ptr.add(2).write_volatile(0) };
-//     }
-// }
+#[cfg(baremetal)]
+pub fn en(en: bool) {
+    let ptr = TIMER_BASE as *mut usize;
+    if en {
+        unsafe { ptr.add(2).write_volatile(1) };
+    } else {
+        unsafe { ptr.add(2).write_volatile(0) };
+    }
+}

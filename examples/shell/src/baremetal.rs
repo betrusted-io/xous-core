@@ -36,7 +36,7 @@ pub unsafe extern "C" fn start_rust() -> ! {
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     )
     .expect("couldn't map uart");
-    unsafe { crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() };
+    crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
     println!("Mapped UART @ {:08x}", uart.addr.get());
 
     xous::syscall::map_memory(
@@ -51,11 +51,12 @@ pub unsafe extern "C" fn start_rust() -> ! {
 
     crate::debug::DEFAULT.enable_rx();
     println!("Allocating IRQ...");
-    xous::rsyscall(xous::SysCall::ClaimInterrupt(
-        2,
-        handle_irq as *mut usize,
-        core::ptr::null_mut::<usize>(),
-    ))
+    xous::claim_interrupt(2, handle_irq, core::ptr::null_mut::<usize>())
+    // xous::rsyscall(xous::SysCall::ClaimInterrupt(
+    //     2,
+    //     handle_irq as *mut usize,
+    //     core::ptr::null_mut::<usize>(),
+    // ))
     .expect("couldn't claim interrupt");
 
     main();

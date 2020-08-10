@@ -11,9 +11,6 @@ mod baremetal;
 mod timer;
 // mod logstr;
 
-#[cfg(baremetal)]
-use core::fmt::Write;
-
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
 //     loop {
@@ -25,6 +22,7 @@ use core::fmt::Write;
 #[cfg_attr(baremetal, no_mangle)]
 fn main() {
     println!("Starting to initialize the timer");
+    #[cfg(not(baremetal))]
     xous::arch::ensure_connection().unwrap();
     timer::init();
 
@@ -62,6 +60,8 @@ fn main() {
             println!("Loop {}", counter);
         }
         counter += 1;
+
+        #[cfg(not(baremetal))]
         std::thread::sleep(std::time::Duration::from_millis(500));
         // if counter & 2 == 0 {
         //     xous::syscall::yield_slice();
