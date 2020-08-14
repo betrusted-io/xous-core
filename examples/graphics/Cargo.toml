@@ -1,0 +1,15 @@
+[package]
+name = "graphics"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Manage the video output"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+minifb = "0.17"
+#pixels = "0.1"
+
+rand = "*"
