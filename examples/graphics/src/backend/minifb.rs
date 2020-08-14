@@ -1,3 +1,4 @@
+use embedded_graphics::{drawable::Pixel, geometry::Size, pixelcolor::BinaryColor, DrawTarget};
 use minifb::{Key, Window, WindowOptions};
 
 const WIDTH: usize = 336;
@@ -6,40 +7,67 @@ const MAX_FPS: u64 = 15;
 const LIGHT_COLOUR: u32 = 0xB5B5AD;
 const DARK_COLOUR: u32 = 0x1B1B19;
 
-pub fn run() {
-    let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
+pub struct XousDisplay {
+    buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
+    window: Window,
+}
 
-    let mut window = Window::new(
-        "Betrusted",
-        WIDTH,
-        HEIGHT,
-        WindowOptions {
-            scale_mode: minifb::ScaleMode::AspectRatioStretch,
-            resize: true,
-            ..WindowOptions::default()
-        },
-    )
-    .unwrap_or_else(|e| {
-        panic!("{}", e);
-    });
+impl XousDisplay {
+    pub fn new() -> XousDisplay {
+        let mut window = Window::new(
+            "Betrusted",
+            WIDTH,
+            HEIGHT,
+            WindowOptions {
+                scale_mode: minifb::ScaleMode::AspectRatioStretch,
+                resize: true,
+                ..WindowOptions::default()
+            },
+        )
+        .unwrap_or_else(|e| {
+            panic!("{}", e);
+        });
 
-    // Limit the maximum refresh rate
-    window.limit_update_rate(Some(std::time::Duration::from_micros(
-        1000 * 1000 / MAX_FPS,
-    )));
+        // Limit the maximum refresh rate
+        window.limit_update_rate(Some(std::time::Duration::from_micros(
+            1000 * 1000 / MAX_FPS,
+        )));
 
-    let mut lfsr = 0xace1u32;
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        for i in buffer.iter_mut() {
-            lfsr ^= lfsr >> 7;
-            lfsr ^= lfsr << 9;
-            lfsr ^= lfsr >> 13;
-            *i = if lfsr & 1 == 0 { LIGHT_COLOUR } else { DARK_COLOUR };
-        }
-
-        // We unwrap here as we want this code to exit if it fails.
-        // Real applications may want to handle this in a different way
+        let buffer = vec![0u32; WIDTH * HEIGHT];
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+
+        XousDisplay { buffer, window }
     }
-    std::process::exit(0);
+
+    pub fn redraw(&mut self) {
+        self.window
+            .update_with_buffer(&self.buffer, WIDTH, HEIGHT)
+            .unwrap();
+    }
+
+    pub fn update(&mut self) {
+        self.window.update();
+        if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
+            std::process::exit(0);
+        }
+    }
+}
+
+impl DrawTarget<BinaryColor> for XousDisplay {
+    type Error = core::convert::Infallible;
+
+    /// Draw a `Pixel` that has a color defined as `Gray8`.
+    fn draw_pixel(&mut self, pixel: Pixel<BinaryColor>) -> Result<(), Self::Error> {
+        let Pixel(point, color) = pixel;
+        self.buffer[(point.y * (WIDTH as i32) + point.x) as usize] = if color == BinaryColor::On {
+            LIGHT_COLOUR
+        } else {
+            DARK_COLOUR
+        };
+        Ok(())
+    }
+
+    fn size(&self) -> Size {
+        Size::new(WIDTH as _, HEIGHT as _)
+    }
 }
