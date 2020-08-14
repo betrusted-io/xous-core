@@ -1,9 +1,9 @@
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub mod native;
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub use native::*;
 
-#[cfg(any(windows,unix))]
+#[cfg(not(target_os = "none"))]
 pub mod hosted;
-#[cfg(any(windows,unix))]
+#[cfg(not(target_os = "none"))]
 pub use hosted::*;

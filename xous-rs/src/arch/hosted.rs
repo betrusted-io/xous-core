@@ -28,13 +28,11 @@ pub struct ProcessInit {
     pub key: ProcessKey,
 }
 
-#[cfg(not(baremetal))]
 pub struct ProcessArgsAsThread<F: FnOnce()> {
     main: F,
     name: String,
 }
 
-#[cfg(not(baremetal))]
 impl<F> ProcessArgsAsThread<F>
 where
     F: FnOnce(),
@@ -46,12 +44,10 @@ where
         }
     }
 }
-#[cfg(not(baremetal))]
 pub struct ProcessHandleAsThread(std::thread::JoinHandle<()>);
 
 /// If no connection exists, create a new connection to the server. This means
 /// our parent PID will be PID1. Otherwise, reuse the same connection.
-#[cfg(not(baremetal))]
 pub fn create_process_pre_as_thread<F>(
     _args: &ProcessArgsAsThread<F>,
 ) -> core::result::Result<ProcessInit, crate::Error>
@@ -70,7 +66,6 @@ where
     })
 }
 
-#[cfg(not(baremetal))]
 pub fn create_process_post_as_thread<F>(
     args: ProcessArgsAsThread<F>,
     init: ProcessInit,
@@ -109,7 +104,6 @@ where
     Ok(ProcessHandleAsThread(thread_main.0))
 }
 
-#[cfg(not(baremetal))]
 pub fn wait_process_as_thread(joiner: ProcessHandleAsThread) -> crate::SysCallResult {
     joiner.0.join().map(|_| Result::Ok).map_err(|_x| {
         // panic!("wait error: {:?}", x);

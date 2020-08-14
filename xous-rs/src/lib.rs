@@ -1,4 +1,4 @@
-#![cfg_attr(baremetal, no_std)]
+#![cfg_attr(target_os = "none", no_std)]
 
 #[macro_use]
 extern crate bitflags;
@@ -19,7 +19,7 @@ pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;
 
-#[cfg(not(baremetal))]
+#[cfg(not(target_os = "none"))]
 pub use arch::ProcessArgsAsThread;
 
 /// Convert a four-letter string into a 32-bit int.
