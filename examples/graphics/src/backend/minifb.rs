@@ -4,8 +4,8 @@ use minifb::{Key, Window, WindowOptions};
 const WIDTH: usize = 336;
 const HEIGHT: usize = 536;
 const MAX_FPS: u64 = 15;
-const LIGHT_COLOUR: u32 = 0xB5B5AD;
-const DARK_COLOUR: u32 = 0x1B1B19;
+const DARK_COLOUR: u32 = 0xB5B5AD;
+const LIGHT_COLOUR: u32 = 0x1B1B19;
 
 pub struct XousDisplay {
     buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
@@ -33,7 +33,7 @@ impl XousDisplay {
             1000 * 1000 / MAX_FPS,
         )));
 
-        let buffer = vec![0u32; WIDTH * HEIGHT];
+        let buffer = vec![DARK_COLOUR; WIDTH * HEIGHT];
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
 
         XousDisplay { buffer, window }
