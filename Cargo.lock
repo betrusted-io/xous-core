@@ -270,7 +270,7 @@ checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 dependencies = [
  "atty",
  "humantime",
- "log 0.4.11",
+ "log",
  "regex",
  "termcolor",
 ]
@@ -317,7 +317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aaf91faf136cb47367fa430cd46e37a788775e7fa104f8b4bcb3861dc389b724"
 
 [[package]]
-name = "graphics"
+name = "graphics-server"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
@@ -407,19 +407,19 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.1.0"
-dependencies = [
- "pancurses",
- "xous",
-]
-
-[[package]]
-name = "log"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fabed175da42fed1fa0746b0ea71f412aa9d35e76e95e59b192c64b9dc2bf8b"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "log-server"
+version = "0.1.0"
+dependencies = [
+ "pancurses",
+ "xous",
 ]
 
 [[package]]
@@ -563,7 +563,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3058bc37c433096b2ac7afef1c5cdfae49ede0a4ffec3dfc1df1df0959d0ff0"
 dependencies = [
  "libc",
- "log 0.4.11",
+ "log",
  "ncurses",
  "pdcurses-sys",
  "winreg",
@@ -1014,7 +1014,7 @@ dependencies = [
  "crc",
  "csv",
  "env_logger",
- "log 0.4.11",
+ "log",
  "xmas-elf",
 ]
 
@@ -1241,6 +1241,10 @@ dependencies = [
  "rand 0.7.3",
  "syn",
 ]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
 
 [[package]]
 name = "zero"

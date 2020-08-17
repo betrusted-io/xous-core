@@ -6,10 +6,15 @@ members = [
     "xous-rs",
     "macros",
     "examples/shell",
-    "examples/graphics",
-    "examples/log",
+    "examples/graphics-server",
+    "examples/log-server",
+    "xtask",
 ]
-default-members = ["examples/shell", "examples/log", "examples/graphics"]
+default-members = [
+    "examples/shell",
+    "examples/log-server",
+    "examples/graphics-server",
+]
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations

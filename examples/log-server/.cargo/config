@@ -1,0 +1,13 @@
+#[target.riscv32i-unknown-none-elf]
+##runner = "riscv64-unknown-elf-gdb -x gdb_init"
+#rustflags = [
+#  "-C", "linker-plugin-lto",
+#]
+#
+#[target.riscv32imac-unknown-none-elf]
+#rustflags = [
+#  "-C", "linker-plugin-lto",
+#]
+
+[build]
+target = "riscv32imac-unknown-none-elf"
