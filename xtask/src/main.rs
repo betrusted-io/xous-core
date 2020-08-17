@@ -57,6 +57,7 @@ fn image() -> Result<(), DynError> {
     for pkg in &["shell", "log-server", "graphics-server"] {
         init.push(build(pkg, debug, None)?);
     }
+    build("loader", false, Some("loader".into()))?;
 
     create_image(&kernel, &init, debug)?;
 
