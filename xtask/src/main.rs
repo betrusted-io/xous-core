@@ -33,7 +33,7 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
-        Some("image") => image()?,
+        Some("renode-image") => image()?,
         _ => print_help(),
     }
     Ok(())
