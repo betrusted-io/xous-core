@@ -14,7 +14,7 @@ use std::thread_local;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, PID, TID};
+use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
@@ -146,7 +146,7 @@ fn handle_connection(
             ServerMessage::Exit => break,
             ServerMessage::ServerPacket(pkt) => {
                 let thread_id = pkt[0];
-                let call = xous::SysCall::from_args(
+                let call = xous_kernel::SysCall::from_args(
                     pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
                 );
                 match call {
@@ -164,7 +164,7 @@ fn handle_connection(
             }
             ServerMessage::ServerPacketWithData(pkt, data) => {
                 let thread_id = pkt[0];
-                let call = xous::SysCall::from_args(
+                let call = xous_kernel::SysCall::from_args(
                     pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
                 );
                 match call {
@@ -182,9 +182,9 @@ fn handle_connection(
                         // );
                         if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
                             match envelope {
-                                xous::Message::MutableBorrow(msg)
-                                | xous::Message::Borrow(msg)
-                                | xous::Message::Move(msg) => {
+                                xous_kernel::Message::MutableBorrow(msg)
+                                | xous_kernel::Message::Borrow(msg)
+                                | xous_kernel::Message::Move(msg) => {
                                     // Update the address pointer. This will get turned back into a
                                     // usable pointer by casting it back into a &[T] on the other
                                     // side. This is just a pointer to the start of data
@@ -209,7 +209,7 @@ fn handle_connection(
                                             _ => unreachable!(),
                                         };
                                 }
-                                xous::Message::Scalar(_) => (),
+                                xous_kernel::Message::Scalar(_) => (),
                             }
                         } else {
                             panic!("unsupported message type");
@@ -225,7 +225,7 @@ fn handle_connection(
     chn.send(ThreadMessage::SysCall(
         pid,
         1,
-        xous::SysCall::TerminateProcess,
+        xous_kernel::SysCall::TerminateProcess,
     ))
     .unwrap();
 }
@@ -419,7 +419,7 @@ pub fn idle() -> bool {
     #[cfg(not(test))]
     {
         let address = address_receiver.recv().unwrap();
-        xous::arch::set_xous_address(address);
+        xous_kernel::arch::set_xous_address(address);
         println!("KERNEL: Xous server listening on {}", address);
         println!("KERNEL: Starting initial processes:");
         let mut args = std::env::args();
@@ -435,13 +435,13 @@ pub fn idle() -> bool {
         println!("-------+------------------");
         for arg in args {
             let process_key = generate_pid_key();
-            let init = xous::ProcessInit {
+            let init = xous_kernel::ProcessInit {
                 key: ProcessKey::new(process_key),
             };
             let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
             println!(" {:^5} |  {}", new_pid, arg);
-            let process_args = xous::ProcessArgs::new("program", arg);
-            xous::arch::create_process_post(process_args, init, new_pid).expect("couldn't spawn");
+            let process_args = xous_kernel::ProcessArgs::new("program", arg);
+            xous_kernel::arch::create_process_post(process_args, init, new_pid).expect("couldn't spawn");
         }
     }
 

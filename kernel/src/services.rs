@@ -3,12 +3,12 @@ use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
 use crate::mem::MemoryManager;
-use xous::MemoryRange;
+use xous_kernel::MemoryRange;
 
 use crate::filled_array;
 use crate::server::Server;
 // use core::mem;
-use xous::{
+use xous_kernel::{
     pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
 };
 
@@ -169,16 +169,16 @@ impl Process {
         }
     }
 
-    pub fn activate(&self) -> Result<(), xous::Error> {
+    pub fn activate(&self) -> Result<(), xous_kernel::Error> {
         crate::arch::process::set_current_pid(self.pid);
         self.mapping.activate()?;
         let mut current_process = crate::arch::process::Process::current();
         current_process.activate()
     }
 
-    pub fn terminate(&mut self) -> Result<(), xous::Error> {
+    pub fn terminate(&mut self) -> Result<(), xous_kernel::Error> {
         if self.free() {
-            return Err(xous::Error::ProcessNotFound);
+            return Err(xous_kernel::Error::ProcessNotFound);
         }
 
         // TODO: Free all pages
@@ -326,7 +326,7 @@ impl SystemServices {
 
     /// Add a new entry to the process table. This results in a new address space
     /// and a new PID, though the process is in the state `Setup()`.
-    pub fn create_process(&mut self, init_process: ProcessInit) -> Result<PID, xous::Error> {
+    pub fn create_process(&mut self, init_process: ProcessInit) -> Result<PID, xous_kernel::Error> {
         for (idx, mut entry) in self.processes.iter_mut().enumerate() {
             if entry.state != ProcessState::Free {
                 continue;
@@ -340,10 +340,10 @@ impl SystemServices {
             entry.pid = new_pid;
             return Ok(new_pid);
         }
-        Err(xous::Error::ProcessNotFound)
+        Err(xous_kernel::Error::ProcessNotFound)
     }
 
-    pub fn get_process(&self, pid: PID) -> Result<&Process, xous::Error> {
+    pub fn get_process(&self, pid: PID) -> Result<&Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
         if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != pid {
@@ -352,12 +352,12 @@ impl SystemServices {
                 self.processes[pid_idx].mapping.get_pid(),
                 pid
             );
-            return Err(xous::Error::ProcessNotFound);
+            return Err(xous_kernel::Error::ProcessNotFound);
         }
         Ok(&self.processes[pid_idx])
     }
 
-    pub fn get_process_mut(&mut self, pid: PID) -> Result<&mut Process, xous::Error> {
+    pub fn get_process_mut(&mut self, pid: PID) -> Result<&mut Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
 
@@ -367,7 +367,7 @@ impl SystemServices {
         //         self.processes[pid_idx].mapping.get_pid(),
         //         pid
         //     );
-        //     return Err(xous::Error::ProcessNotFound);
+        //     return Err(xous_kernel::Error::ProcessNotFound);
         // }
         Ok(&mut self.processes[pid_idx])
     }
@@ -398,7 +398,7 @@ impl SystemServices {
     /// 2. Save the process state, if it hasn't already been saved
     /// 3. Run the new process, returning to an illegal instruction
     #[cfg(baremetal)]
-    pub fn finish_callback_and_resume(&mut self, pid: PID, tid: TID) -> Result<(), xous::Error> {
+    pub fn finish_callback_and_resume(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was the interrupt handler) and mark it
         // as Ready.  Note that the new PID may very well be the same PID.
         {
@@ -448,8 +448,8 @@ impl SystemServices {
         _pc: *const usize,
         _irq_no: usize,
         _arg: *mut usize,
-    ) -> Result<(), xous::Error> {
-        Err(xous::Error::UnhandledSyscall)
+    ) -> Result<(), xous_kernel::Error> {
+        Err(xous_kernel::Error::UnhandledSyscall)
     }
 
     /// Create a stack frame in the specified process and jump to it.
@@ -463,7 +463,7 @@ impl SystemServices {
         pc: *const usize,
         irq_no: usize,
         arg: *mut usize,
-    ) -> Result<(), xous::Error> {
+    ) -> Result<(), xous_kernel::Error> {
         // Get the current process (which was just interrupted) and mark it as
         // "ready to run".  If this function is called when the current process
         // isn't running, that means the system has gotten into an invalid
@@ -528,7 +528,7 @@ impl SystemServices {
 
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
-    pub fn ready_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous::Error> {
+    pub fn ready_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         // assert!(tid == INITIAL_TID);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
@@ -557,7 +557,7 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running, or if it's "Running" but has no free contexts
-    pub fn switch_to_thread(&mut self, pid: PID, tid: Option<TID>) -> Result<(), xous::Error> {
+    pub fn switch_to_thread(&mut self, pid: PID, tid: Option<TID>) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // println!(
         //     "switch_to_thread({}:{:?}): Old state was {:?}",
@@ -566,9 +566,9 @@ impl SystemServices {
 
         // Determine which context number to switch to
         process.state = match process.state {
-            ProcessState::Free => return Err(xous::Error::ProcessNotFound),
-            ProcessState::Sleeping => return Err(xous::Error::ProcessNotFound),
-            ProcessState::Allocated => return Err(xous::Error::ProcessNotFound),
+            ProcessState::Free => return Err(xous_kernel::Error::ProcessNotFound),
+            ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
+            ProcessState::Allocated => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Setup(setup) => {
                 // Activate the process, which enables its memory mapping
                 process.activate()?;
@@ -608,7 +608,7 @@ impl SystemServices {
                     Some(ctx) => {
                         // Ensure the specified context is ready to run
                         if x & (1 << ctx) == 0 {
-                            return Err(xous::Error::InvalidThread);
+                            return Err(xous_kernel::Error::InvalidThread);
                         }
                         ctx
                     }
@@ -652,7 +652,7 @@ impl SystemServices {
                         if ready_threads & (1 << ctx) == 0
                         /*&& ctx != current_thread*/
                         {
-                            return Err(xous::Error::InvalidThread);
+                            return Err(xous_kernel::Error::InvalidThread);
                         }
                         ctx
                     }
@@ -682,7 +682,7 @@ impl SystemServices {
     /// # Panics
     ///
     /// If the current process is not running.
-    pub fn switch_from_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous::Error> {
+    pub fn switch_from_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // println!(
         //     "switch_from_thread({}:{}): Old state was {:?}",
@@ -744,8 +744,8 @@ impl SystemServices {
         &mut self,
         pid: PID,
         tid: TID,
-        result: xous::Result,
-    ) -> Result<(), xous::Error> {
+        result: xous_kernel::Result,
+    ) -> Result<(), xous_kernel::Error> {
         // Temporarily switch into the target process memory space
         // in order to pass the return value.
         let current_pid = self.current_pid();
@@ -772,7 +772,7 @@ impl SystemServices {
         new_pid: PID,
         mut new_tid: TID,
         can_resume: bool,
-    ) -> Result<TID, xous::Error> {
+    ) -> Result<TID, xous_kernel::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_tid);
         let previous_pid = self.current_pid();
         println!(
@@ -789,7 +789,7 @@ impl SystemServices {
             match new.state {
                 ProcessState::Free => {
                     println!("PID {} was free", new_pid);
-                    return Err(xous::Error::ProcessNotFound);
+                    return Err(xous_kernel::Error::ProcessNotFound);
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
@@ -815,7 +815,7 @@ impl SystemServices {
                                 // // If we've looped around, return an error.
                                 // if new_tid == new.current_thread as usize {
                                 println!("Looked through all contexts and couldn't find one that was ready");
-                                return Err(xous::Error::ProcessNotFound);
+                                return Err(xous_kernel::Error::ProcessNotFound);
                             }
                         }
                     // println!(" -- picked context {}", new_context);
@@ -824,12 +824,12 @@ impl SystemServices {
                             "thread is {:?}, which is not valid for new thread {}",
                             new.state, new_tid
                         );
-                        return Err(xous::Error::ProcessNotFound);
+                        return Err(xous_kernel::Error::ProcessNotFound);
                     }
                 }
                 ProcessState::Sleeping => {
                     println!("PID {} was sleeping", new_pid);
-                    return Err(xous::Error::ProcessNotFound);
+                    return Err(xous_kernel::Error::ProcessNotFound);
                 }
             }
 
@@ -908,7 +908,7 @@ impl SystemServices {
             let new = self.get_process_mut(new_pid)?; /*
                                                       new.state = match new.state {
                                                           ProcessState::Running(x) if (x & 1 << new_tid) == 0 => {
-                                                              return Err(xous::Error::ProcessNotFound)
+                                                              return Err(xous_kernel::Error::ProcessNotFound)
                                                           }
                                                           // ProcessState::Running(x) => {
                                                           //     if can_resume {
@@ -979,18 +979,18 @@ impl SystemServices {
         dest_pid: PID,
         dest_virt: *mut u8,
         len: usize,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         if len == 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if len & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if src_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if dest_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
 
         let current_pid = self.current_pid();
@@ -1000,7 +1000,7 @@ impl SystemServices {
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
             let dest_virt = mm
-                .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
+                .find_virtual_address(dest_virt, len, xous_kernel::MemoryType::Messages)
                 .or_else(|e| {
                     src_mapping.activate().expect("couldn't undo mapping");
                     Err(e)
@@ -1035,7 +1035,7 @@ impl SystemServices {
         _dest_pid: PID,
         _dest_virt: *mut u8,
         _len: usize,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         Ok(src_virt)
     }
 
@@ -1072,18 +1072,18 @@ impl SystemServices {
         dest_virt: *mut u8,
         len: usize,
         mutable: bool,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         if len == 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if len & 0xfff != 0 {
-            return Err(xous::Error::BadAlignment);
+            return Err(xous_kernel::Error::BadAlignment);
         }
         if src_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAlignment);
+            return Err(xous_kernel::Error::BadAlignment);
         }
         if dest_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAlignment);
+            return Err(xous_kernel::Error::BadAlignment);
         }
 
         let current_pid = self.current_pid();
@@ -1093,7 +1093,7 @@ impl SystemServices {
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
             let dest_virt = mm
-                .find_virtual_address(dest_virt, len, xous::MemoryType::Messages)
+                .find_virtual_address(dest_virt, len, xous_kernel::MemoryType::Messages)
                 .or_else(|e| {
                     src_mapping.activate().unwrap();
                     Err(e)
@@ -1131,7 +1131,7 @@ impl SystemServices {
         _dest_virt: *mut u8,
         _len: usize,
         _mutable: bool,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         Ok(src_virt)
     }
 
@@ -1153,18 +1153,18 @@ impl SystemServices {
         dest_pid: PID,
         dest_virt: *mut u8,
         len: usize,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         if len == 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if len & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if src_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         if dest_virt as usize & 0xfff != 0 {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
 
         let current_pid = self.current_pid();
@@ -1200,7 +1200,7 @@ impl SystemServices {
         dest_pid: PID,
         _dest_virt: *mut u8,
         len: usize,
-    ) -> Result<*mut u8, xous::Error> {
+    ) -> Result<*mut u8, xous_kernel::Error> {
         let buf = unsafe { core::slice::from_raw_parts(src_virt, len) };
         let current_pid = self.current_pid();
         {
@@ -1226,14 +1226,14 @@ impl SystemServices {
     ///
     /// * **ThreadNotAvailable**: The process has used all of its context
     ///   slots.
-    pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous::Error> {
+    pub fn create_thread(&mut self, pid: PID, thread_init: ThreadInit) -> Result<TID, xous_kernel::Error> {
         let mut process = self.get_process_mut(pid)?;
         process.activate()?;
 
         let mut arch_process = crate::arch::process::Process::current();
         let new_tid = arch_process
             .find_free_thread()
-            .ok_or(xous::Error::ThreadNotAvailable)?;
+            .ok_or(xous_kernel::Error::ThreadNotAvailable)?;
 
         arch_process.setup_thread(new_tid, thread_init)?;
 
@@ -1265,7 +1265,7 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<SID, xous::Error> {
+    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<SID, xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Looking through server list for free server",
         //     self.pid.get()
@@ -1300,12 +1300,12 @@ impl SystemServices {
                 return Ok(sid);
             }
         }
-        Err(xous::Error::ServerNotFound)
+        Err(xous_kernel::Error::ServerNotFound)
     }
 
     /// Allocate a new server ID for this process and return the address. If the
     /// server table is full, return an error.
-    pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous::Error> {
+    pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous_kernel::Error> {
         // Check to see if we've already connected to this server.
         // While doing this, find a free slot in case we haven't
         // yet connected.
@@ -1340,7 +1340,7 @@ impl SystemServices {
                     }
                 }
             }
-            Err(xous::Error::OutOfMemory)
+            Err(xous_kernel::Error::OutOfMemory)
         })
     }
 
@@ -1388,12 +1388,12 @@ impl SystemServices {
         context: TID,
         message: Message,
         original_address: Option<MemoryAddress>,
-    ) -> Result<usize, xous::Error> {
+    ) -> Result<usize, xous_kernel::Error> {
         let current_pid = self.current_pid();
         let result = {
             let server_pid = self
                 .server_from_sidx(sidx)
-                .ok_or(xous::Error::ServerNotFound)?
+                .ok_or(xous_kernel::Error::ServerNotFound)?
                 .pid;
             {
                 let server_process = self.get_process(server_pid)?;
@@ -1420,11 +1420,11 @@ impl SystemServices {
         context: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
-    ) -> Result<usize, xous::Error> {
+    ) -> Result<usize, xous_kernel::Error> {
         // let current_pid = self.current_pid();
         // let server_pid = self
         //     .server_from_sidx(sidx)
-        //     .ok_or(xous::Error::ServerNotFound)?
+        //     .ok_or(xous_kernel::Error::ServerNotFound)?
         //     .pid;
         // {
         //     let server_process = self.get_process(server_pid)?;
@@ -1449,7 +1449,7 @@ impl SystemServices {
     }
 
     /// Terminate the given process. Returns the process' parent PID.
-    pub fn terminate_process(&mut self, target_pid: PID) -> Result<PID, xous::Error> {
+    pub fn terminate_process(&mut self, target_pid: PID) -> Result<PID, xous_kernel::Error> {
         // To terminate a process, we must perform the following:
         //
         // 1. If we have any client connections, remove them.
@@ -1501,7 +1501,7 @@ impl SystemServices {
     }
 
     /// Calls the provided function with the current inner process state.
-    pub fn shutdown(&mut self) -> Result<(), xous::Error> {
+    pub fn shutdown(&mut self) -> Result<(), xous_kernel::Error> {
         // Destroy all servers. This will cause all queued messages to be lost.
         for server in &mut self.servers {
             if server.is_some() {

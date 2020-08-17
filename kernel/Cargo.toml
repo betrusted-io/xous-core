@@ -7,7 +7,7 @@ description = "Core kernel for Xous, including task switching and memory managem
 
 [dependencies]
 bitflags = "1.2.1"
-xous = { path = "../xous-rs", features = ["forget-memory-messages"] }
+xous-kernel = { package = "xous", path = "../xous-rs", features = ["forget-memory-messages"] }
 stats_alloc = { version = "0.1.8", optional = true }
 sha3 = { default-features = false, version = "0.8.2" }
 

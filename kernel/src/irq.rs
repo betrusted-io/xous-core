@@ -1,11 +1,11 @@
 use crate::arch;
 use crate::services::SystemServices;
-use xous::{MemoryAddress, PID};
+use xous_kernel::{MemoryAddress, PID};
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
 
 #[cfg(baremetal)]
-pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
+pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::Error> {
     // Unsafe is required here because we're accessing a static
     // mutable value, and it could be modified from various threads.
     // However, this is fine because this is run from an IRQ context
@@ -27,7 +27,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
                             arg.map(|x| x.get() as *mut usize)
                                 .unwrap_or(core::ptr::null_mut::<usize>()),
                         )
-                        .map(|_| xous::Result::ResumeProcess)
+                        .map(|_| xous_kernel::Result::ResumeProcess)
                     });
                 } else {
                     // If there is no handler, mask this interrupt
@@ -38,7 +38,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous::Result, xous::Error> {
             }
         }
     }
-    Ok(xous::Result::ResumeProcess)
+    Ok(xous_kernel::Result::ResumeProcess)
 }
 
 pub fn interrupt_claim(
@@ -46,15 +46,15 @@ pub fn interrupt_claim(
     pid: PID,
     f: MemoryAddress,
     arg: Option<MemoryAddress>,
-) -> Result<(), xous::Error> {
+) -> Result<(), xous_kernel::Error> {
     // Unsafe is required since we're accessing a static mut array.
     // However, we disable interrupts to prevent contention on this array.
     unsafe {
         arch::irq::enable_all_irqs();
         let result = if irq > IRQ_HANDLERS.len() {
-            Err(xous::Error::InterruptNotFound)
+            Err(xous_kernel::Error::InterruptNotFound)
         } else if IRQ_HANDLERS[irq].is_some() {
-            Err(xous::Error::InterruptInUse)
+            Err(xous_kernel::Error::InterruptInUse)
         } else {
             IRQ_HANDLERS[irq] = Some((pid, f, arg));
             arch::irq::enable_irq(irq);

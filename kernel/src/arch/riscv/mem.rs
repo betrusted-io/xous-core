@@ -1,7 +1,7 @@
 use crate::mem::MemoryManager;
 use core::fmt;
 use riscv::register::satp;
-use xous::{MemoryFlags, PID};
+use xous_kernel::{MemoryFlags, PID};
 
 // pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
@@ -53,13 +53,13 @@ impl core::fmt::Debug for MemoryMapping {
 
 fn translate_flags(req_flags: MemoryFlags) -> MMUFlags {
     let mut flags = MMUFlags::NONE;
-    if req_flags & xous::MemoryFlags::R == xous::MemoryFlags::R {
+    if req_flags & xous_kernel::MemoryFlags::R == xous_kernel::MemoryFlags::R {
         flags |= MMUFlags::R;
     }
-    if req_flags & xous::MemoryFlags::W == xous::MemoryFlags::W {
+    if req_flags & xous_kernel::MemoryFlags::W == xous_kernel::MemoryFlags::W {
         flags |= MMUFlags::W;
     }
-    if req_flags & xous::MemoryFlags::X == xous::MemoryFlags::X {
+    if req_flags & xous_kernel::MemoryFlags::X == xous_kernel::MemoryFlags::X {
         flags |= MMUFlags::X;
     }
     flags
@@ -67,15 +67,15 @@ fn translate_flags(req_flags: MemoryFlags) -> MMUFlags {
 
 fn untranslate_flags(req_flags: usize) -> MemoryFlags {
     let req_flags = MMUFlags::from_bits_truncate(req_flags);
-    let mut flags = xous::MemoryFlags::FREE;
+    let mut flags = xous_kernel::MemoryFlags::FREE;
     if req_flags & MMUFlags::R == MMUFlags::R {
-        flags |= xous::MemoryFlags::R;
+        flags |= xous_kernel::MemoryFlags::R;
     }
     if req_flags & MMUFlags::W == MMUFlags::W {
-        flags |= xous::MemoryFlags::W;
+        flags |= xous_kernel::MemoryFlags::W;
     }
     if req_flags & MMUFlags::X == MMUFlags::X {
-        flags |= xous::MemoryFlags::X;
+        flags |= xous_kernel::MemoryFlags::X;
     }
     flags
 }
@@ -110,7 +110,7 @@ impl MemoryMapping {
     /// kernel, which should be mapped into every possible address space.
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
-    pub fn activate(self) -> Result<(), xous::Error> {
+    pub fn activate(self) -> Result<(), xous_kernel::Error> {
         satp::write(self.satp);
         Ok(())
     }
@@ -162,7 +162,7 @@ impl MemoryMapping {
         mm: &mut MemoryManager,
         addr: usize,
         flags: MemoryFlags,
-    ) -> Result<(), xous::Error> {
+    ) -> Result<(), xous_kernel::Error> {
         let vpn1 = (addr >> 22) & ((1 << 10) - 1);
         let vpn0 = (addr >> 12) & ((1 << 10) - 1);
 
@@ -256,7 +256,7 @@ impl fmt::Display for LeafPageTable {
 
 /// When we allocate pages, they are owned by the kernel so we can zero
 /// them out.  After that is done, hand the page to the user.
-pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous::Error> {
+pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     let virt = virt as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
@@ -278,12 +278,12 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous::Error> {
 
     // If the level 1 pagetable doesn't exist, then this address isn't valid.
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
 
     // Ensure the entry hasn't already been mapped.
     if l0_pt.entries[vpn0] & 1 == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
 
     // Add the USER flag to the entry
@@ -306,7 +306,7 @@ pub fn map_page_inner(
     virt: usize,
     req_flags: MemoryFlags,
     map_user: bool,
-) -> Result<(), xous::Error> {
+) -> Result<(), xous_kernel::Error> {
     let ppn1 = (phys >> 22) & ((1 << 12) - 1);
     let ppn0 = (phys >> 12) & ((1 << 10) - 1);
     let ppo = (phys >> 0) & ((1 << 12) - 1);
@@ -376,9 +376,9 @@ pub fn map_page_inner(
 }
 
 /// Get the pagetable entry for a given address, or `Err()` if the address is invalid
-pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous::Error> {
+pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous_kernel::Error> {
     if addr & 3 != 0 {
-        return Err(xous::Error::BadAlignment);
+        return Err(xous_kernel::Error::BadAlignment);
     }
     let vpn1 = (addr >> 22) & ((1 << 10) - 1);
     let vpn0 = (addr >> 12) & ((1 << 10) - 1);
@@ -388,7 +388,7 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous::Error> {
     let l1_pt = unsafe { &(*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
     let l1_pte = l1_pt.entries[vpn1];
     if l1_pte & 1 == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
     let l0_pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
     let entry = unsafe { &mut (*((l0_pt_virt + vpn0 * 4) as *mut usize)) };
@@ -405,12 +405,12 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous::Error> {
 /// # Errors
 ///
 /// * BadAddress - Address was not already mapped.
-pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous::Error> {
+pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous_kernel::Error> {
     let entry = pagetable_entry(virt)?;
 
     // Ensure the entry hasn't already been mapped.
     if *entry & 1 == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
     let phys = (*entry >> 10) << 12;
     *entry = 0;
@@ -427,10 +427,10 @@ pub fn move_page_inner(
     dest_pid: PID,
     dest_space: &MemoryMapping,
     dest_addr: *mut u8,
-) -> Result<(), xous::Error> {
+) -> Result<(), xous_kernel::Error> {
     let entry = pagetable_entry(src_addr as usize)?;
     if *entry & MMUFlags::VALID.bits() == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
     let previous_entry = *entry;
     // Invalidate the old entry
@@ -471,7 +471,7 @@ pub fn lend_page_inner(
     dest_space: &MemoryMapping,
     dest_addr: *mut u8,
     mutable: bool,
-) -> Result<usize, xous::Error> {
+) -> Result<usize, xous_kernel::Error> {
     let entry = pagetable_entry(src_addr as usize)?;
     let phys = (*entry >> 10) << 12;
 
@@ -479,7 +479,7 @@ pub fn lend_page_inner(
         // If we try to share a page that's already mutable, that's a sharing
         // violation.
         if *entry & MMUFlags::S.bits() != 0 {
-            return Err(xous::Error::ShareViolation);
+            return Err(xous_kernel::Error::ShareViolation);
         }
 
         // If the page should be writable in the other process, ensure it's
@@ -539,12 +539,12 @@ pub fn return_page_inner(
     _dest_pid: PID,
     dest_space: &MemoryMapping,
     dest_addr: *mut u8,
-) -> Result<usize, xous::Error> {
+) -> Result<usize, xous_kernel::Error> {
     let src_entry = pagetable_entry(src_addr as usize)?;
     let phys = (*src_entry >> 10) << 12;
 
     if *src_entry & MMUFlags::VALID.bits() == 0 {
-        return Err(xous::Error::ShareViolation);
+        return Err(xous_kernel::Error::ShareViolation);
     }
 
     *src_entry = 0;
@@ -576,7 +576,7 @@ pub fn return_page_inner(
     Ok(phys)
 }
 
-pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
+pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
 
@@ -592,12 +592,12 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous::Error> {
 
     // If the level 1 pagetable doesn't exist, then this address is invalid
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
 
     // Ensure the entry hasn't already been mapped.
     if l0_pt.entries[vpn0] & 1 == 0 {
-        return Err(xous::Error::BadAddress);
+        return Err(xous_kernel::Error::BadAddress);
     }
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }

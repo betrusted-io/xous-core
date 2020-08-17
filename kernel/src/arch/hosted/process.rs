@@ -4,7 +4,7 @@ use core::cell::RefCell;
 use std::io::Write;
 use std::net::TcpStream;
 use std::thread_local;
-use xous::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
+use xous_kernel::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
 pub const INITIAL_TID: usize = 1;
 pub const MAX_PROCESS_COUNT: usize = 32;
@@ -87,7 +87,7 @@ pub fn set_current_pid(pid: PID) {
     });
 }
 
-pub fn register_connection_for_key(conn: TcpStream, key: ProcessKey) -> Result<PID, xous::Error> {
+pub fn register_connection_for_key(conn: TcpStream, key: ProcessKey) -> Result<PID, xous_kernel::Error> {
     PROCESS_TABLE.with(|pt| {
         let mut process_table = pt.borrow_mut();
         for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
@@ -98,7 +98,7 @@ pub fn register_connection_for_key(conn: TcpStream, key: ProcessKey) -> Result<P
                 }
             }
         }
-        Err(xous::Error::ProcessNotFound)
+        Err(xous_kernel::Error::ProcessNotFound)
     })
 }
 
@@ -135,7 +135,7 @@ impl Process {
     }
 
     /// Mark this process as running (on the current core?!)
-    pub fn activate(&mut self) -> Result<(), xous::Error> {
+    pub fn activate(&mut self) -> Result<(), xous_kernel::Error> {
         // let mut pt = PROCESS_TABLE.lock().unwrap();
         // assert!(pt.table[self.pid as usize - 1] == *self);
         // pt.current = self.pid as _;
@@ -176,12 +176,12 @@ impl Process {
         process.threads[thread - 1].allocated = true;
     }
 
-    pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous::Error> {
+    pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
         let mut tmp = Process { pid };
         tmp.setup_thread(INITIAL_TID, setup)
     }
 
-    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous::Error> {
+    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Setting up thread {} @ {:?}",
         //     self.pid,
@@ -212,7 +212,7 @@ impl Process {
     // }
 
     /// Set the current context number.
-    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous::Error> {
+    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         assert!(thread > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
@@ -243,7 +243,7 @@ impl Process {
         })
     }
 
-    pub fn set_thread_result(&mut self, tid: TID, result: xous::Result) {
+    pub fn set_thread_result(&mut self, tid: TID, result: xous_kernel::Result) {
         assert!(tid > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
@@ -313,7 +313,7 @@ impl Process {
         })
     }
 
-    pub fn destroy(pid: PID) -> Result<(), xous::Error> {
+    pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let pid_idx = pid.get() as usize - 1;
@@ -333,7 +333,7 @@ impl Process {
         })
     }
 
-    pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous::Error> {
+    pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous_kernel::Error> {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;

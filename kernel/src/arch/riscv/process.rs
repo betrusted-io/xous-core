@@ -5,7 +5,7 @@ pub const INITIAL_TID: TID = 1;
 pub const IRQ_TID: TID = 0;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
-use xous::{ProcessInit, ThreadInit, PID, TID};
+use xous_kernel::{ProcessInit, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
@@ -128,7 +128,7 @@ impl Process {
     }
 
     /// Mark this process as running on the current core
-    pub fn activate(&mut self) -> Result<(), xous::Error> {
+    pub fn activate(&mut self) -> Result<(), xous_kernel::Error> {
         Ok(())
     }
 
@@ -185,7 +185,7 @@ impl Process {
     }
 
     /// Set the current thread number.
-    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous::Error> {
+    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         let mut process = unsafe { &mut *PROCESS };
         // println!("KERNEL({}:{}): Switching to thread {}", self.pid, process.hardware_thread - 1, thread);
         assert!(
@@ -227,7 +227,7 @@ impl Process {
         None
     }
 
-    pub fn set_thread_result(&mut self, thread_nr: TID, result: xous::Result) {
+    pub fn set_thread_result(&mut self, thread_nr: TID, result: xous_kernel::Result) {
         let vals = unsafe { mem::transmute::<_, [usize; 8]>(result) };
         let thread = self.thread_mut(thread_nr);
         for (idx, reg) in vals.iter().enumerate() {
@@ -308,14 +308,14 @@ impl Process {
                     .reserve_range(
                         init_sp as *mut u8,
                         stack_size + 4096,
-                        xous::MemoryFlags::R | xous::MemoryFlags::W,
+                        xous_kernel::MemoryFlags::R | xous_kernel::MemoryFlags::W,
                     )
                     .expect("couldn't reserve stack")
             });
         }
     }
 
-    pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous::Error> {
+    pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
         let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
@@ -376,7 +376,7 @@ impl Process {
         todo!();
     }
 
-    pub fn destroy(_pid: PID) -> Result<(), xous::Error> {
+    pub fn destroy(_pid: PID) -> Result<(), xous_kernel::Error> {
         todo!();
         // let mut process_table = unsafe { &mut *PROCESS };
         // let pid_idx = pid.get() as usize - 1;

@@ -1,6 +1,6 @@
 pub const PAGE_SIZE: usize = 4096;
 use crate::mem::MemoryManager;
-use xous::{Error, MemoryFlags, PID};
+use xous_kernel::{Error, MemoryFlags, PID};
 
 pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
 pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
@@ -32,7 +32,7 @@ impl MemoryMapping {
     /// kernel, which should be mapped into every possible address space.
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
-    pub fn activate(self) -> Result<(), xous::Error> {
+    pub fn activate(self) -> Result<(), xous_kernel::Error> {
         // This is a no-op on hosted environments
         Ok(())
     }
@@ -59,7 +59,7 @@ pub fn map_page_inner(
     _virt: usize,
     _req_flags: MemoryFlags,
     _map_user: bool,
-) -> Result<(), xous::Error> {
+) -> Result<(), xous_kernel::Error> {
     unimplemented!()
 }
 

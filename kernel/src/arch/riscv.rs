@@ -1,5 +1,5 @@
 use riscv::register::{satp, sie, sstatus};
-use xous::PID;
+use xous_kernel::PID;
 
 pub mod exception;
 pub mod irq;

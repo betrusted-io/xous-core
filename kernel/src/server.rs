@@ -1,6 +1,6 @@
 pub use crate::arch::process::Thread;
 use core::mem;
-use xous::{TID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
+use xous_kernel::{TID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
 
 pub struct SenderID {
     pub sidx: usize,
@@ -8,7 +8,7 @@ pub struct SenderID {
 }
 
 impl SenderID {
-    pub fn from_usize(src: usize) -> Result<SenderID, xous::Error> {
+    pub fn from_usize(src: usize) -> Result<SenderID, xous_kernel::Error> {
         Ok(SenderID {
             sidx: src >> 16,
             tidx: src & 0xffff,
@@ -169,9 +169,9 @@ impl Server {
         pid: PID,
         sid: SID,
         _backing: MemoryRange,
-    ) -> Result<(), xous::Error> {
+    ) -> Result<(), xous_kernel::Error> {
         if new != &None {
-            return Err(xous::Error::MemoryInUse);
+            return Err(xous_kernel::Error::MemoryInUse);
         }
 
         #[cfg(baremetal)]
@@ -205,7 +205,7 @@ impl Server {
     }
 
     /// Take a current slot and replace it with `None`, clearing out the contents of the queue.
-    pub fn destroy(current: &mut Option<Server>) -> Result<(), xous::Error> {
+    pub fn destroy(current: &mut Option<Server>) -> Result<(), xous_kernel::Error> {
         if let Some(mut server) = current.take() {
             server.queue_head = 0;
             server.queue_tail = 0;
@@ -278,9 +278,9 @@ impl Server {
         &mut self,
         idx: usize,
         buf: MemoryRange,
-    ) -> Result<WaitingMessage, xous::Error> {
+    ) -> Result<WaitingMessage, xous_kernel::Error> {
         if idx > self.queue.len() {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         let (pid, ctx, server_addr, client_addr, len, forget) = match self.queue[idx] {
             QueuedMessage::WaitingResponse(pid, ctx, server_addr, client_addr, len) => {
@@ -292,7 +292,7 @@ impl Server {
             _ => return Ok(WaitingMessage::None),
         };
         if server_addr != buf.as_ptr() as usize || len != buf.len() {
-            return Err(xous::Error::BadAddress);
+            return Err(xous_kernel::Error::BadAddress);
         }
         self.queue[idx] = QueuedMessage::Empty;
         self.queue_tail += 1;
@@ -338,7 +338,7 @@ impl Server {
     ///
     /// * **None**: There are no waiting messages
     /// ***Some(MessageEnvelope): This message is queued.
-    pub fn take_next_message(&mut self, server_idx: usize) -> Option<xous::MessageEnvelope> {
+    pub fn take_next_message(&mut self, server_idx: usize) -> Option<xous_kernel::MessageEnvelope> {
         // println!(
         //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}",
         //     self.queue_head, self.queue_tail, self.queue[self.queue_tail]
@@ -357,9 +357,9 @@ impl Server {
                 offset,
                 valid,
             ) => (
-                xous::MessageEnvelope {
+                xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::Borrow(xous::MemoryMessage {
+                    message: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -383,9 +383,9 @@ impl Server {
                 offset,
                 valid,
             ) => (
-                xous::MessageEnvelope {
+                xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::MutableBorrow(xous::MemoryMessage {
+                    message: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -409,9 +409,9 @@ impl Server {
                 offset,
                 valid,
             ) => (
-                xous::MessageEnvelope {
+                xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::Borrow(xous::MemoryMessage {
+                    message: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -435,9 +435,9 @@ impl Server {
                 offset,
                 valid,
             ) => (
-                xous::MessageEnvelope {
+                xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous::Message::MutableBorrow(xous::MemoryMessage {
+                    message: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -461,9 +461,9 @@ impl Server {
                 offset,
                 valid,
             ) => {
-                let msg = xous::MessageEnvelope {
+                let msg = xous_kernel::MessageEnvelope {
                     sender: make_sender(pid, ctx),
-                    message: xous::Message::Move(xous::MemoryMessage {
+                    message: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -480,9 +480,9 @@ impl Server {
 
             // Scalar messages have nothing to return, so they can go straight to the `Free` state
             QueuedMessage::ScalarMessage(pid, ctx, _reserved, id, arg1, arg2, arg3, arg4) => {
-                let msg = xous::MessageEnvelope {
+                let msg = xous_kernel::MessageEnvelope {
                     sender: make_sender(pid, ctx),
-                    message: xous::Message::Scalar(xous::ScalarMessage {
+                    message: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                         id,
                         arg1,
                         arg2,
@@ -517,16 +517,16 @@ impl Server {
         &mut self,
         pid: PID,
         context: TID,
-        message: xous::Message,
+        message: xous_kernel::Message,
         original_address: Option<MemoryAddress>,
-    ) -> core::result::Result<usize, xous::Error> {
+    ) -> core::result::Result<usize, xous_kernel::Error> {
         // println!("Queueing message: {:?} for pid: {}  ctx: {}", message, pid.get(), context);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
-            return Err(xous::Error::ServerQueueFull);
+            return Err(xous_kernel::Error::ServerQueueFull);
         }
 
         self.queue[self.queue_head] = match message {
-            xous::Message::Scalar(msg) => QueuedMessage::ScalarMessage(
+            xous_kernel::Message::Scalar(msg) => QueuedMessage::ScalarMessage(
                 pid.get() as _,
                 context as _,
                 original_address.map(|x| x.get()).unwrap_or(0),
@@ -536,7 +536,7 @@ impl Server {
                 msg.arg3,
                 msg.arg4,
             ),
-            xous::Message::Move(msg) => QueuedMessage::MemoryMessageSend(
+            xous_kernel::Message::Move(msg) => QueuedMessage::MemoryMessageSend(
                 pid.get() as _,
                 context as _,
                 original_address.map(|x| x.get()).unwrap_or(0),
@@ -546,7 +546,7 @@ impl Server {
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
-            xous::Message::MutableBorrow(msg) => QueuedMessage::MemoryMessageRWLend(
+            xous_kernel::Message::MutableBorrow(msg) => QueuedMessage::MemoryMessageRWLend(
                 pid.get() as _,
                 context as _,
                 original_address.map(|x| x.get()).unwrap_or(0),
@@ -556,7 +556,7 @@ impl Server {
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
-            xous::Message::Borrow(msg) => QueuedMessage::MemoryMessageROLend(
+            xous_kernel::Message::Borrow(msg) => QueuedMessage::MemoryMessageROLend(
                 pid.get() as _,
                 context as _,
                 original_address.map(|x| x.get()).unwrap_or(0),
@@ -582,14 +582,14 @@ impl Server {
         context: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
-    ) -> core::result::Result<usize, xous::Error> {
+    ) -> core::result::Result<usize, xous_kernel::Error> {
         // println!("Queueing address message: {:?} (pid: {} ctx: {})", message, pid.get(), context);
         if self.queue[self.queue_head] != QueuedMessage::Empty {
-            return Err(xous::Error::ServerQueueFull);
+            return Err(xous_kernel::Error::ServerQueueFull);
         }
         let (server_address, len) = match message {
-            xous::Message::Scalar(_) | xous::Message::Move(_) => (0, 0),
-            xous::Message::MutableBorrow(msg) | xous::Message::Borrow(msg) => {
+            xous_kernel::Message::Scalar(_) | xous_kernel::Message::Move(_) => (0, 0),
+            xous_kernel::Message::MutableBorrow(msg) | xous_kernel::Message::Borrow(msg) => {
                 (msg.buf.addr.get(), msg.buf.size.get())
             }
         };

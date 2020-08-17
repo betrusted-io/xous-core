@@ -5,10 +5,10 @@ use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::services::SystemServices;
 use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
-use xous::{SysCall, PID, TID};
+use xous_kernel::{SysCall, PID, TID};
 
 extern "Rust" {
-    fn _xous_syscall_return_result(result: &xous::Result, context: &Thread) -> !;
+    fn _xous_syscall_return_result(result: &xous_kernel::Result, context: &Thread) -> !;
 }
 
 extern "C" {
@@ -31,7 +31,7 @@ pub fn enable_irq(irq_no: usize) {
     sim::write(sim::read() | (1 << irq_no));
 }
 
-pub fn disable_irq(irq_no: usize) -> Result<(), xous::Error> {
+pub fn disable_irq(irq_no: usize) -> Result<(), xous_kernel::Error> {
     sim::write(sim::read() & !(1 << irq_no));
     Ok(())
 }
@@ -89,14 +89,14 @@ pub extern "C" fn trap_handler(
         let call = SysCall::from_args(a0, a1, a2, a3, a4, a5, a6, a7).unwrap_or_else(|_| {
             ArchProcess::with_current_mut(|p| unsafe {
                 _xous_syscall_return_result(
-                    &xous::Result::Error(xous::Error::UnhandledSyscall),
+                    &xous_kernel::Result::Error(xous_kernel::Error::UnhandledSyscall),
                     p.current_thread(),
                 )
             })
         });
 
         let response =
-            crate::syscall::handle(pid, tid, call).unwrap_or_else(|e| xous::Result::Error(e));
+            crate::syscall::handle(pid, tid, call).unwrap_or_else(|e| xous_kernel::Result::Error(e));
 
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
@@ -104,7 +104,7 @@ pub extern "C" fn trap_handler(
             // If we're resuming a process that was previously sleeping, restore the
             // context. Otherwise, keep the context the same but pass the return
             // values in 8 return registers.
-            if response == xous::Result::ResumeProcess {
+            if response == xous_kernel::Result::ResumeProcess {
                 crate::arch::syscall::resume(current_pid().get() == 1, thread);
             } else {
                 println!("Returning to address {:08x}", thread.sepc);
