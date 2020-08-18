@@ -823,13 +823,13 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 ///
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
+/// * **ServerQueueFull**: The queue in the server is full, and this call would block
 /// * **Timeout**: The timeout limit has been reached
 pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
-    let result =
-        rsyscall(SysCall::SendMessage(connection, message)).expect("couldn't send message");
-    if let Result::Ok = result {
+    let result = rsyscall(SysCall::SendMessage(connection, message));
+    if let Ok(Result::Ok) = result {
         Ok(())
-    } else if let Result::Error(e) = result {
+    } else if let Err(e) = result {
         Err(e)
     } else {
         panic!("Unexpected return value: {:?}", result);
