@@ -5,9 +5,6 @@
 #[macro_use]
 mod debug;
 
-#[cfg(baremetal)]
-mod baremetal;
-
 mod timer;
 // mod logstr;
 
@@ -19,11 +16,8 @@ mod timer;
 //     }
 // }
 
-#[cfg_attr(baremetal, no_mangle)]
-fn main() {
-    println!("Starting to initialize the timer");
-    #[cfg(not(baremetal))]
-    xous::arch::ensure_connection().unwrap();
+#[xous::xous_main]
+fn shell_main() -> ! {
     timer::init();
 
     let mut connection = None;
@@ -45,7 +39,7 @@ fn main() {
     // let ls = logstr::LogStr::new();
     loop {
         println!("Sending a scalar message with id {}...", counter + 4096);
-        xous::syscall::send_message(
+        match xous::syscall::send_message(
             connection,
             xous::Message::Scalar(xous::ScalarMessage {
                 id: counter + 4096,
@@ -54,15 +48,20 @@ fn main() {
                 arg3: !counter,
                 arg4: counter + 1,
             }),
-        )
-        .expect("couldn't send scalar message");
-        if counter.trailing_zeros() >= 12 {
-            println!("Loop {}", counter);
+        ) {
+            Err(xous::Error::ServerQueueFull) => {
+                println!("Server queue is full... retrying");
+                continue;
+            },
+            Ok(_) => {
+                println!("Loop {}", counter);
+                counter += 1;
+            },
+            Err(e) => panic!("Unable to send message: {:?}", e),
         }
-        counter += 1;
 
-        #[cfg(not(baremetal))]
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // #[cfg(not(target_os = "none"))]
+        // std::thread::sleep(std::time::Duration::from_millis(500));
         // if counter & 2 == 0 {
         //     xous::syscall::yield_slice();
         // }
