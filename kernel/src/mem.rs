@@ -164,7 +164,9 @@ impl MemoryManager {
 
     #[cfg(all(baremetal, feature = "print-debug"))]
     pub fn print_ownership(&self) {
-        println!("Ownership ({} bytes in all):", unsafe { MEMORY_ALLOCATIONS.len() });
+        println!("Ownership ({} bytes in all):", unsafe {
+            MEMORY_ALLOCATIONS.len()
+        });
 
         let mut offset = 0;
         unsafe {
@@ -342,7 +344,8 @@ impl MemoryManager {
     ) -> Result<xous_kernel::MemoryRange, xous_kernel::Error> {
         // If no address was specified, pick the next address that fits
         // in the "default" range
-        let virt = self.find_virtual_address(virt_ptr, size, xous_kernel::MemoryType::Default)? as usize;
+        let virt =
+            self.find_virtual_address(virt_ptr, size, xous_kernel::MemoryType::Default)? as usize;
 
         if virt & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAlignment);
@@ -363,10 +366,16 @@ impl MemoryManager {
     /// Attempt to allocate a single page from the default section.
     /// Note that this will be backed by a real page.
     #[cfg(baremetal)]
-    pub fn map_zeroed_page(&mut self, pid: PID, is_user: bool) -> Result<*mut usize, xous_kernel::Error> {
-        let virt =
-            self.find_virtual_address(core::ptr::null_mut(), PAGE_SIZE, xous_kernel::MemoryType::Default)?
-                as usize;
+    pub fn map_zeroed_page(
+        &mut self,
+        pid: PID,
+        is_user: bool,
+    ) -> Result<*mut usize, xous_kernel::Error> {
+        let virt = self.find_virtual_address(
+            core::ptr::null_mut(),
+            PAGE_SIZE,
+            xous_kernel::MemoryType::Default,
+        )? as usize;
 
         // Grab the next available page.  This claims it for this process.
         let phys = self.alloc_page(pid)?;
