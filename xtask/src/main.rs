@@ -49,8 +49,8 @@ renode-image            builds a test image for renode
 
 fn image() -> Result<(), DynError> {
     let debug = false;
-    let _ = fs::remove_dir_all(&dist_dir());
-    fs::create_dir_all(&dist_dir())?;
+    // let _ = fs::remove_dir_all(&dist_dir());
+    // fs::create_dir_all(&dist_dir())?;
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -69,6 +69,7 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
 }
 
 fn build(project: &str, debug: bool, directory: Option<PathBuf>) -> Result<PathBuf, DynError> {
+    println!("Building {}...", project);
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build", "--target", TARGET, "--package", project];
     if !debug {
@@ -76,7 +77,7 @@ fn build(project: &str, debug: bool, directory: Option<PathBuf>) -> Result<PathB
     }
 
     let mut dir = project_root();
-    if let Some(subdir) = directory {
+    if let Some(subdir) = &directory {
         dir.push(subdir);
     }
 
@@ -89,7 +90,17 @@ fn build(project: &str, debug: bool, directory: Option<PathBuf>) -> Result<PathB
         return Err("cargo build failed".into());
     }
 
-    Ok(project_root().join(&format!("target/{}/{}/{}", TARGET, stream, project)))
+    if let Some(base_dir) = &directory {
+        Ok(project_root().join(&format!(
+            "{}/target/{}/{}/{}",
+            base_dir.to_str().ok_or(BuildError::PathConversionError)?,
+            TARGET,
+            stream,
+            project
+        )))
+    } else {
+        Ok(project_root().join(&format!("target/{}/{}/{}", TARGET, stream, project)))
+    }
 }
 
 fn create_image(kernel: &Path, init: &[PathBuf], debug: bool) -> Result<PathBuf, DynError> {
@@ -133,6 +144,6 @@ fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn dist_dir() -> PathBuf {
-    project_root().join("target/dist")
-}
+// fn dist_dir() -> PathBuf {
+//     project_root().join("target/dist")
+// }

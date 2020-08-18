@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "kernel",
-    "loader",
+#    "kernel",
+#    "loader",
     "tools",
     "xous-rs",
     "macros",
@@ -14,6 +14,15 @@ default-members = [
     "examples/shell",
     "examples/log-server",
     "examples/graphics-server",
+]
+
+# These packages have custom RUSTFLAGS, so if they
+# were included in the workspace they would cause
+# packages to be rebuilt every time they were touched.
+# Keep them out of the main workspace.
+exclude = [
+    "kernel",
+    "loader",
 ]
 
 [profile.release]

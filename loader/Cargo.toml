@@ -15,3 +15,8 @@ rand = "0.7.3"
 debug-print = []
 earlyprintk = []
 
+[profile.release]
+codegen-units = 1 # 1 better optimizations
+debug = true # symbols are nice and they don't increase the size on Flash
+lto = thin
+force-frame-pointers = no

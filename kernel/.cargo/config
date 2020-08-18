@@ -1,22 +1,16 @@
 [target.riscv32i-unknown-none-elf]
 rustflags = [
   "-C", "link-arg=-Tlink.x",
-  "-C", "linker-plugin-lto",
-  "-C", "force-frame-pointers=no",
 ]
 
 [target.riscv32imac-unknown-none-elf]
 rustflags = [
   "-C", "link-arg=-Tlink.x",
-  "-C", "linker-plugin-lto",
-  "-C", "force-frame-pointers=no",
 ]
 
 [target.riscv32imac-unknown-xous-elf]
 rustflags = [
   "-C", "link-arg=-Tlink.x",
-  "-C", "linker-plugin-lto",
-  "-C", "force-frame-pointers=no",
 ]
 
 [build]

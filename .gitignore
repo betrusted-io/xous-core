@@ -1,4 +1,6 @@
 /target
+/kernel/target
+/loader/target
 **/*.rs.bk
 
 # Emacs
