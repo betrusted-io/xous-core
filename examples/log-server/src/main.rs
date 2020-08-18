@@ -1,85 +1,19 @@
-#![cfg_attr(baremetal, no_std)]
-#![cfg_attr(baremetal, no_main)]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 #[cfg(baremetal)]
 #[macro_use]
 mod debug;
 
 mod log_string;
-mod start;
 
 use core::fmt::Write;
 use log_string::LogString;
 
-#[cfg(bracket_terminal)]
-mod implementation {
-    use bracket_terminal::prelude::*;
-    use core::fmt::{Error, Write};
-    use std::sync::mpsc::{channel, Sender};
-    use std::thread::{spawn, JoinHandle};
-
-    struct State {}
-
-    impl GameState for State {
-        fn tick(&mut self, ctx: &mut BTerm) {
-            ctx.print(1, 1, "Hello Bracket World");
-        }
-    }
-
-    enum ControlMessage {
-        Text(String),
-        Exit,
-    }
-
-    pub struct Output {
-        stream: Sender<ControlMessage>,
-        context: Option<BTerm>,
-        gs: Option<State>,
-    }
-
-    pub fn init() -> Output {
-        let (tx, rx) = channel();
-
-        let context = BTermBuilder::simple80x50()
-            .with_title("Hello Minimal Bracket World")
-            .build()
-            .unwrap();
-        let gs: State = State {};
-        Output {
-            stream: tx,
-            context: Some(context),
-            gs: Some(gs),
-        }
-    }
-
-    impl Output {
-        pub fn run(&mut self) {
-            main_loop(self.context.take().unwrap(), self.gs.take().unwrap());
-        }
-    }
-
-    impl Drop for Output {
-        fn drop(&mut self) {
-            self.stream.send(ControlMessage::Exit).unwrap();
-            // self.finish.take().unwrap().join().unwrap();
-        }
-    }
-
-    impl Write for Output {
-        fn write_str(&mut self, s: &str) -> Result<(), Error> {
-            // It would be nice if this worked with &str
-            self.stream
-                .send(ControlMessage::Text(s.to_owned()))
-                .unwrap();
-            Ok(())
-        }
-    }
-}
-
-#[cfg(not(baremetal))]
+#[cfg(not(target_os = "none"))]
 mod implementation {
     use core::fmt::{Error, Write};
-    use pancurses::{endwin, initscr, Window};
+    // use pancurses::{endwin, initscr, Window};
     use std::sync::mpsc::{channel, Receiver, Sender};
 
     enum ControlMessage {
@@ -88,20 +22,20 @@ mod implementation {
     }
 
     pub struct Output {
-        window: Option<Window>,
+        // window: Option<Window>,
         tx: Sender<ControlMessage>,
         rx: Receiver<ControlMessage>,
     }
 
     pub fn init() -> Output {
         let (tx, rx) = channel();
-        let window = initscr();
-        window.nodelay(true);
+        // let window = initscr();
+        // window.nodelay(true);
 
         Output {
             tx,
             rx,
-            window: Some(window),
+            // window: Some(window),
         }
     }
 
@@ -112,13 +46,14 @@ mod implementation {
                     Ok(msg) => match msg {
                         ControlMessage::Exit => break,
                         ControlMessage::Text(s) => {
-                            self.window.as_ref().unwrap().printw(s);
-                            self.window.as_ref().unwrap().refresh();
+                            print!("{}", s);
+                            // self.window.as_ref().unwrap().printw(s);
+                            // self.window.as_ref().unwrap().refresh();
                         }
                     },
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         // Calling `getch` refreshes the screen
-                        self.window.as_ref().unwrap().getch();
+                        // self.window.as_ref().unwrap().getch();
                     }
                     Err(e) => panic!("Error: {}", e),
                 }
@@ -135,7 +70,7 @@ mod implementation {
     impl Drop for Output {
         fn drop(&mut self) {
             self.tx.send(ControlMessage::Exit).unwrap();
-            endwin();
+            // endwin();
         }
     }
 
@@ -160,7 +95,7 @@ mod implementation {
     }
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 mod implementation {
     use core::fmt::{Error, Write};
 
@@ -217,15 +152,15 @@ mod implementation {
         }
     }
 
-    use core::panic::PanicInfo;
+    // use core::panic::PanicInfo;
 
-    #[panic_handler]
-    fn handle_panic(arg: &PanicInfo) -> ! {
-        println!("PANIC!");
-        println!("Details: {:?}", arg);
-        xous::syscall::wait_event();
-        loop {}
-    }
+    // #[panic_handler]
+    // fn handle_panic(arg: &PanicInfo) -> ! {
+    //     println!("PANIC!");
+    //     println!("Details: {:?}", arg);
+    //     xous::syscall::wait_event();
+    //     loop {}
+    // }
 
     fn handle_irq(irq_no: usize, arg: *mut usize) {
         print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
@@ -314,8 +249,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
     }
 }
 
-#[cfg_attr(baremetal, no_mangle)]
-fn main() {
+#[xous::xous_main]
+fn some_main() -> ! {
     let mut output = implementation::init();
     let writer = output.get_writer();
     // xous::arch::ensure_connection().unwrap();
@@ -323,4 +258,5 @@ fn main() {
     xous::create_thread_simple(reader_thread, writer).unwrap();
     println!("Running the output");
     output.run();
+    panic!("exited");
 }

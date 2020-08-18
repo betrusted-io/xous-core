@@ -55,22 +55,6 @@ use proc_macro::TokenStream;
 pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
     let f = parse_macro_input!(input as ItemFn);
 
-    // let hosted =
-    //     cfg!(target_os = "linux") || cfg!(target_os = "windows") || cfg!(target_os = "macos");
-    // let is_none = cfg!(target_os = "");
-
-    // return parse::Error::new(
-    //     f.span(),
-    //     format!(
-    //         "Target OS is none? {} - hosted? {}  Unknown OS? {}",
-    //         is_none,
-    //         hosted,
-    //         cfg!(target_os = "unknown")
-    //     ),
-    // )
-    // .to_compile_error()
-    // .into();
-
     // check the function signature
     let valid_signature = f.sig.constness.is_none()
         && f.sig.asyncness.is_none()
@@ -109,94 +93,16 @@ pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
     let hash = random_ident();
     let stmts = f.block.stmts;
 
-    quote!(
-        xous::maybe_main!();
+    let r = quote!(
         #[export_name = "xous_entry"]
         #(#attrs)*
         pub #unsafety fn #hash() -> ! {
             #(#stmts)*
         }
-
-    )
-    .into()
-    // pub fn main() {
-    //     #hash()
-    // }
+        xous::maybe_main!();
+    );
+    r.into()
 }
-
-// /// Attribute to mark which function will be called at the beginning of the reset handler.
-// ///
-// /// **IMPORTANT**: This attribute can appear at most *once* in the dependency graph. Also, if you
-// /// are using Rust 1.30 the attribute must be used on a reachable item (i.e. there must be no
-// /// private modules between the item and the root of the crate); if the item is in the root of the
-// /// crate you'll be fine. This reachability restriction doesn't apply to Rust 1.31 and newer
-// /// releases.
-// ///
-// /// The function must have the signature of `unsafe fn()`.
-// ///
-// /// The function passed will be called before static variables are initialized. Any access of static
-// /// variables will result in undefined behavior.
-// ///
-// /// # Examples
-// ///
-// /// ```
-// /// # use riscv_rt_macros::pre_init;
-// /// #[pre_init]
-// /// unsafe fn before_main() {
-// ///     // do something here
-// /// }
-// ///
-// /// # fn main() {}
-// /// ```
-// #[proc_macro_attribute]
-// pub fn pre_init(args: TokenStream, input: TokenStream) -> TokenStream {
-//     let f = parse_macro_input!(input as ItemFn);
-
-//     // check the function signature
-//     let valid_signature = f.sig.constness.is_none()
-//         && f.sig.asyncness.is_none()
-//         && f.vis == Visibility::Inherited
-//         && f.sig.unsafety.is_some()
-//         && f.sig.abi.is_none()
-//         && f.sig.inputs.is_empty()
-//         && f.sig.generics.params.is_empty()
-//         && f.sig.generics.where_clause.is_none()
-//         && f.sig.variadic.is_none()
-//         && match f.sig.output {
-//             ReturnType::Default => true,
-//             ReturnType::Type(_, ref ty) => match **ty {
-//                 Type::Tuple(ref tuple) => tuple.elems.is_empty(),
-//                 _ => false,
-//             },
-//         };
-
-//     if !valid_signature {
-//         return parse::Error::new(
-//             f.span(),
-//             "`#[pre_init]` function must have signature `unsafe fn()`",
-//         )
-//         .to_compile_error()
-//         .into();
-//     }
-
-//     if !args.is_empty() {
-//         return parse::Error::new(Span::call_site(), "This attribute accepts no arguments")
-//             .to_compile_error()
-//             .into();
-//     }
-
-//     // XXX should we blacklist other attributes?
-//     let attrs = f.attrs;
-//     let ident = f.sig.ident;
-//     let block = f.block;
-
-//     quote!(
-//         #[export_name = "__pre_init"]
-//         #(#attrs)*
-//         pub unsafe fn #ident() #block
-//     )
-//     .into()
-// }
 
 // Creates a random identifier
 fn random_ident() -> Ident {
@@ -221,9 +127,9 @@ fn random_ident() -> Ident {
         &(0..16)
             .map(|i| {
                 if i == 0 || rng.gen() {
-                    ('a' as u8 + rng.gen::<u8>() % 25) as char
+                    (b'a' + rng.gen::<u8>() % 25) as char
                 } else {
-                    ('0' as u8 + rng.gen::<u8>() % 10) as char
+                    (b'0' + rng.gen::<u8>() % 10) as char
                 }
             })
             .collect::<String>(),

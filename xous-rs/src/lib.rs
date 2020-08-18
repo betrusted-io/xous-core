@@ -40,6 +40,7 @@ macro_rules! maybe_main {
             fn xous_entry() -> !;
         }
         fn main() {
+            xous::arch::ensure_connection().unwrap();
             unsafe { xous_entry() };
         }
     };

@@ -8,6 +8,5 @@ description = "Log output program"
 [dependencies]
 xous = { path = "../../xous-rs" }
 
-[target.'cfg(any(windows, unix))'.dependencies]
-#bracket-terminal = "0.8.1"
-pancurses = "*"
+#[target.'cfg(any(windows, unix))'.dependencies]
+#pancurses = "*"

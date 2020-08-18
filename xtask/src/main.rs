@@ -1,6 +1,6 @@
 use std::{
-    env, fs,
-    path::{Path, PathBuf},
+    env,
+    path::{Path, PathBuf, MAIN_SEPARATOR},
     process::Command,
 };
 
@@ -34,6 +34,7 @@ fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => image()?,
+        Some("run") => run()?,
         _ => print_help(),
     }
     Ok(())
@@ -49,29 +50,86 @@ renode-image            builds a test image for renode
 
 fn image() -> Result<(), DynError> {
     let debug = false;
-    // let _ = fs::remove_dir_all(&dist_dir());
-    // fs::create_dir_all(&dist_dir())?;
-
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &["log-server", "graphics-server"] {
-        init.push(build(pkg, debug, None)?);
+        init.push(build(pkg, debug, Some(TARGET), None)?);
     }
-    build("loader", false, Some("loader".into()))?;
+    build("loader", false, Some(TARGET), Some("loader".into()))?;
 
     create_image(&kernel, &init, debug)?;
 
     Ok(())
 }
 
-fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    build("kernel", debug, Some("kernel".into()))
+fn run() -> Result<(), DynError> {
+    let debug = false;
+    let stream = if debug { "debug" } else { "release" };
+    let init = ["shell", "log-server", "graphics-server"];
+
+    // let mut init_paths = vec![];
+    for pkg in &init {
+        build(pkg, debug, None, None)?;
+    }
+    // println!("Built packages: {:?}", init_paths);
+
+    // Build and run the kernel
+    let mut args = vec!["run"];
+    if !debug {
+        args.push("--release");
+    }
+
+    args.push("--");
+
+    let mut paths = vec![];
+    for i in &init {
+        let tmp: PathBuf = Path::new(&format!(
+            "..{}target{}{}{}{}",
+            MAIN_SEPARATOR, MAIN_SEPARATOR, stream, MAIN_SEPARATOR, i
+        ))
+        .to_owned();
+        // .canonicalize()
+        // .or(Err(BuildError::PathConversionError))?;
+        paths.push(tmp);
+    }
+    for t in &paths {
+        args.push(t.to_str().ok_or(BuildError::PathConversionError)?);
+    }
+
+    let mut dir = project_root();
+    dir.push("kernel");
+
+    let status = Command::new(cargo())
+        .current_dir(dir)
+        .args(&args)
+        .status()?;
+    if !status.success() {
+        return Err("cargo build failed".into());
+    }
+
+    Ok(())
 }
 
-fn build(project: &str, debug: bool, directory: Option<PathBuf>) -> Result<PathBuf, DynError> {
+fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
+    build("kernel", debug, Some(TARGET), Some("kernel".into()))
+}
+
+fn build(
+    project: &str,
+    debug: bool,
+    target: Option<&str>,
+    directory: Option<PathBuf>,
+) -> Result<PathBuf, DynError> {
     println!("Building {}...", project);
     let stream = if debug { "debug" } else { "release" };
-    let mut args = vec!["build", "--target", TARGET, "--package", project];
+    let mut args = vec!["build", "--package", project];
+    let mut target_path = "".to_owned();
+    if let Some(t) = target {
+        args.push("--target");
+        args.push(t);
+        target_path = format!("{}/", t);
+    }
+
     if !debug {
         args.push("--release");
     }
@@ -92,14 +150,14 @@ fn build(project: &str, debug: bool, directory: Option<PathBuf>) -> Result<PathB
 
     if let Some(base_dir) = &directory {
         Ok(project_root().join(&format!(
-            "{}/target/{}/{}/{}",
+            "{}/target/{}{}/{}",
             base_dir.to_str().ok_or(BuildError::PathConversionError)?,
-            TARGET,
+            target_path,
             stream,
             project
         )))
     } else {
-        Ok(project_root().join(&format!("target/{}/{}/{}", TARGET, stream, project)))
+        Ok(project_root().join(&format!("target/{}{}/{}", target_path, stream, project)))
     }
 }
 
