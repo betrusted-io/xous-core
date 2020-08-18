@@ -27,7 +27,7 @@ logLevel -1 kbd
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """
-    sysbus LoadELF @../target/riscv32imac-unknown-none-elf/release/loader
+    sysbus LoadELF @../loader/target/riscv32imac-unknown-none-elf/release/loader
     sysbus LoadBinary @../target/riscv32imac-unknown-none-elf/release/args.bin 0x40800000
     # Set $a0 to point at the args binary
     cpu SetRegisterUnsafe 10 0x40800000
