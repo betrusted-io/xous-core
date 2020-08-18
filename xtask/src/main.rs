@@ -52,7 +52,7 @@ fn image() -> Result<(), DynError> {
     let debug = false;
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["log-server", "graphics-server"] {
+    for pkg in &["shell", "log-server", "graphics-server"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     build("loader", false, Some(TARGET), Some("loader".into()))?;
