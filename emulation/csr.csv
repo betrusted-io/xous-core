@@ -21,8 +21,8 @@ csr_base,spinor,0xf0008000,,
 csr_base,audio,0xf000a800,,
 csr_base,ctrl,0xf0000000,,
 csr_base,uart,0xf0001800,,
-csr_base,memlcd,0xf0004800,,
-csr_base,com,0xf0005000,,
+csr_base,memlcd,0xf0005000,,
+csr_base,com,0xf000c000,,
 csr_register,i2c_prescale,0xf0005800,1,rw
 csr_register,messible_in,0xf0006800,1,rw
 csr_register,i2c_command,0xf0005810,1,rw
