@@ -1,11 +1,11 @@
 use crate::arch;
-// use crate::services::SystemServices;
 use xous_kernel::{MemoryAddress, PID};
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];
 
 #[cfg(baremetal)]
 pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::Error> {
+    use crate::services::SystemServices;
     // Unsafe is required here because we're accessing a static
     // mutable value, and it could be modified from various threads.
     // However, this is fine because this is run from an IRQ context
