@@ -1,6 +1,6 @@
 use core::fmt::{Error, Write};
 #[macro_use]
-#[cfg(all(not(test), feature = "debug-print"))]
+#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
@@ -16,10 +16,10 @@ pub mod debug_print_hardware {
         });
     }
 }
-#[cfg(all(not(test), feature = "debug-print"))]
+#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART;
 
-#[cfg(all(not(test), not(feature = "debug-print")))]
+#[cfg(all(not(test), not(any(feature = "debug-print", feature = "print-panics"))))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
@@ -82,7 +82,7 @@ impl Uart {
     }
 }
 
-#[cfg(all(not(test), feature = "debug-print"))]
+#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
     println!(
         "Interrupt {}: Key pressed: {}",
