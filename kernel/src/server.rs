@@ -359,7 +359,7 @@ impl Server {
             ) => (
                 xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
+                    body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -385,7 +385,7 @@ impl Server {
             ) => (
                 xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
+                    body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -411,7 +411,7 @@ impl Server {
             ) => (
                 xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
+                    body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -437,7 +437,7 @@ impl Server {
             ) => (
                 xous_kernel::MessageEnvelope {
                     sender: self.queue_tail | (server_idx << 16),
-                    message: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
+                    body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -463,7 +463,7 @@ impl Server {
             ) => {
                 let msg = xous_kernel::MessageEnvelope {
                     sender: make_sender(pid, ctx),
-                    message: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
+                    body: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
                         id,
                         buf: MemoryRange::new(buf, buf_size).ok()?,
                         offset: MemorySize::new(offset),
@@ -482,7 +482,7 @@ impl Server {
             QueuedMessage::ScalarMessage(pid, ctx, _reserved, id, arg1, arg2, arg3, arg4) => {
                 let msg = xous_kernel::MessageEnvelope {
                     sender: make_sender(pid, ctx),
-                    message: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                         id,
                         arg1,
                         arg2,

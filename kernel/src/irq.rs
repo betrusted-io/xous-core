@@ -1,5 +1,5 @@
 use crate::arch;
-use crate::services::SystemServices;
+// use crate::services::SystemServices;
 use xous_kernel::{MemoryAddress, PID};
 
 static mut IRQ_HANDLERS: [Option<(PID, MemoryAddress, Option<MemoryAddress>)>; 32] = [None; 32];

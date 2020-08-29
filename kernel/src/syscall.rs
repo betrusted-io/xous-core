@@ -119,7 +119,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                         e
                     })?,
             };
-            let envelope = MessageEnvelope { sender, message };
+            let envelope = MessageEnvelope { sender, body: message };
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.

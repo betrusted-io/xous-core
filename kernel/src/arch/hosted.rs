@@ -14,7 +14,7 @@ use std::thread_local;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, PID, TID};
+use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
@@ -263,13 +263,15 @@ fn listen_thread(
         let mut access_key = [0u8; 16];
         conn.read_exact(&mut access_key).unwrap();
 
-        // Spawn a new process. This process will start out in the "Setup()" state.
+        // Spawn a new process. This process will start out in the "Allocated" state.
         chn.send(ThreadMessage::NewConnection(
             conn.try_clone()
                 .expect("couldn't make a copy of the network connection for the kernel"),
             ProcessKey::new(access_key),
         ))
         .expect("couldn't request a new PID");
+
+        // The kernel will immediately respond with a new PID.
         let NewPidMessage::NewPid(new_pid) = new_pid_channel
             .recv()
             .expect("couldn't receive message from main thread");
@@ -441,7 +443,8 @@ pub fn idle() -> bool {
             let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
             println!(" {:^5} |  {}", new_pid, arg);
             let process_args = xous_kernel::ProcessArgs::new("program", arg);
-            xous_kernel::arch::create_process_post(process_args, init, new_pid).expect("couldn't spawn");
+            xous_kernel::arch::create_process_post(process_args, init, new_pid)
+                .expect("couldn't spawn");
         }
     }
 
@@ -452,10 +455,10 @@ pub fn idle() -> bool {
                 // into a PID, and register the connection with the server.
                 let new_pid =
                     crate::arch::process::register_connection_for_key(conn, access_key).unwrap();
-                // println!(
-                //     "KERNEL: Access key {:?} mapped to PID {}",
-                //     access_key, new_pid
-                // );
+                println!(
+                    "KERNEL: Access key {:?} mapped to PID {}",
+                    access_key, new_pid
+                );
 
                 // Inform the backchannel of the new process ID.
                 new_pid_sender
@@ -468,7 +471,11 @@ pub fn idle() -> bool {
                 // Switch to this process immediately, which moves it from `Setup(_)` to `Running(0)`.
                 // Note that in this system, multiple processes can be active at once. This is
                 // similar to having one core for each process
-                // SystemServices::with_mut(|ss| ss.switch_to_thread(new_pid, Some(1))).unwrap();
+                SystemServices::with_mut(|ss| {
+                    ss.create_thread(new_pid, ThreadInit {})?;
+                    ss.switch_to_thread(new_pid, None)
+                })
+                .unwrap();
             }
             ThreadMessage::SysCall(pid, thread_id, call) => {
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);
