@@ -292,12 +292,12 @@ pub enum Message {
 #[derive(Debug, PartialEq)]
 pub struct MessageEnvelope {
     pub sender: MessageSender,
-    pub message: Message,
+    pub body: Message,
 }
 
 impl MessageEnvelope {
     pub fn to_usize(&self) -> [usize; 7] {
-        let ret = match &self.message {
+        let ret = match &self.body {
             Message::MutableBorrow(m) => (0, m.to_usize()),
             Message::Borrow(m) => (1, m.to_usize()),
             Message::Move(m) => (2, m.to_usize()),
@@ -321,7 +321,7 @@ impl MessageEnvelope {
 /// (in the case of a Borrow).  Ignore Scalar messages.
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
-        match &self.message {
+        match &self.body {
             Message::Borrow(x) | Message::MutableBorrow(x) => {
                 crate::syscall::return_memory(self.sender, x.buf)
                     .expect("couldn't return memory")
@@ -506,7 +506,7 @@ impl Result {
                     )),
                     _ => return Result::Error(Error::InternalError),
                 };
-                Result::Message(MessageEnvelope { sender, message })
+                Result::Message(MessageEnvelope { sender, body: message })
             }
             9 => Result::ThreadID(src[1] as TID),
             10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
