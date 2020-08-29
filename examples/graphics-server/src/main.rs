@@ -76,12 +76,12 @@ fn xmain() -> ! {
     let mut current_style = PrimitiveStyle::with_fill(BinaryColor::Off);
 
     let sid = xous::create_server(b"graphics-server ").unwrap();
-    println!("GFX: Server listening on address {:?}", sid);
+    // println!("GFX: Server listening on address {:?}", sid);
     loop {
         let msg = xous::receive_message(sid).unwrap();
         // println!("GFX: Message: {:?}", msg);
         if let Ok(opcode) = Opcode::try_from(&msg.body) {
-            println!("GFX: Opcode: {:?}", opcode);
+            // println!("GFX: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Flush => {
                     display.update();
@@ -134,7 +134,7 @@ fn xmain() -> ! {
                 }
             }
         } else {
-            println!("Couldn't convert opcode");
+            // println!("Couldn't convert opcode");
         }
         display.update();
     }
