@@ -1100,6 +1100,7 @@ impl SystemServices {
         let current_pid = self.current_pid();
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
+        use crate::mem::MemoryManager;
         MemoryManager::with_mut(|mm| {
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
@@ -1181,6 +1182,7 @@ impl SystemServices {
         let current_pid = self.current_pid();
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
+        use crate::mem::MemoryManager;
         MemoryManager::with_mut(|mm| {
             let mut error = None;
 
