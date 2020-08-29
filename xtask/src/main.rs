@@ -33,7 +33,8 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
-        Some("renode-image") => image()?,
+        Some("renode-image") => image(false)?,
+        Some("renode-image-debug") => image(true)?,
         Some("run") => run(false)?,
         Some("debug") => run(true)?,
         _ => print_help(),
@@ -45,20 +46,20 @@ fn print_help() {
     eprintln!(
         "Tasks:
 renode-image            builds a test image for renode
+renode-image-debug      builds a test image for renode in debug mode
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 "
     )
 }
 
-fn image() -> Result<(), DynError> {
-    let debug = false;
+fn image(debug: bool) -> Result<(), DynError> {
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &["shell", "log-server", "graphics-server"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
-    build("loader", false, Some(TARGET), Some("loader".into()))?;
+    build("loader", debug, Some(TARGET), Some("loader".into()))?;
 
     create_image(&kernel, &init, debug)?;
 
