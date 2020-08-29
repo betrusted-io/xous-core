@@ -34,7 +34,8 @@ fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => image()?,
-        Some("run") => run()?,
+        Some("run") => run(false)?,
+        Some("debug") => run(true)?,
         _ => print_help(),
     }
     Ok(())
@@ -44,6 +45,8 @@ fn print_help() {
     eprintln!(
         "Tasks:
 renode-image            builds a test image for renode
+run                     runs a release build using a hosted environment
+debug                   runs a debug build using a hosted environment
 "
     )
 }
@@ -62,8 +65,7 @@ fn image() -> Result<(), DynError> {
     Ok(())
 }
 
-fn run() -> Result<(), DynError> {
-    let debug = false;
+fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
     let init = ["shell", "log-server", "graphics-server"];
 
