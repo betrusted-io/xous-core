@@ -237,7 +237,7 @@ impl Process {
 
     /// Initialize this process thread with the given entrypoint and stack
     /// addresses.
-    pub fn setup_process(pid: PID, thread_init: ThreadInit) {
+    pub fn setup_process(pid: PID, thread_init: ThreadInit) -> Result<(), xous_kernel::Error> {
         let mut process = unsafe { &mut *PROCESS };
         let tid = INITIAL_TID;
 
@@ -313,6 +313,7 @@ impl Process {
                     .expect("couldn't reserve stack")
             });
         }
+        Ok(())
     }
 
     pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {

@@ -43,6 +43,7 @@ pub enum ProcessState {
 
     /// This is a brand-new process that hasn't been run yet, and needs its
     /// initial context set up.
+    #[allow(dead_code)]
     Setup(ThreadInit),
 
     /// This process is able to be run.  The context bitmask describes contexts
@@ -322,7 +323,7 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ArchProcess::setup_process(PID::new(1).unwrap(), ThreadInit::default());
+        ArchProcess::setup_process(PID::new(1).unwrap(), ThreadInit::default()).expect("couldn't setup process");
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -446,16 +447,16 @@ impl SystemServices {
         Ok(())
     }
 
-    #[cfg(not(baremetal))]
-    pub fn make_callback_to(
-        &mut self,
-        _pid: PID,
-        _pc: *const usize,
-        _irq_no: usize,
-        _arg: *mut usize,
-    ) -> Result<(), xous_kernel::Error> {
-        Err(xous_kernel::Error::UnhandledSyscall)
-    }
+    // #[cfg(not(baremetal))]
+    // pub fn make_callback_to(
+    //     &mut self,
+    //     _pid: PID,
+    //     _pc: *const usize,
+    //     _irq_no: usize,
+    //     _arg: *mut usize,
+    // ) -> Result<(), xous_kernel::Error> {
+    //     Err(xous_kernel::Error::UnhandledSyscall)
+    // }
 
     /// Create a stack frame in the specified process and jump to it.
     /// 1. Pause the current process and switch to the new one
@@ -854,7 +855,8 @@ impl SystemServices {
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
                     println!("Setting up new process...");
-                    ArchProcess::setup_process(new_pid, thread_init);
+                    ArchProcess::setup_process(new_pid, thread_init)
+                        .expect("couldn't set up new process");
 
                     ProcessState::Running(0)
                 }
@@ -899,16 +901,16 @@ impl SystemServices {
                     previous_pid, other
                 ),
             };
-            // if advance_thread {
-            //     previous.current_thread += 1;
-            //     if previous.current_thread as TID > arch::process::MAX_CONTEXT {
-            //         previous.current_thread = 0;
-            //     }
-            // }
-            // println!(
-            //     "Set previous process PID {} state to {:?} (with can_resume = {})",
-            //     previous_pid, previous.state, can_resume
-            // );
+        // if advance_thread {
+        //     previous.current_thread += 1;
+        //     if previous.current_thread as TID > arch::process::MAX_CONTEXT {
+        //         previous.current_thread = 0;
+        //     }
+        // }
+        // println!(
+        //     "Set previous process PID {} state to {:?} (with can_resume = {})",
+        //     previous_pid, previous.state, can_resume
+        // );
         } else {
             // if self.current_thread(previous_pid) == new_tid {
             //     if !can_resume {
@@ -1367,7 +1369,8 @@ impl SystemServices {
             for (server_idx, server) in self.servers.iter().enumerate() {
                 if let Some(allocated_server) = server {
                     if allocated_server.sid == sid {
-                        process_inner.connection_map[slot_idx] = Some(NonZeroU8::new((server_idx as u8) + 2).unwrap());
+                        process_inner.connection_map[slot_idx] =
+                            Some(NonZeroU8::new((server_idx as u8) + 2).unwrap());
                         // println!(
                         //     "KERNEL({}): New connection to {:?}. After connection, process connection map is: {:?}",
                         //     _pid.get(),
