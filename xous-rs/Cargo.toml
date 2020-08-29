@@ -6,7 +6,7 @@ edition = "2018"
 description = "System call interface for Xous"
 
 [dependencies]
-bitflags = "1.2.1"
+bitflags = "1"
 xous-macros = { path = "../macros", version = "0.1.0" }
 
 [features]
