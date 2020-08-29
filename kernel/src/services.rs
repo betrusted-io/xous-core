@@ -411,7 +411,7 @@ impl SystemServices {
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
-            println!("Finishing callback in PID {}", current_pid);
+            // println!("Finishing callback in PID {}", current_pid);
             current.state = match current.state {
                 ProcessState::Running(0) => ProcessState::Sleeping,
                 ProcessState::Running(x) => ProcessState::Ready(x),
@@ -484,7 +484,7 @@ impl SystemServices {
                 }
                 y => panic!("current process was {:?}, not 'Running(_)'", y),
             };
-            println!("Making PID {} state {:?}", current_pid, current.state);
+            // println!("Making PID {} state {:?}", current_pid, current.state);
         }
 
         // Get the new process, and ensure that it is in a state where it's fit
@@ -786,10 +786,10 @@ impl SystemServices {
     ) -> Result<TID, xous_kernel::Error> {
         // println!("Activating PID {}, context {}", new_pid, new_tid);
         let previous_pid = self.current_pid();
-        println!(
-            "KERNEL({}): Activating process {} thread {}",
-            previous_pid, new_pid, new_tid
-        );
+        // println!(
+        //     "KERNEL({}): Activating process {} thread {}",
+        //     previous_pid, new_pid, new_tid
+        // );
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -905,10 +905,10 @@ impl SystemServices {
             //         previous.current_thread = 0;
             //     }
             // }
-            println!(
-                "Set previous process PID {} state to {:?} (with can_resume = {})",
-                previous_pid, previous.state, can_resume
-            );
+            // println!(
+            //     "Set previous process PID {} state to {:?} (with can_resume = {})",
+            //     previous_pid, previous.state, can_resume
+            // );
         } else {
             // if self.current_thread(previous_pid) == new_tid {
             //     if !can_resume {
