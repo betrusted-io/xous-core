@@ -720,7 +720,7 @@ pub fn map_memory(
 pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
     crate::arch::unmap_memory_pre(&range)?;
     let result = rsyscall(SysCall::UnmapMemory(range))?;
-    if let Result::Ok = result {
+    if let crate::Result::Ok = result {
         crate::arch::unmap_memory_post(range)?;
         Ok(())
     } else if let Result::Error(e) = result {
@@ -734,7 +734,7 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
 /// The `size` field must be page-aligned.
 pub fn return_memory(sender: MessageSender, mem: MemoryRange) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnMemory(sender, mem))?;
-    if let Result::Ok = result {
+    if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
         Err(e)
@@ -754,7 +754,7 @@ pub fn claim_interrupt(
         MemoryAddress::new(callback as *mut usize as usize).ok_or(Error::InvalidSyscall)?,
         MemoryAddress::new(arg as *mut usize as usize),
     ))?;
-    if let Result::Ok = result {
+    if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
         Err(e)
