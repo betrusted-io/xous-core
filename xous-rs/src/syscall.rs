@@ -225,15 +225,26 @@ pub enum SysCall {
     CreateServer(SID /* server hash */),
 
     /// Connect to a server.   This turns a 128-bit Serever ID into a 32-bit
+    /// Connection ID. Blocks until the server is available.
+    ///
+    /// # Errors
+    ///
+    /// None
+    Connect(SID /* server id */),
+
+    /// Try to connect to a server.   This turns a 128-bit Serever ID into a 32-bit
     /// Connection ID.
     ///
     /// # Errors
     ///
     /// * **ServerNotFound**: The server could not be found.
-    Connect(SID /* server id */),
+    TryConnect(SID /* server id */),
 
-    /// Send a message to a server
+    /// Send a message to a server (blocking until it's ready)
     SendMessage(CID, Message),
+
+    /// Try to send a message to a server
+    TrySendMessage(CID, Message),
 
     /// Return a Borrowed memory region to a sender
     ReturnMemory(MessageSender, MemoryRange),
@@ -280,6 +291,8 @@ enum SysCallNumber {
     CreateProcess = 21,
     TerminateProcess = 22,
     Shutdown = 23,
+    TrySendMessage = 24,
+    TryConnect = 25,
     Invalid,
 }
 
@@ -309,6 +322,8 @@ impl SysCallNumber {
             21 => CreateProcess,
             22 => TerminateProcess,
             23 => Shutdown,
+            24 => TrySendMessage,
+            25 => TryConnect,
             _ => Invalid,
         }
     }
@@ -540,6 +555,61 @@ impl SysCall {
                 0,
             ],
             SysCall::Shutdown => [SysCallNumber::Shutdown as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::TryConnect(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::TryConnect as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::TrySendMessage(a1, ref a2) => match a2 {
+                Message::MutableBorrow(mm) => [
+                    SysCallNumber::TrySendMessage as usize,
+                    *a1,
+                    1,
+                    mm.id as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
+                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
+                ],
+                Message::Borrow(mm) => [
+                    SysCallNumber::TrySendMessage as usize,
+                    *a1,
+                    2,
+                    mm.id as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
+                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
+                ],
+                Message::Move(mm) => [
+                    SysCallNumber::TrySendMessage as usize,
+                    *a1,
+                    3,
+                    mm.id as usize,
+                    mm.buf.as_ptr() as usize,
+                    mm.buf.len(),
+                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
+                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
+                ],
+                Message::Scalar(sc) => [
+                    SysCallNumber::TrySendMessage as usize,
+                    *a1,
+                    4,
+                    sc.id as usize,
+                    sc.arg1,
+                    sc.arg2,
+                    sc.arg3,
+                    sc.arg4,
+                ],
+            },
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -659,6 +729,49 @@ impl SysCall {
             }
             SysCallNumber::TerminateProcess => SysCall::TerminateProcess,
             SysCallNumber::Shutdown => SysCall::Shutdown,
+            SysCallNumber::TryConnect => {
+                SysCall::TryConnect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            }
+            SysCallNumber::TrySendMessage => match a2 {
+                1 => SysCall::TrySendMessage(
+                    a1,
+                    Message::MutableBorrow(MemoryMessage {
+                        id: a3,
+                        buf: MemoryRange::new(a4, a5)?,
+                        offset: MemoryAddress::new(a6),
+                        valid: MemorySize::new(a7),
+                    }),
+                ),
+                2 => SysCall::TrySendMessage(
+                    a1,
+                    Message::Borrow(MemoryMessage {
+                        id: a3,
+                        buf: MemoryRange::new(a4, a5)?,
+                        offset: MemoryAddress::new(a6),
+                        valid: MemorySize::new(a7),
+                    }),
+                ),
+                3 => SysCall::TrySendMessage(
+                    a1,
+                    Message::Move(MemoryMessage {
+                        id: a3,
+                        buf: MemoryRange::new(a4, a5)?,
+                        offset: MemoryAddress::new(a6),
+                        valid: MemorySize::new(a7),
+                    }),
+                ),
+                4 => SysCall::TrySendMessage(
+                    a1,
+                    Message::Scalar(ScalarMessage {
+                        id: a3,
+                        arg1: a4,
+                        arg2: a5,
+                        arg3: a6,
+                        arg4: a7,
+                    }),
+                ),
+                _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
+            },
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -798,6 +911,18 @@ pub fn connect(server: SID) -> core::result::Result<CID, Error> {
     }
 }
 
+/// Connect to a server with the given SID
+pub fn try_connect(server: SID) -> core::result::Result<CID, Error> {
+    let result = rsyscall(SysCall::TryConnect(server))?;
+    if let Result::ConnectionID(cid) = result {
+        Ok(cid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
 /// Suspend the current process until a message is received.  This thread will
 /// block until a message is received.
 ///
@@ -824,6 +949,24 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **ServerQueueFull**: The queue in the server is full, and this call would block
+/// * **Timeout**: The timeout limit has been reached
+pub fn try_send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::TrySendMessage(connection, message));
+    if let Ok(Result::Ok) = result {
+        Ok(())
+    } else if let Err(e) = result {
+        Err(e)
+    } else {
+        panic!("Unexpected return value: {:?}", result);
+    }
+}
+
+/// Send a message to a server, but keep trying if the server queue is full.
+///
+/// # Errors
+///
+/// * **ServerNotFound**: The server does not exist so the connection is now invalid
+/// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
 pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::SendMessage(connection, message));
