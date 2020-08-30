@@ -25,7 +25,7 @@ fn move_lfsr(mut lfsr: u32) -> u32 {
 
 fn ensure_connection(server: xous::SID) -> xous::CID {
     loop {
-        if let Ok(cid) = xous::syscall::connect(server) {
+        if let Ok(cid) = xous::syscall::try_connect(server) {
             return cid;
         }
         xous::syscall::yield_slice();
@@ -124,7 +124,7 @@ fn shell_main() -> ! {
         let lfsr = move_lfsr(lfsr);
         if lfsr.trailing_zeros() >= 3 {
             loop {
-                match xous::syscall::send_message(
+                match xous::syscall::try_send_message(
                     log_conn,
                     xous::Message::Scalar(xous::ScalarMessage {
                         id: counter + 4096,
