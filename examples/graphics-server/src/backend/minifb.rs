@@ -59,11 +59,15 @@ impl DrawTarget<BinaryColor> for XousDisplay {
     /// Draw a `Pixel` that has a color defined as `Gray8`.
     fn draw_pixel(&mut self, pixel: Pixel<BinaryColor>) -> Result<(), Self::Error> {
         let Pixel(point, color) = pixel;
-        self.buffer[(point.y * (WIDTH as i32) + point.x) as usize] = if color == BinaryColor::On {
-            LIGHT_COLOUR
-        } else {
-            DARK_COLOUR
-        };
+        let w = WIDTH as _;
+        let h = HEIGHT as _;
+        if point.x < w && point.y < h && point.x >= 0 && point.y >= 0 {
+            self.buffer[(point.y * w + point.x) as usize] = if color == BinaryColor::On {
+                LIGHT_COLOUR
+            } else {
+                DARK_COLOUR
+            };
+        }
         Ok(())
     }
 
