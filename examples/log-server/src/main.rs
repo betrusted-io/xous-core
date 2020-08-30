@@ -196,8 +196,7 @@ mod implementation {
 }
 
 fn reader_thread(mut output: implementation::OutputWriter) {
-    writeln!(output, "Xous Logging Server starting up...").unwrap();
-    // std::thread::sleep(std::time::Duration::from_secs(1));
+    writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
     writeln!(output, "LOG: Starting log server...").unwrap();
     let server_addr = xous::create_server(b"xous-logs-output").unwrap();
