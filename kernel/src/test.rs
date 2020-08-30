@@ -134,7 +134,7 @@ fn send_scalar_message() {
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             assert_eq!(
-                envelope.message,
+                envelope.body,
                 xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                     id: 1,
                     arg1: 2,
@@ -196,7 +196,7 @@ fn send_move_message() {
             // println!("SERVER: Starting to receive messages...");
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             // println!("SERVER: Received message from {}", envelope.sender);
-            let message = envelope.message;
+            let message = envelope.body;
             if let xous_kernel::Message::Move(m) = message {
                 let buf = m.buf;
                 let bt = unsafe {
@@ -254,7 +254,7 @@ fn send_borrow_message() {
             // println!("SERVER: Receiving message...");
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             // println!("SERVER: Received message from {}", envelope.sender);
-            let message = envelope.message;
+            let message = envelope.body;
             if let xous_kernel::Message::Borrow(m) = message {
                 let buf = m.buf;
                 let bt = unsafe {
@@ -323,7 +323,7 @@ fn send_mutableborrow_message() {
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             // println!("Received message from {}", envelope.sender);
-            let message = envelope.message;
+            let message = envelope.body;
             if let xous_kernel::Message::MutableBorrow(m) = message {
                 let buf = m.buf;
                 let mut bt = unsafe {
@@ -395,7 +395,7 @@ fn send_mutableborrow_message_repeat() {
 
             for iteration in 0..loops {
                 let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
-                let message = envelope.message;
+                let message = envelope.body;
                 if let xous_kernel::Message::MutableBorrow(m) = message {
                     let buf = m.buf;
                     let mut bt = unsafe {
@@ -504,7 +504,7 @@ fn server_client_same_process() {
 
             let msg = xous_kernel::receive_message(server).expect("couldn't receive message");
 
-            assert_eq!(msg.message, xous_kernel::Message::Scalar(msg_contents));
+            assert_eq!(msg.body, xous_kernel::Message::Scalar(msg_contents));
         },
     ))
     .expect("couldn't start server");
@@ -538,11 +538,11 @@ fn multiple_contexts() {
             };
 
             let mut server_threads = vec![];
-            for _ in 0..crate::arch::process::MAX_THREAD {
+            for _ in 1..crate::arch::process::MAX_THREAD {
                 server_threads.push(
                     xous_kernel::create_thread(move || {
                         let msg = xous_kernel::receive_message(server).expect("couldn't receive message");
-                        assert_eq!(msg.message, xous_kernel::Message::Scalar(msg_contents));
+                        assert_eq!(msg.body, xous_kernel::Message::Scalar(msg_contents));
                     })
                     .expect("couldn't spawn client thread"),
                 );
@@ -594,7 +594,7 @@ fn process_restart_server() {
                 let thr = xous_kernel::create_thread(move || {
                     let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
                     // println!("Received message from {}", envelope.sender);
-                    let message = envelope.message;
+                    let message = envelope.body;
                     if let xous_kernel::Message::Move(m) = message {
                         let buf = m.buf;
                         let bt = unsafe {
