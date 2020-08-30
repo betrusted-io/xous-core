@@ -102,6 +102,7 @@ fn run(debug: bool) -> Result<(), DynError> {
     let mut dir = project_root();
     dir.push("kernel");
 
+    println!("Building and running kernel...");
     let status = Command::new(cargo())
         .current_dir(dir)
         .args(&args)
