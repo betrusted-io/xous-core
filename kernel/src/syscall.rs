@@ -517,12 +517,11 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         SysCall::CreateServer(name) => {
             SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous_kernel::Result::ServerID))
         }
-        SysCall::Connect(sid) => {
-            // ::debug_here::debug_here!();
+        SysCall::TryConnect(sid) => {
             SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
         }
         SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, sender, buf),
-        SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+        SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
             let ppid = ss.terminate_process(pid)?;
@@ -534,6 +533,12 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             }
         }),
         SysCall::Shutdown => SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok)),
+
+        // SysCall::Connect(sid) => {
+        //     SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
+        // }
+        // SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }
