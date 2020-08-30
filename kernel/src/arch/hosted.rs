@@ -455,10 +455,10 @@ pub fn idle() -> bool {
                 // into a PID, and register the connection with the server.
                 let new_pid =
                     crate::arch::process::register_connection_for_key(conn, access_key).unwrap();
-                println!(
-                    "KERNEL: Access key {:?} mapped to PID {}",
-                    access_key, new_pid
-                );
+                // println!(
+                //     "KERNEL: Access key {:?} mapped to PID {}",
+                //     access_key, new_pid
+                // );
 
                 // Inform the backchannel of the new process ID.
                 new_pid_sender

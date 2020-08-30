@@ -1312,12 +1312,12 @@ impl SystemServices {
 
                 #[cfg(not(baremetal))]
                 let backing = MemoryRange::new(4096, 4096).unwrap();
-                println!(
-                    "KERNEL({}): Found a free slot for server {:?} @ {} -- allocating an entry",
-                    pid.get(),
-                    sid,
-                    _idx,
-                );
+                // println!(
+                //     "KERNEL({}): Found a free slot for server {:?} @ {} -- allocating an entry",
+                //     pid.get(),
+                //     sid,
+                //     _idx,
+                // );
 
                 // Initialize the server with the given memory page.
                 Server::init(entry, pid, sid, backing).map_err(|x| x)?;
