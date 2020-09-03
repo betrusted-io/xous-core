@@ -203,7 +203,7 @@ fn send_move_message() {
             if let xous_kernel::Message::Move(m) = message {
                 let buf = m.buf;
                 let bt = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
-                assert_eq!(*test_bytes, *bt);
+                assert_eq!(*test_bytes, *bt, "message was changed by the kernel");
             // let s = String::from_utf8_lossy(&bt);
             // println!("SERVER: Got message: {:?} -> \"{}\"", bt, s);
             } else {
