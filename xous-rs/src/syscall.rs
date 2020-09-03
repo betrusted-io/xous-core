@@ -268,7 +268,7 @@ pub enum SysCall {
 }
 
 // #[derive(FromPrimitive)]
-enum SysCallNumber {
+pub enum SysCallNumber {
     MapMemory = 2,
     Yield = 3,
     ReturnToParentI = 4,
