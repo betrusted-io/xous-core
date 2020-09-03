@@ -101,7 +101,8 @@ fn handle_connection(
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
 
-            if packet_data[1] == 16
+            if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
+                || packet_data[1] == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
                 && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
             {
                 let mut v = vec![0; packet_data[6]];
@@ -180,39 +181,41 @@ fn handle_connection(
                         //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
                         //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
                         // );
-                        if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
-                            match envelope {
-                                xous_kernel::Message::MutableBorrow(msg)
-                                | xous_kernel::Message::Borrow(msg)
-                                | xous_kernel::Message::Move(msg) => {
-                                    // Update the address pointer. This will get turned back into a
-                                    // usable pointer by casting it back into a &[T] on the other
-                                    // side. This is just a pointer to the start of data
-                                    // as well as the index into the data it points at. The lengths
-                                    // should still be equal once we reconstitute the data in the
-                                    // other process.
-                                    // ::debug_here::debug_here!();
-                                    let sliced_data = data.into_boxed_slice();
-                                    assert_eq!(
-                                        sliced_data.len(),
-                                        msg.buf.len(),
-                                        "deconstructed data {} != message buf length {}",
-                                        sliced_data.len(),
-                                        msg.buf.len()
-                                    );
-                                    msg.buf.addr =
-                                        match MemoryAddress::new(Box::into_raw(sliced_data)
-                                            as *mut u8
-                                            as usize)
-                                        {
-                                            Some(a) => a,
-                                            _ => unreachable!(),
-                                        };
+                        match call {
+                            SysCall::SendMessage(ref _cid, ref mut envelope)
+                            | SysCall::TrySendMessage(ref _cid, ref mut envelope) => {
+                                match envelope {
+                                    xous_kernel::Message::MutableBorrow(msg)
+                                    | xous_kernel::Message::Borrow(msg)
+                                    | xous_kernel::Message::Move(msg) => {
+                                        // Update the address pointer. This will get turned back into a
+                                        // usable pointer by casting it back into a &[T] on the other
+                                        // side. This is just a pointer to the start of data
+                                        // as well as the index into the data it points at. The lengths
+                                        // should still be equal once we reconstitute the data in the
+                                        // other process.
+                                        // ::debug_here::debug_here!();
+                                        let sliced_data = data.into_boxed_slice();
+                                        assert_eq!(
+                                            sliced_data.len(),
+                                            msg.buf.len(),
+                                            "deconstructed data {} != message buf length {}",
+                                            sliced_data.len(),
+                                            msg.buf.len()
+                                        );
+                                        msg.buf.addr =
+                                            match MemoryAddress::new(Box::into_raw(sliced_data)
+                                                as *mut u8
+                                                as usize)
+                                            {
+                                                Some(a) => a,
+                                                _ => unreachable!(),
+                                            };
+                                    }
+                                    xous_kernel::Message::Scalar(_) => (),
                                 }
-                                xous_kernel::Message::Scalar(_) => (),
                             }
-                        } else {
-                            panic!("unsupported message type");
+                            _ => panic!("unsupported message type"),
                         }
                         chn.send(ThreadMessage::SysCall(pid, thread_id, call))
                             .expect("couldn't make syscall");
