@@ -293,8 +293,7 @@ fn listen_thread(
         should_exit.store(true, core::sync::atomic::Ordering::Relaxed);
         for (jh, conn) in clients {
             use std::net::Shutdown;
-            conn.shutdown(Shutdown::Both)
-                .expect("couldn't shutdown client");
+            conn.shutdown(Shutdown::Both).ok();
             jh.join().expect("couldn't join client thread");
         }
     }
