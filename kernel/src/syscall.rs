@@ -181,7 +181,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
-fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
+fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from_usize(sender)?;
 
@@ -239,7 +239,9 @@ fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -
         // Return the memory to the calling process
         ss.return_memory(
             server_addr.get() as _,
+            tid,
             client_pid,
+            client_tid,
             client_addr.get() as _,
             len.get(),
         )?;

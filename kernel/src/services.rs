@@ -1164,7 +1164,9 @@ impl SystemServices {
     pub fn return_memory(
         &mut self,
         src_virt: *mut u8,
+        _src_tid: TID,
         dest_pid: PID,
+        _dest_tid: TID,
         dest_virt: *mut u8,
         len: usize,
     ) -> Result<*mut u8, xous_kernel::Error> {
@@ -1212,7 +1214,9 @@ impl SystemServices {
     pub fn return_memory(
         &mut self,
         src_virt: *mut u8,
+        _src_tid: TID,
         dest_pid: PID,
+        dest_tid: TID,
         _dest_virt: *mut u8,
         len: usize,
     ) -> Result<*mut u8, xous_kernel::Error> {
@@ -1222,7 +1226,7 @@ impl SystemServices {
             let target_process = self.get_process(dest_pid)?;
             target_process.activate()?;
             let mut arch_process = crate::arch::process::Process::current();
-            arch_process.return_memory(buf);
+            arch_process.return_memory(dest_tid, buf);
         }
         let target_process = self.get_process(current_pid)?;
         target_process.activate()?;
