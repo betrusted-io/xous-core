@@ -559,10 +559,15 @@ fn _xous_syscall_result(
 
                     crate::Message::Move(crate::MemoryMessage {
                         id: _id,
-                        buf: _buf,
+                        buf,
                         offset: _offset,
                         valid: _valid,
-                    }) => (),
+                    }) => {
+                        // In a hosted environment, the message contents are leaked when
+                        // it gets converted into a MemoryMessage. Now that the call is
+                        // complete, free the memory.
+                        mem::unmap_memory_post(*buf).unwrap();
+                    },
                     // Nothing to do for Immutable borrow, since the memory can't change
                     crate::Message::Scalar(_) => (),
                 }
@@ -612,33 +617,36 @@ fn _xous_syscall_to(
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
         pkt.extend_from_slice(&word.to_le_bytes());
     }
-    if let crate::SysCall::SendMessage(_, ref msg) = call {
-        match msg {
-            crate::Message::MutableBorrow(crate::MemoryMessage {
-                id: _id,
-                buf,
-                offset: _offset,
-                valid: _valid,
-            })
-            | crate::Message::Borrow(crate::MemoryMessage {
-                id: _id,
-                buf,
-                offset: _offset,
-                valid: _valid,
-            })
-            | crate::Message::Move(crate::MemoryMessage {
-                id: _id,
-                buf,
-                offset: _offset,
-                valid: _valid,
-            }) => {
-                use core::slice;
-                let data: &[u8] =
-                    unsafe { slice::from_raw_parts(buf.addr.get() as _, buf.size.get()) };
-                pkt.extend_from_slice(data);
+    match call {
+        crate::SysCall::SendMessage(_, ref msg) | crate::SysCall::TrySendMessage(_, ref msg) => {
+            match msg {
+                crate::Message::MutableBorrow(crate::MemoryMessage {
+                    id: _id,
+                    buf,
+                    offset: _offset,
+                    valid: _valid,
+                })
+                | crate::Message::Borrow(crate::MemoryMessage {
+                    id: _id,
+                    buf,
+                    offset: _offset,
+                    valid: _valid,
+                })
+                | crate::Message::Move(crate::MemoryMessage {
+                    id: _id,
+                    buf,
+                    offset: _offset,
+                    valid: _valid,
+                }) => {
+                    use core::slice;
+                    let data: &[u8] =
+                        unsafe { slice::from_raw_parts(buf.addr.get() as _, buf.size.get()) };
+                    pkt.extend_from_slice(data);
+                }
+                crate::Message::Scalar(_) => (),
             }
-            crate::Message::Scalar(_) => (),
         }
+        _ => (),
     }
 
     xsc.write_all(&pkt).expect("Server shut down");
