@@ -487,40 +487,20 @@ impl SysCall {
                 ]
             }
             SysCall::SendMessage(a1, ref a2) => match a2 {
-                Message::MutableBorrow(mm) => [
+                Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
                     SysCallNumber::SendMessage as usize,
                     *a1,
-                    1,
+                    a2.message_type(),
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
                     mm.buf.len(),
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
-                Message::Borrow(mm) => [
+                Message::Scalar(sc) | Message::BlockingScalar(sc) => [
                     SysCallNumber::SendMessage as usize,
                     *a1,
-                    2,
-                    mm.id as usize,
-                    mm.buf.as_ptr() as usize,
-                    mm.buf.len(),
-                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
-                ],
-                Message::Move(mm) => [
-                    SysCallNumber::SendMessage as usize,
-                    *a1,
-                    3,
-                    mm.id as usize,
-                    mm.buf.as_ptr() as usize,
-                    mm.buf.len(),
-                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
-                ],
-                Message::Scalar(sc) => [
-                    SysCallNumber::SendMessage as usize,
-                    *a1,
-                    4,
+                    a2.message_type(),
                     sc.id as usize,
                     sc.arg1,
                     sc.arg2,
@@ -569,40 +549,20 @@ impl SysCall {
                 ]
             }
             SysCall::TrySendMessage(a1, ref a2) => match a2 {
-                Message::MutableBorrow(mm) => [
+                Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
                     SysCallNumber::TrySendMessage as usize,
                     *a1,
-                    1,
+                    a2.message_type(),
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
                     mm.buf.len(),
                     mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
                     mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
                 ],
-                Message::Borrow(mm) => [
+                Message::Scalar(sc) | Message::BlockingScalar(sc) => [
                     SysCallNumber::TrySendMessage as usize,
                     *a1,
-                    2,
-                    mm.id as usize,
-                    mm.buf.as_ptr() as usize,
-                    mm.buf.len(),
-                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
-                ],
-                Message::Move(mm) => [
-                    SysCallNumber::TrySendMessage as usize,
-                    *a1,
-                    3,
-                    mm.id as usize,
-                    mm.buf.as_ptr() as usize,
-                    mm.buf.len(),
-                    mm.offset.map(|x| x.get()).unwrap_or(0) as usize,
-                    mm.valid.map(|x| x.get()).unwrap_or(0) as usize,
-                ],
-                Message::Scalar(sc) => [
-                    SysCallNumber::TrySendMessage as usize,
-                    *a1,
-                    4,
+                    a2.message_type(),
                     sc.id as usize,
                     sc.arg1,
                     sc.arg2,

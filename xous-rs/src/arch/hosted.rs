@@ -567,9 +567,9 @@ fn _xous_syscall_result(
                         // it gets converted into a MemoryMessage. Now that the call is
                         // complete, free the memory.
                         mem::unmap_memory_post(*buf).unwrap();
-                    },
+                    }
                     // Nothing to do for Immutable borrow, since the memory can't change
-                    crate::Message::Scalar(_) => (),
+                    crate::Message::Scalar(_) | crate::Message::BlockingScalar(_) => (),
                 }
             }
             _ => (),
@@ -620,30 +620,15 @@ fn _xous_syscall_to(
     match call {
         crate::SysCall::SendMessage(_, ref msg) | crate::SysCall::TrySendMessage(_, ref msg) => {
             match msg {
-                crate::Message::MutableBorrow(crate::MemoryMessage {
-                    id: _id,
-                    buf,
-                    offset: _offset,
-                    valid: _valid,
-                })
-                | crate::Message::Borrow(crate::MemoryMessage {
-                    id: _id,
-                    buf,
-                    offset: _offset,
-                    valid: _valid,
-                })
-                | crate::Message::Move(crate::MemoryMessage {
-                    id: _id,
-                    buf,
-                    offset: _offset,
-                    valid: _valid,
-                }) => {
+                crate::Message::MutableBorrow(m)
+                | crate::Message::Borrow(m)
+                | crate::Message::Move(m) => {
                     use core::slice;
                     let data: &[u8] =
-                        unsafe { slice::from_raw_parts(buf.addr.get() as _, buf.size.get()) };
+                        unsafe { slice::from_raw_parts(m.buf.addr.get() as _, m.buf.size.get()) };
                     pkt.extend_from_slice(data);
                 }
-                crate::Message::Scalar(_) => (),
+                crate::Message::Scalar(_) | crate::Message::BlockingScalar(_) => (),
             }
         }
         _ => (),

@@ -305,6 +305,16 @@ impl Message {
             Message::BlockingScalar(_) | Message::Scalar(_) => false,
         }
     }
+
+    pub fn message_type(&self) -> usize {
+        match *self {
+            Message::MutableBorrow(_) => 1,
+            Message::Borrow(_) => 2,
+            Message::Move(_) => 3,
+            Message::Scalar(_) => 4,
+            Message::BlockingScalar(_) => 5,
+        }
+    }
 }
 
 #[repr(C)]
