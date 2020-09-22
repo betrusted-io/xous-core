@@ -55,7 +55,7 @@ impl<'a> Carton<'a> {
 
     /// Perform an immutable lend of this Carton to the specified server.
     /// This function will block until the server returns.
-    pub fn lend(&self, connection: CID, id: usize) -> Result<(), Error> {
+    pub fn lend(&self, connection: CID, id: usize) -> Result<crate::Result, Error> {
         let msg = MemoryMessage {
             id,
             buf: self.valid,
@@ -66,7 +66,7 @@ impl<'a> Carton<'a> {
     }
 
     /// Perform a mutable lend of this Carton to the server.
-    pub fn lend_mut(&mut self, connection: CID, id: usize) -> Result<(), Error> {
+    pub fn lend_mut(&mut self, connection: CID, id: usize) -> Result<crate::Result, Error> {
         let msg = MemoryMessage {
             id,
             buf: self.valid,

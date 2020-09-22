@@ -246,8 +246,14 @@ pub enum SysCall {
     /// Try to send a message to a server
     TrySendMessage(CID, Message),
 
-    /// Return a Borrowed memory region to a sender
+    /// Return a Borrowed memory region to the sender
     ReturnMemory(MessageSender, MemoryRange),
+
+    /// Return a scalar to the sender
+    ReturnScalar1(MessageSender, usize),
+
+    /// Return two scalars to the sender
+    ReturnScalar2(MessageSender, usize, usize),
 
     /// Spawn a new thread
     CreateThread(ThreadInit),
@@ -293,6 +299,8 @@ pub enum SysCallNumber {
     Shutdown = 23,
     TrySendMessage = 24,
     TryConnect = 25,
+    ReturnScalar1 = 26,
+    ReturnScalar2 = 27,
     Invalid,
 }
 
@@ -324,6 +332,8 @@ impl SysCallNumber {
             23 => Shutdown,
             24 => TrySendMessage,
             25 => TryConnect,
+            26 => ReturnScalar1,
+            27 => ReturnScalar2,
             _ => Invalid,
         }
     }
@@ -570,6 +580,8 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
+            SysCall::ReturnScalar1(sender, arg1) => [SysCallNumber::ReturnScalar1 as usize, *sender, *arg1, 0, 0, 0, 0, 0],
+            SysCall::ReturnScalar2(sender, arg1, arg2) => [SysCallNumber::ReturnScalar2 as usize, *sender, *arg1, *arg2, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -752,6 +764,8 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
+            SysCallNumber::ReturnScalar1 => SysCall::ReturnScalar1(a1, a2),
+            SysCallNumber::ReturnScalar2 => SysCall::ReturnScalar2(a1, a2, a3),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -827,6 +841,19 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
 /// The `size` field must be page-aligned.
 pub fn return_memory(sender: MessageSender, mem: MemoryRange) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnMemory(sender, mem))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnScalar1(sender, val))?;
     if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -930,14 +957,14 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **ServerQueueFull**: The queue in the server is full, and this call would block
 /// * **Timeout**: The timeout limit has been reached
-pub fn try_send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
+pub fn try_send_message(connection: CID, message: Message) -> core::result::Result<Result, Error> {
     let result = rsyscall(SysCall::TrySendMessage(connection, message));
-    if let Ok(Result::Ok) = result {
-        Ok(())
-    } else if let Err(e) = result {
-        Err(e)
-    } else {
-        panic!("Unexpected return value: {:?}", result);
+    match result {
+        Ok(Result::Ok) => Ok(Result::Ok),
+        Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
+        Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Err(e) => Err(e),
+        v => panic!("Unexpected return value: {:?}", v),
     }
 }
 
