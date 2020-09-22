@@ -1,6 +1,6 @@
 pub use crate::arch::process::Thread;
 use core::mem;
-use xous_kernel::{TID, MemoryAddress, MemoryRange, MemorySize, Message, PID, SID};
+use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, PID, SID, TID};
 
 pub struct SenderID {
     pub sidx: usize,
@@ -36,6 +36,16 @@ pub enum WaitingMessage {
 #[derive(PartialEq, Debug)]
 enum QueuedMessage {
     Empty,
+    BlockingScalarMessage(
+        u16,   /* sender PID */
+        u16,   /* Sender CTX */
+        usize, /* sender base address */
+        usize, /* id */
+        usize, /* arg1 */
+        usize, /* arg2 */
+        usize, /* arg3 */
+        usize, /* arg4 */
+    ),
     ScalarMessage(
         u16,   /* sender PID */
         u16,   /* Sender CTX */
@@ -103,6 +113,19 @@ enum QueuedMessage {
         usize, /* valid */
     ),
 
+    /// The process waiting for the response terminated before
+    /// we could receive the message.
+    BlockingScalarTerminated(
+        u16,   /* sender PID */
+        u16,   /* Sender CTX */
+        usize, /* sender base address */
+        usize, /* id */
+        usize, /* arg1 */
+        usize, /* arg2 */
+        usize, /* arg3 */
+        usize, /* arg4 */
+    ),
+
     /// When a message is taken that needs to be returned -- such as an ROLend
     /// or RWLend -- the slot is replaced with a WaitingResponse token and its
     /// index is returned as the message sender.  This is used to unblock the
@@ -124,6 +147,10 @@ enum QueuedMessage {
         usize, /* Server base address */
         usize, /* Range size */
     ),
+
+    /// This is the state when a message is blocking, but has no associated memory
+    /// page.
+    WaitingScalar(u16 /* sender PID */, u16 /* sender CTX */),
 }
 
 /// A pointer to resolve a server ID to a particular process
@@ -262,6 +289,22 @@ impl Server {
                         );
                     }
                 }
+                QueuedMessage::BlockingScalarMessage(
+                    msg_pid,
+                    ctx,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                    arg5,
+                    arg6,
+                ) => {
+                    if msg_pid == pid.get() as _ {
+                        *entry = QueuedMessage::BlockingScalarTerminated(
+                            msg_pid, ctx, arg1, arg2, arg3, arg4, arg5, arg6,
+                        );
+                    }
+                }
                 // For "Scalar" and "Move" messages, this memory has already
                 // been moved into this process, so memory will be reclaimed
                 // when the process terminates.
@@ -343,10 +386,11 @@ impl Server {
         //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}",
         //     self.queue_head, self.queue_tail, self.queue[self.queue_tail]
         // );
-        let result = match self.queue[self.queue_tail] {
+        let (result, response) = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::WaitingResponse(_, _, _, _, _) => return None,
             QueuedMessage::WaitingForget(_, _, _, _, _) => return None,
+            QueuedMessage::WaitingScalar(_, _) => return None,
             QueuedMessage::MemoryMessageROLend(
                 pid,
                 ctx,
@@ -366,12 +410,7 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
-                pid,
-                ctx,
-                buf,
-                client_addr,
-                buf_size,
-                false,
+                QueuedMessage::WaitingForget(pid, ctx, buf, client_addr, buf_size),
             ),
             QueuedMessage::MemoryMessageRWLend(
                 pid,
@@ -392,12 +431,7 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
-                pid,
-                ctx,
-                buf,
-                client_addr,
-                buf_size,
-                false,
+                QueuedMessage::WaitingForget(pid, ctx, buf, client_addr, buf_size),
             ),
             QueuedMessage::MemoryMessageROLendTerminated(
                 pid,
@@ -418,12 +452,7 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
-                pid,
-                ctx,
-                buf,
-                client_addr,
-                buf_size,
-                true,
+                QueuedMessage::WaitingResponse(pid, ctx, buf, client_addr, buf_size),
             ),
             QueuedMessage::MemoryMessageRWLendTerminated(
                 pid,
@@ -444,12 +473,30 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
+                QueuedMessage::WaitingResponse(pid, ctx, buf, client_addr, buf_size),
+            ),
+
+            QueuedMessage::BlockingScalarMessage(
                 pid,
                 ctx,
-                buf,
-                client_addr,
-                buf_size,
-                true,
+                _reserved,
+                id,
+                arg1,
+                arg2,
+                arg3,
+                arg4,
+            ) => (
+                xous_kernel::MessageEnvelope {
+                    sender: make_sender(pid, ctx),
+                    body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                        id,
+                        arg1,
+                        arg2,
+                        arg3,
+                        arg4,
+                    }),
+                },
+                QueuedMessage::WaitingScalar(pid, ctx),
             ),
             QueuedMessage::MemoryMessageSend(
                 pid,
@@ -497,15 +544,28 @@ impl Server {
                 }
                 return Some(msg);
             }
+            QueuedMessage::BlockingScalarTerminated(pid, ctx, _reserved, id, arg1, arg2, arg3, arg4) => {
+                let msg = xous_kernel::MessageEnvelope {
+                    sender: make_sender(pid, ctx),
+                    body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                        id,
+                        arg1,
+                        arg2,
+                        arg3,
+                        arg4,
+                    }),
+                };
+                self.queue[self.queue_tail] = QueuedMessage::Empty;
+                self.queue_tail += 1;
+                if self.queue_tail >= self.queue.len() {
+                    self.queue_tail = 0;
+                }
+                return Some(msg);
+            }
         };
-        if result.6 {
-            self.queue[self.queue_tail] =
-                QueuedMessage::WaitingForget(result.1, result.2, result.3, result.4, result.5);
-        } else {
-            self.queue[self.queue_tail] =
-                QueuedMessage::WaitingResponse(result.1, result.2, result.3, result.4, result.5);
-        }
-        Some(result.0)
+
+        self.queue[self.queue_tail] = response;
+        Some(result)
     }
 
     /// Add the given message to this server's queue.
@@ -527,6 +587,16 @@ impl Server {
 
         self.queue[self.queue_head] = match message {
             xous_kernel::Message::Scalar(msg) => QueuedMessage::ScalarMessage(
+                pid.get() as _,
+                context as _,
+                original_address.map(|x| x.get()).unwrap_or(0),
+                msg.id,
+                msg.arg1,
+                msg.arg2,
+                msg.arg3,
+                msg.arg4,
+            ),
+            xous_kernel::Message::BlockingScalar(msg) => QueuedMessage::BlockingScalarMessage(
                 pid.get() as _,
                 context as _,
                 original_address.map(|x| x.get()).unwrap_or(0),
@@ -588,7 +658,9 @@ impl Server {
             return Err(xous_kernel::Error::ServerQueueFull);
         }
         let (server_address, len) = match message {
-            xous_kernel::Message::Scalar(_) | xous_kernel::Message::Move(_) => (0, 0),
+            xous_kernel::Message::Scalar(_)
+            | xous_kernel::Message::BlockingScalar(_)
+            | xous_kernel::Message::Move(_) => (0, 0),
             xous_kernel::Message::MutableBorrow(msg) | xous_kernel::Message::Borrow(msg) => {
                 (msg.buf.addr.get(), msg.buf.size.get())
             }

@@ -212,7 +212,7 @@ fn handle_connection(
                                                 _ => unreachable!(),
                                             };
                                     }
-                                    xous_kernel::Message::Scalar(_) => (),
+                                    xous_kernel::Message::Scalar(_) | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
                             }
                             _ => panic!("unsupported message type"),
