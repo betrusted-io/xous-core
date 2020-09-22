@@ -286,6 +286,17 @@ pub enum Message {
     Borrow(MemoryMessage),
     Move(MemoryMessage),
     Scalar(ScalarMessage),
+    BlockingScalar(ScalarMessage),
+}
+
+impl Message {
+    /// Determine whether the specified Message will block
+    pub fn is_blocking(&self) -> bool {
+        match *self {
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::BlockingScalar(_) => true,
+            Message::Move(_) | Message::Scalar(_) => false,
+        }
+    }
 }
 
 #[repr(C)]
@@ -302,6 +313,7 @@ impl MessageEnvelope {
             Message::Borrow(m) => (1, m.to_usize()),
             Message::Move(m) => (2, m.to_usize()),
             Message::Scalar(m) => (3, m.to_usize()),
+            Message::BlockingScalar(m) => (4, m.to_usize()),
         };
         [
             self.sender,
@@ -510,6 +522,9 @@ impl Result {
                         Some(s) => Message::Move(s),
                     },
                     3 => Message::Scalar(ScalarMessage::from_usize(
+                        src[3], src[4], src[5], src[6], src[7],
+                    )),
+                    4 => Message::BlockingScalar(ScalarMessage::from_usize(
                         src[3], src[4], src[5], src[6], src[7],
                     )),
                     _ => return Result::Error(Error::InternalError),
