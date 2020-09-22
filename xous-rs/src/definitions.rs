@@ -297,6 +297,14 @@ impl Message {
             Message::Move(_) | Message::Scalar(_) => false,
         }
     }
+
+    /// Determine whether the specified message has data attached
+    pub fn has_memory(&self) -> bool {
+        match *self {
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) => true,
+            Message::BlockingScalar(_) | Message::Scalar(_) => false,
+        }
+    }
 }
 
 #[repr(C)]
