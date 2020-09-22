@@ -43,3 +43,9 @@ $ cargo run -p tools --bin create-image -- \
 
 $
 ```
+
+## Try It Out on a Desktop
+
+Clone this repository, and run
+
+`cargo xtask run`
