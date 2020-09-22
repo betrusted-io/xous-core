@@ -678,6 +678,16 @@ impl SysCall {
                         arg4: a7,
                     }),
                 ),
+                5 => SysCall::SendMessage(
+                    a1,
+                    Message::BlockingScalar(ScalarMessage {
+                        id: a3,
+                        arg1: a4,
+                        arg2: a5,
+                        arg3: a6,
+                        arg4: a7,
+                    }),
+                ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
             SysCallNumber::ReturnMemory => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?),
@@ -723,6 +733,16 @@ impl SysCall {
                 4 => SysCall::TrySendMessage(
                     a1,
                     Message::Scalar(ScalarMessage {
+                        id: a3,
+                        arg1: a4,
+                        arg2: a5,
+                        arg3: a6,
+                        arg4: a7,
+                    }),
+                ),
+                5 => SysCall::TrySendMessage(
+                    a1,
+                    Message::BlockingScalar(ScalarMessage {
                         id: a3,
                         arg1: a4,
                         arg2: a5,
