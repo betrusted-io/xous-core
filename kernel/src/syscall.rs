@@ -34,9 +34,9 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         // Translate memory messages from the client process to the server
         // process. Additionally, determine whether the call is blocking. If
         // so, switch to the server context right away.
-        let (message, blocking) = match message {
-            Message::Scalar(_) => (message, false),
-            Message::BlockingScalar(_) => (message, true),
+        let blocking = message.is_blocking();
+        let message = match message {
+            Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
                 let new_virt = ss.send_memory(
                     msg.buf.as_mut_ptr(),
@@ -44,15 +44,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     core::ptr::null_mut(),
                     msg.buf.len(),
                 )?;
-                (
-                    Message::Move(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    false,
-                )
+                Message::Move(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
             Message::MutableBorrow(msg) => {
                 let new_virt = ss.lend_memory(
@@ -62,15 +59,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     msg.buf.len(),
                     true,
                 )?;
-                (
-                    Message::MutableBorrow(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    true,
-                )
+                Message::MutableBorrow(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
             Message::Borrow(msg) => {
                 let new_virt = ss.lend_memory(
@@ -88,15 +82,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 //     new_virt as usize,
                 //     server_pid,
                 // );
-                (
-                    Message::Borrow(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    true,
-                )
+                Message::Borrow(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
         };
 
