@@ -422,6 +422,12 @@ pub enum Result {
     /// The process is blocked and should perform the read() again
     BlockedProcess,
 
+    /// A scalar with one value
+    Scalar1(usize),
+
+    /// A scalar with two values
+    Scalar2(usize, usize),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -451,6 +457,8 @@ impl Result {
             Result::ProcessID(pid) => [10, pid.get() as _, 0, 0, 0, 0, 0, 0],
             Result::Unimplemented => [11, 0, 0, 0, 0, 0, 0, 0],
             Result::BlockedProcess => [12, 0, 0, 0, 0, 0, 0, 0],
+            Result::Scalar1(a) => [13, *a, 0, 0, 0, 0, 0, 0],
+            Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -512,6 +520,8 @@ impl Result {
             10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
             11 => Result::Unimplemented,
             12 => Result::BlockedProcess,
+            13 => Result::Scalar1(src[1]),
+            14 => Result::Scalar2(src[1], src[2]),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
