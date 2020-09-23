@@ -1288,7 +1288,7 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<SID, xous_kernel::Error> {
+    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<(SID, CID), xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Looking through server list for free server",
         //     self.pid.get()
@@ -1303,7 +1303,7 @@ impl SystemServices {
             );
         }
 
-        for (_idx, entry) in self.servers.iter_mut().enumerate() {
+        for entry in self.servers.iter_mut() {
             if entry == &None {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
@@ -1325,7 +1325,9 @@ impl SystemServices {
 
                 // Initialize the server with the given memory page.
                 Server::init(entry, pid, sid, backing).map_err(|x| x)?;
-                return Ok(sid);
+
+                let cid = self.connect_to_server(sid)?;
+                return Ok((sid, cid));
             }
         }
         Err(xous_kernel::Error::ServerNotFound)
@@ -1338,7 +1340,7 @@ impl SystemServices {
         // While doing this, find a free slot in case we haven't
         // yet connected.
 
-        let _pid = crate::arch::process::current_pid();
+        // let _pid = crate::arch::process::current_pid();
         // println!("KERNEL({}): Server table: {:?}", _pid.get(), self.servers);
         ArchProcess::with_inner_mut(|process_inner| {
             let mut slot_idx = None;
@@ -1390,7 +1392,16 @@ impl SystemServices {
     }
 
     /// Return a server based on the connection id and the current process
-    pub fn server_from_sidx(&mut self, sidx: usize) -> Option<&mut Server> {
+    pub fn server_from_sidx(&self, sidx: usize) -> Option<&Server> {
+        if sidx > self.servers.len() {
+            None
+        } else {
+            self.servers[sidx].as_ref()
+        }
+    }
+
+    /// Return a server based on the connection id and the current process
+    pub fn server_from_sidx_mut(&mut self, sidx: usize) -> Option<&mut Server> {
         if sidx > self.servers.len() {
             None
         } else {
@@ -1450,9 +1461,31 @@ impl SystemServices {
                 server_process.mapping.activate().unwrap();
             }
             let server = self
-                .server_from_sidx(sidx)
+                .server_from_sidx_mut(sidx)
                 .expect("couldn't re-discover server index");
             server.queue_message(pid, context, message, original_address)
+        };
+        let current_process = self
+            .get_process(current_pid)
+            .expect("couldn't restore previous process");
+        current_process.mapping.activate()?;
+        result
+    }
+
+    /// Obtain the connection ID of the server from within the server process.
+    pub fn server_cid(&mut self, sidx: usize) -> Result<CID, xous_kernel::Error> {
+        let current_pid = self.current_pid();
+        let result = {
+            let server = self
+                .server_from_sidx(sidx)
+                .ok_or(xous_kernel::Error::ServerNotFound)?;
+            let server_pid = server.pid;
+            let sid = server.sid;
+            {
+                let server_process = self.get_process(server_pid)?;
+                server_process.mapping.activate().unwrap();
+            }
+            self.connect_to_server(sid)
         };
         let current_process = self
             .get_process(current_pid)
@@ -1481,9 +1514,9 @@ impl SystemServices {
         //     server_process.mapping.activate();
         // }
         let server = self
-            .server_from_sidx(sidx)
+            .server_from_sidx_mut(sidx)
             .expect("couldn't re-discover server index");
-        server.queue_address(pid, context, message, client_address)
+        server.queue_response(pid, context, message, client_address)
     }
 
     /// Get a server index based on a SID
