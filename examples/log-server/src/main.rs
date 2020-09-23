@@ -216,6 +216,9 @@ fn reader_thread(mut output: implementation::OutputWriter) {
             xous::Message::Scalar(msg) => {
                 writeln!(output, "LOG: Scalar message from {}: {:?}", envelope.sender, msg).unwrap();
             }
+            xous::Message::BlockingScalar(msg) => {
+                writeln!(output, "LOG: BlockingScalar message from {}: {:?}", envelope.sender, msg).unwrap();
+            }
             xous::Message::Move(msg) => {
                 let log_entry = LogString::from_message(msg);
                 writeln!(
