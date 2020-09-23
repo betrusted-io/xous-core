@@ -353,11 +353,11 @@ impl Drop for MessageEnvelope {
     fn drop(&mut self) {
         match &self.body {
             Message::Borrow(x) | Message::MutableBorrow(x) => {
-                crate::syscall::return_memory(self.sender, x.buf)
-                    .expect("couldn't return memory")
+                crate::syscall::return_memory(self.sender, x.buf).expect("couldn't return memory")
             }
-            Message::Move(msg) => crate::syscall::unmap_memory(msg.buf)
-                .expect("couldn't free memory message"),
+            Message::Move(msg) => {
+                crate::syscall::unmap_memory(msg.buf).expect("couldn't free memory message")
+            }
             _ => (),
         }
     }
@@ -442,6 +442,7 @@ pub enum Result {
     ResumeProcess,
     ServerID(SID),
     ConnectionID(CID),
+    NewServerID(SID, CID),
     Message(MessageEnvelope),
     ThreadID(TID),
     ProcessID(PID),
@@ -489,6 +490,10 @@ impl Result {
             Result::BlockedProcess => [12, 0, 0, 0, 0, 0, 0, 0],
             Result::Scalar1(a) => [13, *a, 0, 0, 0, 0, 0, 0],
             Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
+            Result::NewServerID(sid, cid) => {
+                let s = sid.to_u32();
+                [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid, 0, 0]
+            }
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -547,7 +552,10 @@ impl Result {
                     )),
                     _ => return Result::Error(Error::InternalError),
                 };
-                Result::Message(MessageEnvelope { sender, body: message })
+                Result::Message(MessageEnvelope {
+                    sender,
+                    body: message,
+                })
             }
             9 => Result::ThreadID(src[1] as TID),
             10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
@@ -555,6 +563,10 @@ impl Result {
             12 => Result::BlockedProcess,
             13 => Result::Scalar1(src[1]),
             14 => Result::Scalar2(src[1], src[2]),
+            15 => Result::NewServerID(
+                SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
+                src[5] as _,
+            ),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }

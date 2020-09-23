@@ -863,6 +863,19 @@ pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<
     }
 }
 
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn return_scalar2(sender: MessageSender, val1: usize, val2: usize) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnScalar2(sender, val1, val2))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
 /// Claim a hardware interrupt for this process.
 pub fn claim_interrupt(
     irq_no: usize,
@@ -897,7 +910,7 @@ pub fn create_server(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> 
     let sid = SID::from_bytes(name_bytes).ok_or(Error::InvalidString)?;
 
     let result = rsyscall(SysCall::CreateServer(sid))?;
-    if let Result::ServerID(sid) = result {
+    if let Result::NewServerID(sid, _cid) = result {
         Ok(sid)
     } else if let Result::Error(e) = result {
         Err(e)
