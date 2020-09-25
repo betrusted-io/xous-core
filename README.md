@@ -62,7 +62,7 @@ cat loader.bin target/args.bin > xous.img
 
 The image should be written to location 0x2050_0000 (SPI ROM offset 0x50_0000), using
 the `provision-xous.sh` script inside [betrusted-scipts](https://github.com/betrusted-io/betrusted-scripts/blob/master/provision-xous.sh)
-running on a Betrusted provisioning harnell, that is a Raspberry Pi 4 with the appropriate debug hat attached, and the Precursor hardware plugged into the debug hat.
+running on a Betrusted provisioning harness, that is a Raspberry Pi 4 with the appropriate debug hat attached, and the Precursor hardware plugged into the debug hat.
 
 ## Try It Out on a Desktop
 
