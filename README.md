@@ -50,6 +50,13 @@ The following files need manual adjustment:
 * examples/graphics-server/src/backend/betrusted.rs needs a correct address for the "control" data structure (based on csr.csv)
 * kernel/src/debug.rs:7 needs a correct UART base, based on csr.csv
 
+Create the loader.bin from the .elf:
+
+```
+riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader.bin
+```
+
+
 ## Try It Out on a Desktop
 
 Clone this repository, and run
