@@ -12,7 +12,9 @@ static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
 fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
     SystemServices::with_mut(|ss| {
-        let sidx = ss.sidx_from_cid(cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let sidx = ss
+            .sidx_from_cid(cid)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
         // ::debug_here::debug_here!();
 
         let server_pid = ss
@@ -23,7 +25,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         // Remember the address the message came from, in case we need to
         // return it after the borrow is through.
         let client_address = match &message {
-            Message::Scalar(_) => None,
+            Message::Scalar(_) | Message::BlockingScalar(_) => None,
             Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
                 Some(msg.buf.addr)
             }
@@ -32,8 +34,9 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         // Translate memory messages from the client process to the server
         // process. Additionally, determine whether the call is blocking. If
         // so, switch to the server context right away.
-        let (message, blocking) = match message {
-            Message::Scalar(_) => (message, false),
+        let blocking = message.is_blocking();
+        let message = match message {
+            Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
                 let new_virt = ss.send_memory(
                     msg.buf.as_mut_ptr(),
@@ -41,15 +44,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     core::ptr::null_mut(),
                     msg.buf.len(),
                 )?;
-                (
-                    Message::Move(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    false,
-                )
+                Message::Move(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
             Message::MutableBorrow(msg) => {
                 let new_virt = ss.lend_memory(
@@ -59,15 +59,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     msg.buf.len(),
                     true,
                 )?;
-                (
-                    Message::MutableBorrow(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    true,
-                )
+                Message::MutableBorrow(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
             Message::Borrow(msg) => {
                 let new_virt = ss.lend_memory(
@@ -85,22 +82,19 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 //     new_virt as usize,
                 //     server_pid,
                 // );
-                (
-                    Message::Borrow(MemoryMessage {
-                        id: msg.id,
-                        buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
-                        offset: msg.offset,
-                        valid: msg.valid,
-                    }),
-                    true,
-                )
+                Message::Borrow(MemoryMessage {
+                    id: msg.id,
+                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    offset: msg.offset,
+                    valid: msg.valid,
+                })
             }
         };
 
         // If the server has an available context to receive the message,
         // transfer it right away.
         if let Some(server_tid) = ss
-            .server_from_sidx(sidx)
+            .server_from_sidx_mut(sidx)
             .expect("server couldn't be located")
             .take_available_thread()
         {
@@ -108,23 +102,31 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             //     "There are contexts available to handle this message.  Marking PID {} as Ready",
             //     server_pid
             // );
-            let sender = match message {
-                Message::Scalar(_) | Message::Move(_) => 0,
-                Message::Borrow(_) | Message::MutableBorrow(_) => ss
-                    .remember_server_message(sidx, pid, thread, &message, client_address)
+            let server_cid = ss.server_cid(sidx)?;
+            let sender_idx = if message.is_blocking() {
+                ss.remember_server_message(sidx, pid, thread, &message, client_address)
                     .map_err(|e| {
-                        ss.server_from_sidx(sidx)
+                        ss.server_from_sidx_mut(sidx)
                             .expect("server couldn't be located")
                             .return_available_thread(thread);
                         e
-                    })?,
+                    })?
+            } else {
+                0
             };
-            let envelope = MessageEnvelope { sender, message };
+            let sender = SenderID {
+                cid: server_cid,
+                idx: sender_idx,
+            };
+            let envelope = MessageEnvelope {
+                sender: sender.into(),
+                body: message,
+            };
 
             // Mark the server's context as "Ready". If this fails, return the context
             // to the blocking list.
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
-                ss.server_from_sidx(sidx)
+                ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
                     .return_available_thread(thread);
                 e
@@ -139,19 +141,31 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 // println!("Blocking client, since it sent a blocking message");
                 ss.switch_from_thread(pid, thread)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
-                ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Message(envelope))
-                    .map(|_| xous_kernel::Result::BlockedProcess)
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::BlockedProcess)
             } else if cfg!(baremetal) {
                 // println!("Setting the return value of the Server and returning to Client");
-                ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Message(envelope))
-                    .map(|_| xous_kernel::Result::Ok)
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::Ok)
             } else {
                 // println!("Setting the return value of the Server and returning to Client");
                 // "Switch to" the server PID when not running on bare metal. This ensures
                 // that it's "Running".
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
-                ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Message(envelope))
-                    .map(|_| xous_kernel::Result::Ok)
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::Ok)
             }
         } else {
             // Add this message to the queue.  If the queue is full, this
@@ -181,17 +195,18 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
-fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
+fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
     SystemServices::with_mut(|ss| {
-        let sender = SenderID::from_usize(sender)?;
+        let sender = SenderID::from(sender);
 
+        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
-            .server_from_sidx(sender.sidx)
+            .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
         if server.pid != pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
-        let result = server.take_waiting_message(sender.tidx, buf)?;
+        let result = server.take_waiting_message(sender.idx, Some(&buf))?;
         let (client_pid, client_tid, server_addr, client_addr, len) = match result {
             WaitingMessage::BorrowedMemory(
                 client_pid,
@@ -221,6 +236,10 @@ fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -
                     result
                 })
             }
+            WaitingMessage::ScalarMessage(_pid, _tid) => {
+                println!("WARNING: Tried to wait on a message that was a scalar");
+                return Err(xous_kernel::Error::InternalError);
+            }
             WaitingMessage::None => {
                 println!("WARNING: Tried to wait on a message that didn't exist");
                 return Err(xous_kernel::Error::ProcessNotFound);
@@ -239,7 +258,9 @@ fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -
         // Return the memory to the calling process
         ss.return_memory(
             server_addr.get() as _,
+            tid,
             client_pid,
+            client_tid,
             client_addr.get() as _,
             len.get(),
         )?;
@@ -256,6 +277,82 @@ fn return_memory(pid: PID, _tid: TID, sender: MessageSender, buf: MemoryRange) -
     })
 }
 
+fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        let sender = SenderID::from(sender);
+
+        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let server = ss
+            .server_from_sidx_mut(sidx)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
+        if server.pid != pid {
+            return Err(xous_kernel::Error::ServerNotFound);
+        }
+        let result = server.take_waiting_message(sender.idx, None)?;
+        let (client_pid, client_tid) = match result {
+            WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
+            WaitingMessage::ForgetMemory(_) => {
+                println!("WARNING: Tried to wait on a scalar message that was actually forgettingmemory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
+                println!("WARNING: Tried to wait on a scalar message that was actually borrowed memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::MovedMemory => {
+                println!("WARNING: Tried to wait on a scalar message that was actually moved memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::None => {
+                println!("WARNING: Tried to wait on a message that didn't exist");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+        };
+        ss.ready_thread(client_pid, client_tid)?;
+        ss.switch_to_thread(client_pid, Some(client_tid))?;
+        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
+        Ok(xous_kernel::Result::Ok)
+    })
+}
+
+fn return_scalar2(pid: PID, _tid: TID, sender: MessageSender, arg1: usize, arg2: usize) -> SysCallResult {
+    SystemServices::with_mut(|ss| {
+        let sender = SenderID::from(sender);
+
+        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let server = ss
+            .server_from_sidx_mut(sidx)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
+        if server.pid != pid {
+            return Err(xous_kernel::Error::ServerNotFound);
+        }
+        let result = server.take_waiting_message(sender.idx, None)?;
+        let (client_pid, client_tid) = match result {
+            WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
+            WaitingMessage::ForgetMemory(_) => {
+                println!("WARNING: Tried to wait on a scalar message that was actually forgetting memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
+                println!("WARNING: Tried to wait on a scalar message that was actually borrowed memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::MovedMemory => {
+                println!("WARNING: Tried to wait on a scalar message that was actually moved memory");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+            WaitingMessage::None => {
+                println!("WARNING: Tried to wait on a message that didn't exist");
+                return Err(xous_kernel::Error::ProcessNotFound);
+            }
+        };
+        ss.ready_thread(client_pid, client_tid)?;
+        ss.switch_to_thread(client_pid, Some(client_tid))?;
+        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar2(arg1, arg2))?;
+        Ok(xous_kernel::Result::Ok)
+    })
+}
+
 fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         assert!(
@@ -263,9 +360,12 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
             "current thread is not running"
         );
         // See if there is a pending message.  If so, return immediately.
-        let sidx = ss.server_sidx(sid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let cid = ss.connect_to_server(sid)?;
+        let sidx = ss
+            .server_sidx(sid)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
-            .server_from_sidx(sidx)
+            .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
         // server.print_queue();
 
@@ -275,8 +375,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         }
 
         // If there is a pending message, return it immediately.
-        if let Some(msg) = server.take_next_message(sidx) {
-            // println!("PID {} had a message ready -- returning it", pid);
+        if let Some(msg) = server.take_next_message(cid) {
             return Ok(xous_kernel::Result::Message(msg));
         }
 
@@ -460,7 +559,8 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             })
         }
         SysCall::ClaimInterrupt(no, callback, arg) => {
-            interrupt_claim(no, pid as definitions::PID, callback, arg).map(|_| xous_kernel::Result::Ok)
+            interrupt_claim(no, pid as definitions::PID, callback, arg)
+                .map(|_| xous_kernel::Result::Ok)
         }
         SysCall::Yield => {
             // If we're not running on bare metal, treat this as a no-op.
@@ -512,17 +612,22 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             })
         }),
         SysCall::CreateProcess(process_init) => SystemServices::with_mut(|ss| {
-            ss.create_process(process_init).map(xous_kernel::Result::ProcessID)
+            ss.create_process(process_init)
+                .map(xous_kernel::Result::ProcessID)
         }),
-        SysCall::CreateServer(name) => {
-            SystemServices::with_mut(|ss| ss.create_server(pid, name).map(xous_kernel::Result::ServerID))
-        }
-        SysCall::Connect(sid) => {
-            // ::debug_here::debug_here!();
-            SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
-        }
+        SysCall::CreateServer(name) => SystemServices::with_mut(|ss| {
+            ss.create_server(pid, name)
+                .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
+        }),
+        SysCall::TryConnect(sid) => SystemServices::with_mut(|ss| {
+            ss.connect_to_server(sid)
+                .map(xous_kernel::Result::ConnectionID)
+        }),
         SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, sender, buf),
-        SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+        SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, sender, arg),
+        SysCall::ReturnScalar2(sender, arg1, arg2) => return_scalar2(pid, tid, sender, arg1, arg2),
+        // SysCall::ReturnScalar2(sender, arg, arg2) => return_memory(pid, tid, sender, arg, arg2),
+        SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
             let ppid = ss.terminate_process(pid)?;
@@ -533,7 +638,14 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 Ok(xous_kernel::Result::Ok)
             }
         }),
-        SysCall::Shutdown => SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok)),
-        _ => Err(xous_kernel::Error::UnhandledSyscall),
+        SysCall::Shutdown => {
+            SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
+        }
+
+        // SysCall::Connect(sid) => {
+        //     SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
+        // }
+        // SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+        _ => panic!("Unhandled Syscall: {:?}", call), //Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

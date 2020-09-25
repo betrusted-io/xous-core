@@ -46,7 +46,9 @@ impl fmt::Display for MemoryRangeExtra {
 pub struct MemoryManager {
     ram_start: usize,
     ram_size: usize,
+    #[allow(dead_code)]
     ram_name: u32,
+    #[allow(dead_code)]
     last_ram_page: usize,
 }
 

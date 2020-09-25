@@ -22,13 +22,12 @@ pub struct KernelArgumentsIterator {
     offset: usize,
 }
 
+#[allow(dead_code)]
 impl KernelArguments {
-    #[allow(dead_code)]
     pub fn get() -> Self {
         KernelArguments { base: unsafe { KERNEL_ARGUMENTS_BASE } }
     }
 
-    #[allow(dead_code)]
     pub unsafe fn init(base: *const u32) {
         KERNEL_ARGUMENTS_BASE = base;
     }

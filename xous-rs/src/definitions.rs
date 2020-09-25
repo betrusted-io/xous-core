@@ -286,22 +286,52 @@ pub enum Message {
     Borrow(MemoryMessage),
     Move(MemoryMessage),
     Scalar(ScalarMessage),
+    BlockingScalar(ScalarMessage),
+}
+
+impl Message {
+    /// Determine whether the specified Message will block
+    pub fn is_blocking(&self) -> bool {
+        match *self {
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::BlockingScalar(_) => true,
+            Message::Move(_) | Message::Scalar(_) => false,
+        }
+    }
+
+    /// Determine whether the specified message has data attached
+    pub fn has_memory(&self) -> bool {
+        match *self {
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) => true,
+            Message::BlockingScalar(_) | Message::Scalar(_) => false,
+        }
+    }
+
+    pub fn message_type(&self) -> usize {
+        match *self {
+            Message::MutableBorrow(_) => 1,
+            Message::Borrow(_) => 2,
+            Message::Move(_) => 3,
+            Message::Scalar(_) => 4,
+            Message::BlockingScalar(_) => 5,
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub struct MessageEnvelope {
     pub sender: MessageSender,
-    pub message: Message,
+    pub body: Message,
 }
 
 impl MessageEnvelope {
     pub fn to_usize(&self) -> [usize; 7] {
-        let ret = match &self.message {
+        let ret = match &self.body {
             Message::MutableBorrow(m) => (0, m.to_usize()),
             Message::Borrow(m) => (1, m.to_usize()),
             Message::Move(m) => (2, m.to_usize()),
             Message::Scalar(m) => (3, m.to_usize()),
+            Message::BlockingScalar(m) => (4, m.to_usize()),
         };
         [
             self.sender,
@@ -321,13 +351,13 @@ impl MessageEnvelope {
 /// (in the case of a Borrow).  Ignore Scalar messages.
 impl Drop for MessageEnvelope {
     fn drop(&mut self) {
-        match &self.message {
+        match &self.body {
             Message::Borrow(x) | Message::MutableBorrow(x) => {
-                crate::syscall::return_memory(self.sender, x.buf)
-                    .expect("couldn't return memory")
+                crate::syscall::return_memory(self.sender, x.buf).expect("couldn't return memory")
             }
-            Message::Move(msg) => crate::syscall::unmap_memory(msg.buf)
-                .expect("couldn't free memory message"),
+            Message::Move(msg) => {
+                crate::syscall::unmap_memory(msg.buf).expect("couldn't free memory message")
+            }
             _ => (),
         }
     }
@@ -412,6 +442,7 @@ pub enum Result {
     ResumeProcess,
     ServerID(SID),
     ConnectionID(CID),
+    NewServerID(SID, CID),
     Message(MessageEnvelope),
     ThreadID(TID),
     ProcessID(PID),
@@ -421,6 +452,12 @@ pub enum Result {
 
     /// The process is blocked and should perform the read() again
     BlockedProcess,
+
+    /// A scalar with one value
+    Scalar1(usize),
+
+    /// A scalar with two values
+    Scalar2(usize, usize),
 
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
@@ -451,6 +488,12 @@ impl Result {
             Result::ProcessID(pid) => [10, pid.get() as _, 0, 0, 0, 0, 0, 0],
             Result::Unimplemented => [11, 0, 0, 0, 0, 0, 0, 0],
             Result::BlockedProcess => [12, 0, 0, 0, 0, 0, 0, 0],
+            Result::Scalar1(a) => [13, *a, 0, 0, 0, 0, 0, 0],
+            Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
+            Result::NewServerID(sid, cid) => {
+                let s = sid.to_u32();
+                [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid, 0, 0]
+            }
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -504,15 +547,27 @@ impl Result {
                     3 => Message::Scalar(ScalarMessage::from_usize(
                         src[3], src[4], src[5], src[6], src[7],
                     )),
+                    4 => Message::BlockingScalar(ScalarMessage::from_usize(
+                        src[3], src[4], src[5], src[6], src[7],
+                    )),
                     _ => return Result::Error(Error::InternalError),
                 };
-                Result::Message(MessageEnvelope { sender, message })
+                Result::Message(MessageEnvelope {
+                    sender,
+                    body: message,
+                })
             }
             9 => Result::ThreadID(src[1] as TID),
             10 => Result::ProcessID(PID::new(src[1] as _).unwrap()),
             11 => Result::Unimplemented,
             12 => Result::BlockedProcess,
-            _ => Result::UnknownResult(src[1], src[2], src[3], src[4], src[5], src[6], src[7]),
+            13 => Result::Scalar1(src[1]),
+            14 => Result::Scalar2(src[1], src[2]),
+            15 => Result::NewServerID(
+                SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
+                src[5] as _,
+            ),
+            _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
 }

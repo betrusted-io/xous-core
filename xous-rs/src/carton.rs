@@ -8,6 +8,7 @@ pub struct Carton<'a> {
     range: MemoryRange,
     valid: MemoryRange,
     slice: &'a [u8],
+    should_drop: bool,
 }
 
 impl<'a> Carton<'a> {
@@ -36,10 +37,14 @@ impl<'a> Carton<'a> {
             range: new_mem,
             slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), bytes.len()) },
             valid,
+            should_drop: true,
         }
     }
 
-    pub fn into_message(self, id: usize) -> MemoryMessage {
+    pub fn into_message(mut self, id: usize) -> MemoryMessage {
+        // Leak the memory buffer, since it will be taken care of
+        // when the MemoryMessage is dropped.
+        self.should_drop = false;
         MemoryMessage {
             id,
             buf: self.valid,
@@ -50,25 +55,25 @@ impl<'a> Carton<'a> {
 
     /// Perform an immutable lend of this Carton to the specified server.
     /// This function will block until the server returns.
-    pub fn lend(&self, connection: CID, id: usize) -> Result<(), Error> {
+    pub fn lend(&self, connection: CID, id: usize) -> Result<crate::Result, Error> {
         let msg = MemoryMessage {
             id,
             buf: self.valid,
             offset: None,
             valid: None,
         };
-        crate::send_message(connection, Message::Borrow(msg))
+        crate::try_send_message(connection, Message::Borrow(msg))
     }
 
     /// Perform a mutable lend of this Carton to the server.
-    pub fn lend_mut(&mut self, connection: CID, id: usize) -> Result<(), Error> {
+    pub fn lend_mut(&mut self, connection: CID, id: usize) -> Result<crate::Result, Error> {
         let msg = MemoryMessage {
             id,
             buf: self.valid,
             offset: None,
             valid: None,
         };
-        crate::send_message(connection, Message::MutableBorrow(msg))
+        crate::try_send_message(connection, Message::MutableBorrow(msg))
     }
 }
 
@@ -86,6 +91,8 @@ impl<'a> AsRef<[u8]> for Carton<'a> {
 
 impl<'a> Drop for Carton<'a> {
     fn drop(&mut self) {
-        crate::unmap_memory(self.range).unwrap();
+        if self.should_drop {
+            crate::unmap_memory(self.range).unwrap();
+        }
     }
 }

@@ -6,13 +6,18 @@ edition = "2018"
 description = "System call interface for Xous"
 
 [dependencies]
-bitflags = "1.2.1"
+bitflags = "1"
 xous-macros = { path = "../macros", version = "0.1.0" }
+log = { version = "0.4", optional = true }
 
 [features]
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
+
+# `logging` causes this program to connect to a log server on startup
+# so you can run log commands such as `info!()`.
+logging = ["log"]
 
 default = []
 

@@ -106,31 +106,33 @@ impl DrawTarget<BinaryColor> for XousDisplay {
     /// Draw a `Pixel` that has a color defined as `BinaryColor`.
     fn draw_pixel(&mut self, pixel: Pixel<BinaryColor>) -> Result<(), Self::Error> {
         let Pixel(coord, color) = pixel;
-        let framebuffer = self.fb.as_mut_ptr() as *mut u32;
-        let offset = (coord.x / 32 + coord.y * FB_WIDTH_WORDS as i32) as usize;
-        match color {
-            BinaryColor::Off => {
-                unsafe {
-                    framebuffer.add(offset).write_volatile(
-                        framebuffer.add(offset).read_volatile() | (1 << (coord.x % 32)),
-                    )
-                };
+        if coord.x < FB_WIDTH_PIXELS as _ && coord.y < FB_LINES as _ {
+            let framebuffer = self.fb.as_mut_ptr() as *mut u32;
+            let offset = (coord.x / 32 + coord.y * FB_WIDTH_WORDS as i32) as usize;
+            match color {
+                BinaryColor::Off => {
+                    unsafe {
+                        framebuffer.add(offset).write_volatile(
+                            framebuffer.add(offset).read_volatile() | (1 << (coord.x % 32)),
+                        )
+                    };
+                }
+                BinaryColor::On => {
+                    unsafe {
+                        framebuffer.add(offset).write_volatile(
+                            framebuffer.add(offset).read_volatile() & !(1 << (coord.x % 32)),
+                        )
+                    };
+                }
             }
-            BinaryColor::On => {
-                unsafe {
-                    framebuffer.add(offset).write_volatile(
-                        framebuffer.add(offset).read_volatile() & !(1 << (coord.x % 32)),
-                    )
-                };
-            }
-        }
 
-        // set the dirty bit on the line
-        unsafe {
-            framebuffer
-                .add(offset)
-                .write_volatile(framebuffer.add(offset).read_volatile() | 0x1_0000)
-        };
+            // set the dirty bit on the line
+            unsafe {
+                framebuffer
+                    .add(offset)
+                    .write_volatile(framebuffer.add(offset).read_volatile() | 0x1_0000)
+            };
+        }
         Ok(())
     }
 

@@ -703,6 +703,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "graphics-server",
  "xous",
 ]
 
@@ -969,6 +970,7 @@ dependencies = [
  "bitflags",
  "hex",
  "lazy_static",
+ "log",
  "xous-macros",
 ]
 

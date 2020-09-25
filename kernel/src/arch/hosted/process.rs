@@ -24,8 +24,8 @@ struct ProcessImpl {
     /// The network connection to the client process.
     conn: Option<TcpStream>,
 
-    /// Memory that may need to be returned to the caller
-    memory_to_return: Option<Vec<u8>>,
+    /// Memory that may need to be returned to the caller for each thread
+    memory_to_return: [Option<Vec<u8>>; MAX_THREAD + 1],
 
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
@@ -87,7 +87,10 @@ pub fn set_current_pid(pid: PID) {
     });
 }
 
-pub fn register_connection_for_key(conn: TcpStream, key: ProcessKey) -> Result<PID, xous_kernel::Error> {
+pub fn register_connection_for_key(
+    conn: TcpStream,
+    key: ProcessKey,
+) -> Result<PID, xous_kernel::Error> {
     PROCESS_TABLE.with(|pt| {
         let mut process_table = pt.borrow_mut();
         for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
@@ -181,7 +184,11 @@ impl Process {
         tmp.setup_thread(INITIAL_TID, setup)
     }
 
-    pub fn setup_thread(&mut self, thread: TID, _setup: ThreadInit) -> Result<(), xous_kernel::Error> {
+    pub fn setup_thread(
+        &mut self,
+        thread: TID,
+        _setup: ThreadInit,
+    ) -> Result<(), xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Setting up thread {} @ {:?}",
         //     self.pid,
@@ -256,15 +263,30 @@ impl Process {
             );
 
             let mut response = vec![];
+            // Add the destination thread ID to the start of the packet.
             response.extend_from_slice(&tid.to_le_bytes());
+
+            // Append the contents of the response packet.
             for word in result.to_args().iter_mut() {
                 response.extend_from_slice(&word.to_le_bytes());
             }
 
-            if let Some(buf) = process.memory_to_return.take() {
+            // If there is memory to return for this thread, also return that.
+            if let Some(buf) = process.memory_to_return[tid - 1].take() {
+                // if let xous_kernel::Result::Message(_) = result {
+                // } else {
+                //     panic!(
+                //         "memory was waiting to be returned, but message was not a result message"
+                //     );
+                // }
                 response.extend_from_slice(&buf);
             }
 
+            // eprintln!(
+            //     "KERNEL({}): Setting thread return value to {:?}",
+            //     current_pid_idx + 1,
+            //     response
+            // );
             process
                 .conn
                 .as_mut()
@@ -274,13 +296,13 @@ impl Process {
         });
     }
 
-    pub fn return_memory(&mut self, buf: &[u8]) {
+    pub fn return_memory(&mut self, tid: TID, buf: &[u8]) {
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            assert!(process.memory_to_return.is_none());
-            process.memory_to_return = Some(buf.to_vec());
+            assert!(process.memory_to_return[tid - 1].is_none());
+            process.memory_to_return[tid - 1] = Some(buf.to_vec());
         });
     }
 
@@ -291,12 +313,12 @@ impl Process {
         PROCESS_TABLE.with(|process_table| {
             let mut process_table = process_table.borrow_mut();
             let pid_idx = (pid.get() - 1) as usize;
-
+            use crate::filled_array;
             let process = ProcessImpl {
                 inner: Default::default(),
                 conn: None,
                 key: init_data.key,
-                memory_to_return: None,
+                memory_to_return: filled_array![None; 32 /* MAX_THREAD */],
                 current_thread: INITIAL_TID,
                 threads: [Thread { allocated: false }; MAX_THREAD + 1],
             };
@@ -334,6 +356,7 @@ impl Process {
     }
 
     pub fn send(&mut self, bytes: &[u8]) -> Result<(), xous_kernel::Error> {
+        // eprintln!("KERNEL: Sending syscall response: {:?}", bytes);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;

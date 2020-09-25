@@ -14,7 +14,7 @@ use std::thread_local;
 use crate::arch::process::Process;
 use crate::services::SystemServices;
 
-use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, PID, TID};
+use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),
@@ -101,7 +101,8 @@ fn handle_connection(
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
 
-            if packet_data[1] == 16
+            if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
+                || packet_data[1] == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
                 && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
             {
                 let mut v = vec![0; packet_data[6]];
@@ -180,39 +181,41 @@ fn handle_connection(
                         //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
                         //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
                         // );
-                        if let SysCall::SendMessage(ref _cid, ref mut envelope) = call {
-                            match envelope {
-                                xous_kernel::Message::MutableBorrow(msg)
-                                | xous_kernel::Message::Borrow(msg)
-                                | xous_kernel::Message::Move(msg) => {
-                                    // Update the address pointer. This will get turned back into a
-                                    // usable pointer by casting it back into a &[T] on the other
-                                    // side. This is just a pointer to the start of data
-                                    // as well as the index into the data it points at. The lengths
-                                    // should still be equal once we reconstitute the data in the
-                                    // other process.
-                                    // ::debug_here::debug_here!();
-                                    let sliced_data = data.into_boxed_slice();
-                                    assert_eq!(
-                                        sliced_data.len(),
-                                        msg.buf.len(),
-                                        "deconstructed data {} != message buf length {}",
-                                        sliced_data.len(),
-                                        msg.buf.len()
-                                    );
-                                    msg.buf.addr =
-                                        match MemoryAddress::new(Box::into_raw(sliced_data)
-                                            as *mut u8
-                                            as usize)
-                                        {
-                                            Some(a) => a,
-                                            _ => unreachable!(),
-                                        };
+                        match call {
+                            SysCall::SendMessage(ref _cid, ref mut envelope)
+                            | SysCall::TrySendMessage(ref _cid, ref mut envelope) => {
+                                match envelope {
+                                    xous_kernel::Message::MutableBorrow(msg)
+                                    | xous_kernel::Message::Borrow(msg)
+                                    | xous_kernel::Message::Move(msg) => {
+                                        // Update the address pointer. This will get turned back into a
+                                        // usable pointer by casting it back into a &[T] on the other
+                                        // side. This is just a pointer to the start of data
+                                        // as well as the index into the data it points at. The lengths
+                                        // should still be equal once we reconstitute the data in the
+                                        // other process.
+                                        // ::debug_here::debug_here!();
+                                        let sliced_data = data.into_boxed_slice();
+                                        assert_eq!(
+                                            sliced_data.len(),
+                                            msg.buf.len(),
+                                            "deconstructed data {} != message buf length {}",
+                                            sliced_data.len(),
+                                            msg.buf.len()
+                                        );
+                                        msg.buf.addr =
+                                            match MemoryAddress::new(Box::into_raw(sliced_data)
+                                                as *mut u8
+                                                as usize)
+                                            {
+                                                Some(a) => a,
+                                                _ => unreachable!(),
+                                            };
+                                    }
+                                    xous_kernel::Message::Scalar(_) | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
-                                xous_kernel::Message::Scalar(_) => (),
                             }
-                        } else {
-                            panic!("unsupported message type");
+                            _ => panic!("unsupported message type"),
                         }
                         chn.send(ThreadMessage::SysCall(pid, thread_id, call))
                             .expect("couldn't make syscall");
@@ -263,13 +266,15 @@ fn listen_thread(
         let mut access_key = [0u8; 16];
         conn.read_exact(&mut access_key).unwrap();
 
-        // Spawn a new process. This process will start out in the "Setup()" state.
+        // Spawn a new process. This process will start out in the "Allocated" state.
         chn.send(ThreadMessage::NewConnection(
             conn.try_clone()
                 .expect("couldn't make a copy of the network connection for the kernel"),
             ProcessKey::new(access_key),
         ))
         .expect("couldn't request a new PID");
+
+        // The kernel will immediately respond with a new PID.
         let NewPidMessage::NewPid(new_pid) = new_pid_channel
             .recv()
             .expect("couldn't receive message from main thread");
@@ -291,8 +296,7 @@ fn listen_thread(
         should_exit.store(true, core::sync::atomic::Ordering::Relaxed);
         for (jh, conn) in clients {
             use std::net::Shutdown;
-            conn.shutdown(Shutdown::Both)
-                .expect("couldn't shutdown client");
+            conn.shutdown(Shutdown::Both).ok();
             jh.join().expect("couldn't join client thread");
         }
     }
@@ -441,7 +445,8 @@ pub fn idle() -> bool {
             let new_pid = SystemServices::with_mut(|ss| ss.create_process(init)).unwrap();
             println!(" {:^5} |  {}", new_pid, arg);
             let process_args = xous_kernel::ProcessArgs::new("program", arg);
-            xous_kernel::arch::create_process_post(process_args, init, new_pid).expect("couldn't spawn");
+            xous_kernel::arch::create_process_post(process_args, init, new_pid)
+                .expect("couldn't spawn");
         }
     }
 
@@ -468,7 +473,11 @@ pub fn idle() -> bool {
                 // Switch to this process immediately, which moves it from `Setup(_)` to `Running(0)`.
                 // Note that in this system, multiple processes can be active at once. This is
                 // similar to having one core for each process
-                // SystemServices::with_mut(|ss| ss.switch_to_thread(new_pid, Some(1))).unwrap();
+                SystemServices::with_mut(|ss| {
+                    ss.create_thread(new_pid, ThreadInit {})?;
+                    ss.switch_to_thread(new_pid, None)
+                })
+                .unwrap();
             }
             ThreadMessage::SysCall(pid, thread_id, call) => {
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);

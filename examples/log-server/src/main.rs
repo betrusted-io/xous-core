@@ -196,32 +196,34 @@ mod implementation {
 }
 
 fn reader_thread(mut output: implementation::OutputWriter) {
-    writeln!(output, "Xous Logging Server starting up...").unwrap();
-    // std::thread::sleep(std::time::Duration::from_secs(1));
+    writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
-    writeln!(output, "Starting log server...").unwrap();
+    writeln!(output, "LOG: Starting log server...").unwrap();
     let server_addr = xous::create_server(b"xous-logs-output").unwrap();
-    writeln!(output, "Server listening on address {:?}", server_addr).unwrap();
+    writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 
     let mut counter: usize = 0;
     loop {
         if counter.trailing_zeros() >= 12 {
-            writeln!(output, "Counter tick: {}", counter).unwrap();
+            writeln!(output, "LOG: Counter tick: {}", counter).unwrap();
         }
         counter += 1;
-        writeln!(output, "Waiting for an event...").unwrap();
+        writeln!(output, "LOG: Waiting for an event...").unwrap();
         let mut envelope =
             xous::syscall::receive_message(server_addr).expect("couldn't get address");
-        writeln!(output, "Got message envelope: {:?}", envelope).unwrap();
-        match &mut envelope.message {
+        writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
+        match &mut envelope.body {
             xous::Message::Scalar(msg) => {
-                writeln!(output, "Scalar message from {}: {:?}", envelope.sender, msg).unwrap();
+                writeln!(output, "LOG: Scalar message from {}: {:?}", envelope.sender, msg).unwrap();
+            }
+            xous::Message::BlockingScalar(msg) => {
+                writeln!(output, "LOG: BlockingScalar message from {}: {:?}", envelope.sender, msg).unwrap();
             }
             xous::Message::Move(msg) => {
                 let log_entry = LogString::from_message(msg);
                 writeln!(
                     output,
-                    "Moved log  message from {}: {}",
+                    "LOG: Moved log  message from {}: {}",
                     envelope.sender, log_entry
                 )
                 .unwrap();
@@ -230,7 +232,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                 let log_entry = LogString::from_message(msg);
                 writeln!(
                     output,
-                    "Immutably borrowed log message from {}: {}",
+                    "LOG: Immutably borrowed log message from {}: {}",
                     envelope.sender, log_entry
                 )
                 .unwrap();
@@ -239,7 +241,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                 let mut log_entry = LogString::from_message(msg);
                 writeln!(
                     output,
-                    "Immutably borrowed log message from {}: {}",
+                    "LOG: Immutably borrowed log message from {}: {}",
                     envelope.sender, log_entry
                 )
                 .unwrap();

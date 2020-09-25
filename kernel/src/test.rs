@@ -79,9 +79,12 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
 fn shutdown_kernel() {
     // Any process ought to be able to shut down the system currently.
     xous_kernel::wait_process_as_thread(
-        xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new("shutdown", || {
-            rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
-        }))
+        xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+            "shutdown",
+            || {
+                rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
+            },
+        ))
         .expect("couldn't shut down the kernel"),
     )
     .expect("couldn't wait for the shutdown process to end");
@@ -129,12 +132,12 @@ fn send_scalar_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid =
-                xous_kernel::create_server(b"send_scalar_mesg").expect("couldn't create test server");
+            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+                .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             assert_eq!(
-                envelope.message,
+                envelope.body,
                 xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                     id: 1,
                     arg1: 2,
@@ -152,8 +155,8 @@ fn send_scalar_message() {
         "send_scalar_message client",
         move || {
             let sid = server_addr_recv.recv().unwrap();
-            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
-            xous_kernel::send_message(
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+            xous_kernel::try_send_message(
                 conn,
                 xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                     id: 1,
@@ -164,6 +167,95 @@ fn send_scalar_message() {
                 }),
             )
             .expect("couldn't send message");
+        },
+    ))
+    .expect("couldn't spawn client process");
+
+    // Wait for both processes to finish
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
+    shutdown_kernel();
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+#[test]
+fn send_blocking_scalar_message() {
+    // Start the server in another thread
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    let (server_addr_send, server_addr_recv) = channel();
+
+    // Spawn the server "process" (which just lives in a separate thread)
+    // and receive the message. Note that we need to communicate to the
+    // "Client" what our server ID is. Normally this would be done via
+    // an external nameserver.
+    let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message server",
+        move || {
+            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+                .expect("couldn't create test server");
+            server_addr_send.send(sid).unwrap();
+            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            assert_eq!(
+                envelope.body,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 1,
+                    arg1: 2,
+                    arg2: 3,
+                    arg3: 4,
+                    arg4: 5
+                })
+            );
+            xous_kernel::return_scalar(envelope.sender, 42).expect("couldn't return scalar");
+
+            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            assert_eq!(
+                envelope.body,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 6,
+                    arg1: 7,
+                    arg2: 8,
+                    arg3: 9,
+                    arg4: 10
+                })
+            );
+            xous_kernel::return_scalar2(envelope.sender, 56, 78).expect("couldn't return scalar");
+        },
+    ))
+    .expect("couldn't spawn server process");
+
+    // Spawn the client "process" and wait for the server address.
+    let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message client",
+        move || {
+            let sid = server_addr_recv.recv().unwrap();
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+            let result = xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 1,
+                    arg1: 2,
+                    arg2: 3,
+                    arg3: 4,
+                    arg4: 5,
+                }),
+            )
+            .expect("couldn't send message");
+            assert_eq!(result, xous_kernel::Result::Scalar1(42));
+
+            let result = xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 6,
+                    arg1: 7,
+                    arg2: 8,
+                    arg3: 9,
+                    arg4: 10,
+                }),
+            )
+            .expect("couldn't send message");
+            assert_eq!(result, xous_kernel::Result::Scalar2(56, 78));
         },
     ))
     .expect("couldn't spawn client process");
@@ -189,22 +281,20 @@ fn send_move_message() {
         "send_move_message server",
         move || {
             // println!("SERVER: Creating server...");
-            let sid =
-                xous_kernel::create_server(b"send_move_messag").expect("couldn't create test server");
+            let sid = xous_kernel::create_server(b"send_move_messag")
+                .expect("couldn't create test server");
             // println!("SERVER: Sending server address of {:?} to client", sid);
             server_addr_send.send(sid).unwrap();
             // println!("SERVER: Starting to receive messages...");
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             // println!("SERVER: Received message from {}", envelope.sender);
-            let message = envelope.message;
+            let message = envelope.body;
             if let xous_kernel::Message::Move(m) = message {
                 let buf = m.buf;
-                let bt = unsafe {
-                    Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
-                };
-                assert_eq!(*test_bytes, *bt);
-                // let s = String::from_utf8_lossy(&bt);
-                // println!("SERVER: Got message: {:?} -> \"{}\"", bt, s);
+                let bt = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
+                assert_eq!(*test_bytes, *bt, "message was changed by the kernel");
+            // let s = String::from_utf8_lossy(&bt);
+            // println!("SERVER: Got message: {:?} -> \"{}\"", bt, s);
             } else {
                 panic!("unexpected message type");
             }
@@ -218,9 +308,9 @@ fn send_move_message() {
             // println!("CLIENT: Waiting for server address...");
             let sid = server_addr_recv.recv().unwrap();
             // println!("CLIENT: Connecting to server {:?}", sid);
-            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
             let msg = xous_kernel::carton::Carton::from_bytes(test_bytes);
-            xous_kernel::send_message(conn, xous_kernel::Message::Move(msg.into_message(0)))
+            xous_kernel::try_send_message(conn, xous_kernel::Message::Move(msg.into_message(0)))
                 .expect("couldn't send a message");
             // println!("CLIENT: Message sent");
         },
@@ -247,27 +337,32 @@ fn send_borrow_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_borrow_message server",
         move || {
-            // println!("SERVER: Creating server...");
-            let sid =
-                xous_kernel::create_server(b"send_borrow_mesg").expect("couldn't create test server");
-            server_addr_send.send(sid).unwrap();
-            // println!("SERVER: Receiving message...");
-            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
-            // println!("SERVER: Received message from {}", envelope.sender);
-            let message = envelope.message;
-            if let xous_kernel::Message::Borrow(m) = message {
-                let buf = m.buf;
-                let bt = unsafe {
-                    Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
-                };
-                assert_eq!(*test_bytes, *bt);
-                // let s = String::from_utf8_lossy(&bt);
-                // println!("SERVER: Got message: {:?} -> \"{}\"", bt, s);
-                xous_kernel::return_memory(envelope.sender, m.buf).unwrap();
-            // println!("SERVER: Returned memory");
-            } else {
-                panic!("unexpected message type");
+            {
+                // println!("SERVER: Creating server...");
+                let sid = xous_kernel::create_server(b"send_borrow_mesg")
+                    .expect("couldn't create test server");
+                server_addr_send.send(sid).unwrap();
+                // println!("SERVER: Receiving message...");
+                let envelope =
+                    xous_kernel::receive_message(sid).expect("couldn't receive messages");
+                // println!("SERVER: Received message from {}", envelope.sender);
+                let message = envelope.body;
+                if let xous_kernel::Message::Borrow(m) = message {
+                    let buf = m.buf;
+                    let bt =
+                        unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
+                    assert_eq!(*test_bytes, *bt);
+                    // let s = String::from_utf8_lossy(&bt);
+                    // println!("SERVER: Got message: {:?} -> \"{}\"", bt, s);
+                    xous_kernel::return_memory(envelope.sender, m.buf).unwrap();
+                // println!("SERVER: Returned memory");
+                // println!("SERVER: Returned memory");
+                } else {
+                    panic!("unexpected message type");
+                }
+                // println!("SERVER: Dropping things");
             }
+            // println!("SERVER: Exiting");
         },
     ))
     .expect("couldn't start server");
@@ -275,25 +370,28 @@ fn send_borrow_message() {
     let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_borrow_message client",
         move || {
-            // Get the server address (out of band) so we know what to connect to
-            // println!("CLIENT: Waiting for server to start...");
-            let sid = server_addr_recv.recv().unwrap();
+            {
+                // Get the server address (out of band) so we know what to connect to
+                // println!("CLIENT: Waiting for server to start...");
+                let sid = server_addr_recv.recv().unwrap();
 
-            // Perform a connection to the server
-            // println!("CLIENT: Connecting to server...");
-            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
+                // Perform a connection to the server
+                // println!("CLIENT: Connecting to server...");
+                let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
 
-            // Convert the message into a "Carton" that can be shipped as a message
-            // println!("CLIENT: Creating carton...");
-            let carton = xous_kernel::carton::Carton::from_bytes(test_bytes);
+                // Convert the message into a "Carton" that can be shipped as a message
+                // println!("CLIENT: Creating carton...");
+                let carton = xous_kernel::carton::Carton::from_bytes(test_bytes);
 
-            // Send the message to the server
-            // println!("CLIENT: Lending message...");
-            carton
-                .lend(conn, 0)
-                .expect("couldn't lend message to server");
+                // Send the message to the server
+                // println!("CLIENT: Lending message...");
+                carton
+                    .lend(conn, 0)
+                    .expect("couldn't lend message to server");
 
-            // println!("CLIENT: Done");
+                // println!("CLIENT: Done, dropping things");
+            }
+            // println!("CLIENT: Exit");
         },
     ))
     .expect("couldn't start client");
@@ -318,17 +416,15 @@ fn send_mutableborrow_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_mutableborrow_message server",
         move || {
-            let sid =
-                xous_kernel::create_server(b"send_mutborrow_m").expect("couldn't create test server");
+            let sid = xous_kernel::create_server(b"send_mutborrow_m")
+                .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             // println!("Received message from {}", envelope.sender);
-            let message = envelope.message;
+            let message = envelope.body;
             if let xous_kernel::Message::MutableBorrow(m) = message {
                 let buf = m.buf;
-                let mut bt = unsafe {
-                    Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
-                };
+                let bt = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
                 for letter in bt.iter_mut() {
                     *letter += 1;
                 }
@@ -347,7 +443,7 @@ fn send_mutableborrow_message() {
             let sid = server_addr_recv.recv().unwrap();
 
             // Perform a connection to the server
-            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
 
             // Convert the message into a "Carton" that can be shipped as a message
             let mut carton = xous_kernel::carton::Carton::from_bytes(&test_bytes);
@@ -389,18 +485,18 @@ fn send_mutableborrow_message_repeat() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_mutableborrow_message_repeat server",
         move || {
-            let sid =
-                xous_kernel::create_server(b"send_mutborrow_r").expect("couldn't create test server");
+            let sid = xous_kernel::create_server(b"send_mutborrow_r")
+                .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
 
             for iteration in 0..loops {
-                let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
-                let message = envelope.message;
+                let envelope =
+                    xous_kernel::receive_message(sid).expect("couldn't receive messages");
+                let message = envelope.body;
                 if let xous_kernel::Message::MutableBorrow(m) = message {
                     let buf = m.buf;
-                    let mut bt = unsafe {
-                        Box::from_raw(core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()))
-                    };
+                    let bt =
+                        unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
                     for letter in bt.iter_mut() {
                         *letter = (*letter).wrapping_add((iteration & 0xff) as u8);
                     }
@@ -420,7 +516,7 @@ fn send_mutableborrow_message_repeat() {
             let sid = server_addr_recv.recv().unwrap();
 
             // Perform a connection to the server
-            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
 
             // Convert the message into a "Carton" that can be shipped as a message
             for iteration in 0..loops {
@@ -486,11 +582,12 @@ fn server_client_same_process() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let internal_server = xous_kernel::create_process_as_thread(xous_kernel::arch::ProcessArgsAsThread::new(
-        "server_client_same_process process",
-        || {
-            let server = xous_kernel::create_server(b"s_c_same_process").expect("couldn't create server");
-            let connection = xous_kernel::connect(server).expect("couldn't connect to our own server");
+    let internal_server = xous_kernel::create_process_as_thread(
+        xous_kernel::arch::ProcessArgsAsThread::new("server_client_same_process process", || {
+            let server =
+                xous_kernel::create_server(b"s_c_same_process").expect("couldn't create server");
+            let connection =
+                xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
                 id: 1,
                 arg1: 2,
@@ -499,17 +596,18 @@ fn server_client_same_process() {
                 arg4: 5,
             };
 
-            xous_kernel::send_message(connection, xous_kernel::Message::Scalar(msg_contents))
+            xous_kernel::try_send_message(connection, xous_kernel::Message::Scalar(msg_contents))
                 .expect("couldn't send message");
 
             let msg = xous_kernel::receive_message(server).expect("couldn't receive message");
 
-            assert_eq!(msg.message, xous_kernel::Message::Scalar(msg_contents));
-        },
-    ))
+            assert_eq!(msg.body, xous_kernel::Message::Scalar(msg_contents));
+        }),
+    )
     .expect("couldn't start server");
 
-    xous_kernel::wait_process_as_thread(internal_server).expect("couldn't join internal_server process");
+    xous_kernel::wait_process_as_thread(internal_server)
+        .expect("couldn't join internal_server process");
 
     // Any process ought to be able to shut down the system currently.
     rsyscall(SysCall::Shutdown).expect("unable to shutdown server");
@@ -524,11 +622,12 @@ fn multiple_contexts() {
     // Start the kernel in its own thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let internal_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
-        "multiple_contexts process",
-        move || {
-            let server = xous_kernel::create_server(b"multiple_context").expect("couldn't create server");
-            let connection = xous_kernel::connect(server).expect("couldn't connect to our own server");
+    let internal_server = xous_kernel::create_process_as_thread(
+        xous_kernel::ProcessArgsAsThread::new("multiple_contexts process", move || {
+            let server =
+                xous_kernel::create_server(b"multiple_context").expect("couldn't create server");
+            let connection =
+                xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
                 id: 1,
                 arg1: 2,
@@ -538,28 +637,33 @@ fn multiple_contexts() {
             };
 
             let mut server_threads = vec![];
-            for _ in 0..crate::arch::process::MAX_THREAD {
+            for _ in 1..crate::arch::process::MAX_THREAD {
                 server_threads.push(
                     xous_kernel::create_thread(move || {
-                        let msg = xous_kernel::receive_message(server).expect("couldn't receive message");
-                        assert_eq!(msg.message, xous_kernel::Message::Scalar(msg_contents));
+                        let msg =
+                            xous_kernel::receive_message(server).expect("couldn't receive message");
+                        assert_eq!(msg.body, xous_kernel::Message::Scalar(msg_contents));
                     })
                     .expect("couldn't spawn client thread"),
                 );
             }
 
             for _ in &server_threads {
-                xous_kernel::send_message(connection, xous_kernel::Message::Scalar(msg_contents))
-                    .expect("couldn't send message");
+                xous_kernel::try_send_message(
+                    connection,
+                    xous_kernel::Message::Scalar(msg_contents),
+                )
+                .expect("couldn't send message");
             }
             for server_thread in server_threads.into_iter() {
                 xous_kernel::wait_thread(server_thread).expect("couldn't wait for thread");
             }
-        },
-    ))
+        }),
+    )
     .expect("couldn't create internal server");
 
-    xous_kernel::wait_process_as_thread(internal_server).expect("couldn't join internal_server process");
+    xous_kernel::wait_process_as_thread(internal_server)
+        .expect("couldn't join internal_server process");
 
     // Any process ought to be able to shut down the system currently.
     shutdown_kernel();
@@ -585,24 +689,20 @@ fn process_restart_server() {
     fn create_destroy_server(test_bytes: &'static [u8]) {
         let (server_addr_send, server_addr_recv) = channel();
 
-        let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
-            "process_restart_server server",
-            move || {
-                let sid =
-                    xous_kernel::create_server(b"test_recreate_se").expect("couldn't create test server");
+        let xous_server = xous_kernel::create_process_as_thread(
+            xous_kernel::ProcessArgsAsThread::new("process_restart_server server", move || {
+                let sid = xous_kernel::create_server(b"test_recreate_se")
+                    .expect("couldn't create test server");
                 server_addr_send.send(sid).unwrap();
                 let thr = xous_kernel::create_thread(move || {
-                    let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+                    let envelope =
+                        xous_kernel::receive_message(sid).expect("couldn't receive messages");
                     // println!("Received message from {}", envelope.sender);
-                    let message = envelope.message;
+                    let message = envelope.body;
                     if let xous_kernel::Message::Move(m) = message {
                         let buf = m.buf;
-                        let bt = unsafe {
-                            Box::from_raw(core::slice::from_raw_parts_mut(
-                                buf.as_mut_ptr(),
-                                buf.len(),
-                            ))
-                        };
+                        let bt =
+                            unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
                         assert_eq!(*test_bytes, *bt);
                     // let s = String::from_utf8_lossy(&bt);
                     // println!("Got message: {:?} -> \"{}\"", bt, s);
@@ -612,21 +712,23 @@ fn process_restart_server() {
                 })
                 .unwrap();
                 xous_kernel::wait_thread(thr).unwrap();
-            },
-        ))
+            }),
+        )
         .expect("couldn't spawn server process");
 
         // Wait for the server to start up
-        let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
-            "process_restart_server client",
-            move || {
+        let xous_client = xous_kernel::create_process_as_thread(
+            xous_kernel::ProcessArgsAsThread::new("process_restart_server client", move || {
                 let sid = server_addr_recv.recv().unwrap();
-                let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
+                let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
                 let msg = xous_kernel::carton::Carton::from_bytes(test_bytes);
-                xous_kernel::send_message(conn, xous_kernel::Message::Move(msg.into_message(0)))
-                    .expect("couldn't send a message");
-            },
-        ))
+                xous_kernel::try_send_message(
+                    conn,
+                    xous_kernel::Message::Move(msg.into_message(0)),
+                )
+                .expect("couldn't send a message");
+            }),
+        )
         .expect("couldn't start client process");
 
         xous_kernel::wait_process_as_thread(xous_server).expect("couldn't join server process");

@@ -107,7 +107,7 @@ pub extern "C" fn trap_handler(
             if response == xous_kernel::Result::ResumeProcess {
                 crate::arch::syscall::resume(current_pid().get() == 1, thread);
             } else {
-                println!("Returning to address {:08x}", thread.sepc);
+                // println!("Returning to address {:08x}", thread.sepc);
                 unsafe { _xous_syscall_return_result(&response, thread) };
             }
         });
@@ -176,10 +176,10 @@ pub extern "C" fn trap_handler(
                         .take()
                         .expect("got an instruction page fault with no previous PID")
                 };
-                println!(
-                    "ISR: Resuming previous pair of ({}, {})",
-                    previous_pid, previous_context
-                );
+                // println!(
+                //     "ISR: Resuming previous pair of ({}, {})",
+                //     previous_pid, previous_context
+                // );
                 // Switch to the previous process' address space.
                 SystemServices::with_mut(|ss| {
                     ss.finish_callback_and_resume(previous_pid, previous_context)
@@ -210,9 +210,9 @@ pub extern "C" fn trap_handler(
             if PREVIOUS_PAIR.is_none() {
                 let tid = crate::arch::process::current_tid();
                 PREVIOUS_PAIR = Some((pid, tid));
-                println!("ISR: Setting previous pair to ({}, {})", pid, tid);
-            } else {
-                println!("ISR: Previous pair is not None");
+                // println!("ISR: Setting previous pair to ({}, {})", pid, tid);
+            // } else {
+            //     println!("ISR: Previous pair is not None");
             }
         }
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");

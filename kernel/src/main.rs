@@ -58,7 +58,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
 
     // Either map memory using a syscall, or if we're debugging the syscall
     // handler then directly map it.
-    #[cfg(feature = "debug-print")]
+    #[cfg(any(feature = "debug-print", feature = "print-panics"))]
     {
         // Map the serial port so println!() works as expected.
         mem::MemoryManager::with_mut(|memory_manager| {
