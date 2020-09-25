@@ -37,12 +37,18 @@ a binary by running the following:
 ```sh
 $ cargo run -p tools --bin create-image -- \
         --csv emulation/csr.csv \
-        --kernel target/riscv32imac-unknown-none-elf/debug/kernel \
+        --kernel kernel/target/riscv32imac-unknown-none-elf/debug/kernel \
         --init target/riscv32imac-unknown-none-elf/debug/shell \
         target/args.bin
-
-$
 ```
+
+## Targeting Real Hardware
+
+The following files need manual adjustment:
+
+* emulation/csr.csv should map to the csr.csv of the final SoC
+* examples/graphics-server/src/backend/betrusted.rs needs a correct address for the "control" data structure (based on csr.csv)
+* kernel/src/debug.rs:7 needs a correct UART base, based on csr.csv
 
 ## Try It Out on a Desktop
 
