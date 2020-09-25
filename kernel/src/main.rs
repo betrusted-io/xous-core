@@ -64,7 +64,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         mem::MemoryManager::with_mut(|memory_manager| {
             memory_manager
                 .map_range(
-                    0xF0002000 as *mut u8,
+                    0xF0004000 as *mut u8,
                     ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut u8,
                     4096,
                     PID::new(1).unwrap(),
@@ -133,6 +133,9 @@ pub extern "C" fn kmain() {
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
+    for _ in 0..100 {
+       println!("Hello world");
+    }
     loop {
         arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);
