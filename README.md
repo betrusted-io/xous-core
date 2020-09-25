@@ -50,10 +50,12 @@ The following files need manual adjustment:
 * examples/graphics-server/src/backend/betrusted.rs needs a correct address for the "control" data structure (based on csr.csv)
 * kernel/src/debug.rs:7 needs a correct UART base, based on csr.csv
 
-Create the loader.bin from the .elf:
+Create the loader.bin from the .elf. `objcopy` adds several hundred megabytes of zero at the end of `loader.bin` so just
+take the first 64kiB, which is the max size allocated for it anyways in hardware.
 
 ```
-riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader.bin
+riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader_raw.bin
+dd if=loader_raw.bin of=loader.bin bs=1024 count=64
 ```
 
 
