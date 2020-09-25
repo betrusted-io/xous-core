@@ -28,7 +28,7 @@ impl Write for Uart {
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
-        base: 0xF000_1000 as *mut u32,
+        base: 0xF000_4000 as *mut u32,
     };
 
     #[macro_export]

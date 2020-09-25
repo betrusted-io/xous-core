@@ -16,20 +16,20 @@ fi
 # This is handled in part by betrusted-scripts, with provision-xous.sh
 # stage1 and kernel are merged into xous.img by this script.
 
-cargo build --target riscv32imac-unknown-none-elf
-cd kernel && cargo build -p kernel --target riscv32imac-unknown-none-elf
+cargo build --release --target riscv32imac-unknown-none-elf
+cd kernel && cargo build -p kernel --release --target riscv32imac-unknown-none-elf
 cd ..
-cd loader && cargo build -p loader --target riscv32imac-unknown-none-elf
+cd loader && cargo build -p loader --release --target riscv32imac-unknown-none-elf
 cd ..
 
-cargo run -p tools --bin create-image -- \
+cargo run --release -p tools --bin create-image -- \
       --csv emulation/csr.csv \
-      --kernel kernel/target/riscv32imac-unknown-none-elf/debug/kernel \
-      --init target/riscv32imac-unknown-none-elf/debug/shell \
+      --kernel kernel/target/riscv32imac-unknown-none-elf/release/kernel \
+      --init target/riscv32imac-unknown-none-elf/release/shell \
               target/args.bin
 
-riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader_raw.bin
-dd if=loader_raw.bin of=loader.bin bs=1024 count=64
+riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader.bin
+dd if=/dev/null of=loader.bin bs=1 count=1 seek=65536
 cat loader.bin target/args.bin > xous.img
 
 if [ $# -gt 0 ]
@@ -38,9 +38,11 @@ then
     then
 	scp xous.img $1:code/betrusted-scripts/
 	scp ../betrusted-soc/build/gateware/encrypted.bin $1:code/betrusted-scripts/
+	scp ../emulation/csr.csv $1:code/betrusted-scripts/soc-csr.csv
     else
 	scp -i $2 xous.img $1:code/betrusted-scripts/
 	scp -i $2 ../betrusted-soc/build/gateware/encrypted.bin $1:code/betrusted-scripts/
+	scp -i $2 emulation/csr.csv $1:code/betrusted-scripts/soc-csr.csv
     fi
 else
     echo "Copy to target with $0 <user@host> <ssh-id>"

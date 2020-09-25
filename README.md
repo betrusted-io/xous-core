@@ -49,6 +49,7 @@ The following files need manual adjustment:
 * emulation/csr.csv should map to the csr.csv of the final SoC
 * examples/graphics-server/src/backend/betrusted.rs needs a correct address for the "control" data structure (based on csr.csv)
 * kernel/src/debug.rs:7 needs a correct UART base, based on csr.csv
+* loader/src/debug.rs:31 needs a correct UART base, basedon csr.csv
 
 Create the loader.bin from the .elf. `objcopy` adds several hundred megabytes of zero at the end of `loader.bin` so just
 take the first 64kiB, which is the exact size allocated for it anyways in hardware. The final loadable image is created by 
