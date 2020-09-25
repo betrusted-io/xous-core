@@ -51,11 +51,15 @@ The following files need manual adjustment:
 * kernel/src/debug.rs:7 needs a correct UART base, based on csr.csv
 
 Create the loader.bin from the .elf. `objcopy` adds several hundred megabytes of zero at the end of `loader.bin` so just
-take the first 64kiB, which is the max size allocated for it anyways in hardware.
+take the first 64kiB, which is the exact size allocated for it anyways in hardware. The final loadable image is created by 
+`cat`ing the loader and the kernel together, and writing it to location 0x2050_0000 (SPI ROM offset 0x50_0000), using
+the `provision-xous.sh` script inside [betrusted-scipts](https://github.com/betrusted-io/betrusted-scripts/blob/master/provision-xous.sh)
+running on a Raspberry Pi 4 with the appropriate debug hat attached.
 
 ```
 riscv64-unknown-elf-objcopy loader/target/riscv32imac-unknown-none-elf/release/loader -O binary loader_raw.bin
 dd if=loader_raw.bin of=loader.bin bs=1024 count=64
+cat loader.bin target/args.bin > xous.img
 ```
 
 
