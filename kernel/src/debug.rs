@@ -4,7 +4,7 @@ use core::fmt::{Error, Write};
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
-        base: 0xffcf_0000 as *mut usize,
+        base: 0xf000_4000 as *mut usize,
     };
 
     #[macro_export]

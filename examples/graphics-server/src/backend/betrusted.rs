@@ -27,7 +27,7 @@ impl XousDisplay {
         .expect("couldn't map control port");
 
         let control = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0xf000_5000),
+            xous::MemoryAddress::new(0xf000_a000),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
