@@ -1,10 +1,11 @@
 use core::fmt::{Error, Write};
+use utra;
 #[macro_use]
 #[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
-        base: 0xf000_4000 as *mut usize,
+        base: utra::HW_UART_BASE as *mut usize,
     };
 
     #[macro_export]

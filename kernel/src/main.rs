@@ -25,6 +25,7 @@ mod syscall;
 
 use services::SystemServices;
 use xous_kernel::*;
+use utra;
 
 #[cfg(baremetal)]
 use core::panic::PanicInfo;
@@ -64,7 +65,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         mem::MemoryManager::with_mut(|memory_manager| {
             memory_manager
                 .map_range(
-                    0xF0004000 as *mut u8,
+                    utra::HW_UART_BASE as *mut u8,
                     ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut u8,
                     4096,
                     PID::new(1).unwrap(),
