@@ -1,0 +1,3 @@
+[submodule "utra"]
+	path = utra
+	url = https://github.com/betrusted-io/utra
