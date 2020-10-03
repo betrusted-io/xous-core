@@ -107,7 +107,7 @@ fn main() {
     }
 
     if let Some(csr_csv) = matches.value_of("csv") {
-        let hv = parse_csr_csv(csr_csv).unwrap();
+        let hv = parse_csr_csv(csr_csv).expect("couldn't find csr.csv file");
         let mut found_ram_name = None;
         fn round_mem(src: u32) -> u32 {
             (src + 4095) & !4095
