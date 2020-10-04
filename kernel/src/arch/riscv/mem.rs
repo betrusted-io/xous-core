@@ -111,7 +111,9 @@ impl MemoryMapping {
     /// As such, this will only have an observable effect once code returns
     /// to userspace.
     pub fn activate(self) -> Result<(), xous_kernel::Error> {
+        unsafe { flush_mmu() };
         satp::write(self.satp);
+        unsafe { flush_mmu() };
         Ok(())
     }
 
