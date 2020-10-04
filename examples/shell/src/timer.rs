@@ -1,6 +1,6 @@
 
 #[cfg(baremetal)]
-const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000;
+const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
 #[cfg(baremetal)]
 const TIMER_BASE: usize = 0xF000_3000;
 
@@ -21,7 +21,7 @@ pub fn init() {
     use xous::{MemoryAddress, MemorySize};
     println!("Allocating timer...");
     xous::rsyscall(xous::SysCall::MapMemory(
-        MemoryAddress::new(TIMER_BASE),
+        MemoryAddress::new(utra::HW_TIMER0_BASE),
         MemoryAddress::new(TIMER_BASE),
         MemorySize::new(4096).unwrap(),
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -35,7 +35,7 @@ pub fn init() {
     ))
     .expect("timer: couldn't claim interrupt");
 
-    let ms = 10; // tick every 10 ms
+    let ms = 100; // tick every 100 ms
     en(false);
     load(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
     reload(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
