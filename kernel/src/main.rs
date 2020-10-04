@@ -76,8 +76,8 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         });
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
-        println!("Claiming IRQ 3 via syscall...");
-        xous_kernel::claim_interrupt(3, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 3");
+        println!("Claiming IRQ 0 via syscall...");
+        xous_kernel::claim_interrupt(0, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 0");
         print!("}} ");
 
         // Print the processed kernel arguments
