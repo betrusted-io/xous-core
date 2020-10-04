@@ -576,17 +576,14 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 );
                 SWITCHTO_CALLER = Some((pid, tid));
             }
-            println!(
-                "Activating process thread {} in pid {} coming from pid {} thread {}",
-                new_context, new_pid, pid, tid
-            );
+            // println!(
+            //     "Activating process thread {} in pid {} coming from pid {} thread {}",
+            //     new_context, new_pid, pid, tid
+            // );
             let result = ss
                 .activate_process_thread(tid, new_pid, new_context, true)
-                .map(|_ctx| {
-                    println!("switchto ({}, {})", pid, _ctx);
-                    xous_kernel::Result::ResumeProcess
-                });
-            println!("Done activating process thread: {:?}", result);
+                .map(|_ctx| xous_kernel::Result::ResumeProcess);
+            // println!("Done activating process thread: {:?}", result);
             result
         }),
         SysCall::ClaimInterrupt(no, callback, arg) => {

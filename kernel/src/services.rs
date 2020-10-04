@@ -854,7 +854,7 @@ impl SystemServices {
             // the list of ready contexts.
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
-                    println!("Setting up new process...");
+                    // println!("Setting up new process...");
                     ArchProcess::setup_process(new_pid, thread_init)
                         .expect("couldn't set up new process");
 
