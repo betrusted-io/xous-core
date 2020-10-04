@@ -134,9 +134,6 @@ pub extern "C" fn kmain() {
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
-    for _ in 0..100 {
-       println!("Hello world");
-    }
     loop {
         arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);
