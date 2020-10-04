@@ -9,3 +9,4 @@ description = "Shell test program"
 bitflags = "1.2.1"
 xous = { path = "../../xous-rs" }
 graphics-server = { path = "../graphics-server" }
+utra = { path = "../../utra/utra"}
