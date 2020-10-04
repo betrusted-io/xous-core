@@ -36,11 +36,11 @@ fn ensure_connection(server: xous::SID) -> xous::CID {
 fn shell_main() -> ! {
     timer::init();
 
-    let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
+    // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
-    let log_conn = ensure_connection(log_server_id);
+    let log_conn = 100;//ensure_connection(log_server_id);
     let graphics_conn = ensure_connection(graphics_server_id);
 
     println!(
@@ -121,33 +121,33 @@ fn shell_main() -> ! {
             }
         }
 
-        let lfsr = move_lfsr(lfsr);
-        if lfsr.trailing_zeros() >= 3 {
-            loop {
-                match xous::syscall::try_send_message(
-                    log_conn,
-                    xous::Message::Scalar(xous::ScalarMessage {
-                        id: counter + 4096,
-                        arg1: counter,
-                        arg2: counter * 2,
-                        arg3: !counter,
-                        arg4: lfsr as _,
-                    }),
-                ) {
-                    Err(xous::Error::ServerQueueFull) => {
-                        println!("SHELL: Log Server queue is full... retrying");
-                        continue;
-                    }
-                    Ok(_) => {
-                        println!("SHELL: Loop {}", counter);
-                        counter += 1;
-                        break;
-                    }
-                    Err(e) => panic!("Unable to send message: {:?}", e),
-                }
-            }
-        }
-        // #[cfg(not(target_os = "none"))]
+        // let lfsr = move_lfsr(lfsr);
+        // if lfsr.trailing_zeros() >= 3 {
+        //     loop {
+        //         match xous::syscall::try_send_message(
+        //             log_conn,
+        //             xous::Message::Scalar(xous::ScalarMessage {
+        //                 id: counter + 4096,
+        //                 arg1: counter,
+        //                 arg2: counter * 2,
+        //                 arg3: !counter,
+        //                 arg4: lfsr as _,
+        //             }),
+        //         ) {
+        //             Err(xous::Error::ServerQueueFull) => {
+        //                 println!("SHELL: Log Server queue is full... retrying");
+        //                 continue;
+        //             }
+        //             Ok(_) => {
+        //                 println!("SHELL: Loop {}", counter);
+        //                 counter += 1;
+        //                 break;
+        //             }
+        //             Err(e) => panic!("Unable to send message: {:?}", e),
+        //         }
+        //     }
+        // }
+        // // #[cfg(not(target_os = "none"))]
         // std::thread::sleep(std::time::Duration::from_millis(500));
         // if counter & 2 == 0 {
         //     xous::syscall::yield_slice();
