@@ -785,17 +785,17 @@ impl SystemServices {
         mut new_tid: TID,
         can_resume: bool,
     ) -> Result<TID, xous_kernel::Error> {
-        // println!("Activating PID {}, context {}", new_pid, new_tid);
         let previous_pid = self.current_pid();
         // println!(
-        //     "KERNEL({}): Activating process {} thread {}",
-        //     previous_pid, new_pid, new_tid
+        //     "KERNEL({},{}): Activating process {} thread {}",
+        //     previous_pid, previous_tid, new_pid, new_tid
         // );
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
         if new_pid != previous_pid {
             let new = self.get_process_mut(new_pid)?;
+            // println!("New state: {:?}", new.state);
 
             // Ensure the new process can be run.
             match new.state {
@@ -830,7 +830,7 @@ impl SystemServices {
                                 return Err(xous_kernel::Error::ProcessNotFound);
                             }
                         }
-                    // println!(" -- picked context {}", new_context);
+                    // println!(" -- picked thread {}", new_tid);
                     } else if x & (1 << new_tid) == 0 {
                         println!(
                             "thread is {:?}, which is not valid for new thread {}",
