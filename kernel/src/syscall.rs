@@ -199,7 +199,9 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let sidx = ss
+            .sidx_from_cid(sender.cid)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
@@ -281,7 +283,9 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let sidx = ss
+            .sidx_from_cid(sender.cid)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
@@ -292,15 +296,21 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
         let (client_pid, client_tid) = match result {
             WaitingMessage::ScalarMessage(pid, tid) => (pid, tid),
             WaitingMessage::ForgetMemory(_) => {
-                println!("WARNING: Tried to wait on a scalar message that was actually forgettingmemory");
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually forgettingmemory"
+                );
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
-                println!("WARNING: Tried to wait on a scalar message that was actually borrowed memory");
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
+                );
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::MovedMemory => {
-                println!("WARNING: Tried to wait on a scalar message that was actually moved memory");
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
+                );
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::None => {
@@ -315,11 +325,19 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
     })
 }
 
-fn return_scalar2(pid: PID, _tid: TID, sender: MessageSender, arg1: usize, arg2: usize) -> SysCallResult {
+fn return_scalar2(
+    pid: PID,
+    _tid: TID,
+    sender: MessageSender,
+    arg1: usize,
+    arg2: usize,
+) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss.sidx_from_cid(sender.cid).ok_or(xous_kernel::Error::ServerNotFound)?;
+        let sidx = ss
+            .sidx_from_cid(sender.cid)
+            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
@@ -334,11 +352,15 @@ fn return_scalar2(pid: PID, _tid: TID, sender: MessageSender, arg1: usize, arg2:
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::BorrowedMemory(_, _, _, _, _) => {
-                println!("WARNING: Tried to wait on a scalar message that was actually borrowed memory");
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually borrowed memory"
+                );
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::MovedMemory => {
-                println!("WARNING: Tried to wait on a scalar message that was actually moved memory");
+                println!(
+                    "WARNING: Tried to wait on a scalar message that was actually moved memory"
+                );
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
             WaitingMessage::None => {
@@ -348,7 +370,11 @@ fn return_scalar2(pid: PID, _tid: TID, sender: MessageSender, arg1: usize, arg2:
         };
         ss.ready_thread(client_pid, client_tid)?;
         ss.switch_to_thread(client_pid, Some(client_tid))?;
-        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar2(arg1, arg2))?;
+        ss.set_thread_result(
+            client_pid,
+            client_tid,
+            xous_kernel::Result::Scalar2(arg1, arg2),
+        )?;
         Ok(xous_kernel::Result::Ok)
     })
 }
@@ -542,22 +568,27 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             });
             Ok(xous_kernel::Result::Ok)
         }
-        SysCall::SwitchTo(new_pid, new_context) => {
-            SystemServices::with_mut(|ss| {
-                unsafe {
-                    assert!(
-                        SWITCHTO_CALLER.is_none(),
-                        "SWITCHTO_CALLER was not None, indicating SwitchTo was called twice"
-                    );
-                    SWITCHTO_CALLER = Some((pid, tid));
-                }
-                ss.activate_process_thread(tid, new_pid, new_context, true)
-                    .map(|_ctx| {
-                        // println!("switchto ({}, {})", pid, _ctx);
-                        xous_kernel::Result::ResumeProcess
-                    })
-            })
-        }
+        SysCall::SwitchTo(new_pid, new_context) => SystemServices::with_mut(|ss| {
+            unsafe {
+                assert!(
+                    SWITCHTO_CALLER.is_none(),
+                    "SWITCHTO_CALLER was not None, indicating SwitchTo was called twice"
+                );
+                SWITCHTO_CALLER = Some((pid, tid));
+            }
+            println!(
+                "Activating process thread {} in pid {} coming from pid {} thread {}",
+                new_context, new_pid, pid, tid
+            );
+            let result = ss
+                .activate_process_thread(tid, new_pid, new_context, true)
+                .map(|_ctx| {
+                    println!("switchto ({}, {})", pid, _ctx);
+                    xous_kernel::Result::ResumeProcess
+                });
+            println!("Done activating process thread: {:?}", result);
+            result
+        }),
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
                 .map(|_| xous_kernel::Result::Ok)
@@ -582,13 +613,11 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         }
         SysCall::ReturnToParentI(_pid, _cpuid) => {
             unsafe {
-                let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
-                    .expect("couldn't get the isr return pair");
-                // ss.ready_context(current_pid, current_ctx).unwrap();
-                let (parent_pid, parent_ctx) = SWITCHTO_CALLER
-                    .take()
-                    .expect("ReturnToParentI called with no existing parent present");
-                crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx);
+                // let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
+                //     .expect("couldn't get the isr return pair");
+                SWITCHTO_CALLER.take().map(|(parent_pid, parent_ctx)| {
+                    crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
+                });
             };
             Ok(xous_kernel::Result::ResumeProcess)
         }
