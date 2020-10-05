@@ -8,6 +8,11 @@ type DynError = Box<dyn std::error::Error>;
 
 const TARGET: &str = "riscv32imac-unknown-none-elf";
 
+enum MemorySpec {
+    SvdFile(String),
+    CsvFile(String),
+}
+
 #[derive(Debug)]
 enum BuildError {
     PathConversionError,
@@ -36,6 +41,7 @@ fn try_main() -> Result<(), DynError> {
         Some("renode-image") => image(false)?,
         Some("renode-image-debug") => image(true)?,
         Some("run") => run(false)?,
+        Some("ci") => build_ci(false, env::args().nth(2))?,
         Some("debug") => run(true)?,
         _ => print_help(),
     }
@@ -47,10 +53,36 @@ fn print_help() {
         "Tasks:
 renode-image            builds a test image for renode
 renode-image-debug      builds a test image for renode in debug mode
+ci [soc.svd]            builds an image for real hardware for CI
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 "
     )
+}
+
+fn build_ci(debug: bool, svd: Option<String>) -> Result<(), DynError> {
+    let svd_file = match svd {
+        Some(s) => s,
+        None => return Err("svd file not specified".into()),
+    };
+
+    let path = std::path::Path::new(&svd_file);
+    if ! path.exists() {
+        return Err("svd file does not exist".into());
+    }
+
+    // Tools use this environment variable to know when to rebuild the UTRA crate.
+    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+
+    let kernel = build_kernel(debug)?;
+    let mut init = vec![];
+    for pkg in &["shell", "log-server", "graphics-server"] {
+        init.push(build(pkg, debug, Some(TARGET), None)?);
+    }
+    build("loader", debug, Some(TARGET), Some("loader".into()))?;
+    create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
+
+    Ok(())
 }
 
 fn image(debug: bool) -> Result<(), DynError> {
@@ -61,7 +93,7 @@ fn image(debug: bool) -> Result<(), DynError> {
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
 
-    create_image(&kernel, &init, debug)?;
+    create_image(&kernel, &init, debug, MemorySpec::CsvFile("emulation/csr.csv".into()))?;
 
     Ok(())
 }
@@ -165,7 +197,7 @@ fn build(
     }
 }
 
-fn create_image(kernel: &Path, init: &[PathBuf], debug: bool) -> Result<PathBuf, DynError> {
+fn create_image(kernel: &Path, init: &[PathBuf], debug: bool, memory_spec: MemorySpec) -> Result<PathBuf, DynError> {
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
@@ -180,8 +212,16 @@ fn create_image(kernel: &Path, init: &[PathBuf], debug: bool) -> Result<PathBuf,
         args.push(i.to_str().ok_or(BuildError::PathConversionError)?);
     }
 
-    args.push("--csv");
-    args.push("emulation/csr.csv");
+    match memory_spec {
+        MemorySpec::CsvFile(ref s) => {
+            args.push("--csv");
+            args.push(s);
+        },
+        MemorySpec::SvdFile(ref s) => {
+            args.push("--svd");
+            args.push(s);
+        },
+    }
 
     let status = Command::new(cargo())
         .current_dir(project_root())
