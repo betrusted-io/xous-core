@@ -29,7 +29,7 @@ pub struct Register {
 #[derive(Default, Debug)]
 pub struct Peripheral {
     name: String,
-    base: usize,
+    pub base: usize,
     size: usize,
     interrupt: Option<usize>,
     registers: Vec<Register>,
