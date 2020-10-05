@@ -8,7 +8,9 @@ description = "Manage the video output"
 [dependencies]
 xous = { path = "../../xous-rs" }
 embedded-graphics = "0.6"
-utra = { path = "../../utra/utra"}
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utra = { path = "../../utra"}
+
+[target.'cfg(any(windows,unix))'.dependencies]
 minifb = "0.17"

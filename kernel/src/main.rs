@@ -25,7 +25,6 @@ mod syscall;
 
 use services::SystemServices;
 use xous_kernel::*;
-use utra;
 
 #[cfg(baremetal)]
 use core::panic::PanicInfo;

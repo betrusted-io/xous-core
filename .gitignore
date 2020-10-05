@@ -2,7 +2,7 @@
 /kernel/target
 /loader/target
 **/*.rs.bk
-/utra/utra
+/utra
 
 # Emacs
 *~

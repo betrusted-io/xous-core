@@ -6,8 +6,8 @@ members = [
     "examples/shell",
     "examples/graphics-server",
     "examples/log-server",
+    "svd2utra",
     "xtask",
-    "utra/utra"
 ]
 default-members = [
     "examples/shell",
@@ -22,9 +22,12 @@ default-members = [
 exclude = [
     "kernel",
     "loader",
+
+    # Exclude UTRA, since it is machine-generated.
+    "utra",
 ]
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
 debug = true # symbols are nice and they don't increase the size on Flash
-lto = "thin"
+#lto = "thin"
