@@ -8,17 +8,18 @@ pub enum ParseError {
     MissingValue,
     ParseIntError,
     NonUTF8,
+    WriteError,
 }
 
 #[derive(Default, Debug)]
-struct Field {
+pub struct Field {
     name: String,
     lsb: usize,
     msb: usize,
 }
 
 #[derive(Default, Debug)]
-struct Register {
+pub struct Register {
     name: String,
     offset: usize,
     description: Option<String>,
@@ -26,7 +27,7 @@ struct Register {
 }
 
 #[derive(Default, Debug)]
-struct Peripheral {
+pub struct Peripheral {
     name: String,
     base: usize,
     size: usize,
@@ -35,14 +36,14 @@ struct Peripheral {
 }
 
 #[derive(Default, Debug)]
-struct MemoryRegion {
+pub struct MemoryRegion {
     name: String,
     base: usize,
     size: usize,
 }
 
 #[derive(Default, Debug)]
-struct Description {
+pub struct Description {
     peripherals: Vec<Peripheral>,
     memory_regions: Vec<MemoryRegion>,
 }
@@ -597,8 +598,7 @@ mod tests {
     Ok(())
 }
 
-
-pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
+pub fn parse_svd<T: Read>(src: T) -> Result<Description, ParseError> {
     let mut buf = Vec::new();
     let buf_reader = BufReader::new(src);
     let mut reader = Reader::from_reader(buf_reader);
@@ -620,11 +620,16 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
         }
         buf.clear();
     }
+    Ok(description)
+}
 
-    print_header(dest).unwrap();
-    print_memory_regions(&description.memory_regions, dest).unwrap();
-    print_peripherals(&description.peripherals, dest).unwrap();
-    print_tests(&description.peripherals, dest).unwrap();
+pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
+    let description = parse_svd(src)?;
+
+    print_header(dest).or(Err(ParseError::WriteError))?;
+    print_memory_regions(&description.memory_regions, dest).or(Err(ParseError::WriteError))?;
+    print_peripherals(&description.peripherals, dest).or(Err(ParseError::WriteError))?;
+    print_tests(&description.peripherals, dest).or(Err(ParseError::WriteError))?;
 
     Ok(())
 }
