@@ -1,5 +1,6 @@
 use std::{
     env,
+    io::{Read, Write},
     path::{Path, PathBuf, MAIN_SEPARATOR},
     process::Command,
 };
@@ -67,7 +68,7 @@ fn build_ci(debug: bool, svd: Option<String>) -> Result<(), DynError> {
     };
 
     let path = std::path::Path::new(&svd_file);
-    if ! path.exists() {
+    if !path.exists() {
         return Err("svd file does not exist".into());
     }
 
@@ -76,11 +77,66 @@ fn build_ci(debug: bool, svd: Option<String>) -> Result<(), DynError> {
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "log-server", "graphics-server"] {
+    for pkg in &["shell", "graphics-server"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
-    build("loader", debug, Some(TARGET), Some("loader".into()))?;
-    create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
+    let loader = build("loader", debug, Some(TARGET), Some("loader".into()))?;
+
+    let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
+    println!();
+    println!(
+        "Kernel+Init bundle is available at {}",
+        output_bundle.display()
+    );
+
+    let mut loader_bin = output_bundle.parent().unwrap().to_owned();
+    loader_bin.push("loader.bin");
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "run",
+            "--package",
+            "tools",
+            "--bin",
+            "copy-object",
+            "--",
+            loader.as_os_str().to_str().unwrap(),
+            loader_bin.as_os_str().to_str().unwrap(),
+        ])
+        .status()?;
+    if !status.success() {
+        return Err("cargo build failed".into());
+    }
+
+    let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
+    xous_img_path.push("xous.img");
+    let mut xous_img = std::fs::File::create(&xous_img_path).expect("couldn't create xous.img");
+    let mut loader_bin_file = std::fs::File::open(loader_bin).expect("couldn't open loader.bin");
+    let mut buf = vec![];
+    loader_bin_file
+        .read_to_end(&mut buf)
+        .expect("couldn't read loader.bin");
+    xous_img
+        .write_all(&buf)
+        .expect("couldn't write loader.bin to xous.img");
+    let leftover_bytes = 65536 - buf.len();
+    let mut buf = vec![];
+    buf.resize_with(leftover_bytes, Default::default);
+    xous_img
+        .write_all(&buf)
+        .expect("couldn't pad xous.img with zeroes");
+
+    let mut bundle_file = std::fs::File::open(output_bundle).expect("couldn't open output bundle");
+    let mut buf = vec![];
+    bundle_file
+        .read_to_end(&mut buf)
+        .expect("couldn't read output bundle file");
+    xous_img
+        .write_all(&buf)
+        .expect("couldn't write bundle file to xous.img");
+
+    println!();
+    println!("Bundled image file created at {}", xous_img_path.display());
 
     Ok(())
 }
@@ -93,7 +149,12 @@ fn image(debug: bool) -> Result<(), DynError> {
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
 
-    create_image(&kernel, &init, debug, MemorySpec::CsvFile("emulation/csr.csv".into()))?;
+    create_image(
+        &kernel,
+        &init,
+        debug,
+        MemorySpec::CsvFile("emulation/csr.csv".into()),
+    )?;
 
     Ok(())
 }
@@ -197,7 +258,12 @@ fn build(
     }
 }
 
-fn create_image(kernel: &Path, init: &[PathBuf], debug: bool, memory_spec: MemorySpec) -> Result<PathBuf, DynError> {
+fn create_image(
+    kernel: &Path,
+    init: &[PathBuf],
+    debug: bool,
+    memory_spec: MemorySpec,
+) -> Result<PathBuf, DynError> {
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
@@ -216,11 +282,11 @@ fn create_image(kernel: &Path, init: &[PathBuf], debug: bool, memory_spec: Memor
         MemorySpec::CsvFile(ref s) => {
             args.push("--csv");
             args.push(s);
-        },
+        }
         MemorySpec::SvdFile(ref s) => {
             args.push("--svd");
             args.push(s);
-        },
+        }
     }
 
     let status = Command::new(cargo())
