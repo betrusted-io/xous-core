@@ -40,6 +40,7 @@ cargo run --release -p tools --bin create-image -- \
       --csv emulation/csr.csv \
       --kernel kernel/target/riscv32imac-unknown-none-elf/release/kernel \
       --init target/riscv32imac-unknown-none-elf/release/shell \
+      --init target/riscv32imac-unknown-none-elf/release/graphics-server \
               target/args.bin
 
 echo "Building binary..."
