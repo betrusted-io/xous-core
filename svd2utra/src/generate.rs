@@ -575,20 +575,20 @@ mod tests {
     out.write_all(test_header)?;
     for peripheral in peripherals {
         let mod_name = peripheral.name.to_lowercase();
-        let per_name = peripheral.name.to_uppercase();
+        let per_name = peripheral.name.to_lowercase() + "_csr";
+        writeln!(out, "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);", per_name, peripheral.name.to_uppercase())?;
         for register in &peripheral.registers {
             writeln!(out)?;
-            let reg_name = register.name.to_uppercase() + "_csr";
-            writeln!(out, "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);", reg_name, per_name)?;
-            writeln!(out, "        let foo = {}.r(utra::{}::{});", reg_name, mod_name, reg_name)?;
-            writeln!(out, "        {}.wo(utra::{}::{}, foo);", reg_name, mod_name, reg_name)?;
+            let reg_name = register.name.to_uppercase();
+            writeln!(out, "        let foo = {}.r(utra::{}::{});", per_name, mod_name, reg_name)?;
+            writeln!(out, "        {}.wo(utra::{}::{}, foo);", per_name, mod_name, reg_name)?;
             for field in &register.fields {
                 let field_name = format!("{}_{}", reg_name, field.name.to_uppercase());
-                writeln!(out, "        let bar = {}.rf(utra::{}::{});", reg_name, mod_name, field_name)?;
-                writeln!(out, "        {}.rmwf(utra::{}::{}, bar);", reg_name, mod_name, field_name)?;
-                writeln!(out, "        let mut baz = {}.zf(utra::{}::{}, bar);", reg_name, mod_name, field_name)?;
-                writeln!(out, "        baz |= {}.ms(utra::{}::{}, 1);", reg_name, mod_name, field_name)?;
-                writeln!(out, "        {}.wfo(utra::{}::{}, baz);", reg_name, mod_name, field_name)?;
+                writeln!(out, "        let bar = {}.rf(utra::{}::{});", per_name, mod_name, field_name)?;
+                writeln!(out, "        {}.rmwf(utra::{}::{}, bar);", per_name, mod_name, field_name)?;
+                writeln!(out, "        let mut baz = {}.zf(utra::{}::{}, bar);", per_name, mod_name, field_name)?;
+                writeln!(out, "        baz |= {}.ms(utra::{}::{}, 1);", per_name, mod_name, field_name)?;
+                writeln!(out, "        {}.wfo(utra::{}::{}, baz);", per_name, mod_name, field_name)?;
             }
         }
     }
