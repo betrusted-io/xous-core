@@ -42,7 +42,7 @@ fn try_main() -> Result<(), DynError> {
         Some("renode-image") => image(false)?,
         Some("renode-image-debug") => image(true)?,
         Some("run") => run(false)?,
-        Some("ci") => build_ci(false, env::args().nth(2))?,
+        Some("hw-image") => build_hw_image(false, env::args().nth(2))?,
         Some("debug") => run(true)?,
         _ => print_help(),
     }
@@ -54,14 +54,14 @@ fn print_help() {
         "Tasks:
 renode-image            builds a test image for renode
 renode-image-debug      builds a test image for renode in debug mode
-ci [soc.svd]            builds an image for real hardware for CI
+hw-image [soc.svd]      builds an image for real hardware
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 "
     )
 }
 
-fn build_ci(debug: bool, svd: Option<String>) -> Result<(), DynError> {
+fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),

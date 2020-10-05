@@ -16,7 +16,7 @@ fi
 # This is handled in part by betrusted-scripts, with provision-xous.sh
 # stage1 and kernel are merged into xous.img by this script.
 
-cargo xtask ci ../betrusted-soc/build/software/soc.svd
+cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
 
 echo "Copying to target..."
 if [ $# -gt 0 ]
