@@ -27,11 +27,17 @@ pub struct Register {
 }
 
 #[derive(Default, Debug)]
+pub struct Interrupt {
+    name: String,
+    value: usize,
+}
+
+#[derive(Default, Debug)]
 pub struct Peripheral {
     name: String,
     pub base: usize,
     size: usize,
-    interrupt: Option<usize>,
+    interrupt: Vec<Interrupt>,
     registers: Vec<Register>,
 }
 
@@ -182,6 +188,46 @@ fn generate_register<T: BufRead>(reader: &mut Reader<T>) -> Result<Register, Par
     })
 }
 
+fn generate_interrupts<T: BufRead>(
+    reader: &mut Reader<T>,
+    interrupts: &mut Vec<Interrupt>,
+) -> Result<(), ParseError> {
+    let mut buf = Vec::new();
+    let mut name = None;
+    let mut value = None;
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag_name = e
+                    .unescape_and_decode(reader)
+                    .map_err(|_| ParseError::NonUTF8)?;
+                match tag_name.as_str() {
+                    "name" => name = Some(extract_contents(reader)?),
+                    "value" => {
+                        value = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
+                    }
+                    _ => (),
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if let b"interrupt" = e.name() {
+                    break;
+                }
+            }
+            Ok(_) => (),
+            Err(e) => panic!("error parsing: {:?}", e),
+        }
+    }
+
+    interrupts.push(
+        Interrupt {
+            name: name.ok_or(ParseError::MissingValue)?,
+            value: value.ok_or(ParseError::MissingValue)?,
+        });
+
+    Ok(())
+}
+
 fn generate_registers<T: BufRead>(
     reader: &mut Reader<T>,
     registers: &mut Vec<Register>,
@@ -212,6 +258,7 @@ fn generate_peripheral<T: BufRead>(reader: &mut Reader<T>) -> Result<Peripheral,
     let mut base = None;
     let mut size = None;
     let mut registers = vec![];
+    let mut interrupts = vec![];
     loop {
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => {
@@ -225,6 +272,7 @@ fn generate_peripheral<T: BufRead>(reader: &mut Reader<T>) -> Result<Peripheral,
                     }
                     "size" => size = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     "registers" => generate_registers(reader, &mut registers)?,
+                    "interrupt" => generate_interrupts(reader, &mut interrupts)?,
                     _ => (),
                 }
             }
@@ -242,7 +290,7 @@ fn generate_peripheral<T: BufRead>(reader: &mut Reader<T>) -> Result<Peripheral,
         name: name.ok_or(ParseError::MissingValue)?,
         base: base.ok_or(ParseError::MissingValue)?,
         size: size.ok_or(ParseError::MissingValue)?,
-        interrupt: None,
+        interrupt: interrupts,
         registers,
     })
 }
@@ -556,6 +604,15 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
                     register.name
                 )?;
             }
+        }
+        writeln!(out)?;
+        for interrupt in &peripheral.interrupt {
+            writeln!(
+                out,
+                "        pub const {}_IRQ: usize = {};",
+                interrupt.name.to_uppercase(),
+                interrupt.value
+            )?;
         }
         writeln!(out, "    }}")?;
     }
