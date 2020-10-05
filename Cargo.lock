@@ -799,6 +799,7 @@ dependencies = [
  "csv",
  "env_logger",
  "log",
+ "svd2utra",
  "xmas-elf",
 ]
 
