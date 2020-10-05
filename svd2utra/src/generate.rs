@@ -37,15 +37,15 @@ pub struct Peripheral {
 
 #[derive(Default, Debug)]
 pub struct MemoryRegion {
-    name: String,
-    base: usize,
-    size: usize,
+    pub name: String,
+    pub base: usize,
+    pub size: usize,
 }
 
 #[derive(Default, Debug)]
 pub struct Description {
-    peripherals: Vec<Peripheral>,
-    memory_regions: Vec<MemoryRegion>,
+    pub peripherals: Vec<Peripheral>,
+    pub memory_regions: Vec<MemoryRegion>,
 }
 
 pub fn get_base(value: &str) -> (&str, u32) {
@@ -359,7 +359,6 @@ fn parse_vendor_extensions<T: BufRead>(
 
 fn print_header<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
-#![cfg_attr(target_os = "none", no_std)]
 use core::convert::TryInto;
 pub struct Register {
     /// Offset of this register within this CSR
