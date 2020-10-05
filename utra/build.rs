@@ -1,7 +1,7 @@
 use std::env;
 
 fn main() {
-    let svd_file = env::var("XOUS_SVD_FILE").unwrap_or("../emulation/example.svd".to_owned());
+    let svd_file = env::var("XOUS_SVD_FILE").expect("Set the environment variable `XOUS_SVD_FILE` to point to an SVD file");    
     println!("cargo:rerun-if-env-changed=XOUS_SVD_FILE");
     println!("cargo:rerun-if-env-changed={}", svd_file);
 
