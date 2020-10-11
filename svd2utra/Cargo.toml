@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 quick-xml = "0.19"
+clap = "2"
+anyhow = "1.0"
