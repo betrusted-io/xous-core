@@ -629,6 +629,7 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
                 interrupt.value
             )?;
         }
+        writeln!(out, "        pub const HW_{}_BASE: usize = 0x{:08x};", peripheral.name.to_uppercase(), peripheral.base)?;
         writeln!(out, "    }}")?;
     }
     writeln!(out, "}}")?;
