@@ -17,51 +17,59 @@ use embedded_graphics::{
 
 use core::convert::TryFrom;
 
+mod logo;
+const USE_BOOT_LOGO: bool = true;
+
 fn draw_boot_logo(display: &mut XousDisplay) {
-    // Create styles used by the drawing operations.
-    let thin_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-    let thick_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 3);
-    let fill = PrimitiveStyle::with_fill(BinaryColor::On);
-    let text_style = TextStyle::new(Font6x8, BinaryColor::On);
 
-    let yoffset = 10;
+    if USE_BOOT_LOGO {
+        display.force_bitmap(logo::LOGO_MAP);
+    } else {
+        // Create styles used by the drawing operations.
+        let thin_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+        let thick_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 3);
+        let fill = PrimitiveStyle::with_fill(BinaryColor::On);
+        let text_style = TextStyle::new(Font6x8, BinaryColor::On);
 
-    // Draw a 3px wide outline around the display.
-    let bottom_right = Point::zero() + display.size() - Point::new(1, 1);
-    Rectangle::new(Point::zero(), bottom_right)
-        .into_styled(thick_stroke)
+        let yoffset = 10;
+
+        // Draw a 3px wide outline around the display.
+        let bottom_right = Point::zero() + display.size() - Point::new(1, 1);
+        Rectangle::new(Point::zero(), bottom_right)
+            .into_styled(thick_stroke)
+            .draw(display)
+            .unwrap();
+
+        // Draw a triangle.
+        Triangle::new(
+            Point::new(16, 16 + yoffset),
+            Point::new(16 + 16, 16 + yoffset),
+            Point::new(16 + 8, yoffset),
+        )
+        .into_styled(thin_stroke)
         .draw(display)
         .unwrap();
 
-    // Draw a triangle.
-    Triangle::new(
-        Point::new(16, 16 + yoffset),
-        Point::new(16 + 16, 16 + yoffset),
-        Point::new(16 + 8, yoffset),
-    )
-    .into_styled(thin_stroke)
-    .draw(display)
-    .unwrap();
+        // Draw a filled square
+        Rectangle::new(Point::new(52, yoffset), Point::new(52 + 16, 16 + yoffset))
+            .into_styled(fill)
+            .draw(display)
+            .unwrap();
 
-    // Draw a filled square
-    Rectangle::new(Point::new(52, yoffset), Point::new(52 + 16, 16 + yoffset))
-        .into_styled(fill)
-        .draw(display)
-        .unwrap();
+        // Draw a circle with a 3px wide stroke.
+        Circle::new(Point::new(96, yoffset + 8), 8)
+            .into_styled(thick_stroke)
+            .draw(display)
+            .unwrap();
 
-    // Draw a circle with a 3px wide stroke.
-    Circle::new(Point::new(96, yoffset + 8), 8)
-        .into_styled(thick_stroke)
-        .draw(display)
-        .unwrap();
-
-    // Draw centered text.
-    let text = "embedded-graphics";
-    let width = text.len() as i32 * 6;
-    Text::new(text, Point::new(64 - width / 2, 40))
-        .into_styled(text_style)
-        .draw(display)
-        .unwrap();
+        // Draw centered text.
+        let text = "embedded-graphics";
+        let width = text.len() as i32 * 6;
+        Text::new(text, Point::new(64 - width / 2, 40))
+            .into_styled(text_style)
+            .draw(display)
+            .unwrap();
+    }
 }
 
 #[xous::xous_main]

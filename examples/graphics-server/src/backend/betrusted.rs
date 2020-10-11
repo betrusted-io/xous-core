@@ -25,7 +25,7 @@ impl XousDisplay {
             ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-        .expect("couldn't map control port");
+        .expect("couldn't map frame buffer");
 
         let control = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::HW_MEMLCD_BASE),
@@ -48,6 +48,19 @@ impl XousDisplay {
     }
 
     pub fn update(&mut self) {}
+
+    pub fn force_bitmap(&mut self, bmp: [u32; FB_SIZE]) {
+        let framebuffer = self.fb.as_mut_ptr() as *mut u32;
+
+        for words in 0..FB_SIZE {
+            unsafe {
+                framebuffer.add(words).write_volatile(bmp[words]);
+            }
+        }
+        self.update_all();
+
+        while self.busy() {}
+    }
 
     /// Beneath this line are pure-HAL layer, and should not be user-visible
 
