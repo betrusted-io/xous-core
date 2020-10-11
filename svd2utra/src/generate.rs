@@ -54,6 +54,21 @@ pub struct Description {
     pub memory_regions: Vec<MemoryRegion>,
 }
 
+impl core::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        use ParseError::*;
+        match *self {
+            UnexpectedTag => write!(f, "unexpected XML tag encountered"),
+            MissingValue => write!(f, "XML tag should have contained a value"),
+            ParseIntError => write!(f, "unable to parse number"),
+            NonUTF8 => write!(f, "file is not UTF-8"),
+            WriteError => write!(f, "unable to write destination file"),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 pub fn get_base(value: &str) -> (&str, u32) {
     if value.starts_with("0x") {
         (value.trim_start_matches("0x"), 16)

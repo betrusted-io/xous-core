@@ -19,6 +19,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1fd36ffbb1fb7c834eac128ea8d0e310c5aeb635548f9d58861e1308d46e71c"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,6 +740,8 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 name = "svd2utra"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "clap",
  "quick-xml",
 ]
 
