@@ -1,5 +1,5 @@
 [package]
-name = "utra"
+name = "utralib"
 version = "0.1.0"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"

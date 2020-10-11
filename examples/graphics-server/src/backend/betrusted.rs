@@ -1,6 +1,6 @@
 use embedded_graphics::{drawable::Pixel, geometry::Size, pixelcolor::BinaryColor, DrawTarget};
 use xous::MemoryRange;
-use utra;
+use utralib::generated::*;
 
 const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
@@ -20,7 +20,7 @@ pub struct XousDisplay {
 impl XousDisplay {
     pub fn new() -> XousDisplay {
         let fb = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::HW_MEMLCD_MEM),
+            xous::MemoryAddress::new(HW_MEMLCD_MEM),
             None,
             ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -28,7 +28,7 @@ impl XousDisplay {
         .expect("couldn't map frame buffer");
 
         let control = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::HW_MEMLCD_BASE),
+            xous::MemoryAddress::new(HW_MEMLCD_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,

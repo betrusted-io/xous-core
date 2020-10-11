@@ -11,4 +11,4 @@ xous = { path = "../../xous-rs" }
 graphics-server = { path = "../graphics-server" }
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utra = { path = "../../utra"}
+utralib = { path = "../../utralib"}

@@ -16,6 +16,8 @@ mod timer;
 //     }
 // }
 
+extern crate utralib;
+
 fn move_lfsr(mut lfsr: u32) -> u32 {
     lfsr ^= lfsr >> 7;
     lfsr ^= lfsr << 9;

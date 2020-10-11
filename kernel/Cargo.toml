@@ -12,7 +12,7 @@ stats_alloc = { version = "0.1.8", optional = true }
 sha3 = { default-features = false, version = "0.8.2" }
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utra = { path = "../utra"}
+utralib = { path = "../utralib"}
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = "0.5.6"

@@ -588,7 +588,7 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
     for peripheral in peripherals {
         writeln!(
             out,
-            "pub const HW_{}_BASE :   usize = {};",
+            "pub const HW_{}_BASE :   usize = 0x{:08x};",
             peripheral.name.to_uppercase(), peripheral.base
         )?;
     }
@@ -606,7 +606,7 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
             writeln!(
                 out,
                 "        pub const {}: crate::Register = crate::Register::new({});",
-                register.name.to_uppercase(), register.offset
+                register.name.to_uppercase(), register.offset / 4
             )?;
             for field in &register.fields {
                 writeln!(

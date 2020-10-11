@@ -4,6 +4,8 @@ const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
 #[cfg(baremetal)]
 const TIMER_BASE: usize = 0xF000_3000;
 
+use utralib::generated::*;
+
 #[cfg(baremetal)]
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!(">>> Timer tick");
@@ -21,7 +23,7 @@ pub fn init() {
     use xous::{MemoryAddress, MemorySize};
     println!("Allocating timer...");
     xous::rsyscall(xous::SysCall::MapMemory(
-        MemoryAddress::new(utra::HW_TIMER0_BASE),
+        MemoryAddress::new(HW_TIMER0_BASE),
         MemoryAddress::new(TIMER_BASE),
         MemorySize::new(4096).unwrap(),
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -42,8 +44,8 @@ pub fn init() {
     en(true);
 
     // Set EV_ENABLE
-    let ptr = TIMER_BASE as *mut usize;
-    unsafe { ptr.add(7).write_volatile(1) };
+    let mut timer = CSR::new(TIMER_BASE as *mut u32);
+    unsafe { timer.wfo(utra::timer0::EV_ENABLE_ENABLE, 0b1); }
 }
 
 #[cfg(not(baremetal))]
