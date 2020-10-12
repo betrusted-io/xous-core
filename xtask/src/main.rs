@@ -39,8 +39,8 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
-        Some("renode-image") => image(false)?,
-        Some("renode-image-debug") => image(true)?,
+        Some("renode-image") => renode_image(false)?,
+        Some("renode-image-debug") => renode_image(true)?,
         Some("run") => run(false)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2))?,
         Some("debug") => run(true)?,
@@ -141,7 +141,9 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
     Ok(())
 }
 
-fn image(debug: bool) -> Result<(), DynError> {
+fn renode_image(debug: bool) -> Result<(), DynError> {
+    let path = std::path::Path::new("emulation/renode.svd");
+    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &["shell", "log-server", "graphics-server"] {
