@@ -40,19 +40,26 @@ fn shell_main() -> ! {
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
     let log_conn = 100;//ensure_connection(log_server_id);
     let graphics_conn = ensure_connection(graphics_server_id);
+    let ticktimer_conn = ensure_connection(ticktimer_server_id);
 
     println!(
-        "SHELL: Connected to Log server: {}  Graphics server: {}",
-        log_conn, graphics_conn
+        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {}",
+        log_conn, graphics_conn, ticktimer_conn,
     );
 
     assert_ne!(
         log_conn, graphics_conn,
         "SHELL: graphics and log connections are the same!"
+    );
+
+    assert_ne!(
+        ticktimer_conn, graphics_conn,
+        "SHELL: graphics and ticktimer connections are the same!"
     );
 
     let mut counter: usize = 0;
@@ -86,6 +93,9 @@ fn shell_main() -> ! {
         // lfsr = move_lfsr(lfsr);
 
         loop {
+            let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+            println!("elapsed time: {}ms", elapsed_time);
+
             match graphics_server::set_style(
                 graphics_conn,
                 5,

@@ -6,6 +6,7 @@ members = [
     "examples/shell",
     "examples/graphics-server",
     "examples/log-server",
+    "examples/ticktimer-server",
     "svd2utra",
     "xtask",
 ]
@@ -13,6 +14,7 @@ default-members = [
     "examples/shell",
     "examples/log-server",
     "examples/graphics-server",
+    "examples/ticktimer-server",
 ]
 
 # These packages have custom RUSTFLAGS, so if they
@@ -24,7 +26,7 @@ exclude = [
     "loader",
 
     # Exclude UTRA, since it is machine-generated.
-    "utra",
+    "utralib",
 ]
 
 [profile.release]

@@ -77,7 +77,7 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "graphics-server"] {
+    for pkg in &["shell", "graphics-server", "ticktimer-server"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     let loader = build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -144,7 +144,7 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
 fn image(debug: bool) -> Result<(), DynError> {
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "log-server", "graphics-server"] {
+    for pkg in &["shell", "log-server", "graphics-server", "ticktimer-server"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -161,7 +161,7 @@ fn image(debug: bool) -> Result<(), DynError> {
 
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
-    let init = ["shell", "log-server", "graphics-server"];
+    let init = ["shell", "log-server", "graphics-server", "ticktimer-server"];
 
     // let mut init_paths = vec![];
     for pkg in &init {
