@@ -10,6 +10,8 @@ mod log_string;
 use core::fmt::Write;
 use log_string::LogString;
 
+use utralib::generated::*;
+
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use core::fmt::{Error, Write};
@@ -105,7 +107,7 @@ mod implementation {
 
     pub fn init() -> Output {
         let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0xf000_4000),
+            xous::MemoryAddress::new(utra::uart::HW_UART_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,

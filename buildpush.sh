@@ -18,6 +18,12 @@ fi
 
 cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
 
+if [ $? -ne 0 ]
+then
+    echo "build failed, aborting!"
+    exit 1
+fi
+
 echo "Copying to target..."
 if [ $# -gt 0 ]
 then

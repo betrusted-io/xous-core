@@ -65,7 +65,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         mem::MemoryManager::with_mut(|memory_manager| {
             memory_manager
                 .map_range(
-                    HW_UART_BASE as *mut u8,
+                    utra::uart::HW_UART_BASE as *mut u8,
                     ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut u8,
                     4096,
                     PID::new(1).unwrap(),
@@ -76,8 +76,8 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         });
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
-        println!("Claiming IRQ 0 via syscall...");
-        xous_kernel::claim_interrupt(0, debug::irq, 0 as *mut usize).expect("Couldn't claim interrupt 0");
+        println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
+        xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize).expect("Couldn't claim debug interrupt");
         print!("}} ");
 
         // Print the processed kernel arguments

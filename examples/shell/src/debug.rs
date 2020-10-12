@@ -1,5 +1,7 @@
 use core::fmt::{Error, Write};
 
+use utralib::generated::*;
+
 #[macro_export]
 macro_rules! print
 {
@@ -39,30 +41,34 @@ pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 pub const DEFAULT: Uart = Uart {};
 
 impl Uart {
-    pub fn putc(&self, _c: u8) {
-        // unsafe {
-        //     if DEFAULT_UART_ADDR as usize == 0 {
-        //         let uart = xous::syscall::map_memory(
-        //             xous::MemoryAddress::new(0xf000_1000),
-        //             None,
-        //             4096,
-        //             xous::MemoryFlags::R | xous::MemoryFlags::W,
-        //         )
-        //         .expect("couldn't map uart");
-        //         DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
-        //         println!("Mapped UART @ {:08x}", uart.addr.get());
-        //         // core::mem::forget(uart);
+    pub fn putc(&self, c: u8) {
+        unsafe {
+            if DEFAULT_UART_ADDR as usize == 0 {
+                let uart = xous::syscall::map_memory(
+                    xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
+                    None,
+                    4096,
+                    xous::MemoryFlags::R | xous::MemoryFlags::W,
+                )
+                .expect("couldn't map uart");
+                DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
+                println!("Mapped UART @ {:08x}", uart.addr.get());
+                // core::mem::forget(uart);
 
-        //         println!("Allocating IRQ...");
-        //         xous::claim_interrupt(2, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
-        //         self.enable_rx();
-        //     }
-        //     let base = DEFAULT_UART_ADDR;
+                println!("Allocating IRQ...");
+                xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+                self.enable_rx();
+            }
+            let base = DEFAULT_UART_ADDR;
+            let mut uart_csr = CSR::new(DEFAULT_UART_ADDR as *mut u32);
 
-        //     // Wait until TXFULL is `0`
-        //     while base.add(1).read_volatile() != 0 {}
-        //     base.add(0).write_volatile(c as usize)
-        // };
+            // Wait until TXFULL is `0`
+            while uart_csr.r(utra::console::TXFULL) != 0 {}
+            uart_csr.wo(utra::console::RXTX, c as u32);
+            /*
+            while base.add(1).read_volatile() != 0 {}
+            base.add(0).write_volatile(c as usize)*/
+        };
     }
 
     pub fn enable_rx(&self) {

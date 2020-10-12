@@ -17,6 +17,7 @@ mod timer;
 // }
 
 extern crate utralib;
+use utralib::generated::*;
 
 fn move_lfsr(mut lfsr: u32) -> u32 {
     lfsr ^= lfsr >> 7;
@@ -67,7 +68,21 @@ fn shell_main() -> ! {
     let mut lfsr = 0xace1u32;
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
+
+    let gpio_base = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map GPIO CSR range");
+    let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
+
     loop {
+        //let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+        //println!("elapsed time: {}ms", elapsed_time);
+
         // println!("Sending a scalar message with id {}...", counter + 4096);
         // match xous::syscall::send_message(
         //     log_conn,
@@ -93,8 +108,6 @@ fn shell_main() -> ! {
         // lfsr = move_lfsr(lfsr);
 
         loop {
-            let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-            println!("elapsed time: {}ms", elapsed_time);
 
             match graphics_server::set_style(
                 graphics_conn,
