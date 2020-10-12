@@ -1,14 +1,16 @@
+use utralib::generated::*;
 pub struct Uart {
     pub base: *mut u32,
 }
 
 impl Uart {
     pub fn putc(&self, c: u8) {
+        let mut uart = CSR::new(self.base);
         unsafe {
             // Wait until TXFULL is `0`
-            while self.base.add(1).read_volatile() != 0 {
+            while uart.r(utra::uart::TXFULL) != 0 {
             }
-            self.base.add(0).write_volatile(c as u32)
+            uart.wo(utra::uart::RXTX, c as u32)
         };
     }
 }
@@ -28,7 +30,7 @@ impl Write for Uart {
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
-        base: 0xF000_4000 as *mut u32,
+        base: utra::uart::HW_UART_BASE as *mut u32,
     };
 
     #[macro_export]
