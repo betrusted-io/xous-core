@@ -9,12 +9,12 @@ use utralib::generated::*;
 #[cfg(baremetal)]
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     println!(">>> Timer tick");
-    let ptr = TIMER_BASE as *mut usize;
+    let mut timer = CSR::new(TIMER_BASE as *mut u32);
 
     xous::rsyscall(xous::SysCall::ReturnToParentI(xous::PID::new(1).unwrap(), 0)).expect("couldn't return to parent");
 
     // acknowledge the timer
-    unsafe { ptr.add(6).write_volatile(1) };
+    timer.wfo(utra::timer0::EV_PENDING_PENDING, 0b1);
     println!("<<< Returning from timer_tick()");
 }
 
@@ -23,7 +23,7 @@ pub fn init() {
     use xous::{MemoryAddress, MemorySize};
     println!("Allocating timer...");
     xous::rsyscall(xous::SysCall::MapMemory(
-        MemoryAddress::new(HW_TIMER0_BASE),
+        MemoryAddress::new(utra::timer0::HW_TIMER0_BASE),
         MemoryAddress::new(TIMER_BASE),
         MemorySize::new(4096).unwrap(),
         xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -39,13 +39,13 @@ pub fn init() {
 
     let ms = 100; // tick every 100 ms
     en(false);
-    load(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
-    reload(SYSTEM_CLOCK_FREQUENCY / 1_000 * ms);
+    load((SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+    reload((SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
     en(true);
 
     // Set EV_ENABLE
     let mut timer = CSR::new(TIMER_BASE as *mut u32);
-    unsafe { timer.wfo(utra::timer0::EV_ENABLE_ENABLE, 0b1); }
+    timer.wfo(utra::timer0::EV_ENABLE_ENABLE, 0b1);
 }
 
 #[cfg(not(baremetal))]
@@ -53,26 +53,22 @@ pub fn init() {}
 
 #[cfg(baremetal)]
 pub fn load(value: u32) {
-    let ptr = TIMER_BASE as *mut usize;
-    unsafe {
-        ptr.add(0).write_volatile(value as usize);
-    }
+    let mut timer = CSR::new(TIMER_BASE as *mut u32);
+    timer.wfo(utra::timer0::LOAD_LOAD, value);
 }
 
 #[cfg(baremetal)]
 pub fn reload(value: u32) {
-    let ptr = TIMER_BASE as *mut usize;
-    unsafe {
-        ptr.add(1).write_volatile(value as usize);
-    }
+    let mut timer = CSR::new(TIMER_BASE as *mut u32);
+    timer.wfo(utra::timer0::RELOAD_RELOAD, value);
 }
 
 #[cfg(baremetal)]
 pub fn en(en: bool) {
-    let ptr = TIMER_BASE as *mut usize;
+    let mut timer = CSR::new(TIMER_BASE as *mut u32);
     if en {
-        unsafe { ptr.add(2).write_volatile(1) };
+        timer.wfo(utra::timer0::EN_EN, 0b1);
     } else {
-        unsafe { ptr.add(2).write_volatile(0) };
+        timer.wfo(utra::timer0::EN_EN, 0b0);
     }
 }
