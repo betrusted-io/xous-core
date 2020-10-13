@@ -1,10 +1,9 @@
+use utralib::generated::*;
 
 #[cfg(baremetal)]
 const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
 #[cfg(baremetal)]
-const TIMER_BASE: usize = 0xF000_3000;
-
-use utralib::generated::*;
+const TIMER_BASE: usize = utra::timer0::HW_TIMER0_BASE; // claim the same address in virt as in phys
 
 #[cfg(baremetal)]
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
@@ -31,7 +30,7 @@ pub fn init() {
     .expect("timer: couldn't map timer");
 
     xous::rsyscall(xous::SysCall::ClaimInterrupt(
-        1,
+        utra::timer0::TIMER0_IRQ,
         MemoryAddress::new(timer_tick as *mut usize as usize).unwrap(),
         None,
     ))
