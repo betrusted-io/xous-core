@@ -1,4 +1,6 @@
 use core::fmt::{Error, Write};
+use utralib::generated::*;
+
 #[macro_use]
 #[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
 pub mod debug_print_hardware {
@@ -48,35 +50,30 @@ pub struct Uart {
 impl Uart {
     #[allow(dead_code)]
     pub fn enable_rx(self) {
-        unsafe {
-            self.base
-                .add(5)
-                .write_volatile(self.base.add(5).read_volatile() | 2)
-        };
+        let mut uart_csr = CSR::new(self.base as *mut u32);
+        uart_csr.wfo(utra::uart::EV_ENABLE_ENABLE, uart_csr.rf(utra::uart::EV_ENABLE_ENABLE) | 2);
     }
 
     pub fn putc(&self, c: u8) {
-        unsafe {
-            // Wait until TXFULL is `0`
-            while self.base.add(1).read_volatile() != 0 {
-                ()
-            }
-            self.base.add(0).write_volatile(c as usize)
-        };
+        let mut uart_csr = CSR::new(self.base as *mut u32);
+        // Wait until TXFULL is `0`
+        while uart_csr.r(utra::uart::TXFULL) != 0 {
+            ()
+        }
+        uart_csr.wfo(utra::uart::RXTX_RXTX, c as u32);
     }
 
     #[allow(dead_code)]
     pub fn getc(&self) -> Option<u8> {
-        unsafe {
-            // If EV_PENDING_RX is 1, return the pending character.
-            // Otherwise, return None.
-            match self.base.add(4).read_volatile() & 2 {
-                0 => None,
-                ack => {
-                    let c = Some(self.base.add(0).read_volatile() as u8);
-                    self.base.add(4).write_volatile(ack);
-                    c
-                }
+        let mut uart_csr = CSR::new(self.base as *mut u32);
+        // If EV_PENDING_RX is 1, return the pending character.
+        // Otherwise, return None.
+        match uart_csr.r(utra::uart::EV_PENDING) & 2 {
+            0 => None,
+            ack => {
+                let c = Some(uart_csr.r(utra::uart::RXTX) as u8);
+                uart_csr.wo(utra::uart::EV_PENDING, ack);
+                c
             }
         }
     }
