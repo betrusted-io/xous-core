@@ -53,9 +53,9 @@ macro_rules! maybe_main {
         use core::panic::PanicInfo;
 
         #[panic_handler]
-        fn handle_panic(_arg: &PanicInfo) -> ! {
-            // println!("PANIC!");
-            // println!("Details: {:?}", arg);
+        fn handle_panic(arg: &PanicInfo) -> ! {
+            println!("PANIC!");
+            println!("Details: {:?}", arg);
             xous::syscall::wait_event();
             loop {}
         }

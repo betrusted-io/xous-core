@@ -14,9 +14,12 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
         match message {
             Message::Scalar(m) => match m.id {
                 1 => Ok(Opcode::Reset),
-                2 => Ok(Opcode::ElapsedMs),
                 _ => Err("unrecognized opcode"),
             },
+            Message::BlockingScalar(m) => match m.id {
+                4919 => Ok(Opcode::ElapsedMs),
+                _ => Err("unrecognized opcode"),
+            }
             _ => Err("unhandled message type"),
         }
     }
@@ -33,7 +36,7 @@ impl Into<Message> for Opcode {
                 arg4: 0,
             }),
             Opcode::ElapsedMs => Message::BlockingScalar(ScalarMessage {
-                id: 2,
+                id: 4919,
                 arg1: 0,
                 arg2: 0,
                 arg3: 0,

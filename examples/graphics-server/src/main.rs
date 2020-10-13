@@ -1,6 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+#[macro_use]
+mod debug;
+
 mod backend;
 use backend::XousDisplay;
 

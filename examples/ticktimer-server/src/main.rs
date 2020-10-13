@@ -59,12 +59,12 @@ fn xmain() -> ! {
     loop {
         println!("TickTimer: waiting for message");
         let envelope = xous::receive_message(ticktimer_server).unwrap();
-        println!("TickTimer: got message");
-        // println!("TickTimer: Message: {:?}", envelope);
+        println!("TickTimer: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            // println!("TickTimer: Opcode: {:?}", opcode);
+            println!("TickTimer: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Reset => {
+                    println!("TickTimer: reset called");
                     ticktimer.reset();
                 },
                 Opcode::ElapsedMs => {
@@ -74,10 +74,11 @@ fn xmain() -> ! {
                         (time & 0xFFFF_FFFFu64) as usize,
                         ((time >> 32) & 0xFFF_FFFFu64) as usize,
                     ).expect("TickTimer: couldn't return time request");
+                    println!("TickTimer: done returning value");
                 }
             }
         } else {
-            // println!("Couldn't convert opcode");
+            println!("Couldn't convert opcode");
         }
     }
 }

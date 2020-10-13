@@ -80,10 +80,6 @@ fn shell_main() -> ! {
     gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
 
     loop {
-        //println!("loop");
-        println!("ticktimer request");
-        let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-        println!("elapsed time: {}ms", elapsed_time);
 
         // println!("Sending a scalar message with id {}...", counter + 4096);
         // match xous::syscall::send_message(
@@ -121,6 +117,15 @@ fn shell_main() -> ! {
                 Ok(_) => break,
                 Err(e) => panic!("unable to draw to screen: {:?}", e),
             }
+        }
+        println!("ticktimer request");
+        /*
+        ticktimer_server::reset(ticktimer_conn);
+        */
+        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+            println!("elapsed time: {}ms", elapsed_time);
+        } else {
+            println!("error requesting ticktimer!")
         }
         let x1 = move_lfsr(lfsr);
         let y1 = move_lfsr(x1);

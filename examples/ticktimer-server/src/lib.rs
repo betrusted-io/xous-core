@@ -9,9 +9,16 @@ pub fn elapsed_ms(cid: CID) -> Result<u64, Error> {
     if let xous::Result::Scalar2(upper, lower) = response {
        Ok(upper as u64 |  ((lower as u64) << 32))
     } else {
-       panic!("unexpected return value"); // or return Err(xous::Result::InternalError)
+       panic!("unexpected return value: {:#?}", response);
     }
-}
+    /* // scalar1 experimental reply to see if this makes it any better. It doesn't.
+    if let xous::Result::Scalar1(lower) = response {
+        Ok(lower as u64)
+     } else {
+        panic!("unexpected return value: {:#?}", response);
+     }
+     */
+ }
 
 pub fn reset(cid: CID) -> Result<(), xous::Error> {
     try_send_message(cid, api::Opcode::Reset.into()).map(|_| ())

@@ -321,13 +321,13 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
         ss.ready_thread(client_pid, client_tid)?;
         ss.switch_to_thread(client_pid, Some(client_tid))?;
         ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-        Ok(xous_kernel::Result::Ok)
+        Ok(xous_kernel::Result::Scalar1(arg))
     })
 }
 
 fn return_scalar2(
-    pid: PID,
-    _tid: TID,
+    server_pid: PID,
+    server_tid: TID,
     sender: MessageSender,
     arg1: usize,
     arg2: usize,
@@ -341,7 +341,7 @@ fn return_scalar2(
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        if server.pid != pid {
+        if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, None)?;
@@ -369,13 +369,21 @@ fn return_scalar2(
             }
         };
         ss.ready_thread(client_pid, client_tid)?;
+        ss.ready_thread(server_pid, server_tid)?;
+
+        /*
+        ss.activate_process_thread(server_tid, client_pid, client_tid, false)
+        .map(|_| Ok(xous_kernel::Result::Scalar2(arg1, arg2)))
+        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))?;*/
+        //ss.switch_from_thread(server_pid, server_tid)?;
+
         ss.switch_to_thread(client_pid, Some(client_tid))?;
         ss.set_thread_result(
             client_pid,
             client_tid,
             xous_kernel::Result::Scalar2(arg1, arg2),
         )?;
-        Ok(xous_kernel::Result::Ok)
+        Ok(xous_kernel::Result::Scalar2(arg1, arg2))
     })
 }
 
