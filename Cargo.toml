@@ -3,18 +3,18 @@ members = [
     "xous-rs",
     "tools",
     "macros",
-    "examples/shell",
-    "examples/graphics-server",
-    "examples/log-server",
-    "examples/ticktimer-server",
+    "services/shell",
+    "services/graphics-server",
+    "services/log-server",
+    "services/ticktimer-server",
     "svd2utra",
     "xtask",
 ]
 default-members = [
-    "examples/shell",
-    "examples/log-server",
-    "examples/graphics-server",
-    "examples/ticktimer-server",
+    "services/shell",
+    "services/log-server",
+    "services/graphics-server",
+    "services/ticktimer-server",
 ]
 
 # These packages have custom RUSTFLAGS, so if they
