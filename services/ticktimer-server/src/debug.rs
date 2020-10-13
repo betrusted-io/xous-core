@@ -48,7 +48,7 @@ impl Uart {
            UART resource. Modify in this function as necessary.
         */
         let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
+            xous::MemoryAddress::new(utra::server0::HW_SERVER0_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -59,7 +59,7 @@ impl Uart {
         // core::mem::forget(uart);
 
         println!("Allocating IRQ...");
-        xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+        xous::claim_interrupt(utra::server0::SERVER0_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
         self.enable_rx();
     }
 
