@@ -14,3 +14,7 @@ xous = { path = "../../xous-rs" }
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+default = [] # "debugprint"
