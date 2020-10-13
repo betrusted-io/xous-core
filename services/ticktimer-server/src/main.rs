@@ -38,7 +38,7 @@ impl XousTickTimer {
     }
 
     pub fn raw_ticktime(&self) -> u64 {
-        let mut tt = CSR::new(self.csr.as_mut_ptr() as *mut u32);
+        let tt = CSR::new(self.csr.as_mut_ptr() as *mut u32);
         let mut time: u64 = tt.r(utra::ticktimer::TIME0) as u64;
         time |= (tt.r(utra::ticktimer::TIME1) as u64) << 32;
 

@@ -6,12 +6,9 @@ pub struct Uart {
 impl Uart {
     pub fn putc(&self, c: u8) {
         let mut uart = CSR::new(self.base);
-        unsafe {
-            // Wait until TXFULL is `0`
-            while uart.r(utra::uart::TXFULL) != 0 {
-            }
-            uart.wo(utra::uart::RXTX, c as u32)
-        };
+        // Wait until TXFULL is `0`
+        while uart.r(utra::uart::TXFULL) != 0 {}
+        uart.wo(utra::uart::RXTX, c as u32)
     }
 }
 

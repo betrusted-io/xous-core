@@ -63,7 +63,7 @@ fn shell_main() -> ! {
         "SHELL: graphics and ticktimer connections are the same!"
     );
 
-    let mut counter: usize = 0;
+    // let mut counter: usize = 0;
     // let ls = logstr::LogStr::new();
     let mut lfsr = 0xace1u32;
     let dark = graphics_server::Color::from(0);
