@@ -505,14 +505,14 @@ where
         CSR { base }
     }
     /// Read the contents of this register
-    pub fn r(&mut self, reg: Register) -> T {
+    pub fn r(&self, reg: Register) -> T {
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         unsafe { usize_base.add(reg.offset).read_volatile() }
             .try_into()
             .unwrap_or_default()
     }
     /// Read a field from this CSR
-    pub fn rf(&mut self, field: Field) -> T {
+    pub fn rf(&self, field: Field) -> T {
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         ((unsafe { usize_base.add(field.register.offset).read_volatile() } >> field.offset)
             & field.mask)
