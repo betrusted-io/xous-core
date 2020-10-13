@@ -32,7 +32,7 @@ impl Into<Message> for Opcode {
                 arg3: 0,
                 arg4: 0,
             }),
-            Opcode::ElapsedMs => Message::Scalar(ScalarMessage {
+            Opcode::ElapsedMs => Message::BlockingScalar(ScalarMessage {
                 id: 2,
                 arg1: 0,
                 arg2: 0,

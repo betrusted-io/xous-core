@@ -7,14 +7,14 @@ const TIMER_BASE: usize = utra::timer0::HW_TIMER0_BASE; // claim the same addres
 
 #[cfg(baremetal)]
 fn timer_tick(_irq_no: usize, _arg: *mut usize) {
-    println!(">>> Timer tick");
+    //println!(">>> Timer tick");
     let mut timer = CSR::new(TIMER_BASE as *mut u32);
 
     xous::rsyscall(xous::SysCall::ReturnToParentI(xous::PID::new(1).unwrap(), 0)).expect("couldn't return to parent");
 
     // acknowledge the timer
     timer.wfo(utra::timer0::EV_PENDING_PENDING, 0b1);
-    println!("<<< Returning from timer_tick()");
+    //println!("<<< Returning from timer_tick()");
 }
 
 #[cfg(baremetal)]

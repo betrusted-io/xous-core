@@ -281,6 +281,7 @@ dependencies = [
 name = "log-server"
 version = "0.1.0"
 dependencies = [
+ "utralib",
  "xous",
 ]
 

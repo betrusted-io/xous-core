@@ -80,8 +80,10 @@ fn shell_main() -> ! {
     gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
 
     loop {
-        //let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-        //println!("elapsed time: {}ms", elapsed_time);
+        //println!("loop");
+        println!("ticktimer request");
+        let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+        println!("elapsed time: {}ms", elapsed_time);
 
         // println!("Sending a scalar message with id {}...", counter + 4096);
         // match xous::syscall::send_message(

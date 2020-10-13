@@ -1,6 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+
+#[macro_use]
+mod debug;
+
 mod api;
 use api::Opcode;
 
@@ -53,7 +57,9 @@ fn xmain() -> ! {
 
     let ticktimer_server = xous::create_server(b"ticktimer-server").expect("Couldn't create Ticktimer server");
     loop {
+        println!("TickTimer: waiting for message");
         let envelope = xous::receive_message(ticktimer_server).unwrap();
+        println!("TickTimer: got message");
         // println!("TickTimer: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // println!("TickTimer: Opcode: {:?}", opcode);
@@ -63,6 +69,7 @@ fn xmain() -> ! {
                 },
                 Opcode::ElapsedMs => {
                     let time = ticktimer.elapsed_ms();
+                    println!("TickTimer: returning time of {:?}", time);
                     xous::return_scalar2(envelope.sender,
                         (time & 0xFFFF_FFFFu64) as usize,
                         ((time >> 32) & 0xFFF_FFFFu64) as usize,

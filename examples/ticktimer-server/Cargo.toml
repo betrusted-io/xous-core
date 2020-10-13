@@ -11,3 +11,7 @@ embedded-graphics = "0.6"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+default = ["debugprint"]

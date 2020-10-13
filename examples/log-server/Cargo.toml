@@ -10,3 +10,7 @@ xous = { path = "../../xous-rs" }
 
 #[target.'cfg(any(windows, unix))'.dependencies]
 #pancurses = "*"
+
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
