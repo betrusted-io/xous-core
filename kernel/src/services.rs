@@ -1499,24 +1499,26 @@ impl SystemServices {
     pub fn remember_server_message(
         &mut self,
         sidx: usize,
-        pid: PID,
-        context: TID,
+        current_pid: PID,
+        current_thread: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> Result<usize, xous_kernel::Error> {
-        // let current_pid = self.current_pid();
-        // let server_pid = self
-        //     .server_from_sidx(sidx)
-        //     .ok_or(xous_kernel::Error::ServerNotFound)?
-        //     .pid;
-        // {
-        //     let server_process = self.get_process(server_pid)?;
-        //     server_process.mapping.activate();
-        // }
+        let server_pid = self
+            .server_from_sidx(sidx)
+            .ok_or(xous_kernel::Error::ServerNotFound)?
+            .pid;
+        {
+            let server_process = self.get_process(server_pid)?;
+            server_process.mapping.activate()?;
+        }
         let server = self
             .server_from_sidx_mut(sidx)
             .expect("couldn't re-discover server index");
-        server.queue_response(pid, context, message, client_address)
+        let result = server.queue_response(current_pid, current_thread, message, client_address);
+        let current_process = self.get_process(current_pid).expect("couldn't find old process");
+        current_process.mapping.activate().expect("couldn't switch back to previous address space");
+        result
     }
 
     /// Get a server index based on a SID
