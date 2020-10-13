@@ -435,10 +435,10 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
 
 pub fn handle(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
     #[cfg(feature = "debug-print")]
-    print!("KERNEL({}:{}): Syscall {:?}", pid, tid, call);
+    print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
     let result = handle_inner(pid, tid, call);
     #[cfg(feature = "debug-print")]
-    println!(" -> {:?}", result);
+    println!(" -> {:x?}", result);
     result
 }
 
