@@ -428,19 +428,24 @@ pub fn _xous_syscall(
 
             let mut xsc_borrowed = xsc.borrow_mut();
             let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server!");
-            _xous_syscall_to(
-                nr,
-                a1,
-                a2,
-                a3,
-                a4,
-                a5,
-                a6,
-                a7,
-                &call,
-                &mut xsc_asmut.send.lock().unwrap(),
-            );
-            _xous_syscall_result(&call, ret, *tid.borrow(), xsc_asmut);
+            loop {
+                _xous_syscall_to(
+                    nr,
+                    a1,
+                    a2,
+                    a3,
+                    a4,
+                    a5,
+                    a6,
+                    a7,
+                    &call,
+                    &mut xsc_asmut.send.lock().unwrap(),
+                );
+                _xous_syscall_result(&call, ret, *tid.borrow(), xsc_asmut);
+                if *ret != Result::WouldBlock {
+                    return;
+                }
+            }
         })
     });
 }
