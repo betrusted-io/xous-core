@@ -673,7 +673,17 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         // SysCall::Connect(sid) => {
         //     SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
         // }
-        // SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+        SysCall::SendMessage(cid, message) => {
+            let result = send_message(pid, tid, cid, message);
+            match result {
+                Ok(o) => Ok(o),
+                Err(xous_kernel::Error::ServerQueueFull) => {
+                    arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
+                    do_yield(pid, tid)
+                },
+                Err(e) => Err(e),
+            }
+        }
         _ => panic!("Unhandled Syscall: {:?}", call), //Err(xous_kernel::Error::UnhandledSyscall),
     }
 }
