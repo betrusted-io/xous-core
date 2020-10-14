@@ -459,6 +459,9 @@ pub enum Result {
     /// A scalar with two values
     Scalar2(usize, usize),
 
+    /// The syscall should be attempted again
+    WouldBlock,
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -494,6 +497,7 @@ impl Result {
                 let s = sid.to_u32();
                 [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid, 0, 0]
             }
+            Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -567,6 +571,7 @@ impl Result {
                 SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
                 src[5] as _,
             ),
+            16 => Result::WouldBlock,
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
