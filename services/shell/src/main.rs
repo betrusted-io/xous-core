@@ -6,7 +6,8 @@
 mod debug;
 
 mod timer;
-// mod logstr;
+mod logstr;
+use core::fmt::Write;
 
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
@@ -42,9 +43,10 @@ fn shell_main() -> ! {
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
-    let log_conn = 100;//ensure_connection(log_server_id);
+    let log_conn = ensure_connection(log_server_id);
     let graphics_conn = ensure_connection(graphics_server_id);
     let ticktimer_conn = ensure_connection(ticktimer_server_id);
 
@@ -64,7 +66,7 @@ fn shell_main() -> ! {
     );
 
     // let mut counter: usize = 0;
-    // let ls = logstr::LogStr::new();
+    let mut ls = logstr::LogStr::new();
     let mut lfsr = 0xace1u32;
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
@@ -77,9 +79,38 @@ fn shell_main() -> ! {
     )
     .expect("couldn't map GPIO CSR range");
     let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
+    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1);
 
+    let mut last_time: u64 = 0;
     loop {
+        // a message passing demo -- checking time
+        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+            println!("SHELL: {}ms", elapsed_time);
+            if elapsed_time - last_time > 4000 {
+                last_time = elapsed_time;
+                /*
+                xous::try_send_message(log_conn,
+                    xous::Message::Scalar(xous::ScalarMessage{id:256, arg1: elapsed_time as usize, arg2: 257, arg3: 258, arg4: 259}));
+                */
+                ls.clear();
+                write!(ls, "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}", elapsed_time as usize).expect("couldn't send hello message");
+
+                println!("Sending a mutable borrow message");
+                let response = xous::syscall::try_send_message(
+                    log_conn,
+                    xous::Message::MutableBorrow(
+                        ls.as_memory_message(0)
+                            .expect("couldn't form memory message"),
+                    ),
+                )
+                .expect("couldn't send memory message");
+                //unsafe { ls.set_len(response.0)};
+                //println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
+            }
+        } else {
+            println!("error requesting ticktimer!")
+        }
+
 
         // println!("Sending a scalar message with id {}...", counter + 4096);
         // match xous::syscall::send_message(
@@ -117,15 +148,6 @@ fn shell_main() -> ! {
                 Ok(_) => break,
                 Err(e) => panic!("unable to draw to screen: {:?}", e),
             }
-        }
-        println!("ticktimer request");
-        /*
-        ticktimer_server::reset(ticktimer_conn);
-        */
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            println!("elapsed time: {}ms", elapsed_time);
-        } else {
-            println!("error requesting ticktimer!")
         }
         let x1 = move_lfsr(lfsr);
         let y1 = move_lfsr(x1);
@@ -185,19 +207,5 @@ fn shell_main() -> ! {
         //     xous::syscall::yield_slice();
         // }
 
-        // ls.clear();
-        // write!(ls, "Hello, Server!  This memory is borrowed from another process.  Loop number: {}", counter).expect("couldn't send hello message");
-
-        // println!("Sending a mutable borrow message");
-        // let response = xous::syscall::send_message(
-        //     connection,
-        //     xous::Message::MutableBorrow(
-        //         ls.as_memory_message(0)
-        //             .expect("couldn't form memory message"),
-        //     ),
-        // )
-        // .expect("couldn't send memory message");
-        // unsafe { ls.set_len(response.0)};
-        // println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
     }
 }

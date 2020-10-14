@@ -33,7 +33,7 @@ impl<'a> LogStr<'a> {
         // XXX This should forget the memory allocated, as it will be sent to the other process
         Ok(xous::MemoryMessage {
             id,
-            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
+            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()).unwrap(),
             offset: None,
             valid: xous::MemorySize::new(self.len),
         })
@@ -42,7 +42,7 @@ impl<'a> LogStr<'a> {
     pub fn as_memory_message(&self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
         Ok(xous::MemoryMessage {
             id,
-            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()),
+            buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()).unwrap(),
             offset: None,
             valid: xous::MemorySize::new(self.len),
         })

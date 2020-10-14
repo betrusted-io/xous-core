@@ -3,14 +3,14 @@ use core::slice;
 
 pub struct LogString<'a> {
     raw_slice: &'a mut [u8],
-    s: &'a str,
-    len: usize,
+    pub s: &'a str,
+    pub len: usize,
     msg_len: &'a mut Option<xous::MemorySize>,
 }
 
 impl<'a> LogString<'a> {
     pub fn from_message(message: &'a mut xous::MemoryMessage) -> LogString<'a> {
-        println!("Message address is at {:08x}", message.buf.addr.get());
+        // println!("Message address is at {:08x}", message.buf.addr.get());
         let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
         LogString {

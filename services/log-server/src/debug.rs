@@ -64,41 +64,33 @@ impl Uart {
     }
 
     pub fn putc(&self, c: u8) {
-        if cfg!(feature = "debugprint") {
-            if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
-                self.map_uart();
-            }
-            let mut uart_csr = CSR::new(unsafe{ DEFAULT_UART_ADDR as *mut u32});
-
-            // Wait until TXFULL is `0`
-            while uart_csr.r(utra::uart::TXFULL) != 0 {}
-            uart_csr.wo(utra::uart::RXTX, c as u32);
+        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+            self.map_uart();
         }
+        let mut uart_csr = CSR::new(unsafe{ DEFAULT_UART_ADDR as *mut u32});
+
+        // Wait until TXFULL is `0`
+        while uart_csr.r(utra::uart::TXFULL) != 0 {}
+        uart_csr.wo(utra::uart::RXTX, c as u32);
     }
 
     pub fn enable_rx(&self) {
-        if cfg!(feature = "debugprint") {
-            let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-            uart_csr.wfo(utra::uart::EV_ENABLE_ENABLE, uart_csr.rf(utra::uart::EV_ENABLE_ENABLE) | 2 );
-        }
+        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
+        uart_csr.wfo(utra::uart::EV_ENABLE_ENABLE, uart_csr.rf(utra::uart::EV_ENABLE_ENABLE) | 2 );
     }
 
     pub fn getc(&self) -> Option<u8> {
-        if cfg!(feature = "debugprint") {
-            if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
-                self.map_uart();
+        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+            self.map_uart();
+        }
+        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
+        match uart_csr.rf(utra::uart::EV_PENDING_PENDING) & 2 {
+            0 => None,
+            ack => {
+                let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
+                uart_csr.wo(utra::uart::EV_PENDING, ack);
+                c
             }
-            let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-            match uart_csr.rf(utra::uart::EV_PENDING_PENDING) & 2 {
-                0 => None,
-                ack => {
-                    let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
-                    uart_csr.wo(utra::uart::EV_PENDING, ack);
-                    c
-                }
-            }
-        } else {
-            None
         }
     }
 }

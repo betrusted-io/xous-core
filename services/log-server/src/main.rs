@@ -10,7 +10,7 @@ mod log_string;
 use core::fmt::Write;
 use log_string::LogString;
 
-use utralib::generated::*;
+extern crate utralib;
 
 #[cfg(not(target_os = "none"))]
 mod implementation {
@@ -100,6 +100,7 @@ mod implementation {
 #[cfg(target_os = "none")]
 mod implementation {
     use core::fmt::{Error, Write};
+    use utralib::generated::*;
 
     pub struct Output {
         // addr: usize,
@@ -107,7 +108,7 @@ mod implementation {
 
     pub fn init() -> Output {
         let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::uart::HW_UART_BASE),
+            xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -120,9 +121,9 @@ mod implementation {
         crate::debug::DEFAULT.enable_rx();
 
         println!("Allocating IRQ...");
-        xous::syscall::claim_interrupt(4, handle_irq, core::ptr::null_mut::<usize>())
+        xous::syscall::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>())
             .expect("couldn't claim interrupt");
-        println!("Claimed IRQ 4");
+        println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
         Output {
             // addr: uart.as_mut_ptr() as usize,
         }
@@ -178,12 +179,11 @@ mod implementation {
 
     impl OutputWriter {
         pub fn putc(&self, c: u8) {
-            unsafe {
-                let base = crate::debug::DEFAULT_UART_ADDR;
-                // Wait until TXFULL is `0`
-                while base.add(1).read_volatile() != 0 {}
-                base.add(0).write_volatile(c as usize)
-            };
+            let mut uart_csr = CSR::new(unsafe{ crate::debug::DEFAULT_UART_ADDR as *mut u32});
+
+            // Wait until TXFULL is `0`
+            while uart_csr.r(utra::uart::TXFULL) != 0 {}
+            uart_csr.wo(utra::uart::RXTX, c as u32);
         }
     }
 
@@ -191,6 +191,9 @@ mod implementation {
         fn write_str(&mut self, s: &str) -> Result<(), Error> {
             for c in s.bytes() {
                 self.putc(c);
+                if c == '\n' as u8 {
+                    self.putc('\r' as u8);
+                }
             }
             Ok(())
         }
@@ -201,7 +204,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
     writeln!(output, "LOG: Starting log server...").unwrap();
-    let server_addr = xous::create_server(b"xous-logs-output").unwrap();
+    let server_addr = xous::create_server(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 
     let mut counter: usize = 0;
@@ -243,8 +246,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                 let mut log_entry = LogString::from_message(msg);
                 writeln!(
                     output,
-                    "LOG: Immutably borrowed log message from {}: {}",
-                    envelope.sender, log_entry
+                    "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",
+                    envelope.sender, log_entry.len, log_entry.s,
                 )
                 .unwrap();
                 writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();

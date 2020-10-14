@@ -291,9 +291,19 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
         //     "KERNEL({}): Unblocking PID {} CTX {}",
         //     pid, client_pid, client_ctx
         // );
+        /*
         ss.ready_thread(client_pid, client_tid)?;
         ss.switch_to_thread(client_pid, Some(client_tid))?;
-        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Ok)?;
+        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Ok)?;*/
+
+        // Switch away from the server, but leave it as Runnable
+        ss.switch_from_thread(pid, tid)?;
+        ss.ready_thread(pid, tid)?;
+        ss.set_thread_result(pid, tid, xous_kernel::Result::Ok)?;
+
+        // Switch to the client
+        ss.ready_thread(client_pid, client_tid)?;
+        ss.switch_to_thread(client_pid, Some(client_tid))?;
         Ok(xous_kernel::Result::Ok)
     })
 }
