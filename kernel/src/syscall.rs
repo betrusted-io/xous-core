@@ -10,6 +10,15 @@ use xous_kernel::*;
 /// This is the context that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
+fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
+    if cfg!(baremetal) {
+        arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
+        do_yield(pid, tid)
+    } else {
+        Ok(xous_kernel::Result::WouldBlock)
+    }
+}
+
 fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
     // If we're not running on bare metal, treat this as a no-op.
     if !cfg!(baremetal) {
@@ -698,7 +707,6 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, sender, buf),
         SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, sender, arg),
         SysCall::ReturnScalar2(sender, arg1, arg2) => return_scalar2(pid, tid, sender, arg1, arg2),
-        // SysCall::ReturnScalar2(sender, arg, arg2) => return_memory(pid, tid, sender, arg, arg2),
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
@@ -714,17 +722,22 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
         }
 
-        // SysCall::Connect(sid) => {
-        //     SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
-        // }
+        SysCall::Connect(sid) => {
+            let result = SystemServices::with_mut(|ss| {
+                ss.connect_to_server(sid)
+                    .map(xous_kernel::Result::ConnectionID)
+            });
+            match result {
+                Ok(o) => Ok(o),
+                Err(xous_kernel::Error::ServerNotFound) => retry_syscall(pid, tid),
+                Err(e) => Err(e),
+            }
+        }
         SysCall::SendMessage(cid, message) => {
             let result = send_message(pid, tid, cid, message);
             match result {
                 Ok(o) => Ok(o),
-                Err(xous_kernel::Error::ServerQueueFull) => {
-                    arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
-                    do_yield(pid, tid)
-                }
+                Err(xous_kernel::Error::ServerQueueFull) => retry_syscall(pid, tid),
                 Err(e) => Err(e),
             }
         }
