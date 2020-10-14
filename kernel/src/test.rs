@@ -377,7 +377,7 @@ fn send_borrow_message() {
 
                 // Perform a connection to the server
                 // println!("CLIENT: Connecting to server...");
-                let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+                let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
 
                 // Convert the message into a "Carton" that can be shipped as a message
                 // println!("CLIENT: Creating carton...");
@@ -443,7 +443,7 @@ fn send_mutableborrow_message() {
             let sid = server_addr_recv.recv().unwrap();
 
             // Perform a connection to the server
-            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
 
             // Convert the message into a "Carton" that can be shipped as a message
             let mut carton = xous_kernel::carton::Carton::from_bytes(&test_bytes);
@@ -516,7 +516,7 @@ fn send_mutableborrow_message_repeat() {
             let sid = server_addr_recv.recv().unwrap();
 
             // Perform a connection to the server
-            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+            let conn = xous_kernel::connect(sid).expect("couldn't connect to server");
 
             // Convert the message into a "Carton" that can be shipped as a message
             for iteration in 0..loops {
