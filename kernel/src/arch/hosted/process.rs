@@ -179,6 +179,10 @@ impl Process {
         process.threads[thread - 1].allocated = true;
     }
 
+    pub fn retry_instruction(&mut self, _tid: TID) -> Result<(), xous_kernel::Error> {
+        Ok(())
+    }
+
     pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
         let mut tmp = Process { pid };
         tmp.setup_thread(INITIAL_TID, setup)

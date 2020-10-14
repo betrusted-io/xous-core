@@ -235,6 +235,15 @@ impl Process {
         }
     }
 
+    pub fn retry_instruction(&mut self, tid: TID) -> Result<(), xous_kernel::Error> {
+        let process = unsafe { &mut *PROCESS };
+        let mut thread = &mut process.threads[tid];
+        if thread.sepc >= 4 {
+            thread.sepc -= 4;
+        }
+        Ok(())
+    }
+
     /// Initialize this process thread with the given entrypoint and stack
     /// addresses.
     pub fn setup_process(pid: PID, thread_init: ThreadInit) -> Result<(), xous_kernel::Error> {
