@@ -79,7 +79,7 @@ fn shell_main() -> ! {
     )
     .expect("couldn't map GPIO CSR range");
     let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1);
+    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
 
     let mut last_time: u64 = 0;
     loop {
@@ -92,16 +92,19 @@ fn shell_main() -> ! {
                 xous::try_send_message(log_conn,
                     xous::Message::Scalar(xous::ScalarMessage{id:256, arg1: elapsed_time as usize, arg2: 257, arg3: 258, arg4: 259}));
                 */
+                println!("Preparing a mutable borrow message");
+
                 ls.clear();
                 write!(ls, "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}", elapsed_time as usize).expect("couldn't send hello message");
 
+                let mm = ls.as_memory_message(0)
+                .expect("couldn't form memory message");
+
                 println!("Sending a mutable borrow message");
+
                 let response = xous::syscall::try_send_message(
                     log_conn,
-                    xous::Message::MutableBorrow(
-                        ls.as_memory_message(0)
-                            .expect("couldn't form memory message"),
-                    ),
+                    xous::Message::MutableBorrow(mm),
                 )
                 .expect("couldn't send memory message");
                 //unsafe { ls.set_len(response.0)};

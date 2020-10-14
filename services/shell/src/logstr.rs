@@ -40,6 +40,13 @@ impl<'a> LogStr<'a> {
     }
 
     pub fn as_memory_message(&self, id: xous::MessageId) -> Result<xous::MemoryMessage, xous::Error> {
+
+        print!("SHELL: String @ {:08x}:", self.raw_slice.as_ptr() as usize);
+        for offset in 0..self.len {
+            print!(" {:02x}", self.raw_slice[offset]);
+        }
+        println!(" (length: {})", self.len);
+
         Ok(xous::MemoryMessage {
             id,
             buf: xous::MemoryRange::new(self.raw_slice.as_ptr() as usize, self.raw_slice.len()).unwrap(),
