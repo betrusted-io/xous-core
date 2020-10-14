@@ -13,6 +13,13 @@ impl<'a> LogString<'a> {
         // println!("Message address is at {:08x}", message.buf.addr.get());
         let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
+
+        print!("String @ {:08x}:", message.buf.as_ptr() as usize);
+        for offset in 0..starting_length {
+            print!(" {:02x}", raw_slice[offset]);
+        }
+        println!(" (length: {})", starting_length);
+
         LogString {
             s: unsafe {
                 core::str::from_utf8_unchecked(slice::from_raw_parts(
