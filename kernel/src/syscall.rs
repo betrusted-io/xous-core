@@ -10,6 +10,25 @@ use xous_kernel::*;
 /// This is the context that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
+fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
+    // If we're not running on bare metal, treat this as a no-op.
+    if !cfg!(baremetal) {
+        return Ok(xous_kernel::Result::Ok);
+    }
+
+    let (parent_pid, parent_ctx) = unsafe {
+        SWITCHTO_CALLER
+            .take()
+            .expect("yielded when no parent context was present")
+    };
+    SystemServices::with_mut(|ss| {
+        // TODO: Advance thread
+        ss.activate_process_thread(tid, parent_pid, parent_ctx, true)
+            .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+            .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+    })
+}
+
 fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sidx = ss
@@ -590,24 +609,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
                 .map(|_| xous_kernel::Result::Ok)
         }
-        SysCall::Yield => {
-            // If we're not running on bare metal, treat this as a no-op.
-            if !cfg!(baremetal) {
-                return Ok(xous_kernel::Result::Ok);
-            }
-
-            let (parent_pid, parent_ctx) = unsafe {
-                SWITCHTO_CALLER
-                    .take()
-                    .expect("yielded when no parent context was present")
-            };
-            SystemServices::with_mut(|ss| {
-                // TODO: Advance thread
-                ss.activate_process_thread(tid, parent_pid, parent_ctx, true)
-                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
-            })
-        }
+        SysCall::Yield => do_yield(pid, tid),
         SysCall::ReturnToParentI(_pid, _cpuid) => {
             unsafe {
                 // let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
