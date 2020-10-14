@@ -298,7 +298,12 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
     })
 }
 
-fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysCallResult {
+fn return_scalar(
+    server_pid: PID,
+    server_tid: TID,
+    sender: MessageSender,
+    arg: usize,
+) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
@@ -308,7 +313,7 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        if server.pid != pid {
+        if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, None)?;
@@ -337,10 +342,27 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
         };
-        ss.ready_thread(client_pid, client_tid)?;
-        ss.switch_to_thread(client_pid, Some(client_tid))?;
-        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-        Ok(xous_kernel::Result::Ok)
+
+        if !cfg!(baremetal) {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // Switch away from the server, but leave it as Runnable
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
+
+            // Switch to the client
+            ss.ready_thread(client_pid, client_tid)?;
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            Ok(xous_kernel::Result::Scalar1(arg))
+        }
     })
 }
 
@@ -388,22 +410,30 @@ fn return_scalar2(
             }
         };
 
-        // Handle the server's return value
-        ss.switch_from_thread(server_pid, server_tid)?;
-        ss.ready_thread(server_pid, server_tid)?;
-        ss.set_thread_result(
-            server_pid,
-            server_tid,
-            xous_kernel::Result::Ok,
-        )?;
+        if !cfg!(baremetal) {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(
+                client_pid,
+                client_tid,
+                xous_kernel::Result::Scalar2(arg1, arg2),
+            )?;
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // Switch away from the server, but leave it as Runnable
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
-        // Switch to the client
-        ss.ready_thread(client_pid, client_tid)?;
-        ss.switch_to_thread(client_pid, Some(client_tid))?;
-        #[cfg(not(baremetal))]
-        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar2(arg1, arg2))?;
-
-        Ok(xous_kernel::Result::Scalar2(arg1, arg2))
+            // Switch to the client
+            ss.ready_thread(client_pid, client_tid)?;
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            Ok(xous_kernel::Result::Scalar2(arg1, arg2))
+        }
     })
 }
 
