@@ -981,21 +981,26 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
     }
 }
 
-/// Send a message to a server, but keep trying if the server queue is full.
+/// Send a message to a server.  Depending on the mesage type (move or borrow), it
+/// will either block (borrow) or return immediately (move).
+/// If the message type is `borrow`, then the memory addresses pointed to will be
+/// unavailable to this process until this function returns.
+///
+/// If the server queue is full, this will block.
 ///
 /// # Errors
 ///
 /// * **ServerNotFound**: The server does not exist so the connection is now invalid
 /// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
 /// * **Timeout**: The timeout limit has been reached
-pub fn send_message(connection: CID, message: Message) -> core::result::Result<(), Error> {
+pub fn send_message(connection: CID, message: Message) -> core::result::Result<Result, Error> {
     let result = rsyscall(SysCall::SendMessage(connection, message));
-    if let Ok(Result::Ok) = result {
-        Ok(())
-    } else if let Err(e) = result {
-        Err(e)
-    } else {
-        panic!("Unexpected return value: {:?}", result);
+    match result {
+        Ok(Result::Ok) => Ok(Result::Ok),
+        Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
+        Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Err(e) => Err(e),
+        v => panic!("Unexpected return value: {:?}", v),
     }
 }
 

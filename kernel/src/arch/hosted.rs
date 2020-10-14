@@ -68,6 +68,10 @@ fn generate_pid_key() -> [u8; 16] {
     process_key
 }
 
+pub fn current_pid() -> PID {
+    crate::arch::process::current_pid()
+}
+
 /// Each client gets its own connection and its own thread, which is handled here.
 fn handle_connection(
     conn: TcpStream,

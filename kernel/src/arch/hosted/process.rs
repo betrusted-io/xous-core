@@ -171,12 +171,29 @@ impl Process {
         })
     }
 
+    /// Calls the provided function with the current inner process state.
+    pub fn with_current_mut<F, R>(f: F) -> R
+    where
+        F: FnOnce(&mut Process) -> R,
+    {
+        let mut process = Self::current();
+        f(&mut process)
+    }
+
+    pub fn current_tid(&self) -> TID {
+        1
+    }
+
     fn setup_thread_inner(thread: TID, process_table: &mut ProcessTable) {
         let current_pid_idx = process_table.current.get() as usize - 1;
         let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
 
         assert!(!process.threads[thread - 1].allocated);
         process.threads[thread - 1].allocated = true;
+    }
+
+    pub fn retry_instruction(&mut self, _tid: TID) -> Result<(), xous_kernel::Error> {
+        Ok(())
     }
 
     pub fn setup_process(pid: PID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {

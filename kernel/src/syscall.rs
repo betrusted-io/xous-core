@@ -10,6 +10,25 @@ use xous_kernel::*;
 /// This is the context that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
+fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
+    // If we're not running on bare metal, treat this as a no-op.
+    if !cfg!(baremetal) {
+        return Ok(xous_kernel::Result::Ok);
+    }
+
+    let (parent_pid, parent_ctx) = unsafe {
+        SWITCHTO_CALLER
+            .take()
+            .expect("yielded when no parent context was present")
+    };
+    SystemServices::with_mut(|ss| {
+        // TODO: Advance thread
+        ss.activate_process_thread(tid, parent_pid, parent_ctx, true)
+            .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+            .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+    })
+}
+
 fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sidx = ss
@@ -279,7 +298,12 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
     })
 }
 
-fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysCallResult {
+fn return_scalar(
+    server_pid: PID,
+    server_tid: TID,
+    sender: MessageSender,
+    arg: usize,
+) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
@@ -289,7 +313,7 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
         let server = ss
             .server_from_sidx_mut(sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        if server.pid != pid {
+        if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, None)?;
@@ -318,10 +342,27 @@ fn return_scalar(pid: PID, _tid: TID, sender: MessageSender, arg: usize) -> SysC
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
         };
-        ss.ready_thread(client_pid, client_tid)?;
-        ss.switch_to_thread(client_pid, Some(client_tid))?;
-        ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-        Ok(xous_kernel::Result::Scalar1(arg))
+
+        if !cfg!(baremetal) {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // Switch away from the server, but leave it as Runnable
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
+
+            // Switch to the client
+            ss.ready_thread(client_pid, client_tid)?;
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            Ok(xous_kernel::Result::Scalar1(arg))
+        }
     })
 }
 
@@ -368,22 +409,31 @@ fn return_scalar2(
                 return Err(xous_kernel::Error::ProcessNotFound);
             }
         };
-        ss.ready_thread(client_pid, client_tid)?;
-        ss.ready_thread(server_pid, server_tid)?;
 
-        /*
-        ss.activate_process_thread(server_tid, client_pid, client_tid, false)
-        .map(|_| Ok(xous_kernel::Result::Scalar2(arg1, arg2)))
-        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))?;*/
-        //ss.switch_from_thread(server_pid, server_tid)?;
+        if !cfg!(baremetal) {
+            // In a hosted environment, `switch_to_thread()` doesn't continue
+            // execution from the new thread. Instead it continues in the old
+            // thread. Therefore, we need to instruct the client to resume, and
+            // return to the server.
+            // In a baremetal environment, the opposite is true -- we instruct
+            // the server to resume and return to the client.
+            ss.set_thread_result(
+                client_pid,
+                client_tid,
+                xous_kernel::Result::Scalar2(arg1, arg2),
+            )?;
+            Ok(xous_kernel::Result::Ok)
+        } else {
+            // Switch away from the server, but leave it as Runnable
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
-        ss.switch_to_thread(client_pid, Some(client_tid))?;
-        ss.set_thread_result(
-            client_pid,
-            client_tid,
-            xous_kernel::Result::Scalar2(arg1, arg2),
-        )?;
-        Ok(xous_kernel::Result::Scalar2(arg1, arg2))
+            // Switch to the client
+            ss.ready_thread(client_pid, client_tid)?;
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            Ok(xous_kernel::Result::Scalar2(arg1, arg2))
+        }
     })
 }
 
@@ -446,7 +496,12 @@ pub fn handle(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
     let result = handle_inner(pid, tid, call);
     #[cfg(feature = "debug-print")]
-    println!(" -> {:x?}", result);
+    println!(
+        " -> ({}:{}) {:?}",
+        crate::arch::current_pid(),
+        crate::arch::process::Process::current().current_tid(),
+        result
+    );
     result
 }
 
@@ -598,24 +653,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
                 .map(|_| xous_kernel::Result::Ok)
         }
-        SysCall::Yield => {
-            // If we're not running on bare metal, treat this as a no-op.
-            if !cfg!(baremetal) {
-                return Ok(xous_kernel::Result::Ok);
-            }
-
-            let (parent_pid, parent_ctx) = unsafe {
-                SWITCHTO_CALLER
-                    .take()
-                    .expect("yielded when no parent context was present")
-            };
-            SystemServices::with_mut(|ss| {
-                // TODO: Advance thread
-                ss.activate_process_thread(tid, parent_pid, parent_ctx, true)
-                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
-            })
-        }
+        SysCall::Yield => do_yield(pid, tid),
         SysCall::ReturnToParentI(_pid, _cpuid) => {
             unsafe {
                 // let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
@@ -679,7 +717,17 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
         // SysCall::Connect(sid) => {
         //     SystemServices::with_mut(|ss| ss.connect_to_server(sid).map(xous_kernel::Result::ConnectionID))
         // }
-        // SysCall::SendMessage(cid, message) => send_message(pid, tid, cid, message),
+        SysCall::SendMessage(cid, message) => {
+            let result = send_message(pid, tid, cid, message);
+            match result {
+                Ok(o) => Ok(o),
+                Err(xous_kernel::Error::ServerQueueFull) => {
+                    arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
+                    do_yield(pid, tid)
+                }
+                Err(e) => Err(e),
+            }
+        }
         _ => panic!("Unhandled Syscall: {:?}", call), //Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

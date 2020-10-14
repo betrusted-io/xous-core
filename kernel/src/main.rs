@@ -25,6 +25,8 @@ mod syscall;
 
 use services::SystemServices;
 use xous_kernel::*;
+
+#[cfg(baremetal)]
 use utralib::generated::*;
 
 #[cfg(baremetal)]
