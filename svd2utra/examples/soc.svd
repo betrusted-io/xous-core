@@ -103,171 +103,8 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>UART_PHY</name>
-            <baseAddress>0xF0003000</baseAddress>
-            <groupName>UART_PHY</groupName>
-            <registers>
-                <register>
-                    <name>TUNING_WORD</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4b7f5a</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>tuning_word</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x4</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
-            <name>UART</name>
-            <baseAddress>0xF0004000</baseAddress>
-            <groupName>UART</groupName>
-            <registers>
-                <register>
-                    <name>RXTX</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>rxtx</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>TXFULL</name>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>txfull</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>RXEMPTY</name>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>rxempty</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_STATUS</name>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>TXEMPTY</name>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>txempty</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>RXFULL</name>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>rxfull</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x20</size>
-                <usage>registers</usage>
-            </addressBlock>
-            <interrupt>
-                <name>uart</name>
-                <value>0</value>
-            </interrupt>
-        </peripheral>
-        <peripheral>
             <name>TIMER0</name>
-            <baseAddress>0xF0005000</baseAddress>
+            <baseAddress>0xF0003000</baseAddress>
             <groupName>TIMER0</groupName>
             <registers>
                 <register>
@@ -407,12 +244,12 @@ the current countdown value to ``value`` register.]]></description>
             </addressBlock>
             <interrupt>
                 <name>timer0</name>
-                <value>1</value>
+                <value>0</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>REBOOT</name>
-            <baseAddress>0xF0006000</baseAddress>
+            <baseAddress>0xF0004000</baseAddress>
             <groupName>REBOOT</groupName>
             <registers>
                 <register>
@@ -454,7 +291,7 @@ the current countdown value to ``value`` register.]]></description>
         </peripheral>
         <peripheral>
             <name>CRG</name>
-            <baseAddress>0xF0007000</baseAddress>
+            <baseAddress>0xF0005000</baseAddress>
             <groupName>CRG</groupName>
             <registers>
                 <register>
@@ -585,8 +422,819 @@ the current countdown value to ``value`` register.]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>INFO</name>
+            <name>GPIO</name>
+            <baseAddress>0xF0006000</baseAddress>
+            <groupName>GPIO</groupName>
+            <registers>
+                <register>
+                    <name>OUTPUT</name>
+                    <description><![CDATA[Values to appear on GPIO when respective `drive` bit is asserted]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>output</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>INPUT</name>
+                    <description><![CDATA[Value measured on the respective GPIO pin]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>input</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>DRIVE</name>
+                    <description><![CDATA[When a bit is set to `1`, the respective pad drives its value out]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>drive</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>INTENA</name>
+                    <description><![CDATA[Enable interrupts when a respective bit is set]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>intena</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>INTPOL</name>
+                    <description><![CDATA[When a bit is `1`, falling-edges cause interrupts. Otherwise, rising edges cause
+interrupts.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>intpol</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>UARTSEL</name>
+                    <description><![CDATA[Used to select which UART is routed to physical pins, 00 = kernel debug, 01 =
+console, others undefined]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>uartsel</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x24</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>gpio</name>
+                <value>1</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>UART_PHY</name>
+            <baseAddress>0xF0007000</baseAddress>
+            <groupName>UART_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x4b7f5a</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>UART</name>
             <baseAddress>0xF0008000</baseAddress>
+            <groupName>UART</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>uart</name>
+                <value>2</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>CONSOLE_PHY</name>
+            <baseAddress>0xF0009000</baseAddress>
+            <groupName>CONSOLE_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x4b7f5a</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>CONSOLE</name>
+            <baseAddress>0xF000A000</baseAddress>
+            <groupName>CONSOLE</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>console</name>
+                <value>3</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>SERVER0_PHY</name>
+            <baseAddress>0xF000B000</baseAddress>
+            <groupName>SERVER0_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x4b7f5a</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>SERVER0</name>
+            <baseAddress>0xF000C000</baseAddress>
+            <groupName>SERVER0</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>server0</name>
+                <value>4</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>SERVER1_PHY</name>
+            <baseAddress>0xF000D000</baseAddress>
+            <groupName>SERVER1_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x4b7f5a</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>SERVER1</name>
+            <baseAddress>0xF000E000</baseAddress>
+            <groupName>SERVER1</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>server1</name>
+                <value>5</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>INFO</name>
+            <baseAddress>0xF000F000</baseAddress>
             <groupName>INFO</groupName>
             <registers>
                 <register>
@@ -1007,7 +1655,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>SRAM_EXT</name>
-            <baseAddress>0xF0009000</baseAddress>
+            <baseAddress>0xF0010000</baseAddress>
             <groupName>SRAM_EXT</groupName>
             <registers>
                 <register>
@@ -1051,7 +1699,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>MEMLCD</name>
-            <baseAddress>0xF000A000</baseAddress>
+            <baseAddress>0xF0011000</baseAddress>
             <groupName>MEMLCD</groupName>
             <registers>
                 <register>
@@ -1164,7 +1812,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>COM</name>
-            <baseAddress>0xF000B000</baseAddress>
+            <baseAddress>0xF0012000</baseAddress>
             <groupName>COM</groupName>
             <registers>
                 <register>
@@ -1285,7 +1933,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>I2C</name>
-            <baseAddress>0xF000C000</baseAddress>
+            <baseAddress>0xF0013000</baseAddress>
             <groupName>I2C</groupName>
             <registers>
                 <register>
@@ -1533,12 +2181,12 @@ upon the completion of one byte of data transfer.]]></description>
             </addressBlock>
             <interrupt>
                 <name>i2c</name>
-                <value>2</value>
+                <value>6</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>BTEVENTS</name>
-            <baseAddress>0xF000D000</baseAddress>
+            <baseAddress>0xF0014000</baseAddress>
             <groupName>BTEVENTS</groupName>
             <registers>
                 <register>
@@ -1594,12 +2242,12 @@ upon the completion of one byte of data transfer.]]></description>
             </addressBlock>
             <interrupt>
                 <name>btevents</name>
-                <value>3</value>
+                <value>7</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>MESSIBLE</name>
-            <baseAddress>0xF000E000</baseAddress>
+            <baseAddress>0xF0015000</baseAddress>
             <groupName>MESSIBLE</groupName>
             <registers>
                 <register>
@@ -1668,7 +2316,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>TICKTIMER</name>
-            <baseAddress>0xF000F000</baseAddress>
+            <baseAddress>0xF0016000</baseAddress>
             <groupName>TICKTIMER</groupName>
             <registers>
                 <register>
@@ -1735,7 +2383,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>POWER</name>
-            <baseAddress>0xF0010000</baseAddress>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>POWER</groupName>
             <registers>
                 <register>
@@ -1894,7 +2542,7 @@ reset fashion]]></description>
         </peripheral>
         <peripheral>
             <name>SPINOR</name>
-            <baseAddress>0xF0011000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>SPINOR</groupName>
             <registers>
                 <register>
@@ -2105,7 +2753,7 @@ checked]]></description>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
-            <baseAddress>0xF0012000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
@@ -2322,161 +2970,19 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
             <interrupt>
                 <name>keyboard</name>
-                <value>4</value>
-            </interrupt>
-        </peripheral>
-        <peripheral>
-            <name>GPIO</name>
-            <baseAddress>0xF0013000</baseAddress>
-            <groupName>GPIO</groupName>
-            <registers>
-                <register>
-                    <name>OUTPUT</name>
-                    <description><![CDATA[Values to appear on GPIO when respective `drive` bit is asserted]]></description>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>output</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>INPUT</name>
-                    <description><![CDATA[Value measured on the respective GPIO pin]]></description>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>input</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DRIVE</name>
-                    <description><![CDATA[When a bit is set to `1`, the respective pad drives its value out]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>drive</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>INTENA</name>
-                    <description><![CDATA[Enable interrupts when a respective bit is set]]></description>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>intena</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>INTPOL</name>
-                    <description><![CDATA[When a bit is `1`, falling-edges cause interrupts. Otherwise, rising edges cause
-interrupts.]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>intpol</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_STATUS</name>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>status</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>pending</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>enable</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x20</size>
-                <usage>registers</usage>
-            </addressBlock>
-            <interrupt>
-                <name>gpio</name>
-                <value>5</value>
+                <value>8</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>SEED</name>
-            <baseAddress>0xF0014000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x64f83336</resetValue>
+                    <resetValue>0xd261d6d</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -2492,7 +2998,7 @@ interrupts.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x60e6ef3</resetValue>
+                    <resetValue>0x541ad152</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -2513,7 +3019,7 @@ interrupts.]]></description>
         </peripheral>
         <peripheral>
             <name>ROMTEST</name>
-            <baseAddress>0xF0015000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>ROMTEST</groupName>
             <registers>
                 <register>
@@ -2557,7 +3063,7 @@ interrupts.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF0016000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -2864,12 +3370,12 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>audio</name>
-                <value>6</value>
+                <value>9</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>TRNG_OSC</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>TRNG_OSC</groupName>
             <registers>
                 <register>
@@ -2958,7 +3464,7 @@ reading the `rand` register]]></description>
         </peripheral>
         <peripheral>
             <name>AES</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>AES</groupName>
             <registers>
                 <register>
@@ -3444,7 +3950,7 @@ automatically on data and IV ready]]></description>
         </peripheral>
         <peripheral>
             <name>SHA2</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>SHA2</groupName>
             <registers>
                 <register>
@@ -3934,12 +4440,12 @@ automatically on data and IV ready]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha2</name>
-                <value>7</value>
+                <value>10</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>SHA512</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF0020000</baseAddress>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
@@ -4405,12 +4911,12 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>8</value>
+                <value>11</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>ENGINE</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF0021000</baseAddress>
             <groupName>ENGINE</groupName>
             <registers>
                 <register>
@@ -4616,12 +5122,12 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>9</value>
+                <value>12</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>JTAG</name>
-            <baseAddress>0xF001C000</baseAddress>
+            <baseAddress>0xF0022000</baseAddress>
             <groupName>JTAG</groupName>
             <registers>
                 <register>
