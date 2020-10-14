@@ -10,6 +10,8 @@ then
     exit 0
 fi
 
+DESTDIR=code/bin
+
 # notes:
 # xous-stage1.bin written to 0x2050_0000 (64k erase block size)
 # xous-kernel.bin written to 0x2051_0000 => passed as a0 arg to xous-stage1.bin
@@ -29,13 +31,13 @@ if [ $# -gt 0 ]
 then
     if [ -z "$2" ]
     then
-	scp target/riscv32imac-unknown-none-elf/release/xous.img $1:code/betrusted-scripts/
-	scp ../betrusted-soc/build/gateware/encrypted.bin $1:code/betrusted-scripts/
-	scp ../betrusted-soc/build/csr.csv $1:code/betrusted-scripts/soc-csr.csv
+	scp target/riscv32imac-unknown-none-elf/release/xous.img $1:$DESTDIR/
+	scp ../betrusted-soc/build/gateware/encrypted.bin $1:$DESTDIR/
+	scp ../betrusted-soc/build/csr.csv $1:$DESTDIR/soc-csr.csv
     else
-	scp -i $2 target/riscv32imac-unknown-none-elf/release/xous.img $1:code/betrusted-scripts/
-	scp -i $2 ../betrusted-soc/build/gateware/encrypted.bin $1:code/betrusted-scripts/
-	scp -i $2 ../betrusted-soc/build/csr.csv $1:code/betrusted-scripts/soc-csr.csv
+	scp -i $2 target/riscv32imac-unknown-none-elf/release/xous.img $1:$DESTDIR/
+	scp -i $2 ../betrusted-soc/build/gateware/encrypted.bin $1:$DESTDIR/
+	scp -i $2 ../betrusted-soc/build/csr.csv $1:$DESTDIR/soc-csr.csv
     fi
 else
     echo "Copy to target with $0 <user@host> <ssh-id>"
