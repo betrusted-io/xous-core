@@ -155,7 +155,7 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
         &kernel,
         &init,
         debug,
-        MemorySpec::CsvFile("emulation/csr.csv".into()),
+        MemorySpec::SvdFile("emulation/renode.svd".into()),
     )?;
 
     Ok(())
