@@ -11,7 +11,6 @@ const TARGET: &str = "riscv32imac-unknown-none-elf";
 
 enum MemorySpec {
     SvdFile(String),
-    CsvFile(String),
 }
 
 #[derive(Debug)]
@@ -281,10 +280,6 @@ fn create_image(
     }
 
     match memory_spec {
-        MemorySpec::CsvFile(ref s) => {
-            args.push("--csv");
-            args.push(s);
-        }
         MemorySpec::SvdFile(ref s) => {
             args.push("--svd");
             args.push(s);
