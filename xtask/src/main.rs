@@ -11,7 +11,6 @@ const TARGET: &str = "riscv32imac-unknown-none-elf";
 
 enum MemorySpec {
     SvdFile(String),
-    CsvFile(String),
 }
 
 #[derive(Debug)]
@@ -155,7 +154,7 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
         &kernel,
         &init,
         debug,
-        MemorySpec::CsvFile("emulation/csr.csv".into()),
+        MemorySpec::SvdFile("emulation/renode.svd".into()),
     )?;
 
     Ok(())
@@ -281,10 +280,6 @@ fn create_image(
     }
 
     match memory_spec {
-        MemorySpec::CsvFile(ref s) => {
-            args.push("--csv");
-            args.push(s);
-        }
         MemorySpec::SvdFile(ref s) => {
             args.push("--svd");
             args.push(s);

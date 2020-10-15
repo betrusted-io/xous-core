@@ -4,22 +4,28 @@ cpu: CPU.VexRiscv @ sysbus
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
 
 uart: UART.LiteX_UART @ {
-        sysbus 0x60001000;
-        sysbus 0xF0001000 // shadow
+        sysbus 0x60008000;
+        sysbus 0xF0008000 // shadow
     }
     -> cpu@1002
 
-uartkernel: UART.LiteX_UART @ {
-        sysbus 0x60002000;
-        sysbus 0xF0002000 // shadow
+uartconsole: UART.LiteX_UART @ {
+        sysbus 0x6000A000;
+        sysbus 0xF000A000 // shadow
     }
     -> cpu@1003
 
-uartlog: UART.LiteX_UART @ {
-        sysbus 0x60004000;
-        sysbus 0xF0004000 // shadow
+uartserver0: UART.LiteX_UART @ {
+        sysbus 0x6000C000;
+        sysbus 0xF000C000 // shadow
     }
     -> cpu@1004
+
+uartserver1: UART.LiteX_UART @ {
+        sysbus 0x6000E000;
+        sysbus 0xF000E000 // shadow
+    }
+    -> cpu@1005
 
 timer0: Timers.LiteX_Timer_32 @ {
         sysbus 0x60003000;
@@ -48,14 +54,17 @@ sram: Memory.MappedMemory @ {
 fbmem: Memory.MappedMemory @ sysbus 0xB0000000
     size: 0x6000
 
-memlcd: Video.BetrustedLCD @ sysbus 0xF0005000
+memlcd: Video.BetrustedLCD @ sysbus 0xF0011000
 
 kbd: Input.BetrustedKbd @ sysbus 0xF0006000
 
 cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
-    frequency: 66000000
+    frequency: 100000000
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
+
+ticktimer: Timers.TickTimer @ sysbus 0xf0016000
+    periodInMs: 1
 
 //flash: SPI.Micron_MT25Q @ spi
 //    underlyingMemory: flash_mem
