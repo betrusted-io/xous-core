@@ -10,8 +10,6 @@ mod log_string;
 use core::fmt::Write;
 use log_string::LogString;
 
-extern crate utralib;
-
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use core::fmt::{Error, Write};
