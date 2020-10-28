@@ -1,3 +1,4 @@
+#[cfg(baremetal)]
 use utralib::generated::*;
 
 #[cfg(baremetal)]

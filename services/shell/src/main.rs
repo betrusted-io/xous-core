@@ -5,8 +5,8 @@
 #[macro_use]
 mod debug;
 
-mod timer;
 mod logstr;
+mod timer;
 use core::fmt::Write;
 
 // fn print_and_yield(index: *mut usize) -> ! {
@@ -17,7 +17,7 @@ use core::fmt::Write;
 //     }
 // }
 
-extern crate utralib;
+#[cfg(baremetal)]
 use utralib::generated::*;
 
 fn move_lfsr(mut lfsr: u32) -> u32 {
@@ -71,22 +71,25 @@ fn shell_main() -> ! {
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
 
-    let gpio_base = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map GPIO CSR range");
-    let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
+    #[cfg(baremetal)]
+    {
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
+    }
 
     let mut last_time: u64 = 0;
     loop {
         // a message passing demo -- checking time
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             println!("SHELL: {}ms", elapsed_time);
-            if elapsed_time - last_time > 4000 {
+            if elapsed_time - last_time > 40 {
                 last_time = elapsed_time;
                 /*
                 xous::try_send_message(log_conn,
@@ -95,25 +98,28 @@ fn shell_main() -> ! {
                 println!("Preparing a mutable borrow message");
 
                 ls.clear();
-                write!(ls, "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}", elapsed_time as usize).expect("couldn't send hello message");
+                write!(
+                    ls,
+                    "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}",
+                    elapsed_time as usize
+                )
+                .expect("couldn't send hello message");
 
-                let mm = ls.as_memory_message(0)
-                .expect("couldn't form memory message");
+                let mm = ls
+                    .as_memory_message(0)
+                    .expect("couldn't form memory message");
 
                 println!("Sending a mutable borrow message");
 
-                let response = xous::syscall::try_send_message(
-                    log_conn,
-                    xous::Message::MutableBorrow(mm),
-                )
-                .expect("couldn't send memory message");
+                let response =
+                    xous::syscall::try_send_message(log_conn, xous::Message::MutableBorrow(mm))
+                        .expect("couldn't send memory message");
                 //unsafe { ls.set_len(response.0)};
                 //println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
             }
         } else {
             println!("error requesting ticktimer!")
         }
-
 
         // println!("Sending a scalar message with id {}...", counter + 4096);
         // match xous::syscall::send_message(
@@ -140,7 +146,6 @@ fn shell_main() -> ! {
         // lfsr = move_lfsr(lfsr);
 
         loop {
-
             match graphics_server::set_style(
                 graphics_conn,
                 5,
@@ -209,6 +214,5 @@ fn shell_main() -> ! {
         // if counter & 2 == 0 {
         //     xous::syscall::yield_slice();
         // }
-
     }
 }
