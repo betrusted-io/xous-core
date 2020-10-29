@@ -288,8 +288,16 @@ impl Process {
                 response.extend_from_slice(&word.to_le_bytes());
             }
 
+            if let Some(mem) = result.memory() {
+                let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
+                response.extend_from_slice(&s);
+            }
+
             // If there is memory to return for this thread, also return that.
             if let Some(buf) = process.memory_to_return[tid - 1].take() {
+                if result.memory().is_some() {
+                    panic!("Result has memory and we're also returning memory!");
+                }
                 // if let xous_kernel::Result::Message(_) = result {
                 // } else {
                 //     panic!(

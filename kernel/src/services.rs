@@ -596,6 +596,7 @@ impl SystemServices {
                 let mut p = crate::arch::process::Process::current();
                 p.setup_thread(INITIAL_TID, setup)?;
                 p.set_thread(INITIAL_TID)?;
+                ArchProcess::with_inner_mut(|process_inner| process_inner.pid = pid);
                 // process.current_thread = INITIAL_TID as u8;
 
                 // Mark the current proces state as "running, and no waiting contexts"
@@ -857,10 +858,14 @@ impl SystemServices {
                     // println!("Setting up new process...");
                     ArchProcess::setup_process(new_pid, thread_init)
                         .expect("couldn't set up new process");
+                    ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
 
                     ProcessState::Running(0)
                 }
-                ProcessState::Allocated => ProcessState::Running(0),
+                ProcessState::Allocated => {
+                    ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
+                    ProcessState::Running(0)
+                },
                 ProcessState::Free => panic!("process was suddenly Free"),
                 ProcessState::Ready(x) | ProcessState::Running(x) => {
                     ProcessState::Running(x & !(1 << new_tid))
@@ -1267,7 +1272,10 @@ impl SystemServices {
             ProcessState::Running(x) => ProcessState::Running(x | (1 << new_tid)),
 
             // This is the initial thread in this process -- schedule it to be run.
-            ProcessState::Allocated => ProcessState::Ready(1 << new_tid),
+            ProcessState::Allocated => {
+                ArchProcess::with_inner_mut(|process_inner| process_inner.pid = pid);
+                ProcessState::Ready(1 << new_tid)
+            },
 
             other => panic!(
                 "error spawning thread: process was in an invalid state {:?}",
@@ -1340,9 +1348,10 @@ impl SystemServices {
         // While doing this, find a free slot in case we haven't
         // yet connected.
 
-        // let _pid = crate::arch::process::current_pid();
+        let pid = crate::arch::process::current_pid();
         // println!("KERNEL({}): Server table: {:?}", _pid.get(), self.servers);
         ArchProcess::with_inner_mut(|process_inner| {
+            assert_eq!(pid, process_inner.pid);
             let mut slot_idx = None;
             // Look through the connection map for (1) a free slot, and (2) an
             // existing connection
@@ -1378,9 +1387,10 @@ impl SystemServices {
                         process_inner.connection_map[slot_idx] =
                             Some(NonZeroU8::new((server_idx as u8) + 2).unwrap());
                         // println!(
-                        //     "KERNEL({}): New connection to {:?}. After connection, process connection map is: {:?}",
-                        //     _pid.get(),
+                        //     "KERNEL({}): New connection to {:?}. After connection, cid is {} and process connection map is: {:?}",
+                        //     pid.get(),
                         //     sid,
+                        //     slot_idx + 2,
                         //     process_inner.connection_map
                         // );
                         return Ok((slot_idx as CID) + 2);
@@ -1389,6 +1399,21 @@ impl SystemServices {
             }
             Err(xous_kernel::Error::OutOfMemory)
         })
+    }
+
+    /// Retrieve the server ID index from the specified SID.
+    /// This may only be called if the SID is a server owned by
+    /// the current process.
+    pub fn sidx_from_sid(&mut self, sid: SID, pid: PID) -> Option<usize> {
+        // println!("KERNEL({}): Server table: {:?}", pid.get(), self.servers);
+        for (idx, slot) in self.servers.iter().enumerate() {
+            if let Some(server) = slot {
+                if server.pid == pid && server.sid == sid {
+                    return Some(idx);
+                }
+            }
+        }
+        None
     }
 
     /// Return a server based on the connection id and the current process
@@ -1409,32 +1434,41 @@ impl SystemServices {
         }
     }
 
+    /// Retrieve a Server ID (Extended) value from the given Connection ID
+    /// within the current process.
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
+        // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(), cid);
         if cid == 0 {
-            println!("CID is invalid -- returning");
+            // println!("KERNEL({}): CID is invalid -- returning", crate::arch::process::current_pid());
             return None;
         } else if cid == 1 {
-            println!("Server has terminated -- returning");
+            // println!("KERNEL({}): Server has terminated -- returning", crate::arch::process::current_pid());
             return None;
         }
 
         let cid = cid - 2;
 
         ArchProcess::with_inner(|process_inner| {
+            assert_eq!(crate::arch::process::current_pid(), process_inner.pid);
             if cid >= process_inner.connection_map.len() {
-                println!("KERNEL: CID {} > connection map len", cid);
+                // println!("KERNEL({}): CID {} > connection map len", crate::arch::process::current_pid(), cid);
                 return None;
             }
+            // if process_inner.connection_map[cid].is_none() {
+            //     println!("KERNEL({}): CID {} doesn't exist in the connection map", crate::arch::process::current_pid(), cid + 2);
+            //     println!("KERNEL({}): Process inner is: {:?}", crate::arch::process::current_pid(), process_inner);
+            // }
             let mut server_idx = process_inner.connection_map[cid]?.get() as usize;
-            if server_idx < 2 {
-                panic!("KERNEL: CID {} is invalid", cid + 2);
+            if server_idx == 1 {
+                // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid + 2);
+                return None;
             }
             server_idx -= 2;
             if server_idx >= self.servers.len() {
-                println!("KERNEL: CID {} and server_idx >= {}", cid + 2, server_idx);
+                // println!("KERNEL({}): CID {} and server_idx >= {}", crate::arch::process::current_pid(), cid + 2, server_idx);
                 None
             } else {
-                // println!("KERNEL: SIDX for CID {} found at index {}", cid + 2, server_idx);
+                // println!("KERNEL({}): SIDX for CID {} found at index {}", crate::arch::process::current_pid(), cid + 2, server_idx);
                 Some(server_idx)
             }
         })
@@ -1472,27 +1506,27 @@ impl SystemServices {
         result
     }
 
-    /// Obtain the connection ID of the server from within the server process.
-    pub fn server_cid(&mut self, sidx: usize) -> Result<CID, xous_kernel::Error> {
-        let current_pid = self.current_pid();
-        let result = {
-            let server = self
-                .server_from_sidx(sidx)
-                .ok_or(xous_kernel::Error::ServerNotFound)?;
-            let server_pid = server.pid;
-            let sid = server.sid;
-            {
-                let server_process = self.get_process(server_pid)?;
-                server_process.mapping.activate().unwrap();
-            }
-            self.connect_to_server(sid)
-        };
-        let current_process = self
-            .get_process(current_pid)
-            .expect("couldn't restore previous process");
-        current_process.mapping.activate()?;
-        result
-    }
+    // /// Obtain the connection ID of the server from within the server process.
+    // pub fn server_cid(&mut self, sidx: usize) -> Result<CID, xous_kernel::Error> {
+    //     let current_pid = self.current_pid();
+    //     let result = {
+    //         let server = self
+    //             .server_from_sidx(sidx)
+    //             .ok_or(xous_kernel::Error::ServerNotFound)?;
+    //         let server_pid = server.pid;
+    //         let sid = server.sid;
+    //         {
+    //             let server_process = self.get_process(server_pid)?;
+    //             server_process.mapping.activate().unwrap();
+    //         }
+    //         self.connect_to_server(sid)
+    //     };
+    //     let current_process = self
+    //         .get_process(current_pid)
+    //         .expect("couldn't restore previous process");
+    //     current_process.mapping.activate()?;
+    //     result
+    // }
 
     /// Switch to the server's address space and add a "remember this address"
     /// entry to its server queue, then switch back to the original address space.
@@ -1521,17 +1555,17 @@ impl SystemServices {
         result
     }
 
-    /// Get a server index based on a SID
-    pub fn server_sidx(&mut self, sid: SID) -> Option<usize> {
-        for (idx, server) in self.servers.iter_mut().enumerate() {
-            if let Some(active_server) = server {
-                if active_server.sid == sid {
-                    return Some(idx);
-                }
-            }
-        }
-        None
-    }
+    // /// Get a server index based on a SID
+    // pub fn server_sidx(&mut self, sid: SID) -> Option<usize> {
+    //     for (idx, server) in self.servers.iter_mut().enumerate() {
+    //         if let Some(active_server) = server {
+    //             if active_server.sid == sid {
+    //                 return Some(idx);
+    //             }
+    //         }
+    //     }
+    //     None
+    // }
 
     /// Terminate the given process. Returns the process' parent PID.
     pub fn terminate_process(&mut self, target_pid: PID) -> Result<PID, xous_kernel::Error> {

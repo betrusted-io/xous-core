@@ -331,6 +331,7 @@ impl MemoryManager {
                     return Ok(potential_start as *mut u8);
                 }
             }
+            // println!("Couldn't find virtual address");
             Err(xous_kernel::Error::BadAddress)
         })
     }
@@ -622,10 +623,10 @@ impl MemoryManager {
                 offset += region.mem_size as usize / PAGE_SIZE;
             }
         }
-        println!(
-            "mem: unable to claim or release physical address {:08x}",
-            addr
-        );
+        // println!(
+        //     "mem: unable to claim or release physical address {:08x}",
+        //     addr
+        // );
         Err(xous_kernel::Error::BadAddress)
     }
 

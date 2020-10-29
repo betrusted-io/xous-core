@@ -89,10 +89,10 @@ fn handle_connection(
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
             if let Err(_e) = conn.read_exact(&mut raw_data) {
-                // println!(
-                //     "KERNEL(?): Client disconnected: {} ({:?}). Shutting down virtual process.",
-                //     _e, _e
-                // );
+                println!(
+                    "KERNEL(?): Client disconnected: {} ({:?}). Shutting down virtual process.",
+                    _e, _e
+                );
                 sender.send(ServerMessage::Exit).ok();
                 return;
             }
@@ -105,23 +105,33 @@ fn handle_connection(
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
 
-            if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
-                || packet_data[1] == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
-                && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
-            {
-                let mut v = vec![0; packet_data[6]];
-                if conn.read_exact(&mut v).is_err() {
-                    sender.send(ServerMessage::Exit).ok();
-                    return;
-                }
-                sender
-                    .send(ServerMessage::ServerPacketWithData(packet_data, v))
-                    .unwrap();
-            } else {
-                sender
-                    .send(ServerMessage::ServerPacket(packet_data))
-                    .unwrap();
-            }
+            sender
+                .send(
+                    if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
+                        || packet_data[1]
+                            == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
+                        && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
+                    {
+                        let mut v = vec![0; packet_data[6]];
+                        if conn.read_exact(&mut v).is_err() {
+                            sender.send(ServerMessage::Exit).ok();
+                            return;
+                        }
+                        ServerMessage::ServerPacketWithData(packet_data, v)
+                    } else if packet_data[1]
+                        == xous_kernel::syscall::SysCallNumber::ReturnMemory as _
+                    {
+                        let mut v = vec![0; packet_data[4]];
+                        if conn.read_exact(&mut v).is_err() {
+                            sender.send(ServerMessage::Exit).ok();
+                            return;
+                        }
+                        ServerMessage::ServerPacketWithData(packet_data, v)
+                    } else {
+                        ServerMessage::ServerPacket(packet_data)
+                    },
+                )
+                .unwrap();
         }
     }
 
@@ -148,7 +158,10 @@ fn handle_connection(
 
     for msg in receiver {
         match msg {
-            ServerMessage::Exit => break,
+            ServerMessage::Exit => {
+                println!("KERNEL({}): Received ServerMessage::Exit", pid);
+                break;
+            }
             ServerMessage::ServerPacket(pkt) => {
                 let thread_id = pkt[0];
                 let call = xous_kernel::SysCall::from_args(
@@ -216,8 +229,28 @@ fn handle_connection(
                                                 _ => unreachable!(),
                                             };
                                     }
-                                    xous_kernel::Message::Scalar(_) | xous_kernel::Message::BlockingScalar(_) => (),
+                                    xous_kernel::Message::Scalar(_)
+                                    | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
+                            },
+                            SysCall::ReturnMemory(_sender, ref mut buf) => {
+                                let sliced_data = data.into_boxed_slice();
+                                assert_eq!(
+                                    sliced_data.len(),
+                                    buf.len(),
+                                    "deconstructed data {} != message buf length {}",
+                                    sliced_data.len(),
+                                    buf.len()
+                                );
+                                buf.addr =
+                                    match MemoryAddress::new(Box::into_raw(sliced_data)
+                                        as *mut u8
+                                        as usize)
+                                    {
+                                        Some(a) => a,
+                                        _ => unreachable!(),
+                                    };
+
                             }
                             _ => panic!("unsupported message type"),
                         }
@@ -228,7 +261,10 @@ fn handle_connection(
             }
         }
     }
-    // eprintln!("KERNEL({}): Finished the thread so sending TerminateProcess", pid);
+    eprintln!(
+        "KERNEL({}): Finished the thread so sending TerminateProcess",
+        pid
+    );
     chn.send(ThreadMessage::SysCall(
         pid,
         1,

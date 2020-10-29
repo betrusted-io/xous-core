@@ -130,7 +130,6 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             //     "There are contexts available to handle this message.  Marking PID {} as Ready",
             //     server_pid
             // );
-            let server_cid = ss.server_cid(sidx)?;
             let sender_idx = if message.is_blocking() {
                 ss.remember_server_message(sidx, pid, thread, &message, client_address)
                     .map_err(|e| {
@@ -143,9 +142,13 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 0
             };
             let sender = SenderID {
-                cid: server_cid,
+                sidx,
                 idx: sender_idx,
             };
+            // println!(
+            //     "KERNEL({}): server connection data: sidx: {}, idx: {}, server pid: {}",
+            //     pid, sidx, sender_idx, server_pid
+            // );
             let envelope = MessageEnvelope {
                 sender: sender.into(),
                 body: message,
@@ -227,11 +230,8 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss
-            .sidx_from_cid(sender.cid)
-            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
-            .server_from_sidx_mut(sidx)
+            .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
         if server.pid != pid {
             return Err(xous_kernel::Error::ServerNotFound);
@@ -276,13 +276,14 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
             }
         };
         // println!(
-        //     "Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+        //     "KERNEL({}): Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
+        //     pid,
         //     len,
         //     server_addr.get(),
         //     pid,
         //     client_addr.get(),
         //     client_pid,
-        //     client_ctx
+        //     client_tid
         // );
 
         // Return the memory to the calling process
@@ -296,10 +297,6 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
         )?;
 
         // Unblock the client context to allow it to continue.
-        // println!(
-        //     "KERNEL({}): Unblocking PID {} CTX {}",
-        //     pid, client_pid, client_ctx
-        // );
         if !cfg!(baremetal) {
             ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
@@ -328,11 +325,8 @@ fn return_scalar(
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss
-            .sidx_from_cid(sender.cid)
-            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
-            .server_from_sidx_mut(sidx)
+            .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
         if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
@@ -397,12 +391,10 @@ fn return_scalar2(
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
-        let sidx = ss
-            .sidx_from_cid(sender.cid)
-            .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
-            .server_from_sidx_mut(sidx)
+            .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
+            // .expect("Couldn't get server from SIDX");
         if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
@@ -465,9 +457,8 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
             "current thread is not running"
         );
         // See if there is a pending message.  If so, return immediately.
-        let cid = ss.connect_to_server(sid)?;
         let sidx = ss
-            .server_sidx(sid)
+            .sidx_from_sid(sid, pid)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
         let server = ss
             .server_from_sidx_mut(sidx)
@@ -480,7 +471,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         }
 
         // If there is a pending message, return it immediately.
-        if let Some(msg) = server.take_next_message(cid) {
+        if let Some(msg) = server.take_next_message(sidx) {
             return Ok(xous_kernel::Result::Message(msg));
         }
 
@@ -545,6 +536,7 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                         .map(|x| x.get() >= arch::mem::USER_AREA_END)
                         .unwrap_or(false)
                 {
+                    println!("Exceeded user area");
                     return Err(xous_kernel::Error::BadAddress);
 
                 // Don't allow mapping non-page values

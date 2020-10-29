@@ -136,6 +136,16 @@ pub extern "C" fn kmain() {
     // Start performing round-robin on all child processes.
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
+
+    #[cfg(not(target_os = "none"))]
+    {
+        use std::panic;
+        panic::set_hook(Box::new(|arg| {
+            println!("Panic Details: {:?}", arg);
+            debug_here::debug_here!();
+        }));
+    }
+
     loop {
         arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);

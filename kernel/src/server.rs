@@ -3,8 +3,8 @@ use core::mem;
 use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, PID, SID, TID};
 
 pub struct SenderID {
-    /// The connection ID inside the server
-    pub cid: usize,
+    /// The index of the server within the SystemServices table
+    pub sidx: usize,
     /// The index into the queue array
     pub idx: usize,
 }
@@ -12,7 +12,7 @@ pub struct SenderID {
 impl From<usize> for SenderID {
     fn from(item: usize) -> SenderID {
         SenderID {
-            cid: item >> 16,
+            sidx: item >> 16,
             idx: item & 0xffff,
         }
     }
@@ -20,10 +20,11 @@ impl From<usize> for SenderID {
 
 impl Into<usize> for SenderID {
     fn into(self) -> usize {
-        (self.cid << 16) | (self.idx & 0xffff)
+        (self.sidx << 16) | (self.idx & 0xffff)
     }
 }
 
+#[derive(Debug)]
 pub enum WaitingMessage {
     /// There is no waiting message.
     None,
@@ -333,6 +334,7 @@ impl Server {
         buf: Option<&MemoryRange>,
     ) -> Result<WaitingMessage, xous_kernel::Error> {
         if idx > self.queue.len() {
+            // println!("KERNEL: index exceeds queue length");
             return Err(xous_kernel::Error::BadAddress);
         }
         let (pid, ctx, server_addr, client_addr, len, forget, is_memory) = match self.queue[idx] {
@@ -350,9 +352,10 @@ impl Server {
 
         // Sanity check the specified address was correct, and matches what we
         // had cached.
-        if is_memory {
+        if is_memory && cfg!(baremetal) {
             let buf = buf.expect("memory message expected but no buffer passed!");
             if server_addr != buf.as_ptr() as usize || len != buf.len() {
+                // println!("KERNEL: Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
                 return Err(xous_kernel::Error::BadAddress);
             }
         }
@@ -407,14 +410,14 @@ impl Server {
     ///
     /// * **None**: There are no waiting messages
     /// ***Some(MessageEnvelope): This message is queued.
-    pub fn take_next_message(&mut self, cid: xous_kernel::CID) -> Option<xous_kernel::MessageEnvelope> {
+    pub fn take_next_message(&mut self, sidx: usize) -> Option<xous_kernel::MessageEnvelope> {
         // println!(
         //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}  CID: ((({})))",
         //     self.queue_head, self.queue_tail, self.queue[self.queue_tail], cid
         // );
         let sender = SenderID {
             idx: self.queue_tail,
-            cid,
+            sidx,
         }.into();
         let (result, response) = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
