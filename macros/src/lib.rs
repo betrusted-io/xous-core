@@ -94,8 +94,10 @@ pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
         #[export_name = "xous_entry"]
         #(#attrs)*
         pub #unsafety fn #hash() -> ! {
+            xous::init();
             #(#stmts)*
         }
+
         xous::maybe_main!();
     );
     r.into()
