@@ -369,6 +369,10 @@ impl MemoryRange {
             addr != 0,
             "tried to construct a memory range with a null pointer"
         );
+        assert!(
+            size != 0,
+            "tried to construct a zero-length memory range"
+        );
         Ok(MemoryRange {
             addr: MemoryAddress::new(addr).ok_or(Error::BadAddress)?,
             size: MemorySize::new(size).ok_or(Error::BadAddress)?,
@@ -573,6 +577,20 @@ impl Result {
             ),
             16 => Result::WouldBlock,
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
+        }
+    }
+
+
+    /// If the Result has memory attached to it, return the memory
+    pub fn memory(&self) -> Option<MemoryRange> {
+        match self {
+            Result::Message(msg) => match &msg.body {
+                Message::Move(memory_message)
+                | Message::Borrow(memory_message)
+                | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
+                _ => None,
+            },
+            _ => None,
         }
     }
 }

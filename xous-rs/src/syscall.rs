@@ -580,8 +580,26 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnScalar1(sender, arg1) => [SysCallNumber::ReturnScalar1 as usize, *sender, *arg1, 0, 0, 0, 0, 0],
-            SysCall::ReturnScalar2(sender, arg1, arg2) => [SysCallNumber::ReturnScalar2 as usize, *sender, *arg1, *arg2, 0, 0, 0, 0],
+            SysCall::ReturnScalar1(sender, arg1) => [
+                SysCallNumber::ReturnScalar1 as usize,
+                *sender,
+                *arg1,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            SysCall::ReturnScalar2(sender, arg1, arg2) => [
+                SysCallNumber::ReturnScalar2 as usize,
+                *sender,
+                *arg1,
+                *arg2,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -769,6 +787,66 @@ impl SysCall {
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
+
+    /// Returns `true` if the associated syscall is a message that has memory attached to it
+    pub fn has_memory(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_))
+            }
+            SysCall::ReturnMemory(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a Move
+    pub fn is_move(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Move(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a Borrow
+    pub fn is_borrow(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Borrow(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a MutableBorrow
+    pub fn is_mutableborrow(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::MutableBorrow(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is returning memory
+    pub fn is_return_memory(&self) -> bool {
+        matches!(self, SysCall::ReturnMemory(_, _))
+    }
+
+    /// If the syscall has memory attached to it, return the memory
+    pub fn memory(&self) -> Option<MemoryRange> {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
+                Message::Move(memory_message)
+                | Message::Borrow(memory_message)
+                | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
+                _ => None,
+            },
+            SysCall::ReturnMemory(_, range) => Some(*range),
+            _ => None,
+        }
+    }
 }
 
 extern "Rust" {
@@ -865,7 +943,11 @@ pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_scalar2(sender: MessageSender, val1: usize, val2: usize) -> core::result::Result<(), Error> {
+pub fn return_scalar2(
+    sender: MessageSender,
+    val1: usize,
+    val2: usize,
+) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnScalar2(sender, val1, val2))?;
     if let crate::Result::Ok = result {
         Ok(())
