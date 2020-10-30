@@ -85,13 +85,13 @@ fn handle_connection(
         ServerPacketWithData([usize; 9], Vec<u8>),
     }
 
-    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>) {
+    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>, pid: PID) {
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
-            if let Err(_e) = conn.read_exact(&mut raw_data) {
+            if let Err(e) = conn.read_exact(&mut raw_data) {
                 println!(
-                    "KERNEL(?): Client disconnected: {} ({:?}). Shutting down virtual process.",
-                    _e, _e
+                    "KERNEL({}): client disconnected: {} -- shutting down virtual process",
+                    pid, e
                 );
                 sender.send(ServerMessage::Exit).ok();
                 return;
@@ -140,7 +140,7 @@ fn handle_connection(
     std::thread::Builder::new()
         .name(format!("PID {}: client connection thread", pid))
         .spawn(move || {
-            conn_thread(conn, conn_sender);
+            conn_thread(conn, conn_sender, pid);
         })
         .unwrap();
 
