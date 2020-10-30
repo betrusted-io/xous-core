@@ -253,7 +253,8 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
                     let mut result = Ok(xous_kernel::Result::Ok);
                     let virt = range.addr.get();
                     let size = range.size.get();
-                    if virt & 0xfff != 0 {
+                    if cfg!(baremetal) && virt & 0xfff != 0 {
+                        print!(" [VIRT NOT DIVISIBLE BY 4: {:08x}]", virt);
                         return Err(xous_kernel::Error::BadAlignment);
                     }
                     for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
