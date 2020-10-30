@@ -7,7 +7,6 @@ description = "Manage the video output"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-embedded-graphics = "0.6"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
