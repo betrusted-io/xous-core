@@ -290,6 +290,7 @@ impl Process {
 
             if let Some(mem) = result.memory() {
                 let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
+                print!(" [adding {} additional bytes from result]", s.len());
                 response.extend_from_slice(&s);
             }
 
@@ -304,6 +305,7 @@ impl Process {
                 //         "memory was waiting to be returned, but message was not a result message"
                 //     );
                 // }
+                print!(" [adding {} additional bytes from memory being returned]", buf.len());
                 response.extend_from_slice(&buf);
             }
 
@@ -312,6 +314,7 @@ impl Process {
             //     current_pid_idx + 1,
             //     response
             // );
+            print!(" [setting thread return value to {} bytes]", response.len());
             process
                 .conn
                 .as_mut()
