@@ -1397,7 +1397,7 @@ impl SystemServices {
                     }
                 }
             }
-            Err(xous_kernel::Error::OutOfMemory)
+            Err(xous_kernel::Error::ServerNotFound) // May also be OutOfMemory if the table is full
         })
     }
 
