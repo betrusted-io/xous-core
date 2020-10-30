@@ -258,10 +258,9 @@ fn reader_thread(mut output: implementation::OutputWriter) {
 fn some_main() -> ! {
     let mut output = implementation::init();
     let writer = output.get_writer();
-    // xous::arch::ensure_connection().unwrap();
-    println!("Creating the reader thread");
+    println!("LOG: Creating the reader thread");
     xous::create_thread_simple(reader_thread, writer).unwrap();
-    println!("Running the output");
+    println!("LOG: Running the output");
     output.run();
-    panic!("exited");
+    panic!("LOG: Exited");
 }
