@@ -62,7 +62,7 @@ impl<'a> Carton<'a> {
             offset: None,
             valid: None,
         };
-        crate::try_send_message(connection, Message::Borrow(msg))
+        crate::send_message(connection, Message::Borrow(msg))
     }
 
     /// Perform a mutable lend of this Carton to the server.
@@ -73,7 +73,7 @@ impl<'a> Carton<'a> {
             offset: None,
             valid: None,
         };
-        crate::try_send_message(connection, Message::MutableBorrow(msg))
+        crate::send_message(connection, Message::MutableBorrow(msg))
     }
 }
 
