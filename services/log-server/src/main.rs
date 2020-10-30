@@ -5,10 +5,8 @@
 #[macro_use]
 mod debug;
 
-mod log_string;
-
 use core::fmt::Write;
-use log_string::LogString;
+use xous::String;
 
 #[cfg(not(target_os = "none"))]
 mod implementation {
@@ -119,8 +117,12 @@ mod implementation {
         crate::debug::DEFAULT.enable_rx();
 
         println!("Allocating IRQ...");
-        xous::syscall::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>())
-            .expect("couldn't claim interrupt");
+        xous::syscall::claim_interrupt(
+            utra::console::CONSOLE_IRQ,
+            handle_irq,
+            core::ptr::null_mut::<usize>(),
+        )
+        .expect("couldn't claim interrupt");
         println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
         Output {
             // addr: uart.as_mut_ptr() as usize,
@@ -129,7 +131,7 @@ mod implementation {
 
     impl Output {
         pub fn get_writer(&self) -> OutputWriter {
-            OutputWriter {  }
+            OutputWriter {}
         }
 
         pub fn run(&mut self) {
@@ -172,12 +174,11 @@ mod implementation {
         println!();
     }
 
-    pub struct OutputWriter {
-    }
+    pub struct OutputWriter {}
 
     impl OutputWriter {
         pub fn putc(&self, c: u8) {
-            let mut uart_csr = CSR::new(unsafe{ crate::debug::DEFAULT_UART_ADDR as *mut u32});
+            let mut uart_csr = CSR::new(unsafe { crate::debug::DEFAULT_UART_ADDR as *mut u32 });
 
             // Wait until TXFULL is `0`
             while uart_csr.r(utra::uart::TXFULL) != 0 {}
@@ -211,44 +212,76 @@ fn reader_thread(mut output: implementation::OutputWriter) {
             writeln!(output, "LOG: Counter tick: {}", counter).unwrap();
         }
         counter += 1;
-        writeln!(output, "LOG: Waiting for an event...").unwrap();
+        // writeln!(output, "LOG: Waiting for an event...").unwrap();
         let mut envelope =
             xous::syscall::receive_message(server_addr).expect("couldn't get address");
-        writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
+        let sender = envelope.sender;
+        // writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
         match &mut envelope.body {
             xous::Message::Scalar(msg) => {
-                writeln!(output, "LOG: Scalar message from {}: {:?}", envelope.sender, msg).unwrap();
+                writeln!(
+                    output,
+                    "LOG: Scalar message from {}: {:?}",
+                    envelope.sender, msg
+                )
+                .unwrap();
             }
             xous::Message::BlockingScalar(msg) => {
-                writeln!(output, "LOG: BlockingScalar message from {}: {:?}", envelope.sender, msg).unwrap();
+                writeln!(
+                    output,
+                    "LOG: BlockingScalar message from {}: {:?}",
+                    envelope.sender, msg
+                )
+                .unwrap();
             }
             xous::Message::Move(msg) => {
-                let log_entry = LogString::from_message(msg);
-                writeln!(
-                    output,
-                    "LOG: Moved log  message from {}: {}",
-                    envelope.sender, log_entry
-                )
-                .unwrap();
+                String::from_message(msg)
+                    .map(|log_entry| {
+                        writeln!(
+                            output,
+                            "LOG: Moved log  message from {}: {}",
+                            sender, log_entry
+                        )
+                        .unwrap()
+                    })
+                    .or_else(|e| {
+                        writeln!(output, "LOG: unable to convert Move message to str: {}", e)
+                    })
+                    .ok();
             }
             xous::Message::Borrow(msg) => {
-                let log_entry = LogString::from_message(msg);
-                writeln!(
-                    output,
-                    "LOG: Immutably borrowed log message from {}: {}",
-                    envelope.sender, log_entry
-                )
-                .unwrap();
+                String::from_message(msg)
+                    .map(|log_entry| writeln!(output, "{}", log_entry).unwrap())
+                    .or_else(|e| {
+                        writeln!(
+                            output,
+                            "LOG: unable to convert Borrow message to str: {}",
+                            e
+                        )
+                    })
+                    .ok();
             }
             xous::Message::MutableBorrow(msg) => {
-                let mut log_entry = LogString::from_message(msg);
-                writeln!(
-                    output,
-                    "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",
-                    envelope.sender, log_entry.len, log_entry.s,
-                )
-                .unwrap();
-                writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
+                String::from_message(msg)
+                    .map(|mut log_entry| {
+                        writeln!(
+                            output,
+                            "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",
+                            sender,
+                            log_entry.len(),
+                            log_entry,
+                        )
+                        .unwrap();
+                        writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
+                    })
+                    .or_else(|e| {
+                        writeln!(
+                            output,
+                            "LOG: unable to convert MutableBorrow message to str: {}",
+                            e
+                        )
+                    })
+                    .ok();
             }
         }
     }
