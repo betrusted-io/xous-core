@@ -13,11 +13,13 @@ pub mod carton;
 pub mod definitions;
 mod messages;
 pub mod syscall;
+pub mod string;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;
+pub use string::*;
 
 #[cfg(not(target_os = "none"))]
 pub use arch::ProcessArgsAsThread;
