@@ -570,6 +570,10 @@ pub fn idle() -> bool {
                     for word in response.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());
                     }
+                    if let Some(mem) = response.memory() {
+                        let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
+                        response_vec.extend_from_slice(s);
+                    }
                     process.send(&response_vec).unwrap_or_else(|_e| {
                         // If we're unable to send data to the process, assume it's dead and terminate it.
                         eprintln!(
