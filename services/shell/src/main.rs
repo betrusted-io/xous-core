@@ -150,6 +150,7 @@ fn shell_main() -> ! {
     }
 
     let mut last_time: u64 = 0;
+    let mut string_buffer = StringBuffer::new(4096);
     loop {
         // a message passing demo -- checking time
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
@@ -186,67 +187,33 @@ fn shell_main() -> ! {
             println!("error requesting ticktimer!")
         }
 
-        // println!("Sending a scalar message with id {}...", counter + 4096);
-        // match xous::syscall::send_message(
-        //     log_conn,
-        //     xous::Message::Scalar(xous::ScalarMessage {
-        //         id: counter + 4096,
-        //         arg1: counter,
-        //         arg2: counter * 2,
-        //         arg3: !counter,
-        //         arg4: counter + 1,
-        //     }),
-        // ) {
-        //     Err(xous::Error::ServerQueueFull) => {
-        //         // println!("Server queue is full... retrying");
-        //         continue;
-        //     }
-        //     Ok(_) => {
-        //         println!("Loop {}", counter);
-        //         counter += 1;
-        //     }
-        //     Err(e) => panic!("Unable to send message: {:?}", e),
-        // }
+        graphics_server::set_style(
+            graphics_conn,
+            5,
+            if lfsr & 1 == 0 { dark } else { light },
+            if lfsr & 1 == 0 { dark } else { light },
+        )
+        .expect("unable to draw to screen: {:?}");
 
-        // lfsr = move_lfsr(lfsr);
-
-        loop {
-            match graphics_server::set_style(
-                graphics_conn,
-                5,
-                if lfsr & 1 == 0 { dark } else { light },
-                if lfsr & 1 == 0 { dark } else { light },
-            ) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
         let x1 = move_lfsr(lfsr);
         let y1 = move_lfsr(x1);
         let x2 = move_lfsr(y1);
         let y2 = move_lfsr(x2);
         lfsr = y2;
 
-        loop {
-            match graphics_server::draw_line(
-                graphics_conn,
-                graphics_server::Point::new((x1 % 336) as _, (y1 % 536) as _),
-                graphics_server::Point::new((x2 % 336) as _, (y2 % 536) as _),
-            ) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
+        graphics_server::draw_line(
+            graphics_conn,
+            graphics_server::Point::new((x1 % 336) as _, (y1 % 536) as _),
+            graphics_server::Point::new((x2 % 336) as _, (y2 % 536) as _),
+        )
+        .expect("unable to draw to screen");
 
-        loop {
-            match graphics_server::flush(graphics_conn) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
+        string_buffer.clear();
+        write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
+        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40).expect("unable to clear region");
+        string_buffer.lend(graphics_conn, 1).expect("unable to draw string");
+
+        graphics_server::flush(graphics_conn).expect("unable to draw to screen");
 
         // let lfsr = move_lfsr(lfsr);
         // if lfsr.trailing_zeros() >= 3 {
