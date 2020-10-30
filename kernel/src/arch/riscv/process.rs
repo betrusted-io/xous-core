@@ -299,9 +299,10 @@ impl Process {
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
         thread.registers[9] = thread_init.arg.map(|x| x.get()).unwrap_or_default();
 
+        #[cfg(any(feature = "debug-print", feature = "print-panics"))]
         if pid != 1 {
-            println!(
-                "Initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}",
+            print!(
+                " [initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}]",
                 pid, tid, thread.sepc, thread.registers[1], thread.registers[9],
             );
         }
