@@ -70,12 +70,8 @@ mod implementation {
             self.start = std::time::Instant::now();
         }
 
-        pub fn raw_ticktime(&self) -> u64 {
-            self.start.elapsed().as_micros().try_into().unwrap()
-        }
-
         pub fn elapsed_ms(&self) -> u64 {
-            self.start.elapsed().as_nanos().try_into().unwrap()
+            self.start.elapsed().as_millis().try_into().unwrap()
         }
     }
 }
