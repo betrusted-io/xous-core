@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+#[cfg(target_os = "none")]
 #[macro_use]
 mod debug;
 
@@ -10,69 +11,15 @@ use backend::XousDisplay;
 mod api;
 use api::Opcode;
 
-use embedded_graphics::{
-    fonts::{Font6x8, Text},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    primitives::{Circle, Line, Rectangle, Triangle},
-    style::{PrimitiveStyle, TextStyle},
-};
+mod op;
+mod fonts;
 
 use core::convert::TryFrom;
 
 mod logo;
-const USE_BOOT_LOGO: bool = true;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
-
-    if USE_BOOT_LOGO {
-        display.force_bitmap(logo::LOGO_MAP);
-    } else {
-        // Create styles used by the drawing operations.
-        let thin_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
-        let thick_stroke = PrimitiveStyle::with_stroke(BinaryColor::On, 3);
-        let fill = PrimitiveStyle::with_fill(BinaryColor::On);
-        let text_style = TextStyle::new(Font6x8, BinaryColor::On);
-
-        let yoffset = 10;
-
-        // Draw a 3px wide outline around the display.
-        let bottom_right = Point::zero() + display.size() - Point::new(1, 1);
-        Rectangle::new(Point::zero(), bottom_right)
-            .into_styled(thick_stroke)
-            .draw(display)
-            .unwrap();
-
-        // Draw a triangle.
-        Triangle::new(
-            Point::new(16, 16 + yoffset),
-            Point::new(16 + 16, 16 + yoffset),
-            Point::new(16 + 8, yoffset),
-        )
-        .into_styled(thin_stroke)
-        .draw(display)
-        .unwrap();
-
-        // Draw a filled square
-        Rectangle::new(Point::new(52, yoffset), Point::new(52 + 16, 16 + yoffset))
-            .into_styled(fill)
-            .draw(display)
-            .unwrap();
-
-        // Draw a circle with a 3px wide stroke.
-        Circle::new(Point::new(96, yoffset + 8), 8)
-            .into_styled(thick_stroke)
-            .draw(display)
-            .unwrap();
-
-        // Draw centered text.
-        let text = "embedded-graphics";
-        let width = text.len() as i32 * 6;
-        Text::new(text, Point::new(64 - width / 2, 40))
-            .into_styled(text_style)
-            .draw(display)
-            .unwrap();
-    }
+    display.blit_screen(logo::LOGO_MAP);
 }
 
 #[xous::xous_main]
@@ -82,12 +29,13 @@ fn xmain() -> ! {
 
     draw_boot_logo(&mut display);
 
-    display.redraw();
+    let mut current_color = api::Color::from(0usize);
 
-    let mut current_style = PrimitiveStyle::with_fill(BinaryColor::Off);
+    display.redraw();
 
     let sid = xous::create_server(b"graphics-server ").unwrap();
     // println!("GFX: Server listening on address {:?}", sid);
+    // ::debug_here::debug_here!();
     loop {
         let msg = xous::receive_message(sid).unwrap();
         // println!("GFX: Message: {:?}", msg);
@@ -98,55 +46,61 @@ fn xmain() -> ! {
                     display.update();
                     display.redraw();
                 },
-                Opcode::Clear(color) => {
-                    let fill_color = PrimitiveStyle::with_fill(if color.color == 0 {
-                        BinaryColor::Off
-                    } else {
-                        BinaryColor::On
-                    });
-
-                    let bottom_right = Point::zero() + display.size();
-                    Rectangle::new(Point::zero(), bottom_right)
-                        .into_styled(fill_color)
-                        .draw(&mut display)
-                        .ok();
+                Opcode::Clear(_color) => {
+                    op::clear_region(display.native_buffer(), op::ClipRegion::screen());
                 }
                 Opcode::Line(start, end) => {
-                    // println!("GFX: Drawing line from {:?} to {:?}", start, end);
-                    Line::new(start.into(), end.into())
-                        .into_styled(current_style)
-                        .draw(&mut display)
-                        .ok();
+                    println!("GFX: Drawing line from {:?} to {:?}", start, end);
+                    op::line(display.native_buffer(), start.x as _, start.y as _, end.x as _, end.y as _, if current_color.color == 0 { op::PixelColor::Off } else {op::PixelColor::On });
+                    // todo!();
                 }
                 Opcode::Rectangle(start, end) => {
-                    Line::new(start.into(), end.into())
-                        .into_styled(current_style)
-                        .draw(&mut display)
-                        .ok();
+                    todo!();
+                    // Line::new(start.into(), end.into())
+                    //     .into_styled(current_style)
+                    //     .draw(&mut display)
+                    //     .ok();
                 }
                 Opcode::Circle(mid, radius) => {
-                    Circle::new(mid.into(), radius)
-                        .into_styled(current_style)
-                        .draw(&mut display)
-                        .unwrap();
+                    todo!();
+                    // Circle::new(mid.into(), radius)
+                    //     .into_styled(current_style)
+                    //     .draw(&mut display)
+                    //     .unwrap();
                 }
                 Opcode::Style(stroke_width, stroke_color, fill_color) => {
-                    current_style.stroke_width = stroke_width;
-                    current_style.stroke_color = Some(if stroke_color.color == 0 {
-                        BinaryColor::Off
-                    } else {
-                        BinaryColor::On
+                    current_color = stroke_color;
+                    // todo!();
+                    // current_style.stroke_width = stroke_width;
+                    // current_style.stroke_color = Some(if stroke_color.color == 0 {
+                    //     BinaryColor::Off
+                    // } else {
+                    //     BinaryColor::On
+                    // });
+                    // current_style.fill_color = Some(if fill_color.color == 0 {
+                    //     BinaryColor::Off
+                    // } else {
+                    //     BinaryColor::On
+                    // });
+                }
+                Opcode::ClearRegion(rect) => {
+                    op::clear_region(display.native_buffer(), op::ClipRegion {
+                        x0: rect.x0 as _,
+                        y0: rect.y0 as _,
+                        x1: rect.x1 as _,
+                        y1: rect.y1 as _,
                     });
-                    current_style.fill_color = Some(if fill_color.color == 0 {
-                        BinaryColor::Off
-                    } else {
-                        BinaryColor::On
-                    });
+                }
+                Opcode::String(s) => {
+                    op::string_regular_left(display.native_buffer(), op::ClipRegion::screen(), s);
                 }
             }
         } else {
             // println!("Couldn't convert opcode");
         }
+        // if let Some(mem) = msg.body.memory() {
+        //     xous::return_memory(msg.sender, *mem).expect("couldn't return message");
+        // }
         display.update();
     }
 }
