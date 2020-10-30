@@ -272,6 +272,8 @@ checksum = "aaf91faf136cb47367fa430cd46e37a788775e7fa104f8b4bcb3861dc389b724"
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "log-server",
  "minifb",
  "utralib",
  "xous",
@@ -341,6 +343,7 @@ dependencies = [
 name = "log-server"
 version = "0.1.0"
 dependencies = [
+ "log",
  "utralib",
  "xous",
 ]
@@ -803,6 +806,8 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "graphics-server",
+ "log",
+ "log-server",
  "ticktimer-server",
  "utralib",
  "xous",
