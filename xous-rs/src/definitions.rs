@@ -306,6 +306,15 @@ impl Message {
         }
     }
 
+    pub fn memory(&self) -> Option<&MemoryRange> {
+        match self {
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => {
+                Some(&mem.buf)
+            }
+            Message::BlockingScalar(_) | Message::Scalar(_) => None,
+        }
+    }
+
     pub fn message_type(&self) -> usize {
         match *self {
             Message::MutableBorrow(_) => 1,
@@ -369,10 +378,7 @@ impl MemoryRange {
             addr != 0,
             "tried to construct a memory range with a null pointer"
         );
-        assert!(
-            size != 0,
-            "tried to construct a zero-length memory range"
-        );
+        assert!(size != 0, "tried to construct a zero-length memory range");
         Ok(MemoryRange {
             addr: MemoryAddress::new(addr).ok_or(Error::BadAddress)?,
             size: MemorySize::new(size).ok_or(Error::BadAddress)?,
@@ -579,7 +585,6 @@ impl Result {
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
-
 
     /// If the Result has memory attached to it, return the memory
     pub fn memory(&self) -> Option<MemoryRange> {
