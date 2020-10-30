@@ -8,6 +8,7 @@ mod debug;
 mod logstr;
 mod timer;
 use core::fmt::Write;
+use log::{error, info};
 use xous::String;
 
 // fn print_and_yield(index: *mut usize) -> ! {
@@ -37,11 +38,10 @@ fn ensure_connection(server: xous::SID) -> xous::CID {
     }
 }
 
-
-
 #[xous::xous_main]
 fn shell_main() -> ! {
     timer::init();
+    log_server::init_wait().unwrap();
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -92,14 +92,14 @@ fn shell_main() -> ! {
     loop {
         // a message passing demo -- checking time
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            println!("SHELL: {}ms", elapsed_time);
+            info!("SHELL: {}ms", elapsed_time);
             if elapsed_time - last_time > 40 {
                 last_time = elapsed_time;
                 /*
                 xous::try_send_message(log_conn,
                     xous::Message::Scalar(xous::ScalarMessage{id:256, arg1: elapsed_time as usize, arg2: 257, arg3: 258, arg4: 259}));
                 */
-                println!("Preparing a mutable borrow message");
+                info!("Preparing a mutable borrow message");
 
                 ls.clear();
                 write!(
@@ -113,16 +113,13 @@ fn shell_main() -> ! {
                     .as_memory_message(0)
                     .expect("couldn't form memory message");
 
-                println!("Sending a mutable borrow message");
+                info!("Sending a mutable borrow message");
 
-                let response =
-                    xous::syscall::try_send_message(log_conn, xous::Message::MutableBorrow(mm))
+                xous::syscall::send_message(log_conn, xous::Message::MutableBorrow(mm))
                         .expect("couldn't send memory message");
-                //unsafe { ls.set_len(response.0)};
-                //println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
             }
         } else {
-            println!("error requesting ticktimer!")
+            error!("error requesting ticktimer!")
         }
 
         graphics_server::set_style(
@@ -148,40 +145,10 @@ fn shell_main() -> ! {
 
         string_buffer.clear();
         write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
-        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40).expect("unable to clear region");
+        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40)
+            .expect("unable to clear region");
+        info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
-
-        // let lfsr = move_lfsr(lfsr);
-        // if lfsr.trailing_zeros() >= 3 {
-        //     loop {
-        //         match xous::syscall::try_send_message(
-        //             log_conn,
-        //             xous::Message::Scalar(xous::ScalarMessage {
-        //                 id: counter + 4096,
-        //                 arg1: counter,
-        //                 arg2: counter * 2,
-        //                 arg3: !counter,
-        //                 arg4: lfsr as _,
-        //             }),
-        //         ) {
-        //             Err(xous::Error::ServerQueueFull) => {
-        //                 println!("SHELL: Log Server queue is full... retrying");
-        //                 continue;
-        //             }
-        //             Ok(_) => {
-        //                 println!("SHELL: Loop {}", counter);
-        //                 counter += 1;
-        //                 break;
-        //             }
-        //             Err(e) => panic!("Unable to send message: {:?}", e),
-        //         }
-        //     }
-        // }
-        // // #[cfg(not(target_os = "none"))]
-        // std::thread::sleep(std::time::Duration::from_millis(500));
-        // if counter & 2 == 0 {
-        //     xous::syscall::yield_slice();
-        // }
     }
 }
