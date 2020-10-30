@@ -10,11 +10,11 @@ pub struct LogString<'a> {
 
 impl<'a> LogString<'a> {
     pub fn from_message(message: &'a mut xous::MemoryMessage) -> LogString<'a> {
-        // println!("Message address is at {:08x}", message.buf.addr.get());
+        println!("LOG: Message address is at {:08x} (whole message: {:?})", message.buf.addr.get(), message);
         let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
 
-        print!("String @ {:08x}:", message.buf.as_ptr() as usize);
+        print!("LOG: String @ {:08x}:", message.buf.as_ptr() as usize);
         for offset in 0..starting_length {
             print!(" {:02x}", raw_slice[offset]);
         }
@@ -43,8 +43,10 @@ impl<'a> fmt::Display for LogString<'a> {
 impl<'a> fmt::Write for LogString<'a> {
     fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
         for c in s.bytes() {
-            self.raw_slice[self.len] = c;
-            self.len += 1;
+            if self.len < self.raw_slice.len() {
+                self.raw_slice[self.len] = c;
+                self.len += 1;
+            }
         }
         self.s = unsafe {
             core::str::from_utf8_unchecked(slice::from_raw_parts(self.raw_slice.as_ptr(), self.len))
