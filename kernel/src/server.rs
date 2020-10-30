@@ -337,6 +337,7 @@ impl Server {
             // println!("KERNEL: index exceeds queue length");
             return Err(xous_kernel::Error::BadAddress);
         }
+        print!(" [memory in queue[{}]: {:?}]", idx, self.queue[idx]);
         let (pid, ctx, server_addr, client_addr, len, forget, is_memory) = match self.queue[idx] {
             QueuedMessage::WaitingReturnMemory(pid, ctx, server_addr, client_addr, len) => {
                 (pid, ctx, server_addr, client_addr, len, false, true)
@@ -752,7 +753,7 @@ impl Server {
         }
         let mut test_thread_mask = 1;
         let mut thread_number = 0;
-        // println!("Ready contexts: 0b{:08b}", self.ready_contexts);
+        print!(" [ready threads: 0b{:08b}]", self.ready_threads);
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.
@@ -788,8 +789,9 @@ impl Server {
 
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_thread(&mut self, tid: TID) {
-        // println!("KERNEL({}): Parking context: {}", self.pid, context);
+        print!(" [parking thread {}]", tid);
         assert!(self.ready_threads & (1 << tid) == 0);
         self.ready_threads |= 1 << tid;
+        print!(" [ready threads now: {:08b}]", self.ready_threads);
     }
 }
