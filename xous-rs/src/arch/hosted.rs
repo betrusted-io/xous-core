@@ -538,14 +538,12 @@ fn _xous_syscall_result(
                 | crate::Message::MutableBorrow(ref mut memory_message) => {
                     let data = vec![0u8; memory_message.buf.len()];
                     let mut data = std::mem::ManuallyDrop::new(data);
-                    // println!("KERNEL: Reading {} bytes of data from network", data.len());
                     if let Err(e) = stream.read_exact(&mut data) {
                         eprintln!("Server shut down: {}", e);
                         std::process::exit(0);
                     }
                     let len = data.len();
                     let addr = data.as_mut_ptr();
-
                     memory_message.buf.addr = crate::MemoryAddress::new(addr as _).unwrap();
                     memory_message.buf.size = crate::MemorySize::new(len).unwrap();
                 }
