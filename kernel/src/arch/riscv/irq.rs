@@ -121,7 +121,7 @@ pub extern "C" fn trap_handler(
         // it with one if necessary.
         match ex {
             RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
-                println!("Fault {} @ {:08x}, addr {:08x}", ex, pc, addr);
+                println!("KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x}", pid, ex, pc, addr);
                 let entry = crate::arch::mem::pagetable_entry(addr).unwrap_or_else(|x| {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
