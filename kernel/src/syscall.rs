@@ -126,10 +126,10 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             .expect("server couldn't be located")
             .take_available_thread()
         {
-            // println!(
-            //     "There are contexts available to handle this message.  Marking PID {} as Ready",
-            //     server_pid
-            // );
+            print!(
+                " [there are contexts available to handle this message -- marking PID {} as Ready]",
+                server_pid
+            );
             let sender_idx = if message.is_blocking() {
                 ss.remember_server_message(sidx, pid, thread, &message, client_address)
                     .map_err(|e| {
@@ -145,10 +145,10 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 sidx,
                 idx: sender_idx,
             };
-            // println!(
-            //     "KERNEL({}): server connection data: sidx: {}, idx: {}, server pid: {}",
-            //     pid, sidx, sender_idx, server_pid
-            // );
+            print!(
+                " [server connection data: sidx: {}, idx: {}, server pid: {}]",
+                sidx, sender_idx, server_pid
+            );
             let envelope = MessageEnvelope {
                 sender: sender.into(),
                 body: message,
@@ -187,7 +187,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )
                 .map(|_| xous_kernel::Result::Ok)
             } else {
-                // println!("Setting the return value of the Server and returning to Client");
+                print!(" [setting the return value of the Server to {:?} and returning to Client]", envelope);
                 // "Switch to" the server PID when not running on bare metal. This ensures
                 // that it's "Running".
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
@@ -199,6 +199,10 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 .map(|_| xous_kernel::Result::Ok)
             }
         } else {
+            print!(
+                " [no threads available in PID {} to handle this message, so blocking]",
+                server_pid
+            );
             // Add this message to the queue.  If the queue is full, this
             // returns an error.
             ss.queue_server_message(sidx, pid, thread, message, client_address)?;
@@ -237,6 +241,7 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, Some(&buf))?;
+        print!(" [waiting message was: {:?}]", result);
         let (client_pid, client_tid, server_addr, client_addr, len) = match result {
             WaitingMessage::BorrowedMemory(
                 client_pid,
@@ -299,9 +304,13 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
 
         // Unblock the client context to allow it to continue.
         if !cfg!(baremetal) {
+            // Send a message to the client, in order to wake it up
+            print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Ok)?;
+
+            // Return success to the server
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
@@ -473,6 +482,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
 
         // If there is a pending message, return it immediately.
         if let Some(msg) = server.take_next_message(sidx) {
+            print!(" [waiting messages found -- returning {:?}]", msg);
             return Ok(xous_kernel::Result::Message(msg));
         }
 
@@ -480,10 +490,10 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         // process and mark ourselves as awaiting an event.  When a message
         // arrives, our return value will already be set to the
         // MessageEnvelope of the incoming message.
-        // println!(
-        //     "KERNEL({}): did not have any waiting messages -- parking context {}",
-        //     pid, tid
-        // );
+        print!(
+            " [did not have any waiting messages -- parking thread {}]",
+            tid
+        );
         server.park_thread(tid);
 
         // For baremetal targets, switch away from this process.
