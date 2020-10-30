@@ -232,7 +232,7 @@ fn handle_connection(
                                     xous_kernel::Message::Scalar(_)
                                     | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
-                            },
+                            }
                             SysCall::ReturnMemory(_sender, ref mut buf) => {
                                 let sliced_data = data.into_boxed_slice();
                                 assert_eq!(
@@ -242,15 +242,13 @@ fn handle_connection(
                                     sliced_data.len(),
                                     buf.len()
                                 );
-                                buf.addr =
-                                    match MemoryAddress::new(Box::into_raw(sliced_data)
-                                        as *mut u8
-                                        as usize)
-                                    {
-                                        Some(a) => a,
-                                        _ => unreachable!(),
-                                    };
-
+                                buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
+                                    as *mut u8
+                                    as usize)
+                                {
+                                    Some(a) => a,
+                                    _ => unreachable!(),
+                                };
                             }
                             _ => panic!("unsupported message type"),
                         }
