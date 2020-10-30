@@ -5,6 +5,8 @@
 #[macro_use]
 mod debug;
 
+use log::info;
+
 mod backend;
 use backend::XousDisplay;
 
@@ -24,6 +26,8 @@ fn draw_boot_logo(display: &mut XousDisplay) {
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    log_server::init_wait().unwrap();
+
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();
 
@@ -34,13 +38,13 @@ fn xmain() -> ! {
     display.redraw();
 
     let sid = xous::create_server(b"graphics-server ").unwrap();
-    // println!("GFX: Server listening on address {:?}", sid);
+    // info!("GFX: Server listening on address {:?}", sid);
     // ::debug_here::debug_here!();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        // println!("GFX: Message: {:?}", msg);
+        // info!("GFX: Message: {:?}", msg);
         if let Ok(opcode) = Opcode::try_from(&msg.body) {
-            // println!("GFX: Opcode: {:?}", opcode);
+            // info!("GFX: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Flush => {
                     display.update();
@@ -50,7 +54,7 @@ fn xmain() -> ! {
                     op::clear_region(display.native_buffer(), op::ClipRegion::screen());
                 }
                 Opcode::Line(start, end) => {
-                    println!("GFX: Drawing line from {:?} to {:?}", start, end);
+                    info!("GFX: Drawing line from {:?} to {:?}", start, end);
                     op::line(display.native_buffer(), start.x as _, start.y as _, end.x as _, end.y as _, if current_color.color == 0 { op::PixelColor::Off } else {op::PixelColor::On });
                     // todo!();
                 }
@@ -96,7 +100,7 @@ fn xmain() -> ! {
                 }
             }
         } else {
-            // println!("Couldn't convert opcode");
+            // info!("Couldn't convert opcode");
         }
         // if let Some(mem) = msg.body.memory() {
         //     xous::return_memory(msg.sender, *mem).expect("couldn't return message");
