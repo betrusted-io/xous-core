@@ -443,7 +443,7 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
-                QueuedMessage::WaitingForget(pid, ctx, buf, client_addr, buf_size),
+                QueuedMessage::WaitingReturnMemory(pid, ctx, buf, client_addr, buf_size),
             ),
             QueuedMessage::MemoryMessageRWLend(
                 pid,
@@ -464,7 +464,7 @@ impl Server {
                         valid: MemorySize::new(valid),
                     }),
                 },
-                QueuedMessage::WaitingForget(pid, ctx, buf, client_addr, buf_size),
+                QueuedMessage::WaitingReturnMemory(pid, ctx, buf, client_addr, buf_size),
             ),
             QueuedMessage::MemoryMessageROLendTerminated(
                 pid,
