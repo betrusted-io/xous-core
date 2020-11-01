@@ -847,6 +847,16 @@ impl SysCall {
             _ => None,
         }
     }
+
+    /// Returns `true` if the given syscall may be called from an IRQ context
+    pub fn can_call_from_interrupt(&self) -> bool {
+        matches!(self, SysCall::TrySendMessage(_, _)
+            | SysCall::TryConnect(_)
+            | SysCall::ReturnToParent(_, _)
+            | SysCall::ReturnScalar2(_, _, _)
+            | SysCall::ReturnScalar1(_, _)
+            | SysCall::ReturnMemory(_, _))
+    }
 }
 
 extern "Rust" {
