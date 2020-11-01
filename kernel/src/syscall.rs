@@ -514,10 +514,16 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
     })
 }
 
-pub fn handle(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
+pub fn handle(pid: PID, tid: TID, irq: bool, call: SysCall) -> SysCallResult {
     #[cfg(feature = "debug-print")]
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
-    let result = handle_inner(pid, tid, call);
+
+    let result = if irq && !call.can_call_from_interrupt() {
+        Err(xous_kernel::Error::InvalidSyscall)
+    } else {
+        handle_inner(pid, tid, call)
+    };
+
     #[cfg(feature = "debug-print")]
     println!(
         " -> ({}:{}) {:?}",

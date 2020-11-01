@@ -544,14 +544,14 @@ pub fn idle() -> bool {
                             "Unable to send response to process: {:?} -- terminating",
                             _e
                         );
-                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
                     });
                     // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
                 let response =
-                    crate::syscall::handle(pid, thread_id, call).unwrap_or_else(Result::Error);
+                    crate::syscall::handle(pid, thread_id, false, call).unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
@@ -580,7 +580,7 @@ pub fn idle() -> bool {
                             "KERNEL({}): Unable to send response to process: {:?} -- terminating",
                             pid, _e
                         );
-                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
                     // SystemServices::with_mut(|ss| {
