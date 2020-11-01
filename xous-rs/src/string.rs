@@ -46,7 +46,7 @@ impl<'a> String<'a> {
 
     /// Perform an immutable lend of this String to the specified server.
     /// This function will block until the server returns.
-    pub fn lend(&self, connection: CID, id: usize) -> core::result::Result<Result, Error> {
+    pub fn lend(&self, connection: CID, id: crate::MessageId) -> core::result::Result<Result, Error> {
         let memory_range =
             MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
         let msg = MemoryMessage {
@@ -56,6 +56,19 @@ impl<'a> String<'a> {
             valid: MemorySize::new(self.len).map(Some).unwrap_or(None),
         };
         send_message(connection, Message::Borrow(msg))
+    }
+
+    /// Move this string from the client into the server.
+    pub fn send(self, connection: CID, id: crate::MessageId) -> core::result::Result<Result, Error> {
+        let memory_range =
+            MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
+        let msg = MemoryMessage {
+            id,
+            buf: memory_range,
+            offset: None,
+            valid: MemorySize::new(self.len).map(Some).unwrap_or(None),
+        };
+        send_message(connection, Message::Move(msg))
     }
 
     /// Clear the contents of this String and set the length to 0
