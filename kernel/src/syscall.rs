@@ -230,7 +230,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
-fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
+fn return_memory(pid: PID, tid: TID, in_irq: bool, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
@@ -303,9 +303,9 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
         )?;
 
         // Unblock the client context to allow it to continue.
-        if !cfg!(baremetal) {
+        if !cfg!(baremetal) || in_irq {
             // Send a message to the client, in order to wake it up
-            print!(" [waking up PID {}:{}]", client_pid, client_tid);
+            // print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Ok)?;
@@ -329,6 +329,7 @@ fn return_memory(pid: PID, tid: TID, sender: MessageSender, buf: MemoryRange) ->
 fn return_scalar(
     server_pid: PID,
     server_tid: TID,
+    in_irq: bool,
     sender: MessageSender,
     arg: usize,
 ) -> SysCallResult {
@@ -368,7 +369,7 @@ fn return_scalar(
             }
         };
 
-        if !cfg!(baremetal) {
+        if !cfg!(baremetal) || in_irq {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -394,6 +395,7 @@ fn return_scalar(
 fn return_scalar2(
     server_pid: PID,
     server_tid: TID,
+    in_irq: bool,
     sender: MessageSender,
     arg1: usize,
     arg2: usize,
@@ -433,7 +435,7 @@ fn return_scalar2(
             }
         };
 
-        if !cfg!(baremetal) {
+        if !cfg!(baremetal) || in_irq {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -514,14 +516,14 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
     })
 }
 
-pub fn handle(pid: PID, tid: TID, irq: bool, call: SysCall) -> SysCallResult {
+pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
     #[cfg(feature = "debug-print")]
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
 
-    let result = if irq && !call.can_call_from_interrupt() {
+    let result = if in_irq && !call.can_call_from_interrupt() {
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
-        handle_inner(pid, tid, call)
+        handle_inner(pid, tid, in_irq, call)
     };
 
     #[cfg(feature = "debug-print")]
@@ -534,7 +536,7 @@ pub fn handle(pid: PID, tid: TID, irq: bool, call: SysCall) -> SysCallResult {
     result
 }
 
-pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
+pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
     // let pid = arch::current_pid();
 
     match call {
@@ -723,9 +725,9 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
             ss.connect_to_server(sid)
                 .map(xous_kernel::Result::ConnectionID)
         }),
-        SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, sender, buf),
-        SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, sender, arg),
-        SysCall::ReturnScalar2(sender, arg1, arg2) => return_scalar2(pid, tid, sender, arg1, arg2),
+        SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, in_irq, sender, buf),
+        SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, in_irq, sender, arg),
+        SysCall::ReturnScalar2(sender, arg1, arg2) => return_scalar2(pid, tid, in_irq, sender, arg1, arg2),
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
@@ -760,6 +762,6 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 Err(e) => Err(e),
             }
         }
-        _ => panic!("Unhandled Syscall: {:?}", call), //Err(xous_kernel::Error::UnhandledSyscall),
+        _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }
