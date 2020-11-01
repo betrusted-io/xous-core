@@ -12,10 +12,6 @@ pub fn enable_irq(_irq_no: usize) {
     unimplemented!();
 }
 
-// pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
-//     unimplemented!()
-// }
-
 pub unsafe fn set_isr_return_pair(_pid: PID, _ctx: TID) {
     unimplemented!()
 }
