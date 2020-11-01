@@ -10,15 +10,15 @@ pub struct LogString<'a> {
 
 impl<'a> LogString<'a> {
     pub fn from_message(message: &'a mut xous::MemoryMessage) -> LogString<'a> {
-        println!("LOG: Message address is at {:08x} (whole message: {:?})", message.buf.addr.get(), message);
+        // println!("LOG: Message address is at {:08x} (whole message: {:?})", message.buf.addr.get(), message);
         let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
 
-        print!("LOG: String @ {:08x}:", message.buf.as_ptr() as usize);
-        for offset in 0..starting_length {
-            print!(" {:02x}", raw_slice[offset]);
-        }
-        println!(" (length: {})", starting_length);
+        // print!("LOG: String @ {:08x}:", message.buf.as_ptr() as usize);
+        // for offset in 0..starting_length {
+        //     print!(" {:02x}", raw_slice[offset]);
+        // }
+        // println!(" (length: {})", starting_length);
 
         LogString {
             s: unsafe {
