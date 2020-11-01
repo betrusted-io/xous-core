@@ -678,10 +678,8 @@ pub fn handle_inner(pid: PID, tid: TID, call: SysCall) -> SysCallResult {
                 .map(|_| xous_kernel::Result::Ok)
         }
         SysCall::Yield => do_yield(pid, tid),
-        SysCall::ReturnToParentI(_pid, _cpuid) => {
+        SysCall::ReturnToParent(_pid, _cpuid) => {
             unsafe {
-                // let (_current_pid, _current_ctx) = crate::arch::irq::take_isr_return_pair()
-                //     .expect("couldn't get the isr return pair");
                 SWITCHTO_CALLER.take().map(|(parent_pid, parent_ctx)| {
                     crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
                 });

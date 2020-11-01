@@ -128,7 +128,7 @@ pub enum SysCall {
     ///
     /// * **ProcessNotChild**: The given PID is not a child of the current
     ///   process
-    ReturnToParentI(PID, CpuID),
+    ReturnToParent(PID, CpuID),
 
     /// Claims an interrupt and unmasks it immediately.  The provided function
     /// will be called from within an interrupt context, but using the ordinary
@@ -277,7 +277,7 @@ pub enum SysCall {
 pub enum SysCallNumber {
     MapMemory = 2,
     Yield = 3,
-    ReturnToParentI = 4,
+    ReturnToParent = 4,
     ClaimInterrupt = 5,
     FreeInterrupt = 6,
     SwitchTo = 7,
@@ -310,7 +310,7 @@ impl SysCallNumber {
         match val {
             2 => MapMemory,
             3 => Yield,
-            4 => ReturnToParentI,
+            4 => ReturnToParent,
             5 => ClaimInterrupt,
             6 => FreeInterrupt,
             7 => SwitchTo,
@@ -386,8 +386,8 @@ impl SysCall {
                     0,
                 ]
             }
-            SysCall::ReturnToParentI(a1, a2) => [
-                SysCallNumber::ReturnToParentI as usize,
+            SysCall::ReturnToParent(a1, a2) => [
+                SysCallNumber::ReturnToParent as usize,
                 a1.get() as usize,
                 *a2 as usize,
                 0,
@@ -639,7 +639,7 @@ impl SysCall {
             SysCallNumber::ReceiveMessage => {
                 SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            SysCallNumber::ReturnToParentI => SysCall::ReturnToParentI(pid_from_usize(a1)?, a2),
+            SysCallNumber::ReturnToParent => SysCall::ReturnToParent(pid_from_usize(a1)?, a2),
             SysCallNumber::ClaimInterrupt => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
