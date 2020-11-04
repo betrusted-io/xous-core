@@ -24,6 +24,7 @@ namespace Antmicro.Renode.Peripherals.Timers
         public TickTimer(Machine machine, ulong periodInMs) : base(machine)
         {
             machine.ClockSource.AddClockEntry(new ClockEntry(periodInMs, ClockEntry.FrequencyToRatio(this, 1000), OnTick, this, "TickTimer"));
+            this.IRQ = new GPIO();
             DefineRegisters();
         }
 
@@ -32,23 +33,37 @@ namespace Antmicro.Renode.Peripherals.Timers
             base.Reset();
             tickValue = 0;
             paused = true;
+            msleepTarget = 0;
         }
 
         private void OnTick()
         {
-            if (!paused) {
-                Interlocked.Increment(ref tickValue);
+            if (!paused)
+            {
+                this.irqStatus = Interlocked.Increment(ref tickValue) >= (long)this.msleepTarget;
+                this.UpdateInterrupts();
             }
         }
 
-        public long Size { get { return  0x20; }}
+        private void UpdateInterrupts()
+        {
+            if (this.irqStatus && this.irqEnabled.Value)
+            {
+                this.irqPending.Value = true;
+            }
+            this.Log(LogLevel.Noisy, "Setting IRQ: {0}", irqPending.Value);
+            IRQ.Set(irqPending.Value && irqEnabled.Value);
+        }
+
+        public long Size { get { return 0x20; } }
 
         private void DefineRegisters()
         {
             Registers.Control.Define32(this)
                 .WithValueField(0, 32, name: "CONTROL", writeCallback: (_, val) =>
                 {
-                    if ((val & 1) != 0) {
+                    if ((val & 1) != 0)
+                    {
                         tickValue = 0;
                     }
                     paused = (val & 2) != 0;
@@ -58,26 +73,75 @@ namespace Antmicro.Renode.Peripherals.Timers
             Registers.Time1.Define32(this)
                 .WithValueField(0, 32, FieldMode.Read, name: "Time1", valueProviderCallback: _ =>
                 {
-                    return (uint) (tickValue >> 32);
+                    return (uint)(tickValue >> 32);
                 })
             ;
 
             Registers.Time0.Define32(this)
                 .WithValueField(0, 32, FieldMode.Read, name: "Time0", valueProviderCallback: _ =>
                 {
-                    return (uint) (tickValue >> 0);
+                    return (uint)(tickValue >> 0);
                 })
             ;
+
+            Registers.MsleepTarget1.Define32(this)
+                .WithValueField(0, 32, name: "MsleepTarget1", writeCallback: (_, value) =>
+                {
+                    this.msleepTarget = (this.msleepTarget & 0x00000000ffffffff) | (value << 32);
+                    this.Log(LogLevel.Noisy, "Setting sleep target 1: {0}, sleep target now: {1}", value, this.msleepTarget);
+                },
+                valueProviderCallback: _ =>
+                {
+                    return (uint)(this.msleepTarget >> 32);
+                })
+            ;
+
+            Registers.MsleepTarget0.Define32(this)
+                .WithValueField(0, 32, name: "MsleepTarget0",
+                writeCallback: (_, value) =>
+                {
+                    this.msleepTarget = (this.msleepTarget & 0xffffffff00000000) | (value & 0xffffffff);
+                    this.Log(LogLevel.Noisy, "Setting sleep target 0: {0}, sleep target now: {1}", value, this.msleepTarget);
+                },
+                valueProviderCallback: _ =>
+                {
+                    return (uint)(this.msleepTarget >> 0);
+                })
+                ;
+
+            Registers.EventStatus.Define32(this)
+                .WithFlag(0, FieldMode.Read, name: "EV_STATUS", valueProviderCallback: _ => irqStatus)
+            ;
+
+            Registers.EventPending.Define32(this)
+                .WithFlag(0, out irqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "EV_PENDING", changeCallback: (_, __) => UpdateInterrupts())
+            ;
+
+            Registers.EventEnable.Define32(this)
+                .WithFlag(0, out irqEnabled, name: "EV_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
+            ;
+
         }
+
+        private IFlagRegisterField irqEnabled;
+        private IFlagRegisterField irqPending;
+        private bool irqStatus;
 
         bool paused;
         long tickValue;
+        ulong msleepTarget;
+        public GPIO IRQ { get; private set; }
 
         private enum Registers
         {
             Control = 0x00,
             Time1 = 0x04,
             Time0 = 0x08,
+            MsleepTarget1 = 0x0c,
+            MsleepTarget0 = 0x10,
+            EventStatus = 0x14,
+            EventPending = 0x18,
+            EventEnable = 0x1c,
         }
     }
 }
