@@ -289,7 +289,7 @@ pub fn set_xous_address(new_address: SocketAddr) {
     });
 }
 
-/// Set the network address for this particular thread.
+/// Get the network address for this particular thread.
 fn xous_address() -> SocketAddr {
     NETWORK_CONNECT_ADDRESS
         .with(|nca| *nca.borrow())
@@ -427,7 +427,7 @@ pub fn _xous_syscall(
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             let mut xsc_borrowed = xsc.borrow_mut();
-            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server!");
+            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server (did you forget to create a thread with xous::create_thread()?)");
             loop {
                 _xous_syscall_to(
                     nr,
@@ -451,12 +451,26 @@ pub fn _xous_syscall(
     });
 }
 
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref CALL_FOR_THREAD: Mutex<HashMap<TID, crate::SysCall>> = Mutex::new(HashMap::new());
+}
+
 fn _xous_syscall_result(
     call: &crate::SysCall,
     ret: &mut Result,
     thread_id: TID,
     server_connection: &ServerConnection,
 ) {
+    // This terrible construct lets us store a copy of the current call so we know how
+    // many bytes to read from the network.
+    let args = call.as_args();
+    let call_copy = crate::SysCall::from_args(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]).unwrap();
+    {
+        let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
+        hm.insert(thread_id, call_copy);
+    }
+
     // Check to see if this thread id has an entry in the mailbox already.
     // This will block until the hashmap is free.
     {
@@ -522,6 +536,14 @@ fn _xous_syscall_result(
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }
 
+        // Determine if this thread will have a memory packet following it.
+        let thread_call = {
+            let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
+            hm
+                .remove(&msg_thread_id)
+                .expect("thread didn't declare whether it has data")
+        };
+
         let mut response = Result::from_args(pkt);
 
         // println!("   Response to {:?}: {:?}", call, response);
@@ -552,17 +574,19 @@ fn _xous_syscall_result(
         }
 
         // If the original call contained memory, then ensure the memory we get back is correct.
-        if let Some(mem) = call.memory() {
-            if call.is_borrow() || call.is_mutableborrow() {
+        if let Some(mem) = thread_call.memory() {
+            if thread_call.is_borrow() || thread_call.is_mutableborrow() {
                 // Read the buffer back from the remote host.
                 use core::slice;
-                let mut data =
+                let data =
                     unsafe { slice::from_raw_parts_mut(mem.addr.get() as _, mem.size.get()) };
-                let previous_data = if call.is_borrow() {
+                let previous_data = if thread_call.is_borrow() {
                     Some(data.to_vec())
                 } else {
                     None
                 };
+                let mut data = vec![0];
+                data.resize_with(mem.len(), Default::default);
                 if let Err(e) = stream.read_exact(&mut data) {
                     eprintln!("Server shut down: {}", e);
                     std::process::exit(0);
@@ -574,15 +598,16 @@ fn _xous_syscall_result(
                 }
             }
 
-            if call.is_move() {
+            if thread_call.is_move() {
                 // In a hosted environment, the message contents are leaked when
                 // it gets converted into a MemoryMessage. Now that the call is
                 // complete, free the memory.
                 mem::unmap_memory_post(mem).unwrap();
             }
 
-            if call.is_return_memory() {
-                let rebuilt = unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
+            if thread_call.is_return_memory() {
+                let rebuilt =
+                    unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
                 drop(rebuilt);
             }
         }
@@ -633,7 +658,8 @@ fn _xous_syscall_to(
     // Also send memory, if it's present.
     if let Some(memory) = call.memory() {
         use core::slice;
-        let data: &[u8] = unsafe { slice::from_raw_parts(memory.addr.get() as _, memory.size.get()) };
+        let data: &[u8] =
+            unsafe { slice::from_raw_parts(memory.addr.get() as _, memory.size.get()) };
         pkt.extend_from_slice(data);
     }
 
