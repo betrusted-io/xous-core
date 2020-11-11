@@ -299,21 +299,10 @@ impl Process {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }
-                // if let xous_kernel::Result::Message(_) = result {
-                // } else {
-                //     panic!(
-                //         "memory was waiting to be returned, but message was not a result message"
-                //     );
-                // }
                 print!(" [adding {} additional bytes from memory being returned]", buf.len());
                 response.extend_from_slice(&buf);
             }
 
-            // eprintln!(
-            //     "KERNEL({}): Setting thread return value to {:?}",
-            //     current_pid_idx + 1,
-            //     response
-            // );
             print!(" [setting thread return value to {} bytes]", response.len());
             process
                 .conn

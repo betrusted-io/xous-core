@@ -583,8 +583,6 @@ pub fn idle() -> bool {
                         crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
-                    // SystemServices::with_mut(|ss| {
-                    // ss.switch_from(pid, 1, true)}).unwrap();
                 }
 
                 if is_shutdown {
