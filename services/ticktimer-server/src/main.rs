@@ -173,37 +173,24 @@ mod implementation {
                 loop {
                     let start_time = std::time::Instant::now();
                     let result = match timeout {
-                        None => {
-                            eprintln!("\n\n>> NO TIMEOUT, SLEEPING FOREVER");
-                            sleep_receiver
-                                .recv()
-                                .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
-                        }
-                        Some(s) => {
-                            eprintln!("\n\n>> TIMEOUT PRESENT, SLEEPING FOR {:?}", s);
-                            sleep_receiver.recv_timeout(s)
-                        }
+                        None => sleep_receiver
+                            .recv()
+                            .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected),
+                        Some(s) => sleep_receiver.recv_timeout(s),
                     };
-                    eprintln!("\n\n>> Got result: {:?}", result);
                     match result {
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                            eprintln!("\n\n\nSENDING RETURN VALUE TO {}\n\n\n", sender);
                             xous::return_scalar(sender, 0).expect("couldn't send response");
 
                             // This is dangerous and may panic if the queue is full.
-                            eprintln!(
-                                "\n\n\nSENDING RECALCULATE SLEEP MESSAGE TO MAIN THREAD\n\n\n"
-                            );
                             xous::try_send_message(
                                 cid,
                                 crate::api::Opcode::RecalculateSleep.into(),
                             )
                             .unwrap();
-                            eprintln!("\n\n\nTRIED SENDING MESSAGE\n\n\n");
                             timeout = None;
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                            eprintln!("SHUTTING DOWN");
                             return;
                         }
                         Ok(SleepComms::InterruptSleep) => time_remaining_sender
@@ -324,9 +311,8 @@ fn xmain() -> ! {
                     }),
                 ),
                 Opcode::RecalculateSleep => {
-                    info!("Recalculating Sleep");
                     recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-                    info!("Done recalculating");
+                    info!("TickTimer: Done recalculating");
                 }
             }
         } else {
