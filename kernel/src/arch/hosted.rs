@@ -550,7 +550,6 @@ pub fn idle() -> bool {
                 }
 
                 // Handle the syscall within the Xous kernel
-                crate::arch::process::clear_response_sent_already();
                 let response =
                     crate::syscall::handle(pid, thread_id, false, call).unwrap_or_else(Result::Error);
 
@@ -575,18 +574,17 @@ pub fn idle() -> bool {
                         let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
                         response_vec.extend_from_slice(s);
                     }
-                    // Send a response only if we haven't already sent one
-                    if ! crate::arch::process::response_sent_already() {
-                        process.send(&response_vec).unwrap_or_else(|_e| {
-                            // If we're unable to send data to the process, assume it's dead and terminate it.
-                            eprintln!(
-                                "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                                pid, _e
-                            );
-                            crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
-                        });
-                    }
+                    process.send(&response_vec).unwrap_or_else(|_e| {
+                        // If we're unable to send data to the process, assume it's dead and terminate it.
+                        eprintln!(
+                            "KERNEL({}): Unable to send response to process: {:?} -- terminating",
+                            pid, _e
+                        );
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
+                    });
                     crate::arch::process::set_current_pid(existing_pid);
+                    // SystemServices::with_mut(|ss| {
+                    // ss.switch_from(pid, 1, true)}).unwrap();
                 }
 
                 if is_shutdown {
