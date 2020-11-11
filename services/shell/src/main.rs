@@ -42,6 +42,7 @@ fn ensure_connection(server: xous::SID) -> xous::CID {
 fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
+    let mut loops = 0;
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -150,5 +151,8 @@ fn shell_main() -> ! {
         info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
+
+        ticktimer_server::sleep_ms(ticktimer_conn, 2000 + loops).expect("couldn't sleep");
+        loops += 1;
     }
 }
