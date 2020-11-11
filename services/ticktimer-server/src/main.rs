@@ -10,18 +10,69 @@ use api::Opcode;
 
 use core::convert::TryFrom;
 
+use heapless::binary_heap::{BinaryHeap, Min};
+use heapless::consts::*;
+
+use log::{error, info};
+
+#[derive(Eq, Debug)]
+pub struct SleepResponse {
+    msec: usize,
+    sender: xous::MessageSender,
+}
+
+impl core::cmp::Ord for SleepResponse {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.msec.cmp(&other.msec)
+    }
+}
+
+impl core::cmp::PartialOrd for SleepResponse {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl core::cmp::PartialEq for SleepResponse {
+    fn eq(&self, other: &Self) -> bool {
+        self.msec == other.msec && self.sender == other.sender
+    }
+}
 
 #[cfg(target_os = "none")]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
+    use super::SleepResponse;
     use utralib::generated::*;
+
     pub struct XousTickTimer {
-        csr: xous::MemoryRange,
+        csr: utralib::CSR<u32>,
+        current_response: Option<SleepResponse>,
+        response_start: u64,
+        connection: xous::CID,
+    }
+
+    fn handle_irq(_irq_no: usize, arg: *mut usize) {
+        let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
+        println!("In IRQ, connection: {}", xtt.connection);
+
+        // Safe because we're in an interrupt, and this interrupt is only
+        // enabled when this value is not None.
+        let response = xtt.current_response.take().unwrap();
+        xous::return_scalar(response.sender, 0).expect("couldn't send response");
+
+        xtt.csr.wo(utra::ticktimer::EV_ENABLE, 0); // Disable the interrupt
+
+        // This is dangerous and may panic if the queue is full.
+        xous::try_send_message(xtt.connection, crate::api::Opcode::RecalculateSleep.into())
+            .map(|_| ())
+            .unwrap();
     }
 
     impl XousTickTimer {
-        pub fn new() -> XousTickTimer {
-            let ctrl = xous::syscall::map_memory(
+        pub fn new(connection: xous::CID) -> XousTickTimer {
+            println!("Connection: {}", connection);
+            let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::ticktimer::HW_TICKTIMER_BASE),
                 None,
                 4096,
@@ -29,19 +80,30 @@ mod implementation {
             )
             .expect("couldn't map Tick Timer CSR range");
 
-            XousTickTimer { csr: ctrl }
+            let mut xtt = XousTickTimer {
+                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                current_response: None,
+                response_start: 0,
+                connection,
+            };
+
+            xous::claim_interrupt(
+                12,
+                handle_irq,
+                (&mut xtt) as *mut XousTickTimer as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            xtt
         }
 
         pub fn reset(&mut self) {
-            let mut tt = CSR::new(self.csr.as_mut_ptr() as *mut u32);
-            tt.wfo(utra::ticktimer::CONTROL_RESET, 0b1);
-            tt.wo(utra::ticktimer::CONTROL, 0); // not paused, not reset -> free-run
+            self.csr.wfo(utra::ticktimer::CONTROL_RESET, 0b1);
+            self.csr.wo(utra::ticktimer::CONTROL, 0); // not paused, not reset -> free-run
         }
 
         pub fn raw_ticktime(&self) -> u64 {
-            let tt = CSR::new(self.csr.as_mut_ptr() as *mut u32);
-            let mut time: u64 = tt.r(utra::ticktimer::TIME0) as u64;
-            time |= (tt.r(utra::ticktimer::TIME1) as u64) << 32;
+            let mut time: u64 = self.csr.r(utra::ticktimer::TIME0) as u64;
+            time |= (self.csr.r(utra::ticktimer::TIME1) as u64) << 32;
 
             time
         }
@@ -49,20 +111,124 @@ mod implementation {
         pub fn elapsed_ms(&self) -> u64 {
             self.raw_ticktime() / TICKS_PER_MS
         }
+
+        pub fn stop_interrupt(&mut self) -> Option<SleepResponse> {
+            self.csr.wo(utra::ticktimer::EV_ENABLE, 0); // Disable the timer
+            let current_value = self.elapsed_ms();
+            if let Some(sr) = self.current_response.take() {
+                Some(SleepResponse {
+                    msec: (current_value - self.response_start) as _,
+                    sender: sr.sender,
+                })
+            } else {
+                None
+            }
+        }
+
+        pub fn schedule_response(&mut self, milliseconds: usize, sender: xous::MessageSender) {
+            self.current_response = Some(SleepResponse {
+                sender,
+                msec: milliseconds,
+            });
+            self.response_start = self.elapsed_ms();
+            let irq_target = self.response_start + (milliseconds as u64);
+            log::info!(
+                "setting a response at {} ms (current time: {} ms)",
+                irq_target,
+                self.response_start
+            );
+            self.csr.wo(utra::ticktimer::EV_PENDING, 1); // Clear previous interrupt (if any)
+            self.csr
+                .wo(utra::ticktimer::MSLEEP_TARGET1, (irq_target >> 32) as _);
+            self.csr
+                .wo(utra::ticktimer::MSLEEP_TARGET0, irq_target as _);
+            self.csr.wo(utra::ticktimer::EV_ENABLE, 1); // Enable the interrupt
+        }
     }
 }
 
 #[cfg(not(target_os = "none"))]
 mod implementation {
+    use super::SleepResponse;
     use std::convert::TryInto;
+
+    #[derive(Debug)]
+    enum SleepComms {
+        InterruptSleep,
+        StartSleep(xous::MessageSender, u64 /* ms */),
+    }
     pub struct XousTickTimer {
         start: std::time::Instant,
+        sleep_comms: std::sync::mpsc::Sender<SleepComms>,
+        time_remaining_receiver: std::sync::mpsc::Receiver<Option<SleepResponse>>,
     }
 
     impl XousTickTimer {
-        pub fn new() -> XousTickTimer {
+        pub fn new(cid: xous::CID) -> XousTickTimer {
+            let (sleep_sender, sleep_receiver) = std::sync::mpsc::channel();
+            let (time_remaining_sender, time_remaining_receiver) = std::sync::mpsc::channel();
+            xous::create_thread(move || {
+                let mut timeout = None;
+                let mut sender = Default::default();
+                loop {
+                    let start_time = std::time::Instant::now();
+                    let result = match timeout {
+                        None => {
+                            eprintln!("\n\n>> NO TIMEOUT, SLEEPING FOREVER");
+                            sleep_receiver
+                                .recv()
+                                .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
+                        }
+                        Some(s) => {
+                            eprintln!("\n\n>> TIMEOUT PRESENT, SLEEPING FOR {:?}", s);
+                            sleep_receiver.recv_timeout(s)
+                        }
+                    };
+                    eprintln!("\n\n>> Got result: {:?}", result);
+                    match result {
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            eprintln!("\n\n\nSENDING RETURN VALUE TO {}\n\n\n", sender);
+                            xous::return_scalar(sender, 0).expect("couldn't send response");
+
+                            // This is dangerous and may panic if the queue is full.
+                            eprintln!(
+                                "\n\n\nSENDING RECALCULATE SLEEP MESSAGE TO MAIN THREAD\n\n\n"
+                            );
+                            xous::try_send_message(
+                                cid,
+                                crate::api::Opcode::RecalculateSleep.into(),
+                            )
+                            .unwrap();
+                            eprintln!("\n\n\nTRIED SENDING MESSAGE\n\n\n");
+                            timeout = None;
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                            eprintln!("SHUTTING DOWN");
+                            return;
+                        }
+                        Ok(SleepComms::InterruptSleep) => time_remaining_sender
+                            .send(if timeout.is_some() {
+                                Some(SleepResponse {
+                                    sender,
+                                    msec: start_time.elapsed().as_millis() as _,
+                                })
+                            } else {
+                                None
+                            })
+                            .unwrap(),
+                        Ok(SleepComms::StartSleep(new_sender, duration)) => {
+                            timeout = Some(std::time::Duration::from_millis(duration));
+                            sender = new_sender;
+                        }
+                    }
+                }
+            })
+            .unwrap();
+
             XousTickTimer {
                 start: std::time::Instant::now(),
+                time_remaining_receiver,
+                sleep_comms: sleep_sender,
             }
         }
 
@@ -73,43 +239,98 @@ mod implementation {
         pub fn elapsed_ms(&self) -> u64 {
             self.start.elapsed().as_millis().try_into().unwrap()
         }
+
+        pub fn stop_interrupt(&mut self) -> Option<SleepResponse> {
+            self.sleep_comms.send(SleepComms::InterruptSleep).unwrap();
+            self.time_remaining_receiver.recv().unwrap()
+        }
+
+        pub fn schedule_response(&mut self, milliseconds: usize, sender: xous::MessageSender) {
+            self.sleep_comms
+                .send(SleepComms::StartSleep(sender, milliseconds as _))
+                .unwrap();
+        }
     }
 }
 
 use implementation::*;
 
+fn recalculate_sleep(
+    ticktimer: &mut XousTickTimer,
+    sleep_heap: &mut BinaryHeap<SleepResponse, U32, Min>,
+    new: Option<SleepResponse>,
+) {
+    if let Some(current) = ticktimer.stop_interrupt() {
+        sleep_heap.push(current).expect("couldn't push to heap")
+    }
+
+    if let Some(response) = new {
+        sleep_heap
+            .push(response)
+            .expect("couldn't push new sleep to heap");
+    }
+    if let Some(next_response) = sleep_heap.pop() {
+        info!("scheduling a response at {}", next_response.msec);
+        ticktimer.schedule_response(next_response.msec, next_response.sender);
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
-    // Create a new ticktimer object
-    let mut ticktimer = XousTickTimer::new();
+    println!("Timer Init");
+    log_server::init_wait().unwrap();
+
+    // "Sleep" commands get put in here and are ordered as necessary
+    let mut sleep_heap: BinaryHeap<SleepResponse, U32, Min> = BinaryHeap::new();
 
     let ticktimer_server =
         xous::create_server(b"ticktimer-server").expect("Couldn't create Ticktimer server");
+
+    // Connect to our own server so we can send the "Recalculate" message
+    let ticktimer_client = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())
+        .expect("couldn't connect to self");
+
+    // Create a new ticktimer object
+    let mut ticktimer = XousTickTimer::new(ticktimer_client);
+
     loop {
-        println!("TickTimer: waiting for message");
+        info!("TickTimer: waiting for message");
         let envelope = xous::receive_message(ticktimer_server).unwrap();
-        println!("TickTimer: Message: {:?}", envelope);
+        info!("TickTimer: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            println!("TickTimer: Opcode: {:?}", opcode);
+            info!("TickTimer: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Reset => {
-                    println!("TickTimer: reset called");
+                    info!("TickTimer: reset called");
                     ticktimer.reset();
                 }
                 Opcode::ElapsedMs => {
                     let time = ticktimer.elapsed_ms();
-                    println!("TickTimer: returning time of {:?}", time);
+                    info!("TickTimer: returning time of {:?}", time);
                     xous::return_scalar2(
                         envelope.sender,
                         (time & 0xFFFF_FFFFu64) as usize,
                         ((time >> 32) & 0xFFF_FFFFu64) as usize,
                     )
                     .expect("TickTimer: couldn't return time request");
-                    println!("TickTimer: done returning value");
+                    info!("TickTimer: done returning value");
+                }
+                Opcode::SleepMs(ms) => recalculate_sleep(
+                    &mut ticktimer,
+                    &mut sleep_heap,
+                    Some(SleepResponse {
+                        msec: ms,
+                        sender: envelope.sender,
+                    }),
+                ),
+                Opcode::RecalculateSleep => {
+                    info!("Recalculating Sleep");
+                    recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
+                    info!("Done recalculating");
                 }
             }
         } else {
-            println!("Couldn't convert opcode");
+            error!("couldn't convert opcode");
         }
     }
 }
