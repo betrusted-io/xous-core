@@ -154,11 +154,12 @@ pub extern "C" fn kmain() {
         match pid {
             Some(pid) => {
                 // #[cfg(feature = "debug-print")]
+                // print!(" [switching to pid {}]", pid);
                 xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
             }
             None => {
-                // #[cfg(feature = "debug-print")]
-                // println!("No runnable tasks found.  Entering idle state...");
+                #[cfg(feature = "debug-print")]
+                println!("NO RUNNABLE TASKS FOUND, entering idle state");
                 // Special case for testing: idle can return `false` to indicate exit
                 if !arch::idle() {
                     return;
