@@ -187,7 +187,10 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )
                 .map(|_| xous_kernel::Result::Ok)
             } else {
-                print!(" [setting the return value of the Server to {:?} and returning to Client]", envelope);
+                print!(
+                    " [setting the return value of the Server to {:?} and returning to Client]",
+                    envelope
+                );
                 // "Switch to" the server PID when not running on bare metal. This ensures
                 // that it's "Running".
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
@@ -230,7 +233,13 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
     })
 }
 
-fn return_memory(pid: PID, tid: TID, in_irq: bool, sender: MessageSender, buf: MemoryRange) -> SysCallResult {
+fn return_memory(
+    pid: PID,
+    tid: TID,
+    in_irq: bool,
+    sender: MessageSender,
+    buf: MemoryRange,
+) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         let sender = SenderID::from(sender);
 
@@ -377,6 +386,9 @@ fn return_scalar(
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
+            if in_irq {
+                ss.ready_thread(client_pid, client_tid)?;
+            }
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
@@ -406,7 +418,7 @@ fn return_scalar2(
         let server = ss
             .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-            // .expect("Couldn't get server from SIDX");
+        // .expect("Couldn't get server from SIDX");
         if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
@@ -447,6 +459,9 @@ fn return_scalar2(
                 client_tid,
                 xous_kernel::Result::Scalar2(arg1, arg2),
             )?;
+            if in_irq {
+                ss.ready_thread(client_pid, client_tid)?;
+            }
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
@@ -727,7 +742,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::ReturnMemory(sender, buf) => return_memory(pid, tid, in_irq, sender, buf),
         SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, in_irq, sender, arg),
-        SysCall::ReturnScalar2(sender, arg1, arg2) => return_scalar2(pid, tid, in_irq, sender, arg1, arg2),
+        SysCall::ReturnScalar2(sender, arg1, arg2) => {
+            return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
+        }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
