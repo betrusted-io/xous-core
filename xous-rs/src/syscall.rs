@@ -1096,6 +1096,10 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
     }
 }
 
+pub fn terminate_process() {
+    rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
+}
+
 /// Return execution to the kernel. This function may return at any time,
 /// including immediately
 pub fn yield_slice() {

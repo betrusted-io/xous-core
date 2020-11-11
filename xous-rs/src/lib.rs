@@ -73,6 +73,7 @@ macro_rules! maybe_main {
             println!("PANIC!");
             println!("Details: {:?}", arg);
             xous::syscall::wait_event();
+            xous::syscall::terminate_process();
             loop {}
         }
 
