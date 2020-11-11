@@ -254,6 +254,7 @@ thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> =
 thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
 thread_local!(static PROCESS_ID: RefCell<PID> = RefCell::new(PID::new(1).unwrap()));
 thread_local!(static PROCESS_KEY: RefCell<Option<ProcessKey>> = RefCell::new(None));
+thread_local!(static CALL_FOR_THREAD: RefCell<Arc<Mutex<HashMap<TID, crate::SysCall>>>> = RefCell::new(Arc::new(Mutex::new(HashMap::new()))));
 
 fn default_xous_address() -> SocketAddr {
     std::env::var("XOUS_SERVER")
@@ -341,12 +342,14 @@ where
     let server_connection =
         XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
     let process_id = PROCESS_ID.with(|pid| *pid.borrow());
+    let call_for_thread = CALL_FOR_THREAD.with(|cft| cft.borrow().clone());
     Ok(std::thread::Builder::new()
         .spawn(move || {
             set_xous_address(server_address);
             THREAD_ID.with(|tid| *tid.borrow_mut() = thread_id);
             PROCESS_ID.with(|pid| *pid.borrow_mut() = process_id);
             XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = Some(server_connection));
+            CALL_FOR_THREAD.with(|cft| *cft.borrow_mut() = call_for_thread);
             f()
         })
         .map(WaitHandle)
@@ -425,6 +428,13 @@ pub fn _xous_syscall(
     XOUS_SERVER_CONNECTION.with(|xsc| {
         THREAD_ID.with(|tid| {
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
+            {
+                CALL_FOR_THREAD.with(|cft| {
+                    eprintln!("Inserting TID for {}", *tid.borrow());
+                    cft.borrow().lock().unwrap().insert(*tid.borrow(), call)
+                });
+            }
+            let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             let mut xsc_borrowed = xsc.borrow_mut();
             let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server (did you forget to create a thread with xous::create_thread()?)");
@@ -441,43 +451,24 @@ pub fn _xous_syscall(
                     &call,
                     &mut xsc_asmut.send.lock().unwrap(),
                 );
-                _xous_syscall_result(&call, ret, *tid.borrow(), xsc_asmut);
+                _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
                 if *ret != Result::WouldBlock {
                     return;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::sleep(std::time::Duration::from_millis(50));
             }
         })
     });
 }
 
-use lazy_static::lazy_static;
-lazy_static! {
-    static ref CALL_FOR_THREAD: Mutex<HashMap<TID, crate::SysCall>> = Mutex::new(HashMap::new());
-}
-
-fn _xous_syscall_result(
-    call: &crate::SysCall,
-    ret: &mut Result,
-    thread_id: TID,
-    server_connection: &ServerConnection,
-) {
-    // This terrible construct lets us store a copy of the current call so we know how
-    // many bytes to read from the network.
-    let args = call.as_args();
-    let call_copy = crate::SysCall::from_args(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]).unwrap();
-    {
-        let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
-        hm.insert(thread_id, call_copy);
-    }
-
+fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &ServerConnection) {
     // Check to see if this thread id has an entry in the mailbox already.
     // This will block until the hashmap is free.
     {
         let mut mailbox = server_connection.mailbox.lock().unwrap();
-        if let Some(entry) = mailbox.remove(&thread_id) {
-            if Result::BlockedProcess != entry {
-                *ret = entry;
+        if let Some(entry) = mailbox.get(&thread_id) {
+            if &Result::BlockedProcess != entry {
+                *ret = mailbox.remove(&thread_id).unwrap();
                 return;
             }
         }
@@ -490,9 +481,9 @@ fn _xous_syscall_result(
         // Note that the mailbox mutex is released if it isn't found.
         {
             let mut mailbox = server_connection.mailbox.lock().unwrap();
-            if let Some(entry) = mailbox.remove(&thread_id) {
-                if Result::BlockedProcess != entry {
-                    *ret = entry;
+            if let Some(entry) = mailbox.get(&thread_id) {
+                if &Result::BlockedProcess != entry {
+                    *ret = mailbox.remove(&thread_id).unwrap();
                     return;
                 }
             }
@@ -510,9 +501,9 @@ fn _xous_syscall_result(
         // One more check, in case something came in while we waited for the receiver above.
         {
             let mut mailbox = server_connection.mailbox.lock().unwrap();
-            if let Some(entry) = mailbox.remove(&thread_id) {
-                if Result::BlockedProcess != entry {
-                    *ret = entry;
+            if let Some(entry) = mailbox.get(&thread_id) {
+                if &Result::BlockedProcess != entry {
+                    *ret = mailbox.remove(&thread_id).unwrap();
                     return;
                 }
             }
@@ -537,12 +528,13 @@ fn _xous_syscall_result(
         }
 
         // Determine if this thread will have a memory packet following it.
-        let thread_call = {
-            let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
-            hm
+        eprintln!("Removing value for TID {}", msg_thread_id);
+        let call = CALL_FOR_THREAD.with(|cft| {
+            cft.borrow().lock()
+                .unwrap()
                 .remove(&msg_thread_id)
                 .expect("thread didn't declare whether it has data")
-        };
+        });
 
         let mut response = Result::from_args(pkt);
 
@@ -574,13 +566,13 @@ fn _xous_syscall_result(
         }
 
         // If the original call contained memory, then ensure the memory we get back is correct.
-        if let Some(mem) = thread_call.memory() {
-            if thread_call.is_borrow() || thread_call.is_mutableborrow() {
+        if let Some(mem) = call.memory() {
+            if call.is_borrow() || call.is_mutableborrow() {
                 // Read the buffer back from the remote host.
                 use core::slice;
                 let data =
                     unsafe { slice::from_raw_parts_mut(mem.addr.get() as _, mem.size.get()) };
-                let previous_data = if thread_call.is_borrow() {
+                let previous_data = if call.is_borrow() {
                     Some(data.to_vec())
                 } else {
                     None
@@ -598,14 +590,14 @@ fn _xous_syscall_result(
                 }
             }
 
-            if thread_call.is_move() {
+            if call.is_move() {
                 // In a hosted environment, the message contents are leaked when
                 // it gets converted into a MemoryMessage. Now that the call is
                 // complete, free the memory.
                 mem::unmap_memory_post(mem).unwrap();
             }
 
-            if thread_call.is_return_memory() {
+            if call.is_return_memory() {
                 let rebuilt =
                     unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
                 drop(rebuilt);
