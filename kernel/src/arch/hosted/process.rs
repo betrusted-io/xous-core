@@ -27,6 +27,9 @@ struct ProcessImpl {
     /// Memory that may need to be returned to the caller for each thread
     memory_to_return: [Option<Vec<u8>>; MAX_THREAD + 1],
 
+    /// We've already sent a response, so don't send another one
+    response_sent: bool,
+
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
     /// receive messages.
@@ -58,8 +61,26 @@ thread_local!(
         current: unsafe { PID::new_unchecked(1) },
         total: 0,
         table: Vec::new(),
-    })
+    });
 );
+
+pub fn response_sent_already() -> bool {
+    PROCESS_TABLE.with(|pt| {
+        let mut process_table = pt.borrow_mut();
+        let current_pid_idx = process_table.current.get() as usize - 1;
+        let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+        process.response_sent
+    })
+}
+
+pub fn clear_response_sent_already() {
+    PROCESS_TABLE.with(|pt| {
+        let mut process_table = pt.borrow_mut();
+        let current_pid_idx = process_table.current.get() as usize - 1;
+        let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
+        process.response_sent = false;
+    })
+}
 
 pub fn current_pid() -> PID {
     PROCESS_TABLE.with(|pt| pt.borrow().current)
@@ -299,22 +320,10 @@ impl Process {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }
-                // if let xous_kernel::Result::Message(_) = result {
-                // } else {
-                //     panic!(
-                //         "memory was waiting to be returned, but message was not a result message"
-                //     );
-                // }
-                print!(" [adding {} additional bytes from memory being returned]", buf.len());
                 response.extend_from_slice(&buf);
             }
 
-            // eprintln!(
-            //     "KERNEL({}): Setting thread return value to {:?}",
-            //     current_pid_idx + 1,
-            //     response
-            // );
-            print!(" [setting thread return value to {} bytes]", response.len());
+            process.response_sent = true;
             process
                 .conn
                 .as_mut()
@@ -347,6 +356,7 @@ impl Process {
                 conn: None,
                 key: init_data.key,
                 memory_to_return: filled_array![None; 32 /* MAX_THREAD */],
+                response_sent: false,
                 current_thread: INITIAL_TID,
                 threads: [Thread { allocated: false }; MAX_THREAD + 1],
             };
