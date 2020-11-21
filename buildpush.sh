@@ -10,7 +10,7 @@ then
     exit 0
 fi
 
-DESTDIR=code/bin
+DESTDIR=code/precursors
 
 # notes:
 # xous-stage1.bin written to 0x2050_0000 (64k erase block size)

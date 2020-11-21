@@ -76,7 +76,7 @@ impl Uart {
 
     pub fn enable_rx(&self) {
         let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-        uart_csr.wfo(utra::uart::EV_ENABLE_ENABLE, uart_csr.rf(utra::uart::EV_ENABLE_ENABLE) | 2 );
+        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1 );
     }
 
     pub fn getc(&self) -> Option<u8> {
@@ -84,7 +84,7 @@ impl Uart {
             self.map_uart();
         }
         let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-        match uart_csr.rf(utra::uart::EV_PENDING_PENDING) & 2 {
+        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
             0 => None,
             ack => {
                 let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
