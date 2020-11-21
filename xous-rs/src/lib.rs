@@ -13,14 +13,29 @@ pub mod carton;
 pub mod definitions;
 mod messages;
 pub mod syscall;
+pub mod string;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;
 pub use syscall::*;
+pub use string::*;
 
 #[cfg(not(target_os = "none"))]
 pub use arch::ProcessArgsAsThread;
+
+#[cfg(target_os = "none")]
+pub fn init() {}
+
+#[cfg(not(target_os = "none"))]
+pub fn init() {
+    use std::panic;
+    panic::set_hook(Box::new(|arg| {
+        println!("PANIC!");
+        println!("Details: {:?}", arg);
+        debug_here::debug_here!();
+    }));
+}
 
 /// Convert a four-letter string into a 32-bit int.
 #[macro_export]
@@ -39,6 +54,7 @@ macro_rules! maybe_main {
         extern "Rust" {
             fn xous_entry() -> !;
         }
+
         fn main() {
             xous::arch::ensure_connection().unwrap();
             unsafe { xous_entry() };
@@ -57,6 +73,7 @@ macro_rules! maybe_main {
             println!("PANIC!");
             println!("Details: {:?}", arg);
             xous::syscall::wait_event();
+            xous::syscall::terminate_process();
             loop {}
         }
 

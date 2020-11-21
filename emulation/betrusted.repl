@@ -31,7 +31,7 @@ timer0: Timers.LiteX_Timer_32 @ {
         sysbus 0x60003000;
         sysbus 0xF0003000 // shadow
     }
-    frequency: 12000000
+    frequency: 100000000
     -> cpu@1001
 
 //spi: SPI.PicoRV_SPI @ {
@@ -63,8 +63,9 @@ cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
 
-ticktimer: Timers.TickTimer @ sysbus 0xf0016000
+ticktimer: Timers.TickTimer @ sysbus 0xF0017000
     periodInMs: 1
+    -> cpu @ 1012
 
 //flash: SPI.Micron_MT25Q @ spi
 //    underlyingMemory: flash_mem

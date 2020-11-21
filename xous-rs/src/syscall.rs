@@ -128,7 +128,7 @@ pub enum SysCall {
     ///
     /// * **ProcessNotChild**: The given PID is not a child of the current
     ///   process
-    ReturnToParentI(PID, CpuID),
+    ReturnToParent(PID, CpuID),
 
     /// Claims an interrupt and unmasks it immediately.  The provided function
     /// will be called from within an interrupt context, but using the ordinary
@@ -277,7 +277,7 @@ pub enum SysCall {
 pub enum SysCallNumber {
     MapMemory = 2,
     Yield = 3,
-    ReturnToParentI = 4,
+    ReturnToParent = 4,
     ClaimInterrupt = 5,
     FreeInterrupt = 6,
     SwitchTo = 7,
@@ -310,7 +310,7 @@ impl SysCallNumber {
         match val {
             2 => MapMemory,
             3 => Yield,
-            4 => ReturnToParentI,
+            4 => ReturnToParent,
             5 => ClaimInterrupt,
             6 => FreeInterrupt,
             7 => SwitchTo,
@@ -386,8 +386,8 @@ impl SysCall {
                     0,
                 ]
             }
-            SysCall::ReturnToParentI(a1, a2) => [
-                SysCallNumber::ReturnToParentI as usize,
+            SysCall::ReturnToParent(a1, a2) => [
+                SysCallNumber::ReturnToParent as usize,
                 a1.get() as usize,
                 *a2 as usize,
                 0,
@@ -580,8 +580,26 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnScalar1(sender, arg1) => [SysCallNumber::ReturnScalar1 as usize, *sender, *arg1, 0, 0, 0, 0, 0],
-            SysCall::ReturnScalar2(sender, arg1, arg2) => [SysCallNumber::ReturnScalar2 as usize, *sender, *arg1, *arg2, 0, 0, 0, 0],
+            SysCall::ReturnScalar1(sender, arg1) => [
+                SysCallNumber::ReturnScalar1 as usize,
+                *sender,
+                *arg1,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            SysCall::ReturnScalar2(sender, arg1, arg2) => [
+                SysCallNumber::ReturnScalar2 as usize,
+                *sender,
+                *arg1,
+                *arg2,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -621,7 +639,7 @@ impl SysCall {
             SysCallNumber::ReceiveMessage => {
                 SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            SysCallNumber::ReturnToParentI => SysCall::ReturnToParentI(pid_from_usize(a1)?, a2),
+            SysCallNumber::ReturnToParent => SysCall::ReturnToParent(pid_from_usize(a1)?, a2),
             SysCallNumber::ClaimInterrupt => SysCall::ClaimInterrupt(
                 a1,
                 MemoryAddress::new(a2).ok_or(Error::InvalidSyscall)?,
@@ -769,6 +787,76 @@ impl SysCall {
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
+
+    /// Returns `true` if the associated syscall is a message that has memory attached to it
+    pub fn has_memory(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_))
+            }
+            SysCall::ReturnMemory(_, _) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a Move
+    pub fn is_move(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Move(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a Borrow
+    pub fn is_borrow(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::Borrow(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is a message that is a MutableBorrow
+    pub fn is_mutableborrow(&self) -> bool {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
+                matches!(msg, Message::MutableBorrow(_))
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the associated syscall is returning memory
+    pub fn is_return_memory(&self) -> bool {
+        matches!(self, SysCall::ReturnMemory(_, _))
+    }
+
+    /// If the syscall has memory attached to it, return the memory
+    pub fn memory(&self) -> Option<MemoryRange> {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
+                Message::Move(memory_message)
+                | Message::Borrow(memory_message)
+                | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
+                _ => None,
+            },
+            SysCall::ReturnMemory(_, range) => Some(*range),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the given syscall may be called from an IRQ context
+    pub fn can_call_from_interrupt(&self) -> bool {
+        matches!(self, SysCall::TrySendMessage(_, _)
+            | SysCall::TryConnect(_)
+            | SysCall::ReturnToParent(_, _)
+            | SysCall::ReturnScalar2(_, _, _)
+            | SysCall::ReturnScalar1(_, _)
+            | SysCall::ReturnMemory(_, _))
+    }
 }
 
 extern "Rust" {
@@ -865,7 +953,11 @@ pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
-pub fn return_scalar2(sender: MessageSender, val1: usize, val2: usize) -> core::result::Result<(), Error> {
+pub fn return_scalar2(
+    sender: MessageSender,
+    val1: usize,
+    val2: usize,
+) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnScalar2(sender, val1, val2))?;
     if let crate::Result::Ok = result {
         Ok(())
@@ -1002,6 +1094,10 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
+}
+
+pub fn terminate_process() {
+    rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
 }
 
 /// Return execution to the kernel. This function may return at any time,

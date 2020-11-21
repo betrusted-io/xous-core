@@ -42,10 +42,10 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
     PREVIOUS_PAIR = Some((pid, tid));
 }
 
-#[allow(dead_code)]
-pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
-    PREVIOUS_PAIR.take()
-}
+// #[allow(dead_code)]
+// pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
+//     PREVIOUS_PAIR.take()
+// }
 
 /// Trap entry point rust (_start_trap_rust)
 ///
@@ -96,8 +96,8 @@ pub extern "C" fn trap_handler(
             })
         });
 
-        let response =
-            crate::syscall::handle(pid, tid, call).unwrap_or_else(|e| xous_kernel::Result::Error(e));
+        let response = crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
+            .unwrap_or_else(|e| xous_kernel::Result::Error(e));
 
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
@@ -121,7 +121,11 @@ pub extern "C" fn trap_handler(
         // it with one if necessary.
         match ex {
             RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
-                println!("Fault {} @ {:08x}, addr {:08x}", ex, pc, addr);
+                #[cfg(any(feature = "debug-print", feature = "print-panics"))]
+                println!(
+                    "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x}",
+                    pid, ex, pc, addr
+                );
                 let entry = crate::arch::mem::pagetable_entry(addr).unwrap_or_else(|x| {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
@@ -211,9 +215,6 @@ pub extern "C" fn trap_handler(
             if PREVIOUS_PAIR.is_none() {
                 let tid = crate::arch::process::current_tid();
                 PREVIOUS_PAIR = Some((pid, tid));
-                // println!("ISR: Setting previous pair to ({}, {})", pid, tid);
-            // } else {
-            //     println!("ISR: Previous pair is not None");
             }
         }
         crate::irq::handle(irqs_pending).expect("Couldn't handle IRQ");

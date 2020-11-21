@@ -85,14 +85,14 @@ fn handle_connection(
         ServerPacketWithData([usize; 9], Vec<u8>),
     }
 
-    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>) {
+    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>, pid: PID) {
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
-            if let Err(_e) = conn.read_exact(&mut raw_data) {
-                // println!(
-                //     "KERNEL(?): Client disconnected: {} ({:?}). Shutting down virtual process.",
-                //     _e, _e
-                // );
+            if let Err(e) = conn.read_exact(&mut raw_data) {
+                println!(
+                    "KERNEL({}): client disconnected: {} -- shutting down virtual process",
+                    pid, e
+                );
                 sender.send(ServerMessage::Exit).ok();
                 return;
             }
@@ -105,23 +105,33 @@ fn handle_connection(
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
 
-            if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
-                || packet_data[1] == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
-                && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
-            {
-                let mut v = vec![0; packet_data[6]];
-                if conn.read_exact(&mut v).is_err() {
-                    sender.send(ServerMessage::Exit).ok();
-                    return;
-                }
-                sender
-                    .send(ServerMessage::ServerPacketWithData(packet_data, v))
-                    .unwrap();
-            } else {
-                sender
-                    .send(ServerMessage::ServerPacket(packet_data))
-                    .unwrap();
-            }
+            sender
+                .send(
+                    if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
+                        || packet_data[1]
+                            == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
+                        && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
+                    {
+                        let mut v = vec![0; packet_data[6]];
+                        if conn.read_exact(&mut v).is_err() {
+                            sender.send(ServerMessage::Exit).ok();
+                            return;
+                        }
+                        ServerMessage::ServerPacketWithData(packet_data, v)
+                    } else if packet_data[1]
+                        == xous_kernel::syscall::SysCallNumber::ReturnMemory as _
+                    {
+                        let mut v = vec![0; packet_data[4]];
+                        if conn.read_exact(&mut v).is_err() {
+                            sender.send(ServerMessage::Exit).ok();
+                            return;
+                        }
+                        ServerMessage::ServerPacketWithData(packet_data, v)
+                    } else {
+                        ServerMessage::ServerPacket(packet_data)
+                    },
+                )
+                .unwrap();
         }
     }
 
@@ -130,7 +140,7 @@ fn handle_connection(
     std::thread::Builder::new()
         .name(format!("PID {}: client connection thread", pid))
         .spawn(move || {
-            conn_thread(conn, conn_sender);
+            conn_thread(conn, conn_sender, pid);
         })
         .unwrap();
 
@@ -148,7 +158,10 @@ fn handle_connection(
 
     for msg in receiver {
         match msg {
-            ServerMessage::Exit => break,
+            ServerMessage::Exit => {
+                println!("KERNEL({}): Received ServerMessage::Exit", pid);
+                break;
+            }
             ServerMessage::ServerPacket(pkt) => {
                 let thread_id = pkt[0];
                 let call = xous_kernel::SysCall::from_args(
@@ -216,8 +229,26 @@ fn handle_connection(
                                                 _ => unreachable!(),
                                             };
                                     }
-                                    xous_kernel::Message::Scalar(_) | xous_kernel::Message::BlockingScalar(_) => (),
+                                    xous_kernel::Message::Scalar(_)
+                                    | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
+                            }
+                            SysCall::ReturnMemory(_sender, ref mut buf) => {
+                                let sliced_data = data.into_boxed_slice();
+                                assert_eq!(
+                                    sliced_data.len(),
+                                    buf.len(),
+                                    "deconstructed data {} != message buf length {}",
+                                    sliced_data.len(),
+                                    buf.len()
+                                );
+                                buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
+                                    as *mut u8
+                                    as usize)
+                                {
+                                    Some(a) => a,
+                                    _ => unreachable!(),
+                                };
                             }
                             _ => panic!("unsupported message type"),
                         }
@@ -228,7 +259,10 @@ fn handle_connection(
             }
         }
     }
-    // eprintln!("KERNEL({}): Finished the thread so sending TerminateProcess", pid);
+    eprintln!(
+        "KERNEL({}): Finished the thread so sending TerminateProcess",
+        pid
+    );
     chn.send(ThreadMessage::SysCall(
         pid,
         1,
@@ -510,14 +544,15 @@ pub fn idle() -> bool {
                             "Unable to send response to process: {:?} -- terminating",
                             _e
                         );
-                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
                     });
                     // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
+                crate::arch::process::clear_response_sent_already();
                 let response =
-                    crate::syscall::handle(pid, thread_id, call).unwrap_or_else(Result::Error);
+                    crate::syscall::handle(pid, thread_id, false, call).unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
@@ -536,17 +571,22 @@ pub fn idle() -> bool {
                     for word in response.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());
                     }
-                    process.send(&response_vec).unwrap_or_else(|_e| {
-                        // If we're unable to send data to the process, assume it's dead and terminate it.
-                        eprintln!(
-                            "KERNEL({}): Unable to send response to process: {:?} -- terminating",
-                            pid, _e
-                        );
-                        crate::syscall::handle(pid, thread_id, SysCall::TerminateProcess).ok();
-                    });
+                    if let Some(mem) = response.memory() {
+                        let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
+                        response_vec.extend_from_slice(s);
+                    }
+                    // Send a response only if we haven't already sent one
+                    if ! crate::arch::process::response_sent_already() {
+                        process.send(&response_vec).unwrap_or_else(|_e| {
+                            // If we're unable to send data to the process, assume it's dead and terminate it.
+                            eprintln!(
+                                "KERNEL({}): Unable to send response to process: {:?} -- terminating",
+                                pid, _e
+                            );
+                            crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
+                        });
+                    }
                     crate::arch::process::set_current_pid(existing_pid);
-                    // SystemServices::with_mut(|ss| {
-                    // ss.switch_from(pid, 1, true)}).unwrap();
                 }
 
                 if is_shutdown {

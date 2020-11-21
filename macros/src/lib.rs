@@ -66,10 +66,7 @@ pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
         && f.sig.variadic.is_none()
         && match f.sig.output {
             ReturnType::Default => false,
-            ReturnType::Type(_, ref ty) => match **ty {
-                Type::Never(_) => true,
-                _ => false,
-            },
+            ReturnType::Type(_, ref ty) => matches!(**ty, Type::Never(_)),
         };
 
     if !valid_signature {
@@ -97,8 +94,10 @@ pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
         #[export_name = "xous_entry"]
         #(#attrs)*
         pub #unsafety fn #hash() -> ! {
+            xous::init();
             #(#stmts)*
         }
+
         xous::maybe_main!();
     );
     r.into()

@@ -81,7 +81,7 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
             <registers>
                 <register>
                     <name>IDENTIFIER_MEM</name>
-                    <description><![CDATA[8 x 28-bit memory]]></description>
+                    <description><![CDATA[8 x 18-bit memory]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -436,8 +436,8 @@ the current countdown value to ``value`` register.]]></description>
                     <fields>
                         <field>
                             <name>output</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -452,8 +452,8 @@ the current countdown value to ``value`` register.]]></description>
                     <fields>
                         <field>
                             <name>input</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -468,8 +468,8 @@ the current countdown value to ``value`` register.]]></description>
                     <fields>
                         <field>
                             <name>drive</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -484,8 +484,8 @@ the current countdown value to ``value`` register.]]></description>
                     <fields>
                         <field>
                             <name>intena</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -501,8 +501,8 @@ interrupts.]]></description>
                     <fields>
                         <field>
                             <name>intpol</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -533,8 +533,8 @@ console, others undefined]]></description>
                     <fields>
                         <field>
                             <name>status</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -548,8 +548,8 @@ console, others undefined]]></description>
                     <fields>
                         <field>
                             <name>pending</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -563,8 +563,8 @@ console, others undefined]]></description>
                     <fields>
                         <field>
                             <name>enable</name>
-                            <msb>5</msb>
-                            <bitRange>[5:0]</bitRange>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -2315,8 +2315,77 @@ register advances the read pointer automatically.]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>TICKTIMER</name>
+            <name>MESSIBLE2</name>
             <baseAddress>0xF0016000</baseAddress>
+            <groupName>MESSIBLE2</groupName>
+            <registers>
+                <register>
+                    <name>IN</name>
+                    <description><![CDATA[Write half of the FIFO to send data out the Messible. Writing to this register
+advances the write pointer automatically.]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>in</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>OUT</name>
+                    <description><![CDATA[Read half of the FIFO to receive data on the Messible. Reading from this
+register advances the read pointer automatically.]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>out</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>STATUS</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>full</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`0` if more data can fit into the IN FIFO.]]></description>
+                        </field>
+                        <field>
+                            <name>have</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if data can be read from the OUT FIFO.]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0xc</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>TICKTIMER</name>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>TICKTIMER</groupName>
             <registers>
                 <register>
@@ -2374,16 +2443,93 @@ register advances the read pointer automatically.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>MSLEEP_TARGET1</name>
+                    <description><![CDATA[Bits 32-63 of `TICKTIMER_MSLEEP_TARGET`. Target time in 1.0ms ticks]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>msleep_target</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>MSLEEP_TARGET0</name>
+                    <description><![CDATA[Bits 0-31 of `TICKTIMER_MSLEEP_TARGET`.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>msleep_target</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>status</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>pending</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>enable</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xc</size>
+                <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
         <peripheral>
             <name>POWER</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>POWER</groupName>
             <registers>
                 <register>
@@ -2542,7 +2688,7 @@ reset fashion]]></description>
         </peripheral>
         <peripheral>
             <name>SPINOR</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>SPINOR</groupName>
             <registers>
                 <register>
@@ -2617,35 +2763,87 @@ once leads to undefined behavior.]]></description>
                             <description><![CDATA[Sequence through init & wakeup routine]]></description>
                         </field>
                         <field>
-                            <name>sector_erase</name>
+                            <name>exec_cmd</name>
                             <msb>1</msb>
                             <bitRange>[1:1]</bitRange>
                             <lsb>1</lsb>
-                            <description><![CDATA[Erase a sector]]></description>
+                            <description><![CDATA[Writing a `1` executes a manual command]]></description>
+                        </field>
+                        <field>
+                            <name>cmd_code</name>
+                            <msb>9</msb>
+                            <bitRange>[9:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Manual command code (first 8 bits, e.g. PP4B is 0x12)]]></description>
+                        </field>
+                        <field>
+                            <name>has_arg</name>
+                            <msb>10</msb>
+                            <bitRange>[10:10]</bitRange>
+                            <lsb>10</lsb>
+                            <description><![CDATA[When set, transmits the value of `cmd_arg` as the argument to the command]]></description>
+                        </field>
+                        <field>
+                            <name>dummy_cycles</name>
+                            <msb>15</msb>
+                            <bitRange>[15:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Number of dummy cycles for manual command; 0 implies a write, >0 implies read]]></description>
+                        </field>
+                        <field>
+                            <name>data_words</name>
+                            <msb>22</msb>
+                            <bitRange>[22:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[Number of data words (2x bytes)]]></description>
+                        </field>
+                        <field>
+                            <name>lock_reads</name>
+                            <msb>23</msb>
+                            <bitRange>[23:23]</bitRange>
+                            <lsb>23</lsb>
+                            <description><![CDATA[When set, locks out read operations (recommended when doing programming)]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
-                    <name>SECTOR</name>
-                    <description><![CDATA[Sector to erase]]></description>
+                    <name>CMD_ARG</name>
+                    <description><![CDATA[Command argument]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-write</access>
                     <fields>
                         <field>
-                            <name>sector</name>
+                            <name>cmd_arg</name>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Sector to erase]]></description>
+                            <description><![CDATA[Argument to manual command]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CMD_RBK_DATA</name>
+                    <description><![CDATA[Readback data from commands]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-only</access>
+                    <fields>
+                        <field>
+                            <name>cmd_rbk_data</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Data read back from a cmd_code that has `write_code` set to 0]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>STATUS</name>
                     <description><![CDATA[Interface status]]></description>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-only</access>
@@ -2660,8 +2858,25 @@ once leads to undefined behavior.]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>WDATA</name>
+                    <description><![CDATA[Page data to write to FLASH]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <access>read-write</access>
+                    <fields>
+                        <field>
+                            <name>wdata</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[16-bit wide write data presented to FLASH, committed to a 128-entry deep FIFO]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-write</access>
@@ -2676,7 +2891,7 @@ once leads to undefined behavior.]]></description>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-write</access>
@@ -2691,7 +2906,7 @@ once leads to undefined behavior.]]></description>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-write</access>
@@ -2706,7 +2921,7 @@ once leads to undefined behavior.]]></description>
                 </register>
                 <register>
                     <name>ECC_ADDRESS</name>
-                    <addressOffset>0x0024</addressOffset>
+                    <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-only</access>
@@ -2722,7 +2937,7 @@ once leads to undefined behavior.]]></description>
                 </register>
                 <register>
                     <name>ECC_STATUS</name>
-                    <addressOffset>0x0028</addressOffset>
+                    <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <access>read-only</access>
@@ -2747,13 +2962,13 @@ checked]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x2c</size>
+                <size>0x34</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
@@ -2975,14 +3190,14 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>SEED</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0xd261d6d</resetValue>
+                    <resetValue>0x26732071</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -2998,7 +3213,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x541ad152</resetValue>
+                    <resetValue>0x5babc71f</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -3019,7 +3234,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>ROMTEST</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>ROMTEST</groupName>
             <registers>
                 <register>
@@ -3063,7 +3278,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF001C000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -3205,7 +3420,7 @@ again until the interrupt is serviced.]]></description>
                     <name>RX_CONF</name>
                     <description><![CDATA[Rx configuration]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xac4442</resetValue>
+                    <resetValue>0xac4441</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -3334,7 +3549,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                     <name>TX_CONF</name>
                     <description><![CDATA[TX configuration]]></description>
                     <addressOffset>0x0020</addressOffset>
-                    <resetValue>0xac4442</resetValue>
+                    <resetValue>0xac4441</resetValue>
                     <size>32</size>
                     <access>read-only</access>
                     <fields>
@@ -3375,7 +3590,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG_OSC</name>
-            <baseAddress>0xF001D000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>TRNG_OSC</groupName>
             <registers>
                 <register>
@@ -3464,7 +3679,7 @@ reading the `rand` register]]></description>
         </peripheral>
         <peripheral>
             <name>AES</name>
-            <baseAddress>0xF001E000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>AES</groupName>
             <registers>
                 <register>
@@ -3949,501 +4164,6 @@ automatically on data and IV ready]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>SHA2</name>
-            <baseAddress>0xF001F000</baseAddress>
-            <groupName>SHA2</groupName>
-            <registers>
-                <register>
-                    <name>KEY0</name>
-                    <description><![CDATA[secret key word 0]]></description>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY1</name>
-                    <description><![CDATA[secret key word 1]]></description>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY2</name>
-                    <description><![CDATA[secret key word 2]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY3</name>
-                    <description><![CDATA[secret key word 3]]></description>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY4</name>
-                    <description><![CDATA[secret key word 4]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key4</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY5</name>
-                    <description><![CDATA[secret key word 5]]></description>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key5</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY6</name>
-                    <description><![CDATA[secret key word 6]]></description>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key6</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY7</name>
-                    <description><![CDATA[secret key word 7]]></description>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>key7</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>CONFIG</name>
-                    <description><![CDATA[Configuration register for the HMAC block]]></description>
-                    <addressOffset>0x0020</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>sha_en</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Enable the SHA256 core]]></description>
-                        </field>
-                        <field>
-                            <name>endian_swap</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Swap the endianness on the input data]]></description>
-                        </field>
-                        <field>
-                            <name>digest_swap</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Swap the endianness on the output digest]]></description>
-                        </field>
-                        <field>
-                            <name>hmac_en</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Enable the HMAC core]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>COMMAND</name>
-                    <description><![CDATA[Command register for the HMAC block]]></description>
-                    <addressOffset>0x0024</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>hash_start</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Writing a 1 indicates the beginning of hash data]]></description>
-                        </field>
-                        <field>
-                            <name>hash_process</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Writing a 1 digests the hash data]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>WIPE</name>
-                    <description><![CDATA[wipe the secret key using the written value. Wipe happens upon write.]]></description>
-                    <addressOffset>0x0028</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>wipe</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST0</name>
-                    <description><![CDATA[digest word 0]]></description>
-                    <addressOffset>0x002c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST1</name>
-                    <description><![CDATA[digest word 1]]></description>
-                    <addressOffset>0x0030</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST2</name>
-                    <description><![CDATA[digest word 2]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST3</name>
-                    <description><![CDATA[digest word 3]]></description>
-                    <addressOffset>0x0038</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST4</name>
-                    <description><![CDATA[digest word 4]]></description>
-                    <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest4</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST5</name>
-                    <description><![CDATA[digest word 5]]></description>
-                    <addressOffset>0x0040</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest5</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST6</name>
-                    <description><![CDATA[digest word 6]]></description>
-                    <addressOffset>0x0044</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest6</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIGEST7</name>
-                    <description><![CDATA[digest word 7]]></description>
-                    <addressOffset>0x0048</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>digest7</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>MSG_LENGTH1</name>
-                    <description><![CDATA[Bits 32-63 of `SHA2_MSG_LENGTH`. Length of digested message, in bits]]></description>
-                    <addressOffset>0x004c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>msg_length</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>MSG_LENGTH0</name>
-                    <description><![CDATA[Bits 0-31 of `SHA2_MSG_LENGTH`.]]></description>
-                    <addressOffset>0x0050</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>msg_length</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>ERROR_CODE</name>
-                    <description><![CDATA[Error code]]></description>
-                    <addressOffset>0x0054</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>error_code</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_STATUS</name>
-                    <addressOffset>0x0058</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>status</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <addressOffset>0x005c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>pending</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <addressOffset>0x0060</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-write</access>
-                    <fields>
-                        <field>
-                            <name>enable</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>FIFO</name>
-                    <description><![CDATA[FIFO status]]></description>
-                    <addressOffset>0x0064</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <access>read-only</access>
-                    <fields>
-                        <field>
-                            <name>read_count</name>
-                            <msb>9</msb>
-                            <bitRange>[9:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[read pointer]]></description>
-                        </field>
-                        <field>
-                            <name>write_count</name>
-                            <msb>19</msb>
-                            <bitRange>[19:10]</bitRange>
-                            <lsb>10</lsb>
-                            <description><![CDATA[write pointer]]></description>
-                        </field>
-                        <field>
-                            <name>read_error</name>
-                            <msb>20</msb>
-                            <bitRange>[20:20]</bitRange>
-                            <lsb>20</lsb>
-                            <description><![CDATA[read error occurred]]></description>
-                        </field>
-                        <field>
-                            <name>write_error</name>
-                            <msb>21</msb>
-                            <bitRange>[21:21]</bitRange>
-                            <lsb>21</lsb>
-                            <description><![CDATA[write error occurred]]></description>
-                        </field>
-                        <field>
-                            <name>almost_full</name>
-                            <msb>22</msb>
-                            <bitRange>[22:22]</bitRange>
-                            <lsb>22</lsb>
-                            <description><![CDATA[almost full]]></description>
-                        </field>
-                        <field>
-                            <name>almost_empty</name>
-                            <msb>23</msb>
-                            <bitRange>[23:23]</bitRange>
-                            <lsb>23</lsb>
-                            <description><![CDATA[almost empty]]></description>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x68</size>
-                <usage>registers</usage>
-            </addressBlock>
-            <interrupt>
-                <name>sha2</name>
-                <value>10</value>
-            </interrupt>
-        </peripheral>
-        <peripheral>
             <name>SHA512</name>
             <baseAddress>0xF0020000</baseAddress>
             <groupName>SHA512</groupName>
@@ -4911,7 +4631,7 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>11</value>
+                <value>10</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -5122,7 +4842,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>12</value>
+                <value>11</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -5221,11 +4941,6 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             <memoryRegion>
                 <name>AUDIO</name>
                 <baseAddress>0xE0000000</baseAddress>
-                <size>0x00000004</size>
-            </memoryRegion>
-            <memoryRegion>
-                <name>SHA2</name>
-                <baseAddress>0xE0001000</baseAddress>
                 <size>0x00000004</size>
             </memoryRegion>
             <memoryRegion>

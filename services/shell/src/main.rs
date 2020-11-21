@@ -5,9 +5,11 @@
 #[macro_use]
 mod debug;
 
-mod timer;
 mod logstr;
+mod timer;
 use core::fmt::Write;
+use log::{error, info};
+use xous::String;
 
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
@@ -17,7 +19,7 @@ use core::fmt::Write;
 //     }
 // }
 
-extern crate utralib;
+#[cfg(baremetal)]
 use utralib::generated::*;
 
 fn move_lfsr(mut lfsr: u32) -> u32 {
@@ -39,6 +41,8 @@ fn ensure_connection(server: xous::SID) -> xous::CID {
 #[xous::xous_main]
 fn shell_main() -> ! {
     timer::init();
+    log_server::init_wait().unwrap();
+    let mut loops = 0;
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -71,144 +75,84 @@ fn shell_main() -> ! {
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
 
-    let gpio_base = xous::syscall::map_memory(
-        xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-        None,
-        4096,
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .expect("couldn't map GPIO CSR range");
-    let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
+    #[cfg(baremetal)]
+    {
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
+    }
 
     let mut last_time: u64 = 0;
+    let mut string_buffer = String::new(4096);
     loop {
         // a message passing demo -- checking time
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            println!("SHELL: {}ms", elapsed_time);
-            if elapsed_time - last_time > 4000 {
+            info!("SHELL: {}ms", elapsed_time);
+            if elapsed_time - last_time > 40 {
                 last_time = elapsed_time;
                 /*
                 xous::try_send_message(log_conn,
                     xous::Message::Scalar(xous::ScalarMessage{id:256, arg1: elapsed_time as usize, arg2: 257, arg3: 258, arg4: 259}));
                 */
-                println!("Preparing a mutable borrow message");
+                info!("Preparing a mutable borrow message");
 
                 ls.clear();
-                write!(ls, "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}", elapsed_time as usize).expect("couldn't send hello message");
-
-                let mm = ls.as_memory_message(0)
-                .expect("couldn't form memory message");
-
-                println!("Sending a mutable borrow message");
-
-                let response = xous::syscall::try_send_message(
-                    log_conn,
-                    xous::Message::MutableBorrow(mm),
+                write!(
+                    ls,
+                    "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}",
+                    elapsed_time as usize
                 )
-                .expect("couldn't send memory message");
-                //unsafe { ls.set_len(response.0)};
-                //println!("Message came back with args ({}, {}) as: {}", response.0, response.1, ls);
+                .expect("couldn't send hello message");
+
+                let mm = ls
+                    .as_memory_message(0)
+                    .expect("couldn't form memory message");
+
+                info!("Sending a mutable borrow message");
+
+                xous::syscall::send_message(log_conn, xous::Message::MutableBorrow(mm))
+                        .expect("couldn't send memory message");
             }
         } else {
-            println!("error requesting ticktimer!")
+            error!("error requesting ticktimer!")
         }
 
+        graphics_server::set_style(
+            graphics_conn,
+            5,
+            if lfsr & 1 == 0 { dark } else { light },
+            if lfsr & 1 == 0 { dark } else { light },
+        )
+        .expect("unable to draw to screen: {:?}");
 
-        // println!("Sending a scalar message with id {}...", counter + 4096);
-        // match xous::syscall::send_message(
-        //     log_conn,
-        //     xous::Message::Scalar(xous::ScalarMessage {
-        //         id: counter + 4096,
-        //         arg1: counter,
-        //         arg2: counter * 2,
-        //         arg3: !counter,
-        //         arg4: counter + 1,
-        //     }),
-        // ) {
-        //     Err(xous::Error::ServerQueueFull) => {
-        //         // println!("Server queue is full... retrying");
-        //         continue;
-        //     }
-        //     Ok(_) => {
-        //         println!("Loop {}", counter);
-        //         counter += 1;
-        //     }
-        //     Err(e) => panic!("Unable to send message: {:?}", e),
-        // }
-
-        // lfsr = move_lfsr(lfsr);
-
-        loop {
-
-            match graphics_server::set_style(
-                graphics_conn,
-                5,
-                if lfsr & 1 == 0 { dark } else { light },
-                if lfsr & 1 == 0 { dark } else { light },
-            ) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
         let x1 = move_lfsr(lfsr);
         let y1 = move_lfsr(x1);
         let x2 = move_lfsr(y1);
         let y2 = move_lfsr(x2);
         lfsr = y2;
 
-        loop {
-            match graphics_server::draw_line(
-                graphics_conn,
-                graphics_server::Point::new((x1 % 336) as _, (y1 % 536) as _),
-                graphics_server::Point::new((x2 % 336) as _, (y2 % 536) as _),
-            ) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
+        graphics_server::draw_line(
+            graphics_conn,
+            graphics_server::Point::new((x1 % 336) as _, (y1 % 536) as _),
+            graphics_server::Point::new((x2 % 336) as _, (y2 % 536) as _),
+        )
+        .expect("unable to draw to screen");
 
-        loop {
-            match graphics_server::flush(graphics_conn) {
-                Err(xous::Error::ServerQueueFull) => continue,
-                Ok(_) => break,
-                Err(e) => panic!("unable to draw to screen: {:?}", e),
-            }
-        }
+        string_buffer.clear();
+        write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
+        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40)
+            .expect("unable to clear region");
+        info!("drawing string: {}", string_buffer);
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        graphics_server::flush(graphics_conn).expect("unable to draw to screen");
 
-        // let lfsr = move_lfsr(lfsr);
-        // if lfsr.trailing_zeros() >= 3 {
-        //     loop {
-        //         match xous::syscall::try_send_message(
-        //             log_conn,
-        //             xous::Message::Scalar(xous::ScalarMessage {
-        //                 id: counter + 4096,
-        //                 arg1: counter,
-        //                 arg2: counter * 2,
-        //                 arg3: !counter,
-        //                 arg4: lfsr as _,
-        //             }),
-        //         ) {
-        //             Err(xous::Error::ServerQueueFull) => {
-        //                 println!("SHELL: Log Server queue is full... retrying");
-        //                 continue;
-        //             }
-        //             Ok(_) => {
-        //                 println!("SHELL: Loop {}", counter);
-        //                 counter += 1;
-        //                 break;
-        //             }
-        //             Err(e) => panic!("Unable to send message: {:?}", e),
-        //         }
-        //     }
-        // }
-        // // #[cfg(not(target_os = "none"))]
-        // std::thread::sleep(std::time::Duration::from_millis(500));
-        // if counter & 2 == 0 {
-        //     xous::syscall::yield_slice();
-        // }
-
+        ticktimer_server::sleep_ms(ticktimer_conn, 2000 + loops).expect("couldn't sleep");
+        loops += 1;
     }
 }

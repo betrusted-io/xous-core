@@ -289,7 +289,7 @@ pub fn set_xous_address(new_address: SocketAddr) {
     });
 }
 
-/// Set the network address for this particular thread.
+/// Get the network address for this particular thread.
 fn xous_address() -> SocketAddr {
     NETWORK_CONNECT_ADDRESS
         .with(|nca| *nca.borrow())
@@ -427,7 +427,7 @@ pub fn _xous_syscall(
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
 
             let mut xsc_borrowed = xsc.borrow_mut();
-            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server!");
+            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server (did you forget to create a thread with xous::create_thread()?)");
             loop {
                 _xous_syscall_to(
                     nr,
@@ -445,9 +445,15 @@ pub fn _xous_syscall(
                 if *ret != Result::WouldBlock {
                     return;
                 }
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         })
     });
+}
+
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref CALL_FOR_THREAD: Mutex<HashMap<TID, crate::SysCall>> = Mutex::new(HashMap::new());
 }
 
 fn _xous_syscall_result(
@@ -456,6 +462,15 @@ fn _xous_syscall_result(
     thread_id: TID,
     server_connection: &ServerConnection,
 ) {
+    // This terrible construct lets us store a copy of the current call so we know how
+    // many bytes to read from the network.
+    let args = call.as_args();
+    let call_copy = crate::SysCall::from_args(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]).unwrap();
+    {
+        let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
+        hm.insert(thread_id, call_copy);
+    }
+
     // Check to see if this thread id has an entry in the mailbox already.
     // This will block until the hashmap is free.
     {
@@ -506,7 +521,10 @@ fn _xous_syscall_result(
         // This thread_id doesn't exist in the mailbox, so read additional data.
         let mut pkt = [0usize; 8];
         let mut raw_bytes = [0u8; size_of::<usize>() * 9];
-        stream.read_exact(&mut raw_bytes).expect("Server shut down");
+        if let Err(e) = stream.read_exact(&mut raw_bytes) {
+            eprintln!("Server shut down: {}", e);
+            std::process::exit(0);
+        }
 
         let mut raw_bytes_chunks = raw_bytes.chunks(size_of::<usize>());
 
@@ -518,66 +536,80 @@ fn _xous_syscall_result(
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }
 
-        let response = Result::from_args(pkt);
+        // Determine if this thread will have a memory packet following it.
+        let thread_call = {
+            let hm = &mut *CALL_FOR_THREAD.lock().unwrap();
+            hm
+                .remove(&msg_thread_id)
+                .expect("thread didn't declare whether it has data")
+        };
 
-        // println!("   Response: {:?}", response);
+        let mut response = Result::from_args(pkt);
+
+        // println!("   Response to {:?}: {:?}", call, response);
         if Result::BlockedProcess == response {
             // println!("   Waiting again");
             continue;
         }
-        match &call {
-            crate::SysCall::SendMessage(_, msg) | crate::SysCall::TrySendMessage(_, msg) => {
-                match msg {
-                    crate::Message::MutableBorrow(crate::MemoryMessage {
-                        id: _id,
-                        buf,
-                        offset: _offset,
-                        valid: _valid,
-                    }) => {
-                        // Read the buffer back from the remote host.
-                        use core::slice;
-                        let mut data = unsafe {
-                            slice::from_raw_parts_mut(buf.addr.get() as _, buf.size.get())
-                        };
-                        stream.read_exact(&mut data).expect("Server shut down");
-                        // pkt.extend_from_slice(data);
-                    }
 
-                    crate::Message::Borrow(crate::MemoryMessage {
-                        id: _id,
-                        buf,
-                        offset: _offset,
-                        valid: _valid,
-                    }) => {
-                        // Read the buffer back from the remote host and ensure it's the same
-                        use core::slice;
-                        let mut check_data = Vec::new();
-                        check_data.resize(buf.len(), 0);
-                        let data =
-                            unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
-                        stream
-                            .read_exact(&mut check_data)
-                            .expect("Server shut down");
-
-                        assert_eq!(data, check_data.as_slice());
+        // If the client is passing us memory, remap the array to our own space.
+        if let Result::Message(msg) = &mut response {
+            match &mut msg.body {
+                crate::Message::Move(ref mut memory_message)
+                | crate::Message::Borrow(ref mut memory_message)
+                | crate::Message::MutableBorrow(ref mut memory_message) => {
+                    let data = vec![0u8; memory_message.buf.len()];
+                    let mut data = std::mem::ManuallyDrop::new(data);
+                    if let Err(e) = stream.read_exact(&mut data) {
+                        eprintln!("Server shut down: {}", e);
+                        std::process::exit(0);
                     }
+                    let len = data.len();
+                    let addr = data.as_mut_ptr();
+                    memory_message.buf.addr = crate::MemoryAddress::new(addr as _).unwrap();
+                    memory_message.buf.size = crate::MemorySize::new(len).unwrap();
+                }
+                _ => (),
+            }
+        }
 
-                    crate::Message::Move(crate::MemoryMessage {
-                        id: _id,
-                        buf,
-                        offset: _offset,
-                        valid: _valid,
-                    }) => {
-                        // In a hosted environment, the message contents are leaked when
-                        // it gets converted into a MemoryMessage. Now that the call is
-                        // complete, free the memory.
-                        mem::unmap_memory_post(*buf).unwrap();
-                    }
-                    // Nothing to do for Immutable borrow, since the memory can't change
-                    crate::Message::Scalar(_) | crate::Message::BlockingScalar(_) => (),
+        // If the original call contained memory, then ensure the memory we get back is correct.
+        if let Some(mem) = thread_call.memory() {
+            if thread_call.is_borrow() || thread_call.is_mutableborrow() {
+                // Read the buffer back from the remote host.
+                use core::slice;
+                let data =
+                    unsafe { slice::from_raw_parts_mut(mem.addr.get() as _, mem.size.get()) };
+                let previous_data = if thread_call.is_borrow() {
+                    Some(data.to_vec())
+                } else {
+                    None
+                };
+                let mut data = vec![0];
+                data.resize_with(mem.len(), Default::default);
+                if let Err(e) = stream.read_exact(&mut data) {
+                    eprintln!("Server shut down: {}", e);
+                    std::process::exit(0);
+                }
+
+                // If it is an immutable borrow, verify the contents haven't changed somehow
+                if let Some(previous_data) = previous_data {
+                    assert_eq!(data, previous_data.as_slice());
                 }
             }
-            _ => (),
+
+            if thread_call.is_move() {
+                // In a hosted environment, the message contents are leaked when
+                // it gets converted into a MemoryMessage. Now that the call is
+                // complete, free the memory.
+                mem::unmap_memory_post(mem).unwrap();
+            }
+
+            if thread_call.is_return_memory() {
+                let rebuilt =
+                    unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
+                drop(rebuilt);
+            }
         }
 
         // Now that we have the Stream mutex, temporarily take the Mailbox mutex to see if
@@ -622,22 +654,17 @@ fn _xous_syscall_to(
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
         pkt.extend_from_slice(&word.to_le_bytes());
     }
-    match call {
-        crate::SysCall::SendMessage(_, ref msg) | crate::SysCall::TrySendMessage(_, ref msg) => {
-            match msg {
-                crate::Message::MutableBorrow(m)
-                | crate::Message::Borrow(m)
-                | crate::Message::Move(m) => {
-                    use core::slice;
-                    let data: &[u8] =
-                        unsafe { slice::from_raw_parts(m.buf.addr.get() as _, m.buf.size.get()) };
-                    pkt.extend_from_slice(data);
-                }
-                crate::Message::Scalar(_) | crate::Message::BlockingScalar(_) => (),
-            }
-        }
-        _ => (),
+
+    // Also send memory, if it's present.
+    if let Some(memory) = call.memory() {
+        use core::slice;
+        let data: &[u8] =
+            unsafe { slice::from_raw_parts(memory.addr.get() as _, memory.size.get()) };
+        pkt.extend_from_slice(data);
     }
 
-    xsc.write_all(&pkt).expect("Server shut down");
+    if let Err(e) = xsc.write_all(&pkt) {
+        eprintln!("Server shut down: {}", e);
+        std::process::exit(0);
+    }
 }

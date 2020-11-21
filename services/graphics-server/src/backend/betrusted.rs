@@ -1,4 +1,3 @@
-use embedded_graphics::{drawable::Pixel, geometry::Size, pixelcolor::BinaryColor, DrawTarget};
 use xous::MemoryRange;
 use utralib::generated::*;
 
@@ -26,6 +25,9 @@ impl XousDisplay {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map frame buffer");
+        for mem_offset in 0..(FB_SIZE / 4) {
+            unsafe { fb.as_mut_ptr().add(mem_offset).write_volatile(0) };
+        }
 
         let control = xous::syscall::map_memory(
             xous::MemoryAddress::new(HW_MEMLCD_BASE),
@@ -49,7 +51,11 @@ impl XousDisplay {
 
     pub fn update(&mut self) {}
 
-    pub fn force_bitmap(&mut self, bmp: [u32; FB_SIZE]) {
+    pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] {
+        unsafe { &mut *(self.fb.as_mut_ptr() as *mut [u32; FB_SIZE]) }
+    }
+
+    pub fn blit_screen(&mut self, bmp: [u32; FB_SIZE]) {
         let framebuffer = self.fb.as_mut_ptr() as *mut u32;
 
         for words in 0..FB_SIZE {
@@ -111,49 +117,5 @@ impl XousDisplay {
                 .read_volatile()
                 == 1
         }
-    }
-}
-
-impl DrawTarget<BinaryColor> for XousDisplay {
-    type Error = core::convert::Infallible;
-
-    /// Draw a `Pixel` that has a color defined as `BinaryColor`.
-    fn draw_pixel(&mut self, pixel: Pixel<BinaryColor>) -> Result<(), Self::Error> {
-        let Pixel(coord, color) = pixel;
-        if coord.x < 0 || coord.y < 0 {
-            return Ok(())
-        }
-        if coord.x < FB_WIDTH_PIXELS as _ && coord.y < FB_LINES as _ {
-            let framebuffer = self.fb.as_mut_ptr() as *mut u32;
-            let offset = (coord.x / 32 + coord.y * FB_WIDTH_WORDS as i32) as usize;
-            match color {
-                BinaryColor::Off => {
-                    unsafe {
-                        framebuffer.add(offset).write_volatile(
-                            framebuffer.add(offset).read_volatile() | (1 << (coord.x % 32)),
-                        )
-                    };
-                }
-                BinaryColor::On => {
-                    unsafe {
-                        framebuffer.add(offset).write_volatile(
-                            framebuffer.add(offset).read_volatile() & !(1 << (coord.x % 32)),
-                        )
-                    };
-                }
-            }
-
-            // set the dirty bit on the line
-            unsafe {
-                framebuffer
-                    .add(offset)
-                    .write_volatile(framebuffer.add(offset).read_volatile() | 0x1_0000)
-            };
-        }
-        Ok(())
-    }
-
-    fn size(&self) -> Size {
-        Size::new(FB_WIDTH_PIXELS as _, FB_LINES as _)
     }
 }

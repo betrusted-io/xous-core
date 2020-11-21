@@ -7,10 +7,7 @@ description = "Log output program"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-
-#[target.'cfg(any(windows, unix))'.dependencies]
-#pancurses = "*"
-
+log = "0.4"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

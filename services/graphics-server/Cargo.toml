@@ -7,7 +7,8 @@ description = "Manage the video output"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-embedded-graphics = "0.6"
+log-server = { path = "../log-server" }
+log = "0.4"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

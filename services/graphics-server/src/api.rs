@@ -2,12 +2,11 @@ use xous::{Message, ScalarMessage};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Point {
-    x: u16,
-    y: u16,
+    pub x: u16,
+    pub y: u16,
 }
 
 impl Point {
-    #[allow(dead_code)]
     pub fn new(x: u16, y: u16) -> Point {
         Point { x, y }
     }
@@ -19,11 +18,25 @@ impl Into<usize> for Point {
     }
 }
 
-impl Into<embedded_graphics::geometry::Point> for Point {
-    fn into(self) -> embedded_graphics::geometry::Point {
-        embedded_graphics::geometry::Point::new(self.x as _, self.y as _)
+#[derive(Copy, Clone, Debug)]
+pub struct Rect {
+    pub x0: u16,
+    pub y0: u16,
+    pub x1: u16,
+    pub y1: u16,
+}
+
+impl Rect {
+    pub fn new(x0: u16, y0: u16, x1: u16, y1: u16) -> Self {
+        Self { x0, y0, x1, y1 }
     }
 }
+
+// impl Into<embedded_graphics::geometry::Point> for Point {
+//     fn into(self) -> embedded_graphics::geometry::Point {
+//         embedded_graphics::geometry::Point::new(self.x as _, self.y as _)
+//     }
+// }
 
 impl From<usize> for Point {
     fn from(p: usize) -> Point {
@@ -46,7 +59,7 @@ impl From<usize> for Color {
 }
 
 #[derive(Debug)]
-pub enum Opcode {
+pub enum Opcode<'a> {
     /// Flush the buffer to the screen
     Flush,
 
@@ -68,9 +81,15 @@ pub enum Opcode {
         Color, /* stroke color */
         Color, /* fill color */
     ),
+
+    /// Clear the specified region
+    ClearRegion(Rect),
+
+    /// Render the string at the (x,y) coordinates
+    String(&'a str),
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
+impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
     type Error = &'static str;
     fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
         match message {
@@ -85,6 +104,24 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
                     Color::from(m.arg2),
                     Color::from(m.arg3),
                 )),
+                7 => Ok(Opcode::ClearRegion(Rect::new(
+                    m.arg1 as _,
+                    m.arg2 as _,
+                    m.arg3 as _,
+                    m.arg4 as _,
+                ))),
+                _ => Err("unrecognized opcode"),
+            },
+            Message::Borrow(m) => match m.id {
+                1 => {
+                    let s = unsafe {
+                        core::slice::from_raw_parts(
+                            m.buf.as_ptr(),
+                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
+                        )
+                    };
+                    Ok(Opcode::String(core::str::from_utf8(s).unwrap()))
+                }
                 _ => Err("unrecognized opcode"),
             },
             _ => Err("unhandled message type"),
@@ -92,7 +129,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
     }
 }
 
-impl Into<Message> for Opcode {
+impl<'a> Into<Message> for Opcode<'a> {
     fn into(self) -> Message {
         match self {
             Opcode::Flush => Message::Scalar(ScalarMessage {
@@ -138,6 +175,17 @@ impl Into<Message> for Opcode {
                     arg3: fill_color.color as _,
                     arg4: 0,
                 })
+            }
+            Opcode::ClearRegion(rect) => Message::Scalar(ScalarMessage {
+                id: 7,
+                arg1: rect.x0 as _,
+                arg2: rect.y0 as _,
+                arg3: rect.x1 as _,
+                arg4: rect.y1 as _,
+            }),
+            Opcode::String(string) => {
+                let region = xous::carton::Carton::from_bytes(string.as_bytes());
+                Message::Borrow(region.into_message(1))
             }
         }
     }
