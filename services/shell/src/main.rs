@@ -162,6 +162,7 @@ fn shell_main() -> ! {
     let mut bouncyball = Bounce::new(14,
         Rectangle::new(Point::new(0, 18 * 21),
         Point::new(336, 536-1))); // TODO: make API call to get screen size
+    bouncyball.update();
 
     #[cfg(baremetal)]
     {
@@ -219,6 +220,22 @@ fn shell_main() -> ! {
             error!("error requesting ticktimer!")
         }
 
+        string_buffer.clear();
+        write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
+        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40)
+            .expect("unable to clear region");
+        info!("drawing string: {}", string_buffer);
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+
+        //ticktimer_server::sleep_ms(ticktimer_conn, 2000 + loops).expect("couldn't sleep");
+        loops += 1;
+
+        // draw the ball
+        bouncyball.update();
+        graphics_server::clear_region(graphics_conn,
+            bouncyball.bounds.top_left().x as _, bouncyball.bounds.top_left().y as _,
+            bouncyball.bounds.bottom_right().x as _, bouncyball.bounds.bottom_right().y as _)
+            .expect("unable to clear region");
         graphics_server::draw_circle(
             graphics_conn,
             bouncyball.loc,
@@ -226,16 +243,6 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
-        string_buffer.clear();
-        write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
-        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40)
-            .expect("unable to clear region");
-        info!("drawing string: {}", string_buffer);
-        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
-
-        ticktimer_server::sleep_ms(ticktimer_conn, 2000 + loops).expect("couldn't sleep");
-        loops += 1;
-        bouncyball.update();
     }
 }

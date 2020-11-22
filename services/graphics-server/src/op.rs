@@ -411,7 +411,7 @@ pub fn circle(fb: &mut LcdFB, x: usize, y: usize, r: usize, stroke_width: usize,
         center: Point{x: x as i16, y: y as i16},
         radius: r as u16,
         style: Style{ fill_color: Some(color), stroke_color: Some(color), stroke_width: stroke_width as i16},
-        p: Point::zero(),
+        p: Point::new(-(r as i16), -(r as i16)),
     };
 
     for pixel in c {

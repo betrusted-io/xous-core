@@ -7,7 +7,7 @@ UPDATE_KERNEL=1
 USE_USB=1
 FPGA_IMAGE=../betrusted-soc/build/gateware/encrypted.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
-CSR_CSV=../betrusted-soc/build/csr.csv.1  # always use the previous version for the current update!
+CSR_CSV=../betrusted-soc/build/csr.csv.1
 USE_IDENITY=0
 
 POSITIONAL=()
@@ -35,8 +35,12 @@ do
 	  shift
 	  shift
 	  ;;
+      --current-csr)
+	  CSR_CSV=../betrusted-soc/build/csr.csv
+	  shift
+	  ;;
       -h|--help)
-		echo "$0 provisions betrusted. --kernel-skip skips the kernel, --fpga-skip skips the FPGA."
+		echo "$0 provisions betrusted. --kernel-skip skips the kernel, --fpga-skip skips the FPGA. --current-csr indicates to use the CSR for the new FPGA image to do the update (normally you want to use the one corresponding to the older, currently installed version)."
 		echo "Alternatively, using --copy-to <hostname> copies the files to a remote host and skips provisioning."
 		echo "  --identity <id_file> supplies an identity file to the scp command."
 		echo "  Copying assumes betrusted-scripts repo is cloned on ssh-target at ~/code/betrused-scripts/"
