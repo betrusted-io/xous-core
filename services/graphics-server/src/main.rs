@@ -66,7 +66,7 @@ fn xmain() -> ! {
                 }
                 Opcode::Circle(mid, radius) => {
                     info!("GFX: Drawing cicrle at {:?} radius {:?}", mid, radius);
-                    op::circle(display.native_buffer(), mid.x as _, mid.y as _, radius as _, 1, op::PixelColor::On);
+                    op::circle(display.native_buffer(), mid.x as _, mid.y as _, radius as _, 0, op::PixelColor::On);
                 }
                 Opcode::Style(stroke_width, stroke_color, fill_color) => {
                     current_color = stroke_color;

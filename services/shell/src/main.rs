@@ -128,7 +128,6 @@ impl Bounce {
 fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
-    let mut loops = 0;
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -227,14 +226,13 @@ fn shell_main() -> ! {
         info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
-        //ticktimer_server::sleep_ms(ticktimer_conn, 2000 + loops).expect("couldn't sleep");
-        loops += 1;
+        ticktimer_server::sleep_ms(ticktimer_conn, 2000).expect("couldn't sleep");
 
         // draw the ball
         bouncyball.update();
         graphics_server::clear_region(graphics_conn,
             bouncyball.bounds.top_left().x as _, bouncyball.bounds.top_left().y as _,
-            bouncyball.bounds.bottom_right().x as _, bouncyball.bounds.bottom_right().y as _)
+            bouncyball.bounds.bottom_right().x as _, bouncyball.bounds.bottom_right().y as usize + 1)
             .expect("unable to clear region");
         graphics_server::draw_circle(
             graphics_conn,
