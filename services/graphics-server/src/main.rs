@@ -56,7 +56,6 @@ fn xmain() -> ! {
                 Opcode::Line(start, end) => {
                     info!("GFX: Drawing line from {:?} to {:?}", start, end);
                     op::line(display.native_buffer(), start.x as _, start.y as _, end.x as _, end.y as _, if current_color.color == 0 { op::PixelColor::Off } else {op::PixelColor::On });
-                    // todo!();
                 }
                 Opcode::Rectangle(start, end) => {
                     todo!();
@@ -66,11 +65,8 @@ fn xmain() -> ! {
                     //     .ok();
                 }
                 Opcode::Circle(mid, radius) => {
-                    todo!();
-                    // Circle::new(mid.into(), radius)
-                    //     .into_styled(current_style)
-                    //     .draw(&mut display)
-                    //     .unwrap();
+                    info!("GFX: Drawing cicrle at {:?} radius {:?}", mid, radius);
+                    op::circle(display.native_buffer(), mid.x as _, mid.y as _, radius as _, 1, op::PixelColor::On);
                 }
                 Opcode::Style(stroke_width, stroke_color, fill_color) => {
                     current_color = stroke_color;
