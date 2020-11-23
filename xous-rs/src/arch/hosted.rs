@@ -455,7 +455,7 @@ pub fn _xous_syscall(
                     &mut xsc_asmut.send.lock().unwrap(),
                 );
                 _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
-                if *ret != Result::WouldBlock {
+                if *ret != Result::BlockedProcess {
                     return;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
@@ -530,22 +530,26 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }
 
-        // Determine if this thread will have a memory packet following it.
-        let call = CALL_FOR_THREAD.with(|cft| {
-            cft.borrow()
-                .lock()
-                .unwrap()
-                .remove(&msg_thread_id)
-                .expect("thread didn't declare whether it has data")
-        });
-
         let mut response = Result::from_args(pkt);
 
         // println!("   Response to {:?}: {:?}", call, response);
-        if Result::BlockedProcess == response {
+        if (Result::BlockedProcess == response) || (Result::WouldBlock == response) {
             // println!("   Waiting again");
             continue;
         }
+
+        // Determine if this thread will have a memory packet following it.
+        let call = CALL_FOR_THREAD.with(|cft| {
+            let cft_borrowed = cft.borrow();
+            let mut cft_mtx = cft_borrowed.lock().unwrap();
+            if ! cft_mtx.contains_key(&msg_thread_id) {
+                eprintln!("msg_thd_id: {}  cft: {:?}", msg_thread_id, cft_mtx);
+                ::debug_here::debug_here!();
+             }
+            cft_mtx
+                .remove(&msg_thread_id)
+                .expect("thread didn't declare whether it has data")
+        });
 
         // If the client is passing us memory, remap the array to our own space.
         if let Result::Message(msg) = &mut response {
@@ -618,6 +622,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                 *ret = response;
                 return;
             }
+            eprintln!("msg_thread_id {} != thread_id {}", msg_thread_id, thread_id);
 
             // Otherwise, add it to the mailbox and try again.
             let mut mailbox = server_connection.mailbox.lock().unwrap();
