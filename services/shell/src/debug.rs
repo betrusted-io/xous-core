@@ -7,7 +7,7 @@ macro_rules! print
 {
 	($($args:tt)+) => ({
 			use core::fmt::Write;
-			let _ = write!(crate::debug::DEFAULT, $($args)+);
+			let _ = write!(crate::debug::Uart {}, $($args)+);
 	});
 }
 #[macro_export]
@@ -28,7 +28,8 @@ macro_rules! println
 fn handle_irq(irq_no: usize, arg: *mut usize) {
     print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
-    while let Some(c) = crate::debug::DEFAULT.getc() {
+    let uart = crate::debug::Uart {};
+    while let Some(c) = uart.getc() {
         print!("{}", c as char);
     }
     println!();
@@ -39,7 +40,7 @@ pub struct Uart {}
 // this is a hack to bypass an explicit initialization/allocation step for the debug structure
 pub static mut DEFAULT_UART_ADDR: *mut usize = 0x0000_0000 as *mut usize;
 
-pub const DEFAULT: Uart = Uart {};
+// pub const DEFAULT: Uart = Uart {};
 
 impl Uart {
     fn map_uart(&self) {
