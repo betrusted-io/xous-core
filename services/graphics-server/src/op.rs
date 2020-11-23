@@ -1,6 +1,6 @@
 use super::fonts;
 use super::fonts::{Font, GlyphHeader};
-use crate::api::{Point, Style, Pixel};
+use crate::api::{Point, Style, Pixel, GlyphSet};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -51,7 +51,7 @@ impl ClipRegion {
 
 /// Blit string with: XOR, bold font, align xr left yr top
 pub fn string_bold_left(fb: &mut LcdFB, mut cr: ClipRegion, s: &str) {
-    let f = Font::new(fonts::GlyphSet::Bold);
+    let f = Font::new(GlyphSet::Bold);
     for c in s.chars() {
         cr.x0 += xor_char(fb, cr, c, f);
     }
@@ -59,7 +59,7 @@ pub fn string_bold_left(fb: &mut LcdFB, mut cr: ClipRegion, s: &str) {
 
 /// Blit string with: XOR, regular font, align xr left yr top
 pub fn string_regular_left(fb: &mut LcdFB, mut cr: ClipRegion, s: &str) {
-    let f = Font::new(fonts::GlyphSet::Regular);
+    let f = Font::new(GlyphSet::Regular);
     for c in s.chars() {
         cr.x0 += xor_char(fb, cr, c, f);
     }
@@ -67,7 +67,7 @@ pub fn string_regular_left(fb: &mut LcdFB, mut cr: ClipRegion, s: &str) {
 
 /// Blit string with: XOR, small font, align xr left yr top
 pub fn string_small_left(fb: &mut LcdFB, mut cr: ClipRegion, s: &str) {
-    let f = Font::new(fonts::GlyphSet::Small);
+    let f = Font::new(GlyphSet::Small);
     for c in s.chars() {
         cr.x0 += xor_char(fb, cr, c, f);
     }

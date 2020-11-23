@@ -11,6 +11,7 @@ use core::fmt::Write;
 use log::{error, info};
 use xous::String;
 use graphics_server::Point;
+use graphics_server::GlyphSet;
 
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
@@ -223,8 +224,10 @@ fn shell_main() -> ! {
         }
 
         string_buffer.clear();
-        write!(&mut string_buffer, "Uptime: {:2}s", last_time/1000).expect("Can't write");
-        graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, 40)
+        write!(&mut string_buffer, "Uptime: {:.2}s", last_time as f32 / 1000f32).expect("Can't write");
+        graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
+        let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
+        graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
             .expect("unable to clear region");
         info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");

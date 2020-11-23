@@ -2,6 +2,39 @@ use crate::op::PixelColor;
 use xous::{Message, ScalarMessage};
 use core::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 
+
+/// Available typeface glyph sets
+#[derive(Debug, Copy, Clone)]
+pub enum GlyphSet {
+    Bold,
+    Regular,
+    Small,
+}
+
+pub fn glyph_to_arg(glyph: GlyphSet) -> usize {
+    match glyph {
+        GlyphSet::Small => 0,
+        GlyphSet::Regular => 1,
+        GlyphSet::Bold => 2,
+    }
+}
+
+pub fn arg_to_glyph(arg: usize) -> GlyphSet {
+    match arg {
+        0 => GlyphSet::Small,
+        1 => GlyphSet::Regular,
+        2 => GlyphSet::Bold,
+        _ => GlyphSet::Regular,
+    }
+}
+
+pub fn glyph_to_height(glyph: GlyphSet) -> usize {
+    match glyph {
+        GlyphSet::Small => crate::fonts::small::MAX_HEIGHT as usize,
+        GlyphSet::Regular => crate::fonts::regular::MAX_HEIGHT as usize,
+        GlyphSet::Bold => crate::fonts::bold::MAX_HEIGHT as usize,
+    }
+}
 /// 2D size.
 ///
 /// `Size` is used to define the width and height of an object.
@@ -583,11 +616,17 @@ pub enum Opcode<'a> {
     /// Clear the specified region
     ClearRegion(Rect),
 
+    /// Set the current string glyph set for strings
+    SetGlyph(GlyphSet),
+
     /// Render the string at the (x,y) coordinates
     String(&'a str),
 
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,
+
+    /// Retrieve the current Glyph characteristics
+    QueryGlyph,
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -611,10 +650,12 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     m.arg3 as _,
                     m.arg4 as _,
                 ))),
+                9 => Ok(Opcode::SetGlyph(arg_to_glyph(m.arg1))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
                 8 => Ok(Opcode::ScreenSize),
+                10 => Ok(Opcode::QueryGlyph),
                 _ => Err("unrecognized opcode"),
             },
             Message::Borrow(m) => match m.id {
@@ -688,13 +729,9 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: rect.x1 as _,
                 arg4: rect.y1 as _,
             }),
-            Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {
-                id: 8,
-                arg1: 0,
-                arg2: 0,
-                arg3: 0,
-                arg4: 0,
-            }),
+            Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {id: 8, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
+            Opcode::QueryGlyph => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
+            Opcode::SetGlyph(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph_to_arg(glyph), arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(1))

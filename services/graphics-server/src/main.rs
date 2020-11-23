@@ -34,6 +34,7 @@ fn xmain() -> ! {
     draw_boot_logo(&mut display);
 
     let mut current_color = api::Color::from(0usize);
+    let mut current_glyph = api::GlyphSet::Regular;
 
     display.redraw();
 
@@ -92,7 +93,14 @@ fn xmain() -> ! {
                     });
                 }
                 Opcode::String(s) => {
-                    op::string_regular_left(display.native_buffer(), op::ClipRegion::screen(), s);
+                    match current_glyph {
+                        api::GlyphSet::Small => op::string_small_left(display.native_buffer(), op::ClipRegion::screen(), s),
+                        api::GlyphSet::Regular => op::string_regular_left(display.native_buffer(), op::ClipRegion::screen(), s),
+                        api::GlyphSet::Bold => op::string_bold_left(display.native_buffer(), op::ClipRegion::screen(), s),
+                    }
+                }
+                Opcode::SetGlyph(glyph) => {
+                    current_glyph = glyph;
                 }
                 Opcode::ScreenSize => {
                     xous::return_scalar2(
@@ -101,6 +109,14 @@ fn xmain() -> ! {
                         536 as usize,
                     )
                     .expect("GFX: couldn't return ScreenSize request");
+                }
+                Opcode::QueryGlyph => {
+                    xous::return_scalar2(
+                        msg.sender,
+                        api::glyph_to_arg(current_glyph),
+                        api::glyph_to_height(current_glyph),
+                    )
+                    .expect("GFX: could not return QueryGlyph request");
                 }
             }
         } else {
