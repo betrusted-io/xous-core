@@ -88,7 +88,7 @@ mod implementation {
             };
 
             xous::claim_interrupt(
-                12,
+                utra::ticktimer::TICKTIMER_IRQ,
                 handle_irq,
                 (&mut xtt) as *mut XousTickTimer as *mut usize,
             )
