@@ -51,7 +51,7 @@ impl Uart {
     #[allow(dead_code)]
     pub fn enable_rx(self) {
         let mut uart_csr = CSR::new(self.base as *mut u32);
-        uart_csr.wfo(utra::uart::EV_ENABLE_ENABLE, uart_csr.rf(utra::uart::EV_ENABLE_ENABLE) | 2);
+        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
     pub fn putc(&self, c: u8) {
@@ -68,7 +68,7 @@ impl Uart {
         let mut uart_csr = CSR::new(self.base as *mut u32);
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
-        match uart_csr.r(utra::uart::EV_PENDING) & 2 {
+        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
             0 => None,
             ack => {
                 let c = Some(uart_csr.r(utra::uart::RXTX) as u8);

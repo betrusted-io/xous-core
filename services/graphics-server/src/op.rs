@@ -1,5 +1,6 @@
 use super::fonts;
 use super::fonts::{Font, GlyphHeader};
+use crate::api::{Point, Style, Pixel};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -10,7 +11,7 @@ pub const LCD_FRAME_BUF_SIZE: usize = LCD_WORDS_PER_LINE * LCD_LINES;
 const WIDTH: usize = 336;
 const HEIGHT: usize = 536;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PixelColor {
     On,
     Off,
@@ -335,6 +336,86 @@ pub fn line(fb: &mut LcdFB, x0: usize, y0: usize, x1: usize, y1: usize, color: P
             err += dx;
             y0 += sy;
         }
+    }
+}
+
+
+/// Pixel iterator for each pixel in the circle border
+#[derive(Debug, Copy, Clone)]
+pub struct CircleIterator {
+    center: Point,
+    radius: u16,
+    style: Style,
+    p: Point,
+}
+
+impl Iterator for CircleIterator
+{
+    type Item = Pixel;
+
+    // https://stackoverflow.com/questions/1201200/fast-algorithm-for-drawing-filled-circles
+    fn next(&mut self) -> Option<Self::Item> {
+        // If border or stroke colour is `None`, treat entire object as transparent and exit early
+        if self.style.stroke_color.is_none() && self.style.fill_color.is_none() {
+            return None;
+        }
+
+        let radius = self.radius as i16 - self.style.stroke_width_i16() + 1;
+        let outer_radius = self.radius as i16;
+
+        let radius_sq = radius * radius;
+        let outer_radius_sq = outer_radius * outer_radius;
+
+        loop {
+            let t = self.p;
+            let len = t.x * t.x + t.y * t.y;
+
+            let is_border = len > radius_sq - radius && len < outer_radius_sq + radius;
+
+            let is_fill = len <= outer_radius_sq + 1;
+
+            let item = if is_border && self.style.stroke_color.is_some() {
+                Some(Pixel(
+                    self.center + t,
+                    self.style.stroke_color.expect("Border color not defined"),
+                ))
+            } else if is_fill && self.style.fill_color.is_some() {
+                Some(Pixel(
+                    self.center + t,
+                    self.style.fill_color.expect("Fill color not defined"),
+                ))
+            } else {
+                None
+            };
+
+            self.p.x += 1;
+
+            if self.p.x > self.radius as i16 {
+                self.p.x = -(self.radius as i16);
+                self.p.y += 1;
+            }
+
+            if self.p.y > self.radius as i16 {
+                break None;
+            }
+
+            if item.is_some() {
+                break item;
+            }
+        }
+    }
+}
+
+pub fn circle(fb: &mut LcdFB, x: usize, y: usize, r: usize, stroke_width: usize, color: PixelColor) {
+    let c = CircleIterator {
+        center: Point{x: x as i16, y: y as i16},
+        radius: r as u16,
+        style: Style{ fill_color: Some(color), stroke_color: Some(color), stroke_width: stroke_width as i16},
+        p: Point::new(-(r as i16), -(r as i16)),
+    };
+
+    for pixel in c {
+        put_pixel(fb, pixel.0.x as usize, pixel.0.y as usize, pixel.1);
     }
 }
 

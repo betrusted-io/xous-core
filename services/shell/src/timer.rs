@@ -14,7 +14,7 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0)).expect("couldn't return to parent");
 
     // acknowledge the timer
-    timer.wfo(utra::timer0::EV_PENDING_PENDING, 0b1);
+    timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);
     //println!("<<< Returning from timer_tick()");
 }
 
@@ -45,7 +45,7 @@ pub fn init() {
 
     // Set EV_ENABLE
     let mut timer = CSR::new(TIMER_BASE as *mut u32);
-    timer.wfo(utra::timer0::EV_ENABLE_ENABLE, 0b1);
+    timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
 }
 
 #[cfg(not(baremetal))]
