@@ -475,7 +475,7 @@ fn send_mutableborrow_message() {
 }
 
 #[test]
-fn send_mutableborrow_message_repeat() {
+fn send_repeat_mutableborrow_message() {
     let main_thread = start_kernel(SERVER_SPEC);
     let (server_addr_send, server_addr_recv) = channel();
     let test_str = "Hello, world!";
