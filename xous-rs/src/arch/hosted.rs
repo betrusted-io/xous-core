@@ -455,7 +455,7 @@ pub fn _xous_syscall(
                     &mut xsc_asmut.send.lock().unwrap(),
                 );
                 _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
-                if *ret != Result::BlockedProcess {
+                if *ret != Result::WouldBlock {
                     return;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
@@ -532,8 +532,22 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
 
         let mut response = Result::from_args(pkt);
 
-        // println!("   Response to {:?}: {:?}", call, response);
-        if (Result::BlockedProcess == response) || (Result::WouldBlock == response) {
+        // If we got a `WouldBlock`, then we need to retry the whole call
+        // again. Return and retry.
+        if response == Result::WouldBlock {
+            // If the incoming message was for this thread, return it directly.
+            if msg_thread_id == thread_id {
+                *ret = response;
+                return;
+            }
+
+            // Otherwise, add it to the mailbox and try again.
+            let mut mailbox = server_connection.mailbox.lock().unwrap();
+            mailbox.insert(msg_thread_id, response);
+            continue;
+        }
+
+        if response == Result::BlockedProcess {
             // println!("   Waiting again");
             continue;
         }
