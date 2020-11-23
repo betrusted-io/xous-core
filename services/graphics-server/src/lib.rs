@@ -36,3 +36,12 @@ pub fn clear_region(cid: CID, x0: usize, y0: usize, x1: usize, y1: usize) -> Res
 pub fn draw_string(cid: CID, s: &String) -> Result<(), xous::Error> {
     s.lend(cid, 1).map(|_| ())
 }
+
+pub fn screen_size(cid: CID) -> Result<Point, xous::Error> {
+    let response = send_message(cid, api::Opcode::ScreenSize.into())?;
+    if let xous::Result::Scalar2(x, y) = response {
+        Ok(Point::new(x as _, y as _))
+    } else {
+        panic!("unexpected return value: {:#?}", response);
+    }
+}

@@ -585,6 +585,9 @@ pub enum Opcode<'a> {
 
     /// Render the string at the (x,y) coordinates
     String(&'a str),
+
+    /// Retrieve the X and Y dimensions of the screen
+    ScreenSize,
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -608,6 +611,10 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     m.arg3 as _,
                     m.arg4 as _,
                 ))),
+                _ => Err("unrecognized opcode"),
+            },
+            Message::BlockingScalar(m) => match m.id {
+                8 => Ok(Opcode::ScreenSize),
                 _ => Err("unrecognized opcode"),
             },
             Message::Borrow(m) => match m.id {
@@ -680,6 +687,13 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg2: rect.y0 as _,
                 arg3: rect.x1 as _,
                 arg4: rect.y1 as _,
+            }),
+            Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {
+                id: 8,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());

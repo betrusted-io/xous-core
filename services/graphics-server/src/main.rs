@@ -94,6 +94,14 @@ fn xmain() -> ! {
                 Opcode::String(s) => {
                     op::string_regular_left(display.native_buffer(), op::ClipRegion::screen(), s);
                 }
+                Opcode::ScreenSize => {
+                    xous::return_scalar2(
+                        msg.sender,
+                        336 as usize,
+                        536 as usize,
+                    )
+                    .expect("GFX: couldn't return ScreenSize request");
+                }
             }
         } else {
             // info!("Couldn't convert opcode");

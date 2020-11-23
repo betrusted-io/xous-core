@@ -154,13 +154,15 @@ fn shell_main() -> ! {
         "SHELL: graphics and ticktimer connections are the same!"
     );
 
+    let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
+
     // let mut counter: usize = 0;
     let mut ls = logstr::LogStr::new();
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
     let mut bouncyball = Bounce::new(14,
         Rectangle::new(Point::new(0, 18 * 21),
-        Point::new(336, 536-1))); // TODO: make API call to get screen size
+        Point::new(screensize.x as _, screensize.y as i16 - 1)));
     bouncyball.update();
 
     #[cfg(baremetal)]
@@ -185,6 +187,7 @@ fn shell_main() -> ! {
     .expect("unable to draw to screen: {:?}");
 
     let mut last_time: u64 = 0;
+    ticktimer_server::reset(ticktimer_conn).unwrap();
     let mut string_buffer = String::new(4096);
     loop {
         // a message passing demo -- checking time
@@ -220,8 +223,8 @@ fn shell_main() -> ! {
         }
 
         string_buffer.clear();
-        write!(&mut string_buffer, "Elapsed time: {}ms", last_time).expect("Can't write");
-        graphics_server::clear_region(graphics_conn, 0, 0, 300, 40)
+        write!(&mut string_buffer, "Uptime: {:2}s", last_time/1000).expect("Can't write");
+        graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, 40)
             .expect("unable to clear region");
         info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
