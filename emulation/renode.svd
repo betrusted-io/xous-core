@@ -2,7 +2,7 @@
 
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
-    <name>JTAG</name>
+    <name>SOC</name>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -23,7 +23,6 @@
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>reset</name>
@@ -41,7 +40,6 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x12345678</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>scratch</name>
@@ -57,7 +55,6 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>bus_errors</name>
@@ -85,7 +82,6 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>identifier_mem</name>
@@ -114,7 +110,6 @@ this register specifies the Timer's duration in clock cycles.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>load</name>
@@ -131,7 +126,6 @@ this register specify the Timer's period in clock cycles.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>reload</name>
@@ -148,7 +142,6 @@ to ``0`` to disable the Timer.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>en</name>
@@ -165,7 +158,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>update_value</name>
@@ -181,7 +173,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>value</name>
@@ -193,46 +184,52 @@ the current countdown value to ``value`` register.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the zero event trigger.  Writes
+to this register have no effect.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>zero</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``zero`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  zero event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>zero</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `zero` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding zero events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>zero</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``zero`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -257,7 +254,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>ctrl</name>
@@ -272,7 +268,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>addr</name>
@@ -299,7 +294,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_reset</name>
@@ -314,7 +308,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_locked</name>
@@ -329,7 +322,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_read</name>
@@ -344,7 +336,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_write</name>
@@ -359,7 +350,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_drdy</name>
@@ -374,7 +364,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_adr</name>
@@ -389,7 +378,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_dat_w</name>
@@ -404,7 +392,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>mmcm_drp_dat_r</name>
@@ -432,7 +419,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>output</name>
@@ -448,7 +434,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>input</name>
@@ -464,7 +449,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>drive</name>
@@ -480,7 +464,6 @@ the current countdown value to ``value`` register.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>intena</name>
@@ -497,7 +480,6 @@ interrupts.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>intpol</name>
@@ -514,7 +496,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>uartsel</name>
@@ -526,46 +507,207 @@ console, others undefined]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the event7 event trigger.
+Writes to this register have no effect.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>event0</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``event0`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event1</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``event1`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event2</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Level of the ``event2`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event3</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Level of the ``event3`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event4</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[Level of the ``event4`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event5</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[Level of the ``event5`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event6</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[Level of the ``event6`` event]]></description>
+                        </field>
+                        <field>
+                            <name>event7</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[Level of the ``event7`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  event7 event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>event0</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event1</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event2</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event3</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event4</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event5</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event6</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>event7</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[`1` if a this particular event occurred. This Event is triggered on a **rising**
+edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding event7 events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
+                            <name>event0</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event0`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event1</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event1`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event2</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event2`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event3</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event3`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event4</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event4`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event5</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event5`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event6</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event6`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>event7</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``event7`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -590,7 +732,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x4b7f5a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tuning_word</name>
@@ -617,7 +758,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>rxtx</name>
@@ -632,7 +772,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txfull</name>
@@ -647,7 +786,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxempty</name>
@@ -659,46 +797,73 @@ console, others undefined]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -707,7 +872,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txempty</name>
@@ -722,7 +886,6 @@ console, others undefined]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxfull</name>
@@ -753,7 +916,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x4b7f5a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tuning_word</name>
@@ -780,7 +942,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>rxtx</name>
@@ -795,7 +956,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txfull</name>
@@ -810,7 +970,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxempty</name>
@@ -822,46 +981,73 @@ console, others undefined]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -870,7 +1056,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txempty</name>
@@ -885,7 +1070,6 @@ console, others undefined]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxfull</name>
@@ -916,7 +1100,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x4b7f5a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tuning_word</name>
@@ -943,7 +1126,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>rxtx</name>
@@ -958,7 +1140,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txfull</name>
@@ -973,7 +1154,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxempty</name>
@@ -985,46 +1165,73 @@ console, others undefined]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1033,7 +1240,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txempty</name>
@@ -1048,7 +1254,6 @@ console, others undefined]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxfull</name>
@@ -1079,7 +1284,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x4b7f5a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tuning_word</name>
@@ -1106,7 +1310,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>rxtx</name>
@@ -1121,7 +1324,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txfull</name>
@@ -1136,7 +1338,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxempty</name>
@@ -1148,46 +1349,73 @@ console, others undefined]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1196,7 +1424,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>txempty</name>
@@ -1211,7 +1438,6 @@ console, others undefined]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxfull</name>
@@ -1243,7 +1469,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>dna_id</name>
@@ -1259,7 +1484,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>dna_id</name>
@@ -1276,7 +1500,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>git_major</name>
@@ -1293,7 +1516,6 @@ console, others undefined]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>git_minor</name>
@@ -1310,7 +1532,6 @@ console, others undefined]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>git_revision</name>
@@ -1328,7 +1549,6 @@ git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>git_gitrev</name>
@@ -1346,7 +1566,6 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>git_gitextra</name>
@@ -1361,7 +1580,6 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>dirty</name>
@@ -1379,7 +1597,6 @@ modifications.]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>platform_platform</name>
@@ -1395,7 +1612,6 @@ modifications.]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>platform_platform</name>
@@ -1411,7 +1627,6 @@ modifications.]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>platform_target</name>
@@ -1427,7 +1642,6 @@ modifications.]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>platform_target</name>
@@ -1445,7 +1659,6 @@ Temperature (°C) = ``Value`` x 503.975 / 4096 - 273.15.]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_temperature</name>
@@ -1463,7 +1676,6 @@ VCCINT (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_vccint</name>
@@ -1481,7 +1693,6 @@ VCCAUX (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_vccaux</name>
@@ -1499,7 +1710,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_vccbram</name>
@@ -1515,7 +1725,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_eoc</name>
@@ -1531,7 +1740,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_eos</name>
@@ -1546,7 +1754,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0048</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>xadc_drp_enable</name>
@@ -1561,7 +1768,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x004c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>xadc_drp_read</name>
@@ -1576,7 +1782,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0050</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>xadc_drp_write</name>
@@ -1591,7 +1796,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0054</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_drp_drdy</name>
@@ -1606,7 +1810,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>xadc_drp_adr</name>
@@ -1621,7 +1824,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x005c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>xadc_drp_dat_w</name>
@@ -1636,7 +1838,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0060</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>xadc_drp_dat_r</name>
@@ -1663,7 +1864,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>mode</name>
@@ -1679,7 +1879,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>trigger</name>
@@ -1707,7 +1906,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>UpdateDirty</name>
@@ -1731,7 +1929,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>busy</name>
@@ -1748,7 +1945,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x63</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>prescaler</name>
@@ -1760,46 +1956,52 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the done event trigger.  Writes
+to this register have no effect.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``done`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  done event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `done` event occurred. This Event is triggered on a **falling** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding done events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>done</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``done`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1821,7 +2023,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tx</name>
@@ -1837,7 +2038,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rx</name>
@@ -1852,7 +2052,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>intena</name>
@@ -1861,6 +2060,13 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Enable interrupt on transaction finished]]></description>
                         </field>
+                        <field>
+                            <name>autohold</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Disallow transmission start if hold if asserted]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -1868,7 +2074,6 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>tip</name>
@@ -1877,50 +2082,86 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Set when transaction is in progress]]></description>
                         </field>
+                        <field>
+                            <name>hold</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Set when peripheral asserts hold]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the spi_hold event trigger.
+Writes to this register have no effect.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>spi_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``spi_int`` event]]></description>
+                        </field>
+                        <field>
+                            <name>spi_hold</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``spi_hold`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  spi_hold event occurs, the corresponding bit will be set in this
+register.  To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>spi_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `spi_int` event occurred. This Event is triggered on a **falling**
+edge.]]></description>
+                        </field>
+                        <field>
+                            <name>spi_hold</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `spi_hold` event occurred. This Event is triggered on a **falling**
+edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding spi_hold events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>spi_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``spi_int`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>spi_hold</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``spi_hold`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -1944,7 +2185,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0xffff</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>prescale</name>
@@ -1959,7 +2199,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>Resvd</name>
@@ -1991,7 +2230,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>txr</name>
@@ -2007,7 +2245,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rxr</name>
@@ -2022,7 +2259,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>IACK</name>
@@ -2080,7 +2316,6 @@ prescaler is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></descript
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>IF</name>
@@ -2130,46 +2365,52 @@ upon the completion of one byte of data transfer.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the i2c_int event trigger.
+Writes to this register have no effect.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>i2c_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``i2c_int`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  i2c_int event occurs, the corresponding bit will be set in this
+register.  To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>i2c_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `i2c_int` event occurred. This Event is triggered on a **rising** edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding i2c_int events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>i2c_int</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``i2c_int`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2191,46 +2432,74 @@ upon the completion of one byte of data transfer.]]></description>
             <registers>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rtc_int event trigger.
+Writes to this register have no effect.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>com_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``com_int`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rtc_int</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rtc_int`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rtc_int event occurs, the corresponding bit will be set in this
+register.  To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>com_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `com_int` event occurred. This Event is triggered on a **rising** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rtc_int</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rtc_int` event occurred. This Event is triggered on a **falling**
+edge.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rtc_int events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>com_int</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``com_int`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rtc_int</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rtc_int`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2257,7 +2526,6 @@ advances the write pointer automatically.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>in</name>
@@ -2274,7 +2542,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>out</name>
@@ -2289,7 +2556,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>full</name>
@@ -2326,7 +2592,6 @@ advances the write pointer automatically.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>in</name>
@@ -2343,7 +2608,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>out</name>
@@ -2358,7 +2622,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>full</name>
@@ -2393,7 +2656,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>reset</name>
@@ -2417,7 +2679,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>time</name>
@@ -2433,7 +2694,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>time</name>
@@ -2449,7 +2709,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>msleep_target</name>
@@ -2465,7 +2724,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>msleep_target</name>
@@ -2477,46 +2735,53 @@ register advances the read pointer automatically.]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the alarm event trigger.  Writes
+to this register have no effect.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>alarm</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``alarm`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[When a  alarm event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>alarm</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `alarm` event occurred. This Event is **level triggered** when the
+signal is **high**.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding alarm events.  Write a ``0`` to this
+register to disable individual events.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>alarm</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``alarm`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2526,6 +2791,10 @@ register advances the read pointer automatically.]]></description>
                 <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
+            <interrupt>
+                <name>ticktimer</name>
+                <value>8</value>
+            </interrupt>
         </peripheral>
         <peripheral>
             <name>POWER</name>
@@ -2537,7 +2806,6 @@ register advances the read pointer automatically.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x0a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>audio</name>
@@ -2623,7 +2891,6 @@ reset fashion]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>vibe</name>
@@ -2636,46 +2903,49 @@ reset fashion]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[USB attach event]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>usb_attach</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``usb_attach`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[USB attach event]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>usb_attach</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[USB attach event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[USB attach event]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>usb_attach</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``usb_attach`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2696,7 +2966,6 @@ reset fashion]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x0a</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>dummy</name>
@@ -2710,9 +2979,8 @@ reset fashion]]></description>
                 <register>
                     <name>DELAY_CONFIG</name>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x1f</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>d</name>
@@ -2735,7 +3003,6 @@ reset fashion]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>q</name>
@@ -2753,7 +3020,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>wakeup</name>
@@ -2792,16 +3058,16 @@ once leads to undefined behavior.]]></description>
                         </field>
                         <field>
                             <name>data_words</name>
-                            <msb>22</msb>
-                            <bitRange>[22:16]</bitRange>
+                            <msb>23</msb>
+                            <bitRange>[23:16]</bitRange>
                             <lsb>16</lsb>
                             <description><![CDATA[Number of data words (2x bytes)]]></description>
                         </field>
                         <field>
                             <name>lock_reads</name>
-                            <msb>23</msb>
-                            <bitRange>[23:23]</bitRange>
-                            <lsb>23</lsb>
+                            <msb>24</msb>
+                            <bitRange>[24:24]</bitRange>
+                            <lsb>24</lsb>
                             <description><![CDATA[When set, locks out read operations (recommended when doing programming)]]></description>
                         </field>
                     </fields>
@@ -2812,7 +3078,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>cmd_arg</name>
@@ -2829,7 +3094,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>cmd_rbk_data</name>
@@ -2846,7 +3110,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>wip</name>
@@ -2863,59 +3126,69 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>wdata</name>
                             <msb>15</msb>
                             <bitRange>[15:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[16-bit wide write data presented to FLASH, committed to a 128-entry deep FIFO]]></description>
+                            <description><![CDATA[16-bit wide write data presented to FLASH, committed to a 128-entry deep FIFO.
+Writes to this register are not cached; note that writes to the SPINOR address
+space are also committed to the FIFO, but this space is cached by the CPU, and
+therefore not guaranteed to be coherent or in order. The direct wishbone-write
+address space is provisioned for e.g. USB bus masters that don't have caching.]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[An ECC event has happened on the current block; triggered by falling edge of
+ECC_N]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>ecc_error</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``ecc_error`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[An ECC event has happened on the current block; triggered by falling edge of
+ECC_N]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>ecc_error</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[An ECC event has happened on the current block; triggered by falling edge of
+ECC_N]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[An ECC event has happened on the current block; triggered by falling edge of
+ECC_N]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>ecc_error</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``ecc_error`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -2924,7 +3197,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>ecc_address</name>
@@ -2940,7 +3212,6 @@ once leads to undefined behavior.]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>ecc_error</name>
@@ -2977,7 +3248,6 @@ checked]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row0dat</name>
@@ -2993,7 +3263,6 @@ checked]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row1dat</name>
@@ -3009,7 +3278,6 @@ checked]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row2dat</name>
@@ -3025,7 +3293,6 @@ checked]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row3dat</name>
@@ -3041,7 +3308,6 @@ checked]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row4dat</name>
@@ -3057,7 +3323,6 @@ checked]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row5dat</name>
@@ -3073,7 +3338,6 @@ checked]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row6dat</name>
@@ -3089,7 +3353,6 @@ checked]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row7dat</name>
@@ -3105,7 +3368,6 @@ checked]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>row8dat</name>
@@ -3117,46 +3379,49 @@ checked]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
+                            <name>keypressed</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``keypressed`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
+                            <name>keypressed</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
+                            <name>keypressed</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``keypressed`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3167,7 +3432,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rowchange</name>
@@ -3185,7 +3449,7 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
             <interrupt>
                 <name>keyboard</name>
-                <value>8</value>
+                <value>9</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -3197,9 +3461,8 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x26732071</resetValue>
+                    <resetValue>0x20483d3b</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>seed</name>
@@ -3213,9 +3476,8 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5babc71f</resetValue>
+                    <resetValue>0x1febda0d</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>seed</name>
@@ -3243,7 +3505,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>address</name>
@@ -3259,7 +3520,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>data</name>
@@ -3283,46 +3543,112 @@ again until the interrupt is serviced.]]></description>
             <registers>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[Indicates a Tx error has happened (over/underflow]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
+                            <name>rx_ready</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``rx_ready`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx_error</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx_error`` event]]></description>
+                        </field>
+                        <field>
+                            <name>tx_ready</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Level of the ``tx_ready`` event]]></description>
+                        </field>
+                        <field>
+                            <name>tx_error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Level of the ``tx_error`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[Indicates a Tx error has happened (over/underflow]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
+                            <name>rx_ready</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Indicates FIFO is ready to read]]></description>
+                        </field>
+                        <field>
+                            <name>rx_error</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Indicates an Rx error has happened (over/underflow)]]></description>
+                        </field>
+                        <field>
+                            <name>tx_ready</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Indicates enough space available for next Tx quanta of 256 words]]></description>
+                        </field>
+                        <field>
+                            <name>tx_error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Indicates a Tx error has happened (over/underflow]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[Indicates a Tx error has happened (over/underflow]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>3</msb>
-                            <bitRange>[3:0]</bitRange>
+                            <name>rx_ready</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx_ready`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx_error</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx_error`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>tx_ready</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx_ready`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>tx_error</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx_error`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3332,7 +3658,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>enable</name>
@@ -3356,7 +3681,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x80000000</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>overflow</name>
@@ -3422,7 +3746,6 @@ again until the interrupt is serviced.]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0xac4441</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>format</name>
@@ -3454,7 +3777,6 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>enable</name>
@@ -3478,7 +3800,6 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x1000000</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>overflow</name>
@@ -3551,7 +3872,6 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0xac4441</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>format</name>
@@ -3585,7 +3905,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>audio</name>
-                <value>9</value>
+                <value>10</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -3598,7 +3918,6 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x2000192</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>ena</name>
@@ -3642,7 +3961,6 @@ coupling of the deterministic sysclk noise into the rings.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0xdeadbeef</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>rand</name>
@@ -3658,7 +3976,6 @@ coupling of the deterministic sysclk noise into the rings.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>fresh</name>
@@ -3687,7 +4004,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_0</name>
@@ -3703,7 +4019,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_1</name>
@@ -3719,7 +4034,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_2</name>
@@ -3735,7 +4049,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_3</name>
@@ -3751,7 +4064,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_4</name>
@@ -3767,7 +4079,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_5</name>
@@ -3783,7 +4094,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_6</name>
@@ -3799,7 +4109,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>key_7</name>
@@ -3815,7 +4124,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>data_0</name>
@@ -3831,7 +4139,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>data_1</name>
@@ -3847,7 +4154,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>data_2</name>
@@ -3863,7 +4169,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>data_3</name>
@@ -3879,7 +4184,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>data_0</name>
@@ -3895,7 +4199,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>data_1</name>
@@ -3911,7 +4214,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>data_2</name>
@@ -3927,7 +4229,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>data_3</name>
@@ -3943,7 +4244,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>iv_0</name>
@@ -3959,7 +4259,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>iv_1</name>
@@ -3975,7 +4274,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0048</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>iv_2</name>
@@ -3991,7 +4289,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x004c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>iv_3</name>
@@ -4007,7 +4304,6 @@ reading the `rand` register]]></description>
                     <addressOffset>0x0050</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mode</name>
@@ -4045,7 +4341,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0054</addressOffset>
                     <resetValue>0x09</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>idle</name>
@@ -4110,7 +4405,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>start</name>
@@ -4174,7 +4468,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>sha_en</name>
@@ -4212,7 +4505,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>hash_start</name>
@@ -4236,7 +4528,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest0</name>
@@ -4252,7 +4543,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest0</name>
@@ -4268,7 +4558,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest1</name>
@@ -4284,7 +4573,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest1</name>
@@ -4300,7 +4588,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest2</name>
@@ -4316,7 +4603,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest2</name>
@@ -4332,7 +4618,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest3</name>
@@ -4348,7 +4633,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest3</name>
@@ -4364,7 +4648,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest4</name>
@@ -4380,7 +4663,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest4</name>
@@ -4396,7 +4678,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest5</name>
@@ -4412,7 +4693,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest5</name>
@@ -4428,7 +4708,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest6</name>
@@ -4444,7 +4723,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest6</name>
@@ -4460,7 +4738,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest7</name>
@@ -4476,7 +4753,6 @@ automatically on data and IV ready]]></description>
                     <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>digest7</name>
@@ -4493,7 +4769,6 @@ in bits]]></description>
                     <addressOffset>0x0048</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>msg_length</name>
@@ -4509,7 +4784,6 @@ in bits]]></description>
                     <addressOffset>0x004c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>msg_length</name>
@@ -4521,46 +4795,91 @@ in bits]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[SHA512 is done]]></description>
                     <addressOffset>0x0050</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>2</msb>
-                            <bitRange>[2:0]</bitRange>
+                            <name>err_valid</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``err_valid`` event]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_full</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``fifo_full`` event]]></description>
+                        </field>
+                        <field>
+                            <name>sha512_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Level of the ``sha512_done`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[SHA512 is done]]></description>
                     <addressOffset>0x0054</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>2</msb>
-                            <bitRange>[2:0]</bitRange>
+                            <name>err_valid</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Error flag was generated]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_full</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[FIFO is full]]></description>
+                        </field>
+                        <field>
+                            <name>sha512_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[SHA512 is done]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[SHA512 is done]]></description>
                     <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>2</msb>
-                            <bitRange>[2:0]</bitRange>
+                            <name>err_valid</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``err_valid`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>fifo_full</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``fifo_full`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>sha512_done</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``sha512_done`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4570,7 +4889,6 @@ in bits]]></description>
                     <addressOffset>0x005c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>read_count</name>
@@ -4631,7 +4949,7 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>10</value>
+                <value>11</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -4644,7 +4962,6 @@ in bits]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>window</name>
@@ -4660,7 +4977,6 @@ in bits]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mpstart</name>
@@ -4676,7 +4992,6 @@ in bits]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>mplen</name>
@@ -4693,7 +5008,6 @@ in bits]]></description>
                     <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>go</name>
@@ -4710,7 +5024,6 @@ microcode instructions starting at mpstart]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>running</name>
@@ -4731,46 +5044,70 @@ microcode memory areas will stall until this bit is clear]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
+                    <description><![CDATA[Illegal opcode encountered]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>status</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>finished</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``finished`` event]]></description>
+                        </field>
+                        <field>
+                            <name>illegal_opcode</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``illegal_opcode`` event]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
+                    <description><![CDATA[Illegal opcode encountered]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>pending</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>finished</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Microcode run finished execution]]></description>
+                        </field>
+                        <field>
+                            <name>illegal_opcode</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Illegal opcode encountered]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
+                    <description><![CDATA[Illegal opcode encountered]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
-                            <name>enable</name>
-                            <msb>1</msb>
-                            <bitRange>[1:0]</bitRange>
+                            <name>finished</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``finished`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>illegal_opcode</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``illegal_opcode`` Event]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4781,7 +5118,6 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
                     <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>opcode</name>
@@ -4842,7 +5178,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>11</value>
+                <value>12</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -4856,7 +5192,6 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-write</access>
                     <fields>
                         <field>
                             <name>tdi</name>
@@ -4880,7 +5215,6 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
-                    <access>read-only</access>
                     <fields>
                         <field>
                             <name>tdo</name>
