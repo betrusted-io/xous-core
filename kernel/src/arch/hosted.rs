@@ -68,6 +68,7 @@ fn generate_pid_key() -> [u8; 16] {
     process_key
 }
 
+#[allow(dead_code)]
 pub fn current_pid() -> PID {
     crate::arch::process::current_pid()
 }
@@ -85,13 +86,14 @@ fn handle_connection(
         ServerPacketWithData([usize; 9], Vec<u8>),
     }
 
-    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>, pid: PID) {
+    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>, _pid: PID) {
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
-            if let Err(e) = conn.read_exact(&mut raw_data) {
-                println!(
+            if let Err(_e) = conn.read_exact(&mut raw_data) {
+                #[cfg(not(test))]
+                eprintln!(
                     "KERNEL({}): client disconnected: {} -- shutting down virtual process",
-                    pid, e
+                    _pid, _e
                 );
                 sender.send(ServerMessage::Exit).ok();
                 return;
@@ -159,7 +161,8 @@ fn handle_connection(
     for msg in receiver {
         match msg {
             ServerMessage::Exit => {
-                println!("KERNEL({}): Received ServerMessage::Exit", pid);
+                #[cfg(not(test))]
+                eprintln!("KERNEL({}): Received ServerMessage::Exit", pid);
                 break;
             }
             ServerMessage::ServerPacket(pkt) => {
@@ -259,6 +262,7 @@ fn handle_connection(
             }
         }
     }
+    #[cfg(not(test))]
     eprintln!(
         "KERNEL({}): Finished the thread so sending TerminateProcess",
         pid
