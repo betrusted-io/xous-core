@@ -556,10 +556,6 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
         let call = CALL_FOR_THREAD.with(|cft| {
             let cft_borrowed = cft.borrow();
             let mut cft_mtx = cft_borrowed.lock().unwrap();
-            if ! cft_mtx.contains_key(&msg_thread_id) {
-                eprintln!("msg_thd_id: {}  cft: {:?}", msg_thread_id, cft_mtx);
-                ::debug_here::debug_here!();
-             }
             cft_mtx
                 .remove(&msg_thread_id)
                 .expect("thread didn't declare whether it has data")
@@ -636,7 +632,6 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                 *ret = response;
                 return;
             }
-            eprintln!("msg_thread_id {} != thread_id {}", msg_thread_id, thread_id);
 
             // Otherwise, add it to the mailbox and try again.
             let mut mailbox = server_connection.mailbox.lock().unwrap();
