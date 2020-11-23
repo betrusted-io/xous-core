@@ -1,6 +1,7 @@
 pub mod bold;
 pub mod regular;
 pub mod small;
+use crate::api::GlyphSet;
 
 /// Strings with Unicode Private Use Area characters for UI Sprites
 pub mod pua {
@@ -33,13 +34,6 @@ impl GlyphHeader {
         let y_offset = (header & 0x000000ff) as usize;
         GlyphHeader { w, h, y_offset }
     }
-}
-
-/// Available typeface glyph sets
-pub enum GlyphSet {
-    Bold,
-    Regular,
-    Small,
 }
 
 /// Abstraction for working with typeface glyph sets
