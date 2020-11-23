@@ -8,6 +8,7 @@ use utralib::generated::*;
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
+        // the HW device mapping is done in main.rs/init(); the virtuall address has to be in the top 4MiB as it is the only page shared among all processes
         base: 0xffcf_0000 as *mut usize,
     };
 

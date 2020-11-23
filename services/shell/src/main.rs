@@ -232,7 +232,7 @@ fn shell_main() -> ! {
         info!("drawing string: {}", string_buffer);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
-        ticktimer_server::sleep_ms(ticktimer_conn, 2000).expect("couldn't sleep");
+        // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
         // draw the ball
         bouncyball.update();

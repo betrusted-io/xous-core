@@ -6,7 +6,7 @@ use utralib::generated::*;
 macro_rules! print
 {
 	($($args:tt)+) => ({
-			use core::fmt::Write;
+            use core::fmt::Write;
 			let _ = write!(crate::debug::Uart {}, $($args)+);
 	});
 }
