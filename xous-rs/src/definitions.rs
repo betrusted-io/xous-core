@@ -460,7 +460,9 @@ pub enum Result {
     /// The requested system call is unimplemented
     Unimplemented,
 
-    /// The process is blocked and should perform the read() again
+    /// The process is blocked and should perform the read() again. This is only
+    /// ever seen in `Hosted` mode, because when running natively the kernel
+    /// simply never schedules the process.
     BlockedProcess,
 
     /// A scalar with one value
@@ -469,7 +471,8 @@ pub enum Result {
     /// A scalar with two values
     Scalar2(usize, usize),
 
-    /// The syscall should be attempted again
+    /// The syscall should be attempted again. This is returned when calling
+    /// functions such as `try_connect()` and `try_send()` that may block.
     WouldBlock,
 
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
