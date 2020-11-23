@@ -113,7 +113,7 @@ mod implementation {
         }
 
         pub fn stop_interrupt(&mut self) -> Option<SleepResponse> {
-            self.csr.wo(utra::ticktimer::EV_ENABLE, 0); // Disable the timer
+            self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0); // Disable the timer
             let current_value = self.elapsed_ms();
             if let Some(sr) = self.current_response.take() {
                 Some(SleepResponse {
@@ -137,12 +137,12 @@ mod implementation {
                 irq_target,
                 self.response_start
             );
-            self.csr.wo(utra::ticktimer::EV_PENDING, 1); // Clear previous interrupt (if any)
+            self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1); // Clear previous interrupt (if any)
             self.csr
                 .wo(utra::ticktimer::MSLEEP_TARGET1, (irq_target >> 32) as _);
             self.csr
                 .wo(utra::ticktimer::MSLEEP_TARGET0, irq_target as _);
-            self.csr.wo(utra::ticktimer::EV_ENABLE, 1); // Enable the interrupt
+            self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 1); // Enable the interrupt
         }
     }
 }

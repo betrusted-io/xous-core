@@ -43,24 +43,26 @@ pub const DEFAULT: Uart = Uart {};
 
 impl Uart {
     fn map_uart(&self) {
-        /*
-           Note: the memory address and interrupt specified here needs to map to a unique hardware
-           UART resource. Modify in this function as necessary.
-        */
-        let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map debug uart");
-        unsafe{ DEFAULT_UART_ADDR = uart.as_mut_ptr() as _; }
-        println!("Mapped UART @ {:08x}", uart.addr.get());
-        // core::mem::forget(uart);
+        if cfg!(feature = "debugprint") {
+                /*
+            Note: the memory address and interrupt specified here needs to map to a unique hardware
+            UART resource. Modify in this function as necessary.
+            */
+            let uart = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::server1::HW_SERVER1_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map debug uart");
+            unsafe{ DEFAULT_UART_ADDR = uart.as_mut_ptr() as _; }
+            println!("Mapped UART @ {:08x}", uart.addr.get());
+            // core::mem::forget(uart);
 
-        println!("Allocating IRQ...");
-        xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
-        self.enable_rx();
+            println!("Allocating IRQ...");
+            xous::claim_interrupt(utra::server1::HW_SERVER1_BASE, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+            self.enable_rx();
+        }
     }
 
     pub fn putc(&self, c: u8) {
