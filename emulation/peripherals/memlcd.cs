@@ -6,6 +6,7 @@
 //
 
 using System;
+using System.Linq;
 using Antmicro.Renode.Backends.Display;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
@@ -51,9 +52,23 @@ namespace Antmicro.Renode.Peripherals.Video
             machine.SystemBus.ReadBytes(bufferAddress, newbuf.Length, newbuf, 0);
             for (int y = 0; y < Height; y++)
             {
-                if (!updateDirty || updateAll || ((newbuf[y * 44 + 0x2a] & 0x1) == 0x1)) for (int x = 0; x < Width; x++)
+                // We should redraw the line if:
+                // 1) The `updateDirty` bit is set and the current line is dirty, or
+                // 2) The `updateAll` bit is set.
+                bool shouldRedrawLine = updateAll;
+                foreach (int i in Enumerable.Range(42, 22)) {
+                    if (shouldRedrawLine) {
+                        break;
+                    }
+                    if (updateDirty && (newbuf[y * 44 + i] != 0)) {
+                        shouldRedrawLine = true;
+                    }
+                }
+                if (shouldRedrawLine)
+                {
+                    for (int x = 0; x < Width; x++)
                     {
-                        if (((newbuf[((x + y * 44 * 8)) / 8] >> (x % 8)) & 1) > 0)
+                        if (((newbuf[(x + y * 44 * 8) / 8] >> (x % 8)) & 1) > 0)
                         {
                             buffer[2 * (x + y * Width)] = 0xFF;
                             buffer[2 * (x + y * Width) + 1] = 0xFF;
@@ -64,6 +79,7 @@ namespace Antmicro.Renode.Peripherals.Video
                             buffer[2 * (x + y * Width) + 1] = 0x0;
                         }
                     }
+                }
             }
         }
 
@@ -85,7 +101,7 @@ namespace Antmicro.Renode.Peripherals.Video
         private bool updateDirty = false;
         private bool updateAll = false;
 
-        private uint bufferAddress = 0xB0000000;
+        private readonly uint bufferAddress = 0xB0000000;
 
         private readonly Machine machine;
 
