@@ -423,8 +423,8 @@ fn send_mutableborrow_message() {
             // println!("Received message from {}", envelope.sender);
             let message = envelope.body;
             if let xous_kernel::Message::MutableBorrow(m) = message {
-                let buf = m.buf;
-                let bt = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
+                let bt = unsafe { core::slice::from_raw_parts_mut(m.buf.as_mut_ptr(), m.buf.len()) };
+                // eprintln!("SERVER: UPDATING VALUES");
                 for letter in bt.iter_mut() {
                     *letter += 1;
                 }
@@ -453,6 +453,7 @@ fn send_mutableborrow_message() {
             }
 
             // Send the message to the server
+            // eprintln!("CLIENT: SENDING MESSAGE: {:?}", test_bytes.to_vec());
             carton
                 .lend_mut(conn, 3)
                 .expect("couldn't mutably lend data");
