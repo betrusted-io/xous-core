@@ -280,6 +280,9 @@ fn line_fill_padded_border(fb: &mut LcdFB, y: usize) {
 }
 
 fn put_pixel(fb: &mut LcdFB, x: usize, y: usize, color: PixelColor) {
+    if (x >= LCD_PX_PER_LINE) || (y >= LCD_LINES) {
+        return;
+    }
     if color == PixelColor::Off {
         fb[(x + y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (x % 32)
     } else {
