@@ -44,23 +44,11 @@ impl Rectangle {
     }
 }
 
-#[cfg(baremetal)]
-use utralib::generated::*;
-
 fn move_lfsr(mut lfsr: u32) -> u32 {
     lfsr ^= lfsr >> 7;
     lfsr ^= lfsr << 9;
     lfsr ^= lfsr >> 13;
     lfsr
-}
-
-fn ensure_connection(server: xous::SID) -> xous::CID {
-    loop {
-        if let Ok(cid) = xous::syscall::try_connect(server) {
-            return cid;
-        }
-        xous::syscall::yield_slice();
-    }
 }
 
 pub struct Bounce {
@@ -136,9 +124,9 @@ fn shell_main() -> ! {
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
-    let log_conn = ensure_connection(log_server_id);
-    let graphics_conn = ensure_connection(graphics_server_id);
-    let ticktimer_conn = ensure_connection(ticktimer_server_id);
+    let log_conn = xous::connect(log_server_id).unwrap();
+    let graphics_conn = xous::connect(graphics_server_id).unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
     println!(
         "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {}",
@@ -168,6 +156,7 @@ fn shell_main() -> ! {
 
     #[cfg(baremetal)]
     {
+        use utralib::generated::*;
         let gpio_base = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
             None,
