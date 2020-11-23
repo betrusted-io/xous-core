@@ -507,12 +507,12 @@ pub fn lend_page_inner(
         } else {
             MMUFlags::NONE
         };
-        print!(" [clearing `W` bit from mapping of page {:08x}]", phys);
+        klog!("clearing `W` bit from mapping of page {:08x}", phys);
 
         // If the current entry is writable, clear that bit and set the "P" flag
         *entry = (*entry & !(MMUFlags::W.bits())) | (previous_flag | MMUFlags::S).bits();
-        print!(
-            " [additionally, mapping {:08x} into PID {:08x} @ {:08x}]",
+        klog!(
+            "additionally, mapping {:08x} into PID {:08x} @ {:08x}",
             phys, dest_pid, dest_addr as usize
         );
         unsafe { flush_mmu() };

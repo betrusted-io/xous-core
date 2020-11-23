@@ -126,8 +126,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             .expect("server couldn't be located")
             .take_available_thread()
         {
-            print!(
-                " [there are contexts available to handle this message -- marking PID {} as Ready]",
+            klog!(
+                "there are contexts available to handle this message -- marking PID {} as Ready",
                 server_pid
             );
             let sender_idx = if message.is_blocking() {
@@ -145,9 +145,11 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 sidx,
                 idx: sender_idx,
             };
-            print!(
-                " [server connection data: sidx: {}, idx: {}, server pid: {}]",
-                sidx, sender_idx, server_pid
+            klog!(
+                "server connection data: sidx: {}, idx: {}, server pid: {}",
+                sidx,
+                sender_idx,
+                server_pid
             );
             let envelope = MessageEnvelope {
                 sender: sender.into(),
@@ -187,8 +189,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )
                 .map(|_| xous_kernel::Result::Ok)
             } else {
-                print!(
-                    " [setting the return value of the Server to {:?} and returning to Client]",
+                klog!(
+                    "setting the return value of the Server to {:?} and returning to Client",
                     envelope
                 );
                 // "Switch to" the server PID when not running on bare metal. This ensures
@@ -202,8 +204,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 .map(|_| xous_kernel::Result::Ok)
             }
         } else {
-            print!(
-                " [no threads available in PID {} to handle this message, so blocking]",
+            klog!(
+                "no threads available in PID {} to handle this message, so blocking",
                 server_pid
             );
             // Add this message to the queue.  If the queue is full, this
@@ -250,7 +252,7 @@ fn return_memory(
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, Some(&buf))?;
-        print!(" [waiting message was: {:?}]", result);
+        klog!("waiting message was: {:?}", result);
         let (client_pid, client_tid, server_addr, client_addr, len) = match result {
             WaitingMessage::BorrowedMemory(
                 client_pid,
@@ -268,7 +270,7 @@ fn return_memory(
                     let virt = range.addr.get();
                     let size = range.size.get();
                     if cfg!(baremetal) && virt & 0xfff != 0 {
-                        print!(" [VIRT NOT DIVISIBLE BY 4: {:08x}]", virt);
+                        klog!("VIRT NOT DIVISIBLE BY 4: {:08x}", virt);
                         return Err(xous_kernel::Error::BadAlignment);
                     }
                     for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
@@ -500,7 +502,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
 
         // If there is a pending message, return it immediately.
         if let Some(msg) = server.take_next_message(sidx) {
-            print!(" [waiting messages found -- returning {:?}]", msg);
+            klog!("waiting messages found -- returning {:?}", msg);
             return Ok(xous_kernel::Result::Message(msg));
         }
 
@@ -508,8 +510,8 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         // process and mark ourselves as awaiting an event.  When a message
         // arrives, our return value will already be set to the
         // MessageEnvelope of the incoming message.
-        print!(
-            " [did not have any waiting messages -- parking thread {}]",
+        klog!(
+            "did not have any waiting messages -- parking thread {}",
             tid
         );
         server.park_thread(tid);

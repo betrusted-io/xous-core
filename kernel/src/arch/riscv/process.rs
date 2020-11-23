@@ -291,7 +291,6 @@ impl Process {
             *thread = Default::default();
         }
 
-        let pid = pid.get();
         let process = unsafe { &mut *PROCESS };
         let mut thread = &mut process.threads[tid];
 
@@ -300,11 +299,14 @@ impl Process {
         thread.registers[9] = thread_init.arg.map(|x| x.get()).unwrap_or_default();
 
         #[cfg(any(feature = "debug-print", feature = "print-panics"))]
-        if pid != 1 {
-            print!(
-                " [initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}]",
-                pid, tid, thread.sepc, thread.registers[1], thread.registers[9],
-            );
+        {
+            let pid = pid.get();
+            if pid != 1 {
+                klog!(
+                    "initializing PID {} thread {} with entrypoint {:08x}, stack @ {:08x}, arg {:08x}",
+                    pid, tid, thread.sepc, thread.registers[1], thread.registers[9],
+                );
+            }
         }
 
         process.inner = Default::default();

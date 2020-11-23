@@ -5,7 +5,6 @@
 #[macro_use]
 extern crate bitflags;
 
-#[cfg(baremetal)]
 #[macro_use]
 mod debug;
 
@@ -25,9 +24,6 @@ mod syscall;
 
 use services::SystemServices;
 use xous_kernel::*;
-
-#[cfg(baremetal)]
-use utralib::generated::*;
 
 #[cfg(baremetal)]
 use core::panic::PanicInfo;
@@ -63,6 +59,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     // handler then directly map it.
     #[cfg(any(feature = "debug-print", feature = "print-panics"))]
     {
+        use utralib::generated::*;
         // Map the serial port so println!() works as expected.
         mem::MemoryManager::with_mut(|memory_manager| {
             memory_manager
@@ -79,7 +76,8 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         println!("KMAIN: Supervisor mode started...");
         debug::SUPERVISOR_UART.enable_rx();
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
-        xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize).expect("Couldn't claim debug interrupt");
+        xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
+            .expect("Couldn't claim debug interrupt");
         print!("}} ");
 
         // Print the processed kernel arguments
@@ -154,8 +152,9 @@ pub extern "C" fn kmain() {
         match pid {
             Some(pid) => {
                 // #[cfg(feature = "debug-print")]
-                // print!(" [switching to pid {}]", pid);
-                xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0)).expect("couldn't switch to pid");
+                // klog!("switching to pid {}", pid);
+                xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0))
+                    .expect("couldn't switch to pid");
             }
             None => {
                 #[cfg(feature = "debug-print")]

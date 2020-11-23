@@ -1,8 +1,10 @@
+#[cfg(baremetal)]
 use core::fmt::{Error, Write};
+#[cfg(baremetal)]
 use utralib::generated::*;
 
 #[macro_use]
-#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
+#[cfg(all(not(test), baremetal, any(feature = "debug-print", feature = "print-panics")))]
 pub mod debug_print_hardware {
     use crate::debug::*;
     pub const SUPERVISOR_UART: Uart = Uart {
@@ -18,10 +20,10 @@ pub mod debug_print_hardware {
         });
     }
 }
-#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
+#[cfg(all(not(test), baremetal, any(feature = "debug-print", feature = "print-panics")))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART;
 
-#[cfg(all(not(test), not(any(feature = "debug-print", feature = "print-panics"))))]
+#[cfg(all(not(test), baremetal, not(any(feature = "debug-print", feature = "print-panics"))))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
@@ -29,6 +31,7 @@ macro_rules! print {
     }};
 }
 
+#[cfg(baremetal)]
 #[macro_export]
 macro_rules! println
 {
@@ -43,10 +46,12 @@ macro_rules! println
 	});
 }
 
+#[cfg(baremetal)]
 pub struct Uart {
     pub base: *mut usize,
 }
 
+#[cfg(baremetal)]
 impl Uart {
     #[allow(dead_code)]
     pub fn enable_rx(self) {
@@ -79,7 +84,7 @@ impl Uart {
     }
 }
 
-#[cfg(all(not(test), any(feature = "debug-print", feature = "print-panics")))]
+#[cfg(all(not(test), baremetal, any(feature = "debug-print", feature = "print-panics")))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
     println!(
         "Interrupt {}: Key pressed: {}",
@@ -90,6 +95,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
     );
 }
 
+#[cfg(baremetal)]
 impl Write for Uart {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         for c in s.bytes() {
@@ -97,4 +103,28 @@ impl Write for Uart {
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "debug-print")]
+#[macro_export]
+macro_rules! klog
+{
+	() => ({
+		print!(" [{}:{}]", file!(), line!())
+	});
+	($fmt:expr) => ({
+        print!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!())
+	});
+	($fmt:expr, $($args:tt)+) => ({
+		print!(concat!(" [{}:{} ", $fmt, "]"), file!(), line!(), $($args)+)
+	});
+}
+
+#[cfg(not(feature = "debug-print"))]
+#[macro_export]
+macro_rules! klog
+{
+    ($($args:tt)+) => {{
+        ()
+    }};
 }

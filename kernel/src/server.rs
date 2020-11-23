@@ -337,7 +337,7 @@ impl Server {
             // println!("KERNEL: index exceeds queue length");
             return Err(xous_kernel::Error::BadAddress);
         }
-        print!(" [memory in queue[{}]: {:?}]", idx, self.queue[idx]);
+        klog!("memory in queue[{}]: {:?}", idx, self.queue[idx]);
         let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match self.queue[idx] {
             QueuedMessage::WaitingReturnMemory(pid, tid, server_addr, client_addr, len) => {
                 (pid, tid, server_addr, client_addr, len, false, true)
@@ -367,7 +367,7 @@ impl Server {
         }
 
         // Destructure the PID and context ID from the `pid_tid` field
-        print!(" [taking waiting message and returning to pid: {} tid: {}", pid, tid);
+        klog!("taking waiting message and returning to pid: {} tid: {}", pid, tid);
 
         if !is_memory {
             return Ok(WaitingMessage::ScalarMessage(
@@ -753,7 +753,7 @@ impl Server {
         }
         let mut test_thread_mask = 1;
         let mut thread_number = 0;
-        print!(" [ready threads: 0b{:08b}]", self.ready_threads);
+        klog!("ready threads: 0b{:08b}", self.ready_threads);
         loop {
             // If the context mask matches this context number, remove it
             // and return the index.
@@ -789,9 +789,9 @@ impl Server {
 
     /// Add the given context to the list of ready and waiting contexts.
     pub fn park_thread(&mut self, tid: TID) {
-        print!(" [parking thread {}]", tid);
+        klog!("parking thread {}", tid);
         assert!(self.ready_threads & (1 << tid) == 0);
         self.ready_threads |= 1 << tid;
-        print!(" [ready threads now: {:08b}]", self.ready_threads);
+        klog!("ready threads now: {:08b}", self.ready_threads);
     }
 }

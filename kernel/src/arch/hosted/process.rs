@@ -180,6 +180,7 @@ impl Process {
         f(&mut process)
     }
 
+    #[allow(dead_code)]
     pub fn current_tid(&self) -> TID {
         1
     }
@@ -290,7 +291,7 @@ impl Process {
 
             if let Some(mem) = result.memory() {
                 let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
-                print!(" [adding {} additional bytes from result]", s.len());
+                klog!("adding {} additional bytes from result", s.len());
                 response.extend_from_slice(&s);
             }
 
@@ -299,11 +300,12 @@ impl Process {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }
-                print!(" [adding {} additional bytes from memory being returned]", buf.len());
+                klog!("adding {} additional bytes from memory being returned", buf.len());
+                klog!("data: {:?}", buf);
                 response.extend_from_slice(&buf);
             }
 
-            print!(" [setting thread return value to {} bytes]", response.len());
+            klog!("setting thread return value to {} bytes", response.len());
             process
                 .conn
                 .as_mut()
