@@ -65,7 +65,7 @@ cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
 
 ticktimer: Timers.TickTimer @ sysbus 0xF0017000
     periodInMs: 1
-    -> cpu @ 1012
+    -> cpu @ 1008
 
 //flash: SPI.Micron_MT25Q @ spi
 //    underlyingMemory: flash_mem
