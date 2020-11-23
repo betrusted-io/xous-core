@@ -1174,6 +1174,7 @@ impl SystemServices {
         _dest_tid: TID,
         dest_virt: *mut u8,
         len: usize,
+        _buf: MemoryRange,
     ) -> Result<*mut u8, xous_kernel::Error> {
         if len == 0 {
             return Err(xous_kernel::Error::BadAddress);
@@ -1223,9 +1224,10 @@ impl SystemServices {
         dest_pid: PID,
         dest_tid: TID,
         _dest_virt: *mut u8,
-        len: usize,
+        _len: usize,
+        buf: MemoryRange,
     ) -> Result<*mut u8, xous_kernel::Error> {
-        let buf = unsafe { core::slice::from_raw_parts(src_virt, len) };
+        let buf = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len()) };
         let current_pid = self.current_pid();
         {
             let target_process = self.get_process(dest_pid)?;

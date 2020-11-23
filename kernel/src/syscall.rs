@@ -309,6 +309,7 @@ fn return_memory(
             client_tid,
             client_addr.get() as _,
             len.get(),
+            buf,
         )?;
 
         // Unblock the client context to allow it to continue.
