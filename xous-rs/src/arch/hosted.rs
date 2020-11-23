@@ -430,8 +430,11 @@ pub fn _xous_syscall(
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
             {
                 CALL_FOR_THREAD.with(|cft| {
-                    eprintln!("Inserting TID for {}", *tid.borrow());
-                    cft.borrow().lock().unwrap().insert(*tid.borrow(), call)
+                    let cft_rc = cft.borrow();
+                    let mut cft_mtx = cft_rc.lock().unwrap();
+                    let tid = *tid.borrow();
+                    assert!(cft_mtx.get(&tid).is_none());
+                    cft_mtx.insert(tid, call)
                 });
             }
             let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
@@ -528,9 +531,9 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
         }
 
         // Determine if this thread will have a memory packet following it.
-        eprintln!("Removing value for TID {}", msg_thread_id);
         let call = CALL_FOR_THREAD.with(|cft| {
-            cft.borrow().lock()
+            cft.borrow()
+                .lock()
                 .unwrap()
                 .remove(&msg_thread_id)
                 .expect("thread didn't declare whether it has data")
@@ -570,15 +573,15 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
             if call.is_borrow() || call.is_mutableborrow() {
                 // Read the buffer back from the remote host.
                 use core::slice;
-                let data =
-                    unsafe { slice::from_raw_parts_mut(mem.addr.get() as _, mem.size.get()) };
+                let mut data = unsafe { slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()) };
+
+                // If it's a Borrow, verify the contents haven't changed.
                 let previous_data = if call.is_borrow() {
                     Some(data.to_vec())
                 } else {
                     None
                 };
-                let mut data = vec![0];
-                data.resize_with(mem.len(), Default::default);
+
                 if let Err(e) = stream.read_exact(&mut data) {
                     eprintln!("Server shut down: {}", e);
                     std::process::exit(0);
@@ -597,6 +600,8 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                 mem::unmap_memory_post(mem).unwrap();
             }
 
+            // If we're returning memory to the Server, then reconstitute the buffer we just passed,
+            // and Drop it so it can be freed.
             if call.is_return_memory() {
                 let rebuilt =
                     unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
@@ -651,7 +656,7 @@ fn _xous_syscall_to(
     if let Some(memory) = call.memory() {
         use core::slice;
         let data: &[u8] =
-            unsafe { slice::from_raw_parts(memory.addr.get() as _, memory.size.get()) };
+            unsafe { slice::from_raw_parts(memory.as_ptr(), memory.len()) };
         pkt.extend_from_slice(data);
     }
 
