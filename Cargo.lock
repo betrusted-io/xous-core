@@ -142,6 +142,8 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "ticktimer-server",
+ "typenum",
  "utralib",
  "xous",
 ]

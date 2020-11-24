@@ -9,9 +9,12 @@ description = "COM interface to the EC"
 xous = { path = "../../xous-rs" }
 heapless = "0.5"
 log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
 log = "0.4"
 com_rs = { path = "com_rs" }
-#[target.'cfg(not(any(windows,unix)))'.dependencies]
+typenum = "1.12"
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]

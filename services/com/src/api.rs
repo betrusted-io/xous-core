@@ -4,11 +4,43 @@ use xous::{Message, ScalarMessage};
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 use com_rs::*;
+#[derive(Debug, Default)]
+pub struct BattStats {
+    /// instantaneous voltage in mV
+    pub voltage: u16,
+    /// state of charge in %, as inferred by impedance tracking
+    pub soc: u8,
+    /// instantaneous current draw in mA
+    pub current: i16,
+    /// remaining capacity in mA, as measured by coulomb counting
+    pub remaining_capacity: u16,
+}
+
+impl From<[usize; 2]> for BattStats {
+    fn from(a: [usize; 2]) -> BattStats {
+        BattStats {
+            voltage: (a[0] & 0xFFFF) as u16,
+            soc: ((a[0] >> 16) & 0xFF) as u8,
+            current: ((a[1] >> 16) & 0xFFFF) as i16,
+            remaining_capacity: (a[1] & 0xFFFF) as u16,
+        }
+    }
+}
+
+impl Into<[usize; 2]> for BattStats {
+    fn into(self) -> [usize; 2] {
+        [ (self.voltage as usize & 0xffff) | ((self.soc as usize) << 16) & 0xFF_0000,
+          (self.remaining_capacity as usize & 0xffff) | ((self.current as usize) << 16) & 0xffff_0000 ]
+    }
+}
 
 #[derive(Debug)]
 pub enum Opcode {
     /// Battery stats
     BattStats,
+
+    /// Query Full charge capacity of the battery
+    BattFullCapacity,
 
     /// Turn Boost Mode On
     BoostOn,

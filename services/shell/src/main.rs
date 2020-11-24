@@ -12,6 +12,8 @@ use log::{error, info};
 use xous::String;
 use graphics_server::Point;
 use graphics_server::GlyphSet;
+use com::api::BattStats;
+use com::*;
 
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
@@ -148,8 +150,6 @@ fn shell_main() -> ! {
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
-    // let mut counter: usize = 0;
-    let mut ls = logstr::LogStr::new();
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
     let mut bouncyball = Bounce::new(14,
@@ -157,8 +157,10 @@ fn shell_main() -> ! {
         Point::new(screensize.x as _, screensize.y as i16 - 1)));
     bouncyball.update();
 
+    let mut batt_stats: BattStats = BattStats::default();
+
     #[cfg(baremetal)]
-    {
+    { // use this to select which UART to monitor in the main loop
         use utralib::generated::*;
         let gpio_base = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
@@ -183,40 +185,19 @@ fn shell_main() -> ! {
     ticktimer_server::reset(ticktimer_conn).unwrap();
     let mut string_buffer = String::new(4096);
     loop {
-        // a message passing demo -- checking time
+        // update battery status periodically
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             info!("SHELL: {}ms", elapsed_time);
-            if elapsed_time - last_time > 40 {
+            if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
-                /*
-                xous::try_send_message(log_conn,
-                    xous::Message::Scalar(xous::ScalarMessage{id:256, arg1: elapsed_time as usize, arg2: 257, arg3: 258, arg4: 259}));
-                */
-                info!("Preparing a mutable borrow message");
-
-                ls.clear();
-                write!(
-                    ls,
-                    "Hello, Server!  This memory is borrowed from another process.  Elapsed: {}",
-                    elapsed_time as usize
-                )
-                .expect("couldn't send hello message");
-
-                let mm = ls
-                    .as_memory_message(0)
-                    .expect("couldn't form memory message");
-
-                info!("Sending a mutable borrow message");
-
-                xous::syscall::send_message(log_conn, xous::Message::MutableBorrow(mm))
-                        .expect("couldn't send memory message");
+                batt_stats = get_batt_stats(com_conn).expect("Can't get battery stats from COM");
             }
         } else {
             error!("error requesting ticktimer!")
         }
 
         string_buffer.clear();
-        write!(&mut string_buffer, "Uptime: {:.2}s", last_time as f32 / 1000f32).expect("Can't write");
+        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", batt_stats.voltage, last_time as f32 / 1000f32).expect("Can't write");
         graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
         let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
         graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
@@ -225,9 +206,6 @@ fn shell_main() -> ! {
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
-        if last_time > 10_000 { // after 10 seconds issue a shutdown command
-            com::power_off_soc(com_conn).expect("Couldn't issue powerdown command to COM");
-        }
 
         // draw the ball
         bouncyball.update();

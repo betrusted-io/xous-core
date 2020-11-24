@@ -10,28 +10,39 @@ use api::Opcode;
 
 use core::convert::TryFrom;
 
-/*
-use heapless::binary_heap::{BinaryHeap, Min};
-use heapless::Vec;
-use heapless::consts::*;
-type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
-*/
-
 use log::{error, info};
 
 use com_rs::*;
 
-//#[cfg(target_os = "none")]
+#[cfg(target_os = "none")]
 mod implementation {
+    use crate::api::BattStats;
+    use ticktimer_server::*;
+    use com_rs::*;
     use utralib::generated::*;
+    use xous::CID;
+
+    /*
+    #[macro_use]
+    use heapless::Vec;
+
+    use typenum::{UInt, UTerm};
+    use typenum::bit::{B0, B1};
+    type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
+    */
+
+    const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
+        ticktimer: CID,
     }
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
-        let _xc = unsafe { &mut *(arg as *mut XousCom) };
+        let xc = unsafe { &mut *(arg as *mut XousCom) };
         println!("COM IRQ");
+        // just clear the pending request, as this is used as a "wait" until request function
+        xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
     }
 
     impl XousCom {
@@ -44,8 +55,15 @@ mod implementation {
             )
             .expect("couldn't map COM CSR range");
 
+            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+
             let mut xc = XousCom {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                ticktimer: ticktimer_conn,
+                //tx_queue: Vec::new(),
+                //rx_queue: Vec::new(),
+                //in_progress: false,
             };
 
             xous::claim_interrupt(
@@ -68,12 +86,53 @@ mod implementation {
             // grab the RX value and return it
             self.csr.rf(utra::com::RX_RX) as u16
         }
+
+        pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
+            self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 1);
+            if timeout.is_some() {
+                let curtime = ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer");
+                let mut timed_out = false;
+                let to = timeout.unwrap() as u64;
+                // timeout after 0.25 second to avoid hangs in case of a bug in the protocol
+                while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
+                    if (ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer") - curtime) > to {
+                        timed_out = true;
+                    }
+                    xous::wait_event();
+                }
+            } else {
+                while self.csr.rf(utra::com::STATUS_HOLD) == 1 {
+                    xous::wait_event();
+                }
+            }
+            self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 0);
+
+            self.txrx(tx)
+        }
+
+        pub fn get_battstats(&mut self) -> BattStats {
+            let mut stats = BattStats::default();
+
+            self.txrx(ComState::GAS_GAUGE.verb);
+            stats.current = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as i16;
+            self.wait_txrx(ComState::LINK_READ.verb, Some(100)); // stby_current, not used here
+            stats.voltage = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            self.wait_txrx(ComState::LINK_READ.verb, Some(100)); // power register value, not used
+
+            self.txrx(ComState::GG_SOC.verb);
+            stats.soc = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+            self.txrx(ComState::GG_REMAINING.verb);
+            stats.remaining_capacity = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+
+            stats
+        }
     }
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
+    use crate::api::BattStats;
     pub struct XousCom {
     }
 
@@ -83,8 +142,17 @@ mod implementation {
             }
         }
 
-        pub fn txrx(tx: u16) -> u16 {
+        pub fn txrx(&mut self, _tx: u16) -> u16 {
             0xDEAD as u16
+        }
+
+        pub fn get_battstats(&mut self) -> BattStats {
+            BattStats {
+                voltage: 3700,
+                current: -150,
+                soc: 50,
+                remaining_capacity: 750,
+            }
         }
     }
 }
@@ -113,6 +181,17 @@ fn xmain() -> ! {
                     info!("COM: power off called");
                     com.txrx(ComState::POWER_OFF.verb);
                 }
+                Opcode::BattStats => {
+                    info!("COM: batt stats request received");
+                    let stats = com.get_battstats();
+                    let raw_stats: [usize; 2] = stats.into();
+                    xous::return_scalar2(
+                        envelope.sender,
+                        raw_stats[1],
+                        raw_stats[0]
+                    ).expect("COM: couldn't return batt stats request");
+                    info!("COM: done returning batt stats request");
+                }
                 _ => error!("unknown opcode"),
             }
         } else {
@@ -120,5 +199,3 @@ fn xmain() -> ! {
         }
     }
 }
-
-// xous::wait_event()
