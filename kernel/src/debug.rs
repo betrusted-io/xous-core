@@ -78,7 +78,7 @@ impl Uart {
             0 => None,
             ack => {
                 let c = Some(uart_csr.r(utra::uart::RXTX) as u8);
-                uart_csr.wo(utra::uart::EV_PENDING, ack);
+                uart_csr.wfo(utra::uart::EV_PENDING_RX, ack);
                 c
             }
         }
