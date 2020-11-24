@@ -1,0 +1,3 @@
+[submodule "services/com/com_rs"]
+	path = services/com/com_rs
+	url = https://github.com/betrusted-io/com_rs
