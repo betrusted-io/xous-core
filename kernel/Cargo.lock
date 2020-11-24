@@ -513,7 +513,6 @@ name = "xous"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "debug-here",
  "hex",
  "lazy_static",
  "xous-macros",
