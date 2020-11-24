@@ -33,7 +33,7 @@ pub fn init() {
     panic::set_hook(Box::new(|arg| {
         println!("PANIC!");
         println!("Details: {:?}", arg);
-        debug_here::debug_here!();
+        // debug_here::debug_here!();
     }));
 }
 
