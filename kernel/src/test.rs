@@ -269,6 +269,98 @@ fn send_blocking_scalar_message() {
 }
 
 #[test]
+fn send_interleved_blocking_scalar_message() {
+    // Start the server in another thread
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    let (server_addr_send, server_addr_recv) = channel();
+
+    // Spawn the server "process" (which just lives in a separate thread)
+    // and receive the message. Note that we need to communicate to the
+    // "Client" what our server ID is. Normally this would be done via
+    // an external nameserver.
+    let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message server",
+        move || {
+            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+                .expect("couldn't create test server");
+            server_addr_send.send(sid).unwrap();
+
+            let envelope1 = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            let envelope2 = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            let retval1 = if let xous_kernel::Message::BlockingScalar(bs) = envelope1.body {
+                bs.id + 1
+            } else {
+                panic!("unexpected value")
+            };
+            let retval2 = if let xous_kernel::Message::BlockingScalar(bs) = envelope2.body {
+                bs.id + 10
+            } else {
+                panic!("unexpected value")
+            };
+            xous_kernel::return_scalar(envelope2.sender, retval2).expect("couldn't return scalar");
+            xous_kernel::return_scalar(envelope1.sender, retval1).expect("couldn't return scalar");
+        },
+    ))
+    .expect("couldn't spawn server process");
+
+    let sid_client_1 = server_addr_recv.recv().unwrap();
+    let sid_client_2 = sid_client_1;
+
+    // Spawn the client "process" and wait for the server address. This one will have
+    // 1 added to the `id` field.
+    let xous_client_1 = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message client 1",
+        move || {
+            let conn = xous_kernel::try_connect(sid_client_1).expect("couldn't connect to server");
+            let result = xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 1,
+                    arg1: 2,
+                    arg2: 3,
+                    arg3: 4,
+                    arg4: 5,
+                }),
+            )
+            .expect("couldn't send message");
+            assert_eq!(result, xous_kernel::Result::Scalar1(2));
+        },
+    ))
+    .expect("couldn't spawn client 1 process");
+
+    // Spawn the client "process" and wait for the server address. This one
+    // will have `10` added to the value when it is returned.
+    let xous_client_2 = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message client 2",
+        move || {
+            let conn = xous_kernel::try_connect(sid_client_2).expect("couldn't connect to server");
+            let result = xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 10,
+                    arg1: 2,
+                    arg2: 3,
+                    arg3: 4,
+                    arg4: 5,
+                }),
+            )
+            .expect("couldn't send message");
+            assert_eq!(result, xous_kernel::Result::Scalar1(20));
+        },
+    ))
+    .expect("couldn't spawn client 2 process");
+
+    // Wait for both processes to finish
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client_1).expect("couldn't join client process");
+    crate::wait_process_as_thread(xous_client_2).expect("couldn't join client process");
+    shutdown_kernel();
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+#[test]
 fn send_move_message() {
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
