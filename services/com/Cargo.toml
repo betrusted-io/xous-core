@@ -1,0 +1,22 @@
+[package]
+name = "com"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "COM interface to the EC"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+heapless = "0.5"
+log-server = { path = "../log-server" }
+log = "0.4"
+com_rs = { path = "com_rs" }
+#[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[target.'cfg(any(windows,unix))'.dependencies]
+
+[features]
+debugprint = []
+#default = [] # "debugprint"
+default = ["debugprint"]
