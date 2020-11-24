@@ -7,6 +7,7 @@ members = [
     "services/graphics-server",
     "services/log-server",
     "services/ticktimer-server",
+    "services/com",
     "svd2utra",
     "xtask",
 ]
@@ -15,6 +16,7 @@ default-members = [
     "services/log-server",
     "services/graphics-server",
     "services/ticktimer-server",
+    "services/com",
 ]
 
 # These packages have custom RUSTFLAGS, so if they

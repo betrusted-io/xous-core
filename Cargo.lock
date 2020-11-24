@@ -170,6 +170,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "com"
+version = "0.1.0"
+dependencies = [
+ "com_rs",
+ "heapless",
+ "log",
+ "log-server",
+ "utralib",
+ "xous",
+]
+
+[[package]]
+name = "com_rs"
+version = "0.1.0"
+
+[[package]]
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -857,6 +873,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "com",
  "graphics-server",
  "log",
  "log-server",

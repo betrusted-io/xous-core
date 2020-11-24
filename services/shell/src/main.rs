@@ -71,8 +71,9 @@ impl Bounce {
     }
 
     pub fn next_rand(&mut self) -> i16 {
-        let ret = move_lfsr(self.lfsr);
+        let mut ret = move_lfsr(self.lfsr);
         self.lfsr = ret;
+        ret *= 2; // make the ball move faster
 
         (ret % 8) as i16
     }
@@ -122,15 +123,17 @@ fn shell_main() -> ! {
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
+    let com_id =        xous::SID::from_bytes(b"com             ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let com_conn = xous::connect(com_id).unwrap();
 
     println!(
-        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {}",
-        log_conn, graphics_conn, ticktimer_conn,
+        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {} Com: {}",
+        log_conn, graphics_conn, ticktimer_conn, com_conn,
     );
 
     assert_ne!(
@@ -222,6 +225,9 @@ fn shell_main() -> ! {
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
+        if last_time > 10_000 { // after 10 seconds issue a shutdown command
+            com::power_off_soc(com_conn).expect("Couldn't issue powerdown command to COM");
+        }
 
         // draw the ball
         bouncyball.update();
