@@ -118,19 +118,40 @@ impl Bounce {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct ShellReturn {
+    batt_stats: BattStats,
+}
+
+fn com_thread(retvals: &mut ShellReturn) {
+    let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
+    let shell_id =        xous::SID::from_bytes(b"shell           ").unwrap();
+    loop {
+        let mut envelope =
+            xous::syscall::receive_message(shell_id).expect("couldn't get address");
+        if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
+            match opcode {
+                com::api::Opcode::BattStatsReturn(stats) => {
+                    retvals.batt_stats = stats;
+                },
+                _ => error!("shell received an opcode that wasn't expected")
+            }
+        } else {
+            error!("couldn't convert opcode");
+        }
+    }
+}
+
 #[xous::xous_main]
 fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
-
-    let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id =        xous::SID::from_bytes(b"com             ").unwrap();
-    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
     let log_conn = xous::connect(log_server_id).unwrap();
@@ -152,6 +173,9 @@ fn shell_main() -> ! {
         ticktimer_conn, graphics_conn,
         "SHELL: graphics and ticktimer connections are the same!"
     );
+
+    let mut retvals: ShellReturn = ShellReturn::default();
+    xous::create_thread_simple(com_thread, &mut retvals);
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
@@ -202,7 +226,7 @@ fn shell_main() -> ! {
         }
 
         string_buffer.clear();
-        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", batt_stats.voltage, last_time as f32 / 1000f32).expect("Can't write");
+        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", retvals.batt_stats.voltage, last_time as f32 / 1000f32).expect("Can't write");
         graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
         let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
         graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
@@ -227,6 +251,7 @@ fn shell_main() -> ! {
 
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
 
+        /*
         let envelope = xous::try_receive_message(shell_server).unwrap();
         if envelope.is_some() {
             if let Ok(opcode) = com::api::Opcode::try_from(&envelope.unwrap().body) {
@@ -237,6 +262,6 @@ fn shell_main() -> ! {
                     _ => error!("SHELL: received unexpected opcode"),
                 }
             }
-        }
+        }*/
     }
 }
