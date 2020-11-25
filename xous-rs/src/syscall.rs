@@ -115,10 +115,15 @@ pub enum SysCall {
     /// This process will now wait for an event such as an IRQ or Message.
     WaitEvent,
 
-    /// This context will now wait for a message with the given server ID. You
+    /// This thread will now wait for a message with the given server ID. You
     /// can set up a pool by having multiple threads call `ReceiveMessage` with
     /// the same SID.
     ReceiveMessage(SID),
+
+    /// If a message is available for the specified server, return that message
+    /// and resume execution. If no message is available, return `Result::None`
+    /// immediately without blocking.
+    TryReceiveMessage(SID),
 
     /// Stop running the given process and return control to the parent. This
     /// will force a Yield on the process currently running on the target CPU.
@@ -301,6 +306,7 @@ pub enum SysCallNumber {
     TryConnect = 25,
     ReturnScalar1 = 26,
     ReturnScalar2 = 27,
+    TryReceiveMessage = 28,
     Invalid,
 }
 
@@ -334,6 +340,7 @@ impl SysCallNumber {
             25 => TryConnect,
             26 => ReturnScalar1,
             27 => ReturnScalar2,
+            28 => TryReceiveMessage,
             _ => Invalid,
         }
     }
@@ -377,6 +384,19 @@ impl SysCall {
                 let s = sid.to_u32();
                 [
                     SysCallNumber::ReceiveMessage as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::TryReceiveMessage(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::TryReceiveMessage as usize,
                     s.0 as _,
                     s.1 as _,
                     s.2 as _,
@@ -639,6 +659,9 @@ impl SysCall {
             SysCallNumber::ReceiveMessage => {
                 SysCall::ReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
+            SysCallNumber::TryReceiveMessage => {
+                SysCall::TryReceiveMessage(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            }
             SysCallNumber::ReturnToParent => SysCall::ReturnToParent(pid_from_usize(a1)?, a2),
             SysCallNumber::ClaimInterrupt => SysCall::ClaimInterrupt(
                 a1,
@@ -852,6 +875,7 @@ impl SysCall {
     pub fn can_call_from_interrupt(&self) -> bool {
         matches!(self, SysCall::TrySendMessage(_, _)
             | SysCall::TryConnect(_)
+            | SysCall::TryReceiveMessage(_)
             | SysCall::ReturnToParent(_, _)
             | SysCall::ReturnScalar2(_, _, _)
             | SysCall::ReturnScalar1(_, _)
@@ -1044,6 +1068,24 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
     let result = rsyscall(SysCall::ReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::Message(envelope) = result {
         Ok(envelope)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Retrieve a message from the message queue for the provided server. If no message
+/// is available, returns `Ok(None)` without blocking
+///
+/// # Errors
+///
+pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
+    let result = rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
+    if let Result::Message(envelope) = result {
+        Ok(Some(envelope))
+    } else if result == Result::None {
+        Ok(None)
     } else if let Result::Error(e) = result {
         Err(e)
     } else {

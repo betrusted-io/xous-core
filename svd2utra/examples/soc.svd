@@ -2166,6 +2166,10 @@ register to disable individual events.]]></description>
                     </fields>
                 </register>
             </registers>
+            <interrupt>
+                <name>com</name>
+                <value>16</value>
+            </interrupt>
             <addressBlock>
                 <offset>0</offset>
                 <size>0x1c</size>

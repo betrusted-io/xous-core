@@ -475,6 +475,9 @@ pub enum Result {
     /// functions such as `try_connect()` and `try_send()` that may block.
     WouldBlock,
 
+    /// The message was successful but no value was returned.
+    None,
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -511,6 +514,7 @@ impl Result {
                 [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid, 0, 0]
             }
             Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
+            Result::None => [17, 0, 0, 0, 0, 0, 0, 0],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -585,6 +589,7 @@ impl Result {
                 src[5] as _,
             ),
             16 => Result::WouldBlock,
+            17 => Result::None,
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }
