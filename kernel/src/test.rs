@@ -180,6 +180,73 @@ fn send_scalar_message() {
 }
 
 #[test]
+fn try_receive_message() {
+    // Start the server in another thread
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    let (server_addr_send, server_addr_recv) = channel();
+    let (client_sent_send, client_sent_recv) = channel();
+
+    // Spawn the server "process" (which just lives in a separate thread)
+    // and receive the message. Note that we need to communicate to the
+    // "Client" what our server ID is. Normally this would be done via
+    // an external nameserver.
+    let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message server",
+        move || {
+            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+                .expect("couldn't create test server");
+            let maybe_envelope = xous_kernel::try_receive_message(sid).expect("couldn't receive messages");
+            assert!(maybe_envelope.is_none(), "some message came back");
+            server_addr_send.send(sid).unwrap();
+            client_sent_recv.recv().unwrap();
+            let maybe_envelope = xous_kernel::try_receive_message(sid).expect("couldn't receive messages");
+            let envelope = maybe_envelope.expect("got None as an envelope");
+            assert_eq!(
+                envelope.body,
+                xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    id: 11,
+                    arg1: 12,
+                    arg2: 13,
+                    arg3: 14,
+                    arg4: 15
+                })
+            );
+        },
+    ))
+    .expect("couldn't spawn server process");
+
+    // Spawn the client "process" and wait for the server address.
+    let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message client",
+        move || {
+            let sid = server_addr_recv.recv().unwrap();
+            let conn = xous_kernel::try_connect(sid).expect("couldn't connect to server");
+            xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    id: 11,
+                    arg1: 12,
+                    arg2: 13,
+                    arg3: 14,
+                    arg4: 15,
+                }),
+            )
+            .expect("couldn't send message");
+            client_sent_send.send(()).expect("couldn't notify them we sent a message");
+        },
+    ))
+    .expect("couldn't spawn client process");
+
+    // Wait for both processes to finish
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
+    shutdown_kernel();
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+#[test]
 fn send_blocking_scalar_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
