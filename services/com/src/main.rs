@@ -14,10 +14,15 @@ use log::{error, info};
 
 use com_rs::*;
 
+use xous::CID;
 #[derive(Debug, Copy, Clone)]
 pub struct WorkRequest {
     work: ComSpec,
-    sender: xous::MessageSender,
+    sender: CID,
+}
+
+fn return_battstats(cid: CID, stats: api::BattStats)  -> Result<(), xous::Error> {
+    xous::send_message(cid, crate::api::Opcode::BattStatsReturn(stats).into()).map(|_| ())
 }
 
 #[cfg(target_os = "none")]
@@ -29,6 +34,7 @@ mod implementation {
     use utralib::generated::*;
     use xous::CID;
     use log::{error, info};
+    use crate::return_battstats;
 
     #[macro_use]
     use heapless::Vec;
@@ -53,10 +59,6 @@ mod implementation {
         println!("COM IRQ");
         // just clear the pending request, as this is used as a "wait" until request function
         xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
-    }
-
-    fn return_battstats(cid: CID, stats: BattStats)  -> Result<(), xous::Error> {
-        xous::send_message(cid, crate::api::Opcode::BattStatsReturn(stats).into()).map(|_| ())
     }
 
     impl XousCom {
@@ -127,15 +129,13 @@ mod implementation {
             self.txrx(tx)
         }
 
-
-        pub fn process_queue(&mut self) {
+        fn process_queue(&mut self) {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
                 if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
                     return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
-                    info!("Returned BattStatsNb value");
                 } else {
                     error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
                 }
@@ -168,13 +168,15 @@ mod implementation {
     use crate::api::BattStats;
     use crate::WorkRequest;
     use log::{error, info};
+    use com_rs::*;
+    use crate::return_battstats;
 
     #[macro_use]
     use heapless::Vec;
     use heapless::consts::*;
 
     pub struct XousCom {
-        workqueue: Vec<WorkRequest, U64>,
+        pub workqueue: Vec<WorkRequest, U64>,
         busy: bool,
     }
 
@@ -205,8 +207,7 @@ mod implementation {
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
                 if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    shell::return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
-                    info!("Returned BattStatsNb value");
+                    return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
                 } else {
                     error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
                 }
@@ -223,6 +224,8 @@ fn xmain() -> ! {
     println!("COM Init");
     log_server::init_wait().unwrap();
 
+    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
+    let shell_conn = xous::connect(shell_id).unwrap();
     let com_server =
         xous::create_server(b"com             ").expect("Couldn't create COM server");
 
@@ -252,8 +255,7 @@ fn xmain() -> ! {
                     info!("COM: done returning batt stats request");
                 }
                 Opcode::BattStatsNb => {
-                    info!("COM: batt stats non-blocking request received");
-                    com.workqueue.push(WorkRequest { work: ComState::STAT, sender: envelope.sender }).unwrap();
+                    com.workqueue.push(WorkRequest { work: ComState::STAT, sender: shell_conn }).unwrap();
                 }
                     _ => error!("unknown opcode"),
             }

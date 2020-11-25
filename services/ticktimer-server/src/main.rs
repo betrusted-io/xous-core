@@ -281,11 +281,11 @@ fn xmain() -> ! {
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
 
     loop {
-        info!("TickTimer: waiting for message");
+        //info!("TickTimer: waiting for message");
         let envelope = xous::receive_message(ticktimer_server).unwrap();
-        info!("TickTimer: Message: {:?}", envelope);
+        //info!("TickTimer: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            info!("TickTimer: Opcode: {:?}", opcode);
+            //info!("TickTimer: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Reset => {
                     info!("TickTimer: reset called");
@@ -293,14 +293,14 @@ fn xmain() -> ! {
                 }
                 Opcode::ElapsedMs => {
                     let time = ticktimer.elapsed_ms();
-                    info!("TickTimer: returning time of {:?}", time);
+                    //info!("TickTimer: returning time of {:?}", time);
                     xous::return_scalar2(
                         envelope.sender,
                         (time & 0xFFFF_FFFFu64) as usize,
                         ((time >> 32) & 0xFFF_FFFFu64) as usize,
                     )
                     .expect("TickTimer: couldn't return time request");
-                    info!("TickTimer: done returning value");
+                    //info!("TickTimer: done returning value");
                 }
                 Opcode::SleepMs(ms) => recalculate_sleep(
                     &mut ticktimer,
@@ -312,7 +312,7 @@ fn xmain() -> ! {
                 ),
                 Opcode::RecalculateSleep => {
                     recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-                    info!("TickTimer: Done recalculating");
+                    //info!("TickTimer: Done recalculating");
                 }
             }
         } else {

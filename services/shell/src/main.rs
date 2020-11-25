@@ -123,12 +123,14 @@ fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
 
+    let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
+
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id =        xous::SID::from_bytes(b"com             ").unwrap();
-    let shell_id =      xous::SID::from_bytes(b"shel            ").unwrap();
+    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
     let log_conn = xous::connect(log_server_id).unwrap();
@@ -173,7 +175,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1);
     }
 
     graphics_server::set_style(
@@ -190,10 +192,10 @@ fn shell_main() -> ! {
     loop {
         // update battery status periodically
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            info!("SHELL: {}ms", elapsed_time);
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
-                batt_stats = get_batt_stats(com_conn).expect("Can't get battery stats from COM");
+                info!("Requesting batt stats from COM");
+                get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
             }
         } else {
             error!("error requesting ticktimer!")
@@ -225,15 +227,16 @@ fn shell_main() -> ! {
 
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
 
-        /*
-        let envelope = xous::receive_message(shell_id).unwrap();
-        if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
-            match opcode {
-                com::api::Opcode::BattStatsReturn(stats) => {
-                    batt_stats = stats;
-                },
-                _ => error!("SHELL: received unexpected opcode"),
+        let envelope = xous::try_receive_message(shell_server).unwrap();
+        if envelope.is_some() {
+            if let Ok(opcode) = com::api::Opcode::try_from(&envelope.unwrap().body) {
+                match opcode {
+                    com::api::Opcode::BattStatsReturn(stats) => {
+                        batt_stats = stats;
+                    },
+                    _ => error!("SHELL: received unexpected opcode"),
+                }
             }
-        }*/
+        }
     }
 }

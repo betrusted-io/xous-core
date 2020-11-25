@@ -142,8 +142,8 @@ impl Into<Message> for Opcode {
                 let raw_stats: [usize; 2] = stats.into();
                 Message::Scalar(ScalarMessage {
                     id: ComState::STAT_RETURN.verb as usize,
-                    arg1: raw_stats[1],
-                    arg2: raw_stats[0],
+                    arg1: raw_stats[0],
+                    arg2: raw_stats[1],
                     arg3: 0,
                     arg4: 0,
                 })
