@@ -13,8 +13,67 @@
 
     <peripherals>
         <peripheral>
+            <name>CTRL</name>
+            <baseAddress>0xF0000000</baseAddress>
+            <groupName>CTRL</groupName>
+            <registers>
+                <register>
+                    <name>RESET</name>
+                    <description><![CDATA[Write a ``1`` to this register to reset the SoC.]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>reset</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SCRATCH</name>
+                    <description><![CDATA[Use this register as a scratch space to verify that software read/write accesses
+to the Wishbone/CSR bus are working correctly. The initial reset value of
+0x1234578 can be used to verify endianness.]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x12345678</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>scratch</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>BUS_ERRORS</name>
+                    <description><![CDATA[Total number of Wishbone bus errors (timeouts) since start.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>bus_errors</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0xc</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>IDENTIFIER_MEM</name>
-            <baseAddress>0xF0001000</baseAddress>
+            <baseAddress>0xF0002000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -41,7 +100,7 @@
         </peripheral>
         <peripheral>
             <name>TIMER0</name>
-            <baseAddress>0xF0002000</baseAddress>
+            <baseAddress>0xF0003000</baseAddress>
             <groupName>TIMER0</groupName>
             <registers>
                 <register>
@@ -187,19 +246,17 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>REBOOT</name>
-            <baseAddress>0xF0003000</baseAddress>
+            <baseAddress>0xF0004000</baseAddress>
             <groupName>REBOOT</groupName>
             <registers>
                 <register>
-                    <name>SOC_RESET</name>
-                    <description><![CDATA[Writing 0xAC to this register will do a full SoC reset, including CRGs and
-peripherals]]></description>
+                    <name>CTRL</name>
                     <addressOffset>0x0000</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>soc_reset</name>
+                            <name>ctrl</name>
                             <msb>7</msb>
                             <bitRange>[7:0]</bitRange>
                             <lsb>0</lsb>
@@ -208,7 +265,6 @@ peripherals]]></description>
                 </register>
                 <register>
                     <name>ADDR</name>
-                    <description><![CDATA[The address written here will be used as the next reset vector]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -221,32 +277,16 @@ peripherals]]></description>
                         </field>
                     </fields>
                 </register>
-                <register>
-                    <name>CPU_RESET</name>
-                    <description><![CDATA[Writing anything to this register resets the CPU, and the CPU only; does not
-affect CRG or peripherals]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>cpu_reset</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xc</size>
+                <size>0x8</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
         <peripheral>
             <name>CRG</name>
-            <baseAddress>0xF0004000</baseAddress>
+            <baseAddress>0xF0005000</baseAddress>
             <groupName>CRG</groupName>
             <registers>
                 <register>
@@ -370,7 +410,7 @@ affect CRG or peripherals]]></description>
         </peripheral>
         <peripheral>
             <name>GPIO</name>
-            <baseAddress>0xF0005000</baseAddress>
+            <baseAddress>0xF0006000</baseAddress>
             <groupName>GPIO</groupName>
             <registers>
                 <register>
@@ -684,7 +724,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>UART_PHY</name>
-            <baseAddress>0xF0006000</baseAddress>
+            <baseAddress>0xF0007000</baseAddress>
             <groupName>UART_PHY</groupName>
             <registers>
                 <register>
@@ -710,7 +750,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>UART</name>
-            <baseAddress>0xF0007000</baseAddress>
+            <baseAddress>0xF0008000</baseAddress>
             <groupName>UART</groupName>
             <registers>
                 <register>
@@ -868,7 +908,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>CONSOLE_PHY</name>
-            <baseAddress>0xF0008000</baseAddress>
+            <baseAddress>0xF0009000</baseAddress>
             <groupName>CONSOLE_PHY</groupName>
             <registers>
                 <register>
@@ -894,7 +934,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>CONSOLE</name>
-            <baseAddress>0xF0009000</baseAddress>
+            <baseAddress>0xF000A000</baseAddress>
             <groupName>CONSOLE</groupName>
             <registers>
                 <register>
@@ -1052,7 +1092,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>SERVER0_PHY</name>
-            <baseAddress>0xF000A000</baseAddress>
+            <baseAddress>0xF000B000</baseAddress>
             <groupName>SERVER0_PHY</groupName>
             <registers>
                 <register>
@@ -1078,7 +1118,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>SERVER0</name>
-            <baseAddress>0xF000B000</baseAddress>
+            <baseAddress>0xF000C000</baseAddress>
             <groupName>SERVER0</groupName>
             <registers>
                 <register>
@@ -1236,7 +1276,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>SERVER1_PHY</name>
-            <baseAddress>0xF000C000</baseAddress>
+            <baseAddress>0xF000D000</baseAddress>
             <groupName>SERVER1_PHY</groupName>
             <registers>
                 <register>
@@ -1262,7 +1302,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>SERVER1</name>
-            <baseAddress>0xF000D000</baseAddress>
+            <baseAddress>0xF000E000</baseAddress>
             <groupName>SERVER1</groupName>
             <registers>
                 <register>
@@ -1420,7 +1460,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>INFO</name>
-            <baseAddress>0xF000E000</baseAddress>
+            <baseAddress>0xF000F000</baseAddress>
             <groupName>INFO</groupName>
             <registers>
                 <register>
@@ -1816,7 +1856,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>SRAM_EXT</name>
-            <baseAddress>0xF000F000</baseAddress>
+            <baseAddress>0xF0010000</baseAddress>
             <groupName>SRAM_EXT</groupName>
             <registers>
                 <register>
@@ -1858,7 +1898,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>MEMLCD</name>
-            <baseAddress>0xF0010000</baseAddress>
+            <baseAddress>0xF0011000</baseAddress>
             <groupName>MEMLCD</groupName>
             <registers>
                 <register>
@@ -1974,7 +2014,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>COM</name>
-            <baseAddress>0xF0011000</baseAddress>
+            <baseAddress>0xF0012000</baseAddress>
             <groupName>COM</groupName>
             <registers>
                 <register>
@@ -2126,19 +2166,19 @@ register to disable individual events.]]></description>
                     </fields>
                 </register>
             </registers>
+            <interrupt>
+                <name>com</name>
+                <value>16</value>
+            </interrupt>
             <addressBlock>
                 <offset>0</offset>
                 <size>0x1c</size>
                 <usage>registers</usage>
             </addressBlock>
-            <interrupt>
-                <name>com</name>
-                <value>6</value>
-            </interrupt>
         </peripheral>
         <peripheral>
             <name>I2C</name>
-            <baseAddress>0xF0012000</baseAddress>
+            <baseAddress>0xF0013000</baseAddress>
             <groupName>I2C</groupName>
             <registers>
                 <register>
@@ -2386,12 +2426,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>i2c</name>
-                <value>7</value>
+                <value>6</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>BTEVENTS</name>
-            <baseAddress>0xF0013000</baseAddress>
+            <baseAddress>0xF0014000</baseAddress>
             <groupName>BTEVENTS</groupName>
             <registers>
                 <register>
@@ -2475,12 +2515,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>btevents</name>
-                <value>8</value>
+                <value>7</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>MESSIBLE</name>
-            <baseAddress>0xF0014000</baseAddress>
+            <baseAddress>0xF0015000</baseAddress>
             <groupName>MESSIBLE</groupName>
             <registers>
                 <register>
@@ -2546,7 +2586,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>MESSIBLE2</name>
-            <baseAddress>0xF0015000</baseAddress>
+            <baseAddress>0xF0016000</baseAddress>
             <groupName>MESSIBLE2</groupName>
             <registers>
                 <register>
@@ -2612,7 +2652,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>TICKTIMER</name>
-            <baseAddress>0xF0016000</baseAddress>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>TICKTIMER</groupName>
             <registers>
                 <register>
@@ -2757,12 +2797,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>ticktimer</name>
-                <value>9</value>
+                <value>8</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>POWER</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>POWER</groupName>
             <registers>
                 <register>
@@ -2922,7 +2962,7 @@ reset fashion]]></description>
         </peripheral>
         <peripheral>
             <name>SPINOR</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>SPINOR</groupName>
             <registers>
                 <register>
@@ -3203,7 +3243,7 @@ checked]]></description>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
@@ -3413,19 +3453,19 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
             <interrupt>
                 <name>keyboard</name>
-                <value>10</value>
+                <value>9</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>SEED</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x2c552c3f</resetValue>
+                    <resetValue>0x20483d3b</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3440,7 +3480,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x3e20093a</resetValue>
+                    <resetValue>0x1febda0d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3460,7 +3500,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>ROMTEST</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>ROMTEST</groupName>
             <registers>
                 <register>
@@ -3502,7 +3542,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF001C000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -3869,12 +3909,12 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>audio</name>
-                <value>11</value>
+                <value>10</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>TRNG_OSC</name>
-            <baseAddress>0xF001D000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>TRNG_OSC</groupName>
             <registers>
                 <register>
@@ -3960,7 +4000,7 @@ reading the `rand` register]]></description>
         </peripheral>
         <peripheral>
             <name>AES</name>
-            <baseAddress>0xF001E000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>AES</groupName>
             <registers>
                 <register>
@@ -4423,7 +4463,7 @@ automatically on data and IV ready]]></description>
         </peripheral>
         <peripheral>
             <name>SHA512</name>
-            <baseAddress>0xF001F000</baseAddress>
+            <baseAddress>0xF0020000</baseAddress>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
@@ -4913,12 +4953,12 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>12</value>
+                <value>11</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>ENGINE</name>
-            <baseAddress>0xF0020000</baseAddress>
+            <baseAddress>0xF0021000</baseAddress>
             <groupName>ENGINE</groupName>
             <registers>
                 <register>
@@ -5142,12 +5182,12 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>13</value>
+                <value>12</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>JTAG</name>
-            <baseAddress>0xF0021000</baseAddress>
+            <baseAddress>0xF0022000</baseAddress>
             <groupName>JTAG</groupName>
             <registers>
                 <register>
