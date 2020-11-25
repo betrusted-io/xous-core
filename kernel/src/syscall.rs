@@ -10,6 +10,12 @@ use xous_kernel::*;
 /// This is the context that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
+#[derive(PartialEq)]
+enum ExecutionType {
+    Blocking,
+    NonBlocking,
+}
+
 fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
     if cfg!(baremetal) {
         arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
@@ -480,7 +486,7 @@ fn return_scalar2(
     })
 }
 
-fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
+fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> SysCallResult {
     SystemServices::with_mut(|ss| {
         assert!(
             ss.thread_is_running(pid, tid),
@@ -504,6 +510,11 @@ fn receive_message(pid: PID, tid: TID, sid: SID) -> SysCallResult {
         if let Some(msg) = server.take_next_message(sidx) {
             klog!("waiting messages found -- returning {:?}", msg);
             return Ok(xous_kernel::Result::Message(msg));
+        }
+
+        if blocking == ExecutionType::NonBlocking {
+            klog!("nonblocking message -- returning None");
+            return Ok(xous_kernel::Result::None);
         }
 
         // There is no pending message, so return control to the parent
@@ -712,7 +723,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             };
             Ok(xous_kernel::Result::ResumeProcess)
         }
-        SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid),
+        SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::Blocking),
+        SysCall::TryReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::NonBlocking),
         SysCall::WaitEvent => SystemServices::with_mut(|ss| {
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
