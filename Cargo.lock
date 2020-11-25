@@ -793,6 +793,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "com",
+ "com_rs",
  "graphics-server",
  "log",
  "log-server",

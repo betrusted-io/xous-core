@@ -39,6 +39,12 @@ pub enum Opcode {
     /// Battery stats
     BattStats,
 
+    /// Battery stats, non-blocking
+    BattStatsNb,
+
+    /// Battery stats return
+    BattStatsReturn(BattStats),
+
     /// Query Full charge capacity of the battery
     BattFullCapacity,
 
@@ -92,6 +98,11 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
                     Ok(Opcode::ShipMode)
                 } else if m.id as u16 == ComState::POWER_OFF.verb {
                     Ok(Opcode::PowerOffSoc)
+                } else if m.id as u16 == ComState::STAT.verb {
+                    Ok(Opcode::BattStatsNb)
+                } else if m.id as u16 == ComState::STAT_RETURN.verb {
+                    let raw_stats: [usize; 2] = [m.arg1, m.arg2];
+                    Ok(Opcode::BattStatsReturn(raw_stats.into()))
                 } else {
                     Err("unrecognized command")
                 }
@@ -123,8 +134,20 @@ impl Into<Message> for Opcode {
                 id: ComState::POWER_OFF.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::BattStats => Message::BlockingScalar(ScalarMessage {
                 id: ComState::STAT.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::BattStatsNb => Message::Scalar(ScalarMessage {
+                id: ComState::STAT.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::ImuAccelRead => Message::BlockingScalar(ScalarMessage {
                 id: ComState::GYRO_READ.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::BattStatsReturn(stats) => {
+                let raw_stats: [usize; 2] = stats.into();
+                Message::Scalar(ScalarMessage {
+                    id: ComState::STAT_RETURN.verb as usize,
+                    arg1: raw_stats[1],
+                    arg2: raw_stats[0],
+                    arg3: 0,
+                    arg4: 0,
+                })
+            }
             _ => todo!("message type not yet implemented")
         }
     }

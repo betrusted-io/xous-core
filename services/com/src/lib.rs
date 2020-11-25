@@ -22,21 +22,6 @@ pub fn get_batt_stats(cid: CID) -> Result<BattStats, xous::Error> {
     }
 }
 
-/*
-pub fn elapsed_ms(cid: CID) -> Result<u64, Error> {
-    let response = send_message(cid, api::Opcode::ElapsedMs.into())?;
-    if let xous::Result::Scalar2(upper, lower) = response {
-        Ok(upper as u64 | ((lower as u64) << 32))
-    } else {
-        panic!("unexpected return value: {:#?}", response);
-    }
+pub fn get_batt_stats_nb(cid: CID) -> Result<(), xous::Error> {
+    send_message(cid, api::Opcode::BattStatsNb.into()).map(|_|())
 }
-
-pub fn reset(cid: CID) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Reset.into()).map(|_| ())
-}
-
-pub fn sleep_ms(cid: CID, ms: usize) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::SleepMs(ms).into()).map(|_| ())
-}
-*/

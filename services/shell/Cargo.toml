@@ -13,6 +13,8 @@ ticktimer-server = { path = "../ticktimer-server" }
 log-server = { path = "../log-server" }
 log = "0.4"
 com = { path = "../com"}
+com_rs = { path = "../com/com_rs" }
+
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

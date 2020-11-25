@@ -15,6 +15,8 @@ use graphics_server::GlyphSet;
 use com::api::BattStats;
 use com::*;
 
+use core::convert::TryFrom;
+
 // fn print_and_yield(index: *mut usize) -> ! {
 //     let num = index as usize;
 //     loop {
@@ -126,6 +128,7 @@ fn shell_main() -> ! {
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id =        xous::SID::from_bytes(b"com             ").unwrap();
+    let shell_id =      xous::SID::from_bytes(b"shel            ").unwrap();
 
     println!("SHELL: Attempting to connect to servers...");
     let log_conn = xous::connect(log_server_id).unwrap();
@@ -170,7 +173,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
     }
 
     graphics_server::set_style(
@@ -221,5 +224,16 @@ fn shell_main() -> ! {
         .expect("unable to draw to screen");
 
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
+
+        /*
+        let envelope = xous::receive_message(shell_id).unwrap();
+        if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
+            match opcode {
+                com::api::Opcode::BattStatsReturn(stats) => {
+                    batt_stats = stats;
+                },
+                _ => error!("SHELL: received unexpected opcode"),
+            }
+        }*/
     }
 }

@@ -14,28 +14,38 @@ use log::{error, info};
 
 use com_rs::*;
 
+#[derive(Debug, Copy, Clone)]
+pub struct WorkRequest {
+    work: ComSpec,
+    sender: xous::MessageSender,
+}
+
 #[cfg(target_os = "none")]
 mod implementation {
     use crate::api::BattStats;
+    use crate::WorkRequest;
     use ticktimer_server::*;
     use com_rs::*;
     use utralib::generated::*;
     use xous::CID;
+    use log::{error, info};
 
-    /*
     #[macro_use]
     use heapless::Vec;
+    use heapless::consts::*;
 
+    /*
     use typenum::{UInt, UTerm};
     use typenum::bit::{B0, B1};
     type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
-    */
-
+*/
     const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
         ticktimer: CID,
+        pub workqueue: Vec<WorkRequest, U64>,
+        busy: bool,
     }
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
@@ -43,6 +53,10 @@ mod implementation {
         println!("COM IRQ");
         // just clear the pending request, as this is used as a "wait" until request function
         xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
+    }
+
+    fn return_battstats(cid: CID, stats: BattStats)  -> Result<(), xous::Error> {
+        xous::send_message(cid, crate::api::Opcode::BattStatsReturn(stats).into()).map(|_| ())
     }
 
     impl XousCom {
@@ -55,12 +69,16 @@ mod implementation {
             )
             .expect("couldn't map COM CSR range");
 
+            info!("test");
+
             let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
             let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
             let mut xc = XousCom {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 ticktimer: ticktimer_conn,
+                workqueue: Vec::new(),
+                busy: false,
                 //tx_queue: Vec::new(),
                 //rx_queue: Vec::new(),
                 //in_progress: false,
@@ -88,26 +106,41 @@ mod implementation {
         }
 
         pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
-            self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 1);
             if timeout.is_some() {
                 let curtime = ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer");
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
-                // timeout after 0.25 second to avoid hangs in case of a bug in the protocol
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
                     if (ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer") - curtime) > to {
                         timed_out = true;
                     }
-                    xous::wait_event();
+                    xous::yield_slice();
                 }
             } else {
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 {
+                    self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 1);
                     xous::wait_event();
+                    self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 0);
                 }
             }
-            self.csr.wfo(utra::com::EV_ENABLE_SPI_HOLD, 0);
 
             self.txrx(tx)
+        }
+
+
+        pub fn process_queue(&mut self) {
+            if !self.workqueue.is_empty() && !self.busy {
+                self.busy = true;
+                let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
+                if work_descriptor.work.verb == ComState::STAT.verb {
+                    let stats = self.get_battstats();
+                    return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
+                    info!("Returned BattStatsNb value");
+                } else {
+                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
+                }
+                self.busy = false;
+            }
         }
 
         pub fn get_battstats(&mut self) -> BattStats {
@@ -133,12 +166,23 @@ mod implementation {
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use crate::api::BattStats;
+    use crate::WorkRequest;
+    use log::{error, info};
+
+    #[macro_use]
+    use heapless::Vec;
+    use heapless::consts::*;
+
     pub struct XousCom {
+        workqueue: Vec<WorkRequest, U64>,
+        busy: bool,
     }
 
     impl XousCom {
         pub fn new() -> XousCom {
             XousCom {
+                workqueue: Vec::new(),
+                busy: false,
             }
         }
 
@@ -152,6 +196,21 @@ mod implementation {
                 current: -150,
                 soc: 50,
                 remaining_capacity: 750,
+            }
+        }
+
+        pub fn process_queue(&mut self) {
+            if !self.workqueue.is_empty() && !self.busy {
+                self.busy = true;
+                let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
+                if work_descriptor.work.verb == ComState::STAT.verb {
+                    let stats = self.get_battstats();
+                    shell::return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
+                    info!("Returned BattStatsNb value");
+                } else {
+                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
+                }
+                self.busy = false;
             }
         }
     }
@@ -192,10 +251,16 @@ fn xmain() -> ! {
                     ).expect("COM: couldn't return batt stats request");
                     info!("COM: done returning batt stats request");
                 }
-                _ => error!("unknown opcode"),
+                Opcode::BattStatsNb => {
+                    info!("COM: batt stats non-blocking request received");
+                    com.workqueue.push(WorkRequest { work: ComState::STAT, sender: envelope.sender }).unwrap();
+                }
+                    _ => error!("unknown opcode"),
             }
         } else {
             error!("couldn't convert opcode");
         }
+
+        com.process_queue();
     }
 }
