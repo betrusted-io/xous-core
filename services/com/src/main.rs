@@ -129,7 +129,7 @@ mod implementation {
             self.txrx(tx)
         }
 
-        fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
@@ -224,10 +224,11 @@ fn xmain() -> ! {
     println!("COM Init");
     log_server::init_wait().unwrap();
 
-    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
-    let shell_conn = xous::connect(shell_id).unwrap();
     let com_server =
         xous::create_server(b"com             ").expect("Couldn't create COM server");
+
+    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
+    let shell_conn = xous::connect(shell_id).unwrap();
 
     // Create a new com object
     let mut com = XousCom::new();

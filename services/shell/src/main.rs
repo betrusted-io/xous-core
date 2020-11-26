@@ -118,21 +118,30 @@ impl Bounce {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct ShellReturn {
-    batt_stats: BattStats,
-}
+use core::sync::atomic::{AtomicU16, AtomicI16, AtomicU8, Ordering};
 
-fn com_thread(retvals: &mut ShellReturn) {
+// need atomic global constants to pass data between threads
+// as we do not yet have a "Mutex" in Xous
+static BATT_STATS_VOLTAGE: AtomicU16 = AtomicU16::new(3700);
+static BATT_STATS_CURRENT: AtomicI16 = AtomicI16::new(-150);
+static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
+static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
+
+fn com_thread(_arg: Option<u32>) {
     let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
-    let shell_id =        xous::SID::from_bytes(b"shell           ").unwrap();
+    let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
+    info!("SHELL|com_thread: starting COM response handler thread");
     loop {
         let mut envelope =
             xous::syscall::receive_message(shell_id).expect("couldn't get address");
+        info!("SHELL|com_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 com::api::Opcode::BattStatsReturn(stats) => {
-                    retvals.batt_stats = stats;
+                    BATT_STATS_VOLTAGE.store(stats.voltage, Ordering::Relaxed);
+                    BATT_STATS_CURRENT.store(stats.current, Ordering::Relaxed);
+                    BATT_STATS_SOC.store(stats.soc, Ordering::Relaxed);
+                    BATT_STATS_REMAINING.store(stats.remaining_capacity, Ordering::Relaxed);
                 },
                 _ => error!("shell received an opcode that wasn't expected")
             }
@@ -146,6 +155,9 @@ fn com_thread(retvals: &mut ShellReturn) {
 fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
+
+    // make a thread to catch responses from the COM
+    xous::create_thread_simple(com_thread, None).unwrap();
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -173,9 +185,6 @@ fn shell_main() -> ! {
         ticktimer_conn, graphics_conn,
         "SHELL: graphics and ticktimer connections are the same!"
     );
-
-    let mut retvals: ShellReturn = ShellReturn::default();
-    xous::create_thread_simple(com_thread, &mut retvals);
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
@@ -226,7 +235,7 @@ fn shell_main() -> ! {
         }
 
         string_buffer.clear();
-        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", retvals.batt_stats.voltage, last_time as f32 / 1000f32).expect("Can't write");
+        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", /*BATT_STATS_VOLTAGE.load(Ordering::Relaxed)*/ -1, last_time as f32 / 1000f32).expect("Can't write");
         graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
         let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
         graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
