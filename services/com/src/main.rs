@@ -71,8 +71,6 @@ mod implementation {
             )
             .expect("couldn't map COM CSR range");
 
-            info!("test");
-
             let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
             let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 

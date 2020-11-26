@@ -129,11 +129,9 @@ static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
 fn com_thread(_arg: Option<u32>) {
     let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
-    let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
     info!("SHELL|com_thread: starting COM response handler thread");
     loop {
-        let mut envelope =
-            xous::syscall::receive_message(shell_id).expect("couldn't get address");
+        let mut envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
         info!("SHELL|com_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
             match opcode {
@@ -155,9 +153,6 @@ fn com_thread(_arg: Option<u32>) {
 fn shell_main() -> ! {
     timer::init();
     log_server::init_wait().unwrap();
-
-    // make a thread to catch responses from the COM
-    xous::create_thread_simple(com_thread, None).unwrap();
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
@@ -186,6 +181,10 @@ fn shell_main() -> ! {
         "SHELL: graphics and ticktimer connections are the same!"
     );
 
+    // make a thread to catch responses from the COM
+    xous::create_thread_simple(com_thread, None).unwrap();
+    info!("SHELL: COM responder thread started");
+
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
     let dark = graphics_server::Color::from(0);
@@ -208,7 +207,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2-3 are various servers
     }
 
     graphics_server::set_style(
@@ -223,19 +222,8 @@ fn shell_main() -> ! {
     ticktimer_server::reset(ticktimer_conn).unwrap();
     let mut string_buffer = String::new(4096);
     loop {
-        // update battery status periodically
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 500 {
-                last_time = elapsed_time;
-                info!("Requesting batt stats from COM");
-                get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
-            }
-        } else {
-            error!("error requesting ticktimer!")
-        }
-
         string_buffer.clear();
-        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", /*BATT_STATS_VOLTAGE.load(Ordering::Relaxed)*/ -1, last_time as f32 / 1000f32).expect("Can't write");
+        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", BATT_STATS_VOLTAGE.load(Ordering::Relaxed), last_time as f32 / 1000f32).expect("Can't write");
         graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
         let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
         graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
@@ -258,19 +246,17 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
-        graphics_server::flush(graphics_conn).expect("unable to draw to screen");
-
-        /*
-        let envelope = xous::try_receive_message(shell_server).unwrap();
-        if envelope.is_some() {
-            if let Ok(opcode) = com::api::Opcode::try_from(&envelope.unwrap().body) {
-                match opcode {
-                    com::api::Opcode::BattStatsReturn(stats) => {
-                        batt_stats = stats;
-                    },
-                    _ => error!("SHELL: received unexpected opcode"),
-                }
+        // Periodic tasks
+        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+            if elapsed_time - last_time > 500 {
+                last_time = elapsed_time;
+                info!("Requesting batt stats from COM");
+                get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
             }
-        }*/
+        } else {
+            error!("error requesting ticktimer!")
+        }
+
+        graphics_server::flush(graphics_conn).expect("unable to draw to screen");
     }
 }

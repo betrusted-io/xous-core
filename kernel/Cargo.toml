@@ -21,8 +21,8 @@ riscv = "0.5.6"
 debug-print = []
 print-panics = []
 report-memory = ["stats_alloc"]
-default = ["print-panics", "debug-print"]
-#default = []
+#default = ["print-panics", "debug-print"]
+default = []
 
 [target.'cfg(any(windows, unix))'.dependencies]
 lazy_static = "1.4"
