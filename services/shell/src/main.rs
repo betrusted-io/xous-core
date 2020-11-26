@@ -12,6 +12,7 @@ use log::{error, info};
 use xous::String;
 use graphics_server::Point;
 use graphics_server::GlyphSet;
+use graphics_server::Rect;
 use com::api::BattStats;
 use com::*;
 
@@ -77,9 +78,9 @@ impl Bounce {
     pub fn next_rand(&mut self) -> i16 {
         let mut ret = move_lfsr(self.lfsr);
         self.lfsr = ret;
-        ret *= 2; // make the ball move faster
+        ret *= 3; // make the ball move faster
 
-        (ret % 8) as i16
+        (ret % 12) as i16
     }
 
     pub fn update(&mut self) -> &mut Self {
@@ -221,14 +222,23 @@ fn shell_main() -> ! {
     let mut last_time: u64 = 0;
     ticktimer_server::reset(ticktimer_conn).unwrap();
     let mut string_buffer = String::new(4096);
+    graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
+    let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
+    let status_clipregion = Rect::new(0, 0, screensize.x, font_h as i16);
+    let work_clipregion = Rect::new(0, font_h as i16, screensize.x, font_h as i16 * 2);
     loop {
         string_buffer.clear();
-        write!(&mut string_buffer, "{}mV  Uptime: {:.2}s", BATT_STATS_VOLTAGE.load(Ordering::Relaxed), last_time as f32 / 1000f32).expect("Can't write");
-        graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
-        let (_, h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
-        graphics_server::clear_region(graphics_conn, 0, 0, screensize.x as usize - 1, h)
+        write!(&mut string_buffer, "{}mV | {}mA", BATT_STATS_VOLTAGE.load(Ordering::Relaxed), BATT_STATS_CURRENT.load(Ordering::Relaxed)).expect("Can't write");
+        graphics_server::clear_rectangle(graphics_conn, status_clipregion)
             .expect("unable to clear region");
-        info!("drawing string: {}", string_buffer);
+        graphics_server::set_string_clipping(graphics_conn, status_clipregion).expect("unable to set string clip region");
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+
+        string_buffer.clear();
+        write!(&mut string_buffer, "Uptime: {:.2}s", last_time as f32 / 1000f32).expect("Can't write");
+        graphics_server::clear_rectangle(graphics_conn, work_clipregion)
+            .expect("unable to clear region");
+        graphics_server::set_string_clipping(graphics_conn, work_clipregion).expect("unable to set string clip region");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");

@@ -35,6 +35,7 @@ fn xmain() -> ! {
 
     let mut current_color = api::Color::from(0usize);
     let mut current_glyph = api::GlyphSet::Regular;
+    let mut current_string_clip = op::ClipRegion::screen();
 
     display.redraw();
 
@@ -94,13 +95,16 @@ fn xmain() -> ! {
                 }
                 Opcode::String(s) => {
                     match current_glyph {
-                        api::GlyphSet::Small => op::string_small_left(display.native_buffer(), op::ClipRegion::screen(), s),
-                        api::GlyphSet::Regular => op::string_regular_left(display.native_buffer(), op::ClipRegion::screen(), s),
-                        api::GlyphSet::Bold => op::string_bold_left(display.native_buffer(), op::ClipRegion::screen(), s),
+                        api::GlyphSet::Small => op::string_small_left(display.native_buffer(), current_string_clip, s),
+                        api::GlyphSet::Regular => op::string_regular_left(display.native_buffer(), current_string_clip, s),
+                        api::GlyphSet::Bold => op::string_bold_left(display.native_buffer(), current_string_clip, s),
                     }
                 }
                 Opcode::SetGlyph(glyph) => {
                     current_glyph = glyph;
+                }
+                Opcode::SetStringClipping(r) => {
+                    current_string_clip = op::ClipRegion::from(r);
                 }
                 Opcode::ScreenSize => {
                     xous::return_scalar2(

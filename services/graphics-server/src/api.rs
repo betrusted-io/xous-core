@@ -619,7 +619,10 @@ pub enum Opcode<'a> {
     /// Set the current string glyph set for strings
     SetGlyph(GlyphSet),
 
-    /// Render the string at the (x,y) coordinates
+    /// Set the clipping region for the string.
+    SetStringClipping(Rect),
+
+    /// Render the string inside the clipping region.
     String(&'a str),
 
     /// Retrieve the X and Y dimensions of the screen
@@ -651,6 +654,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     m.arg4 as _,
                 ))),
                 9 => Ok(Opcode::SetGlyph(arg_to_glyph(m.arg1))),
+                11 => Ok(Opcode::SetStringClipping(Rect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -732,6 +736,10 @@ impl<'a> Into<Message> for Opcode<'a> {
             Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {id: 8, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
             Opcode::QueryGlyph => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
             Opcode::SetGlyph(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph_to_arg(glyph), arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::SetStringClipping(r) => Message::Scalar(ScalarMessage {
+                id: 11,
+                arg1: r.x0 as _, arg2: r.y0 as _, arg3: r.x1 as _, arg4: r.y1 as _,
+            }),
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(1))

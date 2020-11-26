@@ -1,6 +1,6 @@
 use super::fonts;
 use super::fonts::{Font, GlyphHeader};
-use crate::api::{Point, Style, Pixel, GlyphSet};
+use crate::api::{Point, Style, Pixel, GlyphSet, Rect};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -46,6 +46,21 @@ impl ClipRegion {
             y0: 0,
             y1: HEIGHT - 1,
         }
+    }
+}
+
+impl From<Rect> for ClipRegion {
+    fn from(r: Rect) -> Self {
+        let mut cr = r.clone();
+        if cr.x0 < 0 { cr.x0 = 0 };
+        if cr.x0 >= WIDTH as _ { cr.x0 = WIDTH as i16 - 1 };
+        if cr.x1 < 0 { cr.x1 = 0 };
+        if cr.x1 >= WIDTH as _ { cr.x1 = WIDTH as i16 - 1 };
+        if cr.y0 < 0 { cr.y0 = 0 };
+        if cr.y0 >= HEIGHT as _ { cr.y0 = HEIGHT as i16 - 1 };
+        if cr.y1 < 0 { cr.y1 = 0 };
+        if cr.y1 >= HEIGHT as _ { cr.y1 = HEIGHT as i16 - 1 };
+        ClipRegion {x0: cr.x0 as usize, y0: cr.y0 as usize, x1: cr.x1 as usize, y1: cr.y1 as usize}
     }
 }
 
