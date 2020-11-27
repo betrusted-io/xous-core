@@ -1,10 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#[cfg(target_os = "none")]
-#[macro_use]
-mod debug;
-
 mod api;
 use api::Opcode;
 
@@ -56,7 +52,6 @@ mod implementation {
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xc = unsafe { &mut *(arg as *mut XousCom) };
-        println!("COM IRQ");
         // just clear the pending request, as this is used as a "wait" until request function
         xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
     }
@@ -219,7 +214,6 @@ mod implementation {
 fn xmain() -> ! {
     use crate::implementation::XousCom;
 
-    println!("COM Init");
     log_server::init_wait().unwrap();
 
     let com_server =
