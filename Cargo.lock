@@ -151,6 +151,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9#9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9"
 
 [[package]]
 name = "crc"
@@ -793,7 +794,6 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "com",
- "com_rs",
  "graphics-server",
  "log",
  "log-server",

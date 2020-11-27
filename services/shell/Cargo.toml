@@ -13,7 +13,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 log-server = { path = "../log-server" }
 log = "0.4"
 com = { path = "../com"}
-com_rs = { path = "../com/com_rs" }
+# com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9" }
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
