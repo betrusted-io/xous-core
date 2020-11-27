@@ -181,7 +181,6 @@ fn handle_scalar(
         1000 => writeln!(output, "PANIC in process {}", sender).unwrap(),
         1100 => (),
         1101..=1132 => {
-            // writeln!(output, "Got packet: {:#?}", msg).ok();
             let mut output_bfr = [0u8; core::mem::size_of::<usize>() * 4];
             let output_iter = output_bfr.iter_mut();
 
