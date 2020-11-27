@@ -11,48 +11,44 @@ use xous::String;
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use core::fmt::{Error, Write};
-    // use pancurses::{endwin, initscr, Window};
     use std::sync::mpsc::{channel, Receiver, Sender};
 
     enum ControlMessage {
         Text(String),
+        Byte(u8),
         Exit,
     }
 
     pub struct Output {
-        // window: Option<Window>,
         tx: Sender<ControlMessage>,
         rx: Receiver<ControlMessage>,
+        stdout: std::io::Stdout,
     }
 
     pub fn init() -> Output {
         let (tx, rx) = channel();
-        // let window = initscr();
-        // window.nodelay(true);
 
         Output {
             tx,
             rx,
-            // window: Some(window),
+            stdout: std::io::stdout(),
         }
     }
 
     impl Output {
         pub fn run(&mut self) {
+            use std::io::Write;
             loop {
                 match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {
                     Ok(msg) => match msg {
                         ControlMessage::Exit => break,
-                        ControlMessage::Text(s) => {
-                            print!("{}", s);
-                            // self.window.as_ref().unwrap().printw(s);
-                            // self.window.as_ref().unwrap().refresh();
+                        ControlMessage::Text(s) => print!("{}", s),
+                        ControlMessage::Byte(s) => {
+                            let mut handle = self.stdout.lock();
+                            handle.write_all(&[s]).unwrap();
                         }
                     },
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        // Calling `getch` refreshes the screen
-                        // self.window.as_ref().unwrap().getch();
-                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                     Err(e) => panic!("Error: {}", e),
                 }
             }
@@ -68,7 +64,6 @@ mod implementation {
     impl Drop for Output {
         fn drop(&mut self) {
             self.tx.send(ControlMessage::Exit).unwrap();
-            // endwin();
         }
     }
 
@@ -82,6 +77,12 @@ mod implementation {
 
     pub struct OutputWriter {
         tx: Sender<ControlMessage>,
+    }
+
+    impl OutputWriter {
+        pub fn putc(&self, c: u8) {
+            self.tx.send(ControlMessage::Byte(c)).unwrap();
+        }
     }
 
     impl Write for OutputWriter {
@@ -98,9 +99,7 @@ mod implementation {
     use core::fmt::{Error, Write};
     use utralib::generated::*;
 
-    pub struct Output {
-        // addr: usize,
-    }
+    pub struct Output {}
 
     pub fn init() -> Output {
         let uart = xous::syscall::map_memory(
@@ -124,9 +123,7 @@ mod implementation {
         )
         .expect("couldn't claim interrupt");
         println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
-        Output {
-            // addr: uart.as_mut_ptr() as usize,
-        }
+        Output {}
     }
 
     impl Output {
@@ -137,33 +134,9 @@ mod implementation {
         pub fn run(&mut self) {
             loop {
                 xous::wait_event();
-                // match self.rx.recv_timeout(std::time::Duration::from_millis(50)) {
-                //     Ok(msg) => match msg {
-                //         ControlMessage::Exit => break,
-                //         ControlMessage::Text(s) => {
-                //             self.window.as_ref().unwrap().printw(s);
-                //             self.window.as_ref().unwrap().refresh();
-                //         }
-                //     },
-                //     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                //         // Calling `getch` refreshes the screen
-                //         self.window.as_ref().unwrap().getch();
-                //     }
-                //     Err(e) => panic!("Error: {}", e),
-                // }
             }
         }
     }
-
-    // use core::panic::PanicInfo;
-
-    // #[panic_handler]
-    // fn handle_panic(arg: &PanicInfo) -> ! {
-    //     println!("PANIC!");
-    //     println!("Details: {:?}", arg);
-    //     xous::syscall::wait_event();
-    //     loop {}
-    // }
 
     fn handle_irq(irq_no: usize, arg: *mut usize) {
         print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
@@ -199,6 +172,47 @@ mod implementation {
     }
 }
 
+fn handle_scalar(
+    output: &mut implementation::OutputWriter,
+    sender: xous::MessageSender,
+    msg: &xous::ScalarMessage,
+) {
+    match msg.id {
+        1000 => writeln!(output, "PANIC in process {}", sender).unwrap(),
+        1100 => (),
+        1101..=1132 => {
+            // writeln!(output, "Got packet: {:#?}", msg).ok();
+            let mut output_bfr = [0u8; core::mem::size_of::<usize>() * 4];
+            let output_iter = output_bfr.iter_mut();
+
+            // Combine the four arguments to form a single
+            // contiguous buffer. Note: The buffer size will change
+            // depending on the platfor's `usize` length.
+            let arg1_bytes = msg.arg1.to_le_bytes();
+            let arg2_bytes = msg.arg2.to_le_bytes();
+            let arg3_bytes = msg.arg3.to_le_bytes();
+            let arg4_bytes = msg.arg4.to_le_bytes();
+            let input_iter = arg1_bytes
+                .iter()
+                .chain(arg2_bytes.iter())
+                .chain(arg3_bytes.iter())
+                .chain(arg4_bytes.iter());
+            for (dest, src) in output_iter.zip(input_iter) {
+                *dest = *src;
+            }
+            let total_chars = msg.id - 1100;
+            for (idx, c) in output_bfr.iter().enumerate() {
+                if idx >= total_chars {
+                    break;
+                }
+                output.putc(*c);
+            }
+        }
+        1200 => writeln!(output, "Terminating process").unwrap(),
+        _ => writeln!(output, "Unrecognized scalar message from {}: {:#?}", sender, msg).unwrap(),
+    }
+}
+
 fn reader_thread(mut output: implementation::OutputWriter) {
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
@@ -218,14 +232,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
         let sender = envelope.sender;
         // writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
         match &mut envelope.body {
-            xous::Message::Scalar(msg) => {
-                writeln!(
-                    output,
-                    "LOG: Scalar message from {}: {:?}",
-                    envelope.sender, msg
-                )
-                .unwrap();
-            }
+            xous::Message::Scalar(msg) => handle_scalar(&mut output, sender, msg),
             xous::Message::BlockingScalar(msg) => {
                 writeln!(
                     output,
