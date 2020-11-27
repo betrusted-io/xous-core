@@ -9,8 +9,8 @@ description = "Manage the video output"
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
 log = "0.4"
-#blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "18385c8f433b90c9414dc80580c642e3270a0f66" }
-blitstr = { path = "../../../blitstr" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "7684e03f98cf72d78e7ed148a34aca97a7ee5e25" }
+# blitstr = { path = "../../../blitstr" }
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
