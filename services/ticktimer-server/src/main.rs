@@ -1,10 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#[cfg(target_os = "none")]
-#[macro_use]
-mod debug;
-
 mod api;
 use api::Opcode;
 
@@ -54,7 +50,7 @@ mod implementation {
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
-        println!("In IRQ, connection: {}", xtt.connection);
+        // println!("In IRQ, connection: {}", xtt.connection);
 
         // Safe because we're in an interrupt, and this interrupt is only
         // enabled when this value is not None.
@@ -71,7 +67,7 @@ mod implementation {
 
     impl XousTickTimer {
         pub fn new(connection: xous::CID) -> XousTickTimer {
-            println!("Connection: {}", connection);
+            // println!("Connection: {}", connection);
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::ticktimer::HW_TICKTIMER_BASE),
                 None,
@@ -264,7 +260,6 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    println!("Timer Init");
     log_server::init_wait().unwrap();
 
     // "Sleep" commands get put in here and are ordered as necessary
