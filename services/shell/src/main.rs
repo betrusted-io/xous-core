@@ -1,30 +1,16 @@
 #![cfg_attr(baremetal, no_main)]
 #![cfg_attr(baremetal, no_std)]
 
-#[cfg(baremetal)]
-#[macro_use]
-mod debug;
-
-mod logstr;
-mod timer;
-use core::fmt::Write;
-use log::{error, info};
-use xous::String;
-use graphics_server::Point;
-use graphics_server::GlyphSet;
-use graphics_server::Rect;
 use com::api::BattStats;
 use com::*;
+use core::fmt::Write;
+use graphics_server::GlyphSet;
+use graphics_server::Point;
+use graphics_server::Rect;
+use log::{error, info};
+use xous::String;
 
 use core::convert::TryFrom;
-
-// fn print_and_yield(index: *mut usize) -> ! {
-//     let num = index as usize;
-//     loop {
-//         println!("THREAD {}", num);
-//         xous::syscall::yield_slice();
-//     }
-// }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rectangle {
@@ -67,10 +53,13 @@ pub struct Bounce {
 impl Bounce {
     pub fn new(radius: u16, bounds: Rectangle) -> Bounce {
         Bounce {
-            vector: Point::new(2,3),
+            vector: Point::new(2, 3),
             radius: radius,
             bounds: bounds,
-            loc: Point::new((bounds.bottom_right.x - bounds.top_left.x)/2, (bounds.bottom_right.y - bounds.top_left.y)/2),
+            loc: Point::new(
+                (bounds.bottom_right.x - bounds.top_left.x) / 2,
+                (bounds.bottom_right.y - bounds.top_left.y) / 2,
+            ),
             lfsr: 0xace1u32,
         }
     }
@@ -87,13 +76,15 @@ impl Bounce {
         let mut x: i16;
         let mut y: i16;
         // update the new ball location
-        x = self.loc.x + self.vector.x; y = self.loc.y + self.vector.y;
+        x = self.loc.x + self.vector.x;
+        y = self.loc.y + self.vector.y;
 
         let r: i16 = self.radius as i16;
-        if (x >= (self.bounds.bottom_right().x - r)) ||
-           (x <= (self.bounds.top_left().x + r)) ||
-           (y >= (self.bounds.bottom_right().y - r)) ||
-           (y <= (self.bounds.top_left().y + r)) {
+        if (x >= (self.bounds.bottom_right().x - r))
+            || (x <= (self.bounds.top_left().x + r))
+            || (y >= (self.bounds.bottom_right().y - r))
+            || (y <= (self.bounds.top_left().y + r))
+        {
             if x >= (self.bounds.bottom_right().x - r - 1) {
                 self.vector.x = -self.next_rand();
                 x = self.bounds.bottom_right().x - r;
@@ -119,7 +110,7 @@ impl Bounce {
     }
 }
 
-use core::sync::atomic::{AtomicU16, AtomicI16, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicI16, AtomicU16, AtomicU8, Ordering};
 
 // need atomic global constants to pass data between threads
 // as we do not yet have a "Mutex" in Xous
@@ -129,10 +120,12 @@ static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
 static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
 fn com_thread(_arg: Option<u32>) {
-    let shell_server = xous::create_server(b"shell           ").expect("Couldn't create Shell server");
+    let shell_server =
+        xous::create_server(b"shell           ").expect("Couldn't create Shell server");
     info!("SHELL|com_thread: starting COM response handler thread");
     loop {
-        let mut envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
+        let mut envelope =
+            xous::syscall::receive_message(shell_server).expect("couldn't get address");
         info!("SHELL|com_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
             match opcode {
@@ -141,8 +134,8 @@ fn com_thread(_arg: Option<u32>) {
                     BATT_STATS_CURRENT.store(stats.current, Ordering::Relaxed);
                     BATT_STATS_SOC.store(stats.soc, Ordering::Relaxed);
                     BATT_STATS_REMAINING.store(stats.remaining_capacity, Ordering::Relaxed);
-                },
-                _ => error!("shell received an opcode that wasn't expected")
+                }
+                _ => error!("shell received an opcode that wasn't expected"),
             }
         } else {
             error!("couldn't convert opcode");
@@ -152,22 +145,20 @@ fn com_thread(_arg: Option<u32>) {
 
 #[xous::xous_main]
 fn shell_main() -> ! {
-    timer::init();
     log_server::init_wait().unwrap();
 
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
-    let com_id =        xous::SID::from_bytes(b"com             ").unwrap();
+    let com_id = xous::SID::from_bytes(b"com             ").unwrap();
 
-    println!("SHELL: Attempting to connect to servers...");
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
     let com_conn = xous::connect(com_id).unwrap();
 
-    println!(
+    info!(
         "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {} Com: {}",
         log_conn, graphics_conn, ticktimer_conn, com_conn,
     );
@@ -190,15 +181,20 @@ fn shell_main() -> ! {
 
     let dark = graphics_server::Color::from(0);
     let light = graphics_server::Color::from(!0);
-    let mut bouncyball = Bounce::new(14,
-        Rectangle::new(Point::new(0, 18 * 21),
-        Point::new(screensize.x as _, screensize.y as i16 - 1)));
+    let mut bouncyball = Bounce::new(
+        14,
+        Rectangle::new(
+            Point::new(0, 18 * 21),
+            Point::new(screensize.x as _, screensize.y as i16 - 1),
+        ),
+    );
     bouncyball.update();
 
     let mut batt_stats: BattStats = BattStats::default();
 
     #[cfg(baremetal)]
-    { // use this to select which UART to monitor in the main loop
+    {
+        // use this to select which UART to monitor in the main loop
         use utralib::generated::*;
         let gpio_base = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
@@ -211,13 +207,8 @@ fn shell_main() -> ! {
         gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2-3 are various servers
     }
 
-    graphics_server::set_style(
-        graphics_conn,
-        1,
-        dark,
-        dark,
-    )
-    .expect("unable to draw to screen: {:?}");
+    graphics_server::set_style(graphics_conn, 1, dark, dark)
+        .expect("unable to draw to screen: {:?}");
 
     let mut last_time: u64 = 0;
     ticktimer_server::reset(ticktimer_conn).unwrap();
@@ -228,33 +219,46 @@ fn shell_main() -> ! {
     let work_clipregion = Rect::new(0, font_h as i16, screensize.x, font_h as i16 * 2);
     loop {
         string_buffer.clear();
-        write!(&mut string_buffer, "{}mV | {}mA", BATT_STATS_VOLTAGE.load(Ordering::Relaxed), BATT_STATS_CURRENT.load(Ordering::Relaxed)).expect("Can't write");
+        write!(
+            &mut string_buffer,
+            "{}mV | {}mA",
+            BATT_STATS_VOLTAGE.load(Ordering::Relaxed),
+            BATT_STATS_CURRENT.load(Ordering::Relaxed)
+        )
+        .expect("Can't write");
         graphics_server::clear_rectangle(graphics_conn, status_clipregion)
             .expect("unable to clear region");
-        graphics_server::set_string_clipping(graphics_conn, status_clipregion).expect("unable to set string clip region");
+        graphics_server::set_string_clipping(graphics_conn, status_clipregion)
+            .expect("unable to set string clip region");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         string_buffer.clear();
-        write!(&mut string_buffer, "Uptime: {:.2}s", last_time as f32 / 1000f32).expect("Can't write");
+        write!(
+            &mut string_buffer,
+            "Uptime: {:.2}s",
+            last_time as f32 / 1000f32
+        )
+        .expect("Can't write");
         graphics_server::clear_rectangle(graphics_conn, work_clipregion)
             .expect("unable to clear region");
-        graphics_server::set_string_clipping(graphics_conn, work_clipregion).expect("unable to set string clip region");
+        graphics_server::set_string_clipping(graphics_conn, work_clipregion)
+            .expect("unable to set string clip region");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
         // draw the ball
         bouncyball.update();
-        graphics_server::clear_region(graphics_conn,
-            bouncyball.bounds.top_left().x as _, bouncyball.bounds.top_left().y as _,
-            bouncyball.bounds.bottom_right().x as _, bouncyball.bounds.bottom_right().y as usize + 1)
-            .expect("unable to clear region");
-        graphics_server::draw_circle(
+        graphics_server::clear_region(
             graphics_conn,
-            bouncyball.loc,
-            bouncyball.radius as u16,
+            bouncyball.bounds.top_left().x as _,
+            bouncyball.bounds.top_left().y as _,
+            bouncyball.bounds.bottom_right().x as _,
+            bouncyball.bounds.bottom_right().y as usize + 1,
         )
-        .expect("unable to draw to screen");
+        .expect("unable to clear region");
+        graphics_server::draw_circle(graphics_conn, bouncyball.loc, bouncyball.radius as u16)
+            .expect("unable to draw to screen");
 
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
