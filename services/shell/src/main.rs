@@ -4,9 +4,9 @@
 use com::api::BattStats;
 use com::*;
 use core::fmt::Write;
-use graphics_server::GlyphSet;
+use blitstr::fonts::GlyphSet;
 use graphics_server::Point;
-use graphics_server::Rect;
+use blitstr::Rect;
 use log::{error, info};
 use xous::String;
 
@@ -62,6 +62,16 @@ impl Bounce {
             ),
             lfsr: 0xace1u32,
         }
+    }
+
+    pub fn ball_center(&self) -> Point {
+        self.loc
+    }
+    pub fn radius(&self) -> u16 {
+        self.radius
+    }
+    pub fn bounds(&self) -> Rectangle {
+        self.bounds
     }
 
     pub fn next_rand(&mut self) -> i16 {
@@ -179,8 +189,8 @@ fn shell_main() -> ! {
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
-    let dark = graphics_server::Color::from(0);
-    let light = graphics_server::Color::from(!0);
+    let dark = graphics_server::Color::from(!0);
+    let light = graphics_server::Color::from(0);
     let mut bouncyball = Bounce::new(
         14,
         Rectangle::new(
@@ -215,48 +225,75 @@ fn shell_main() -> ! {
     let mut string_buffer = String::new(4096);
     graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
-    let status_clipregion = Rect::new(0, 0, screensize.x, font_h as i16);
-    let work_clipregion = Rect::new(0, font_h as i16, screensize.x, font_h as i16 * 2);
+    let status_clipregion = blitstr::Rect::new(4, 0, screensize.x as _, font_h as usize);
+    let mut status_cursor = blitstr::Cursor::from_top_left_of(status_clipregion);
+    let work_clipregion = blitstr::Rect::new(4, font_h + 2 as usize, screensize.x as _, font_h as usize * 11);
+    let mut work_cursor = blitstr::Cursor::from_top_left_of(work_clipregion);
     loop {
-        string_buffer.clear();
-        write!(
-            &mut string_buffer,
-            "{}mV | {}mA",
-            BATT_STATS_VOLTAGE.load(Ordering::Relaxed),
-            BATT_STATS_CURRENT.load(Ordering::Relaxed)
-        )
-        .expect("Can't write");
+        // status bar
+        graphics_server::set_glyph(graphics_conn, GlyphSet::Small).expect("unable to set glyph");
+
         graphics_server::clear_rectangle(graphics_conn, status_clipregion)
             .expect("unable to clear region");
         graphics_server::set_string_clipping(graphics_conn, status_clipregion)
             .expect("unable to set string clip region");
+        string_buffer.clear();
+        write!(&mut string_buffer, "{}mV", BATT_STATS_VOLTAGE.load(Ordering::Relaxed)).expect("Can't write");
+        status_cursor = blitstr::Cursor::from_top_left_of(status_clipregion);
+        graphics_server::set_cursor(graphics_conn, status_cursor);
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        status_cursor.pt.x = 95;
+        string_buffer.clear();
+        write!(&mut string_buffer, "{}mA", BATT_STATS_CURRENT.load(Ordering::Relaxed)).expect("Can't write");
+        graphics_server::set_cursor(graphics_conn, status_cursor);
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        status_cursor.pt.x = 190;
+        string_buffer.clear();
+        write!(&mut string_buffer, "{}mA", BATT_STATS_REMAINING.load(Ordering::Relaxed)).expect("Can't write");
+        graphics_server::set_cursor(graphics_conn, status_cursor);
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        status_cursor.pt.x = 280;
+        string_buffer.clear();
+        write!(&mut string_buffer, "{}%", BATT_STATS_SOC.load(Ordering::Relaxed)).expect("Can't write");
+        graphics_server::set_cursor(graphics_conn, status_cursor);
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
+        graphics_server::set_style(graphics_conn, 1, dark, dark);
+        graphics_server::draw_line(graphics_conn, Point::new(0, font_h as i16 + 1), Point::new(screensize.x as _, font_h as i16 + 1));
+
+        // work area
         string_buffer.clear();
-        write!(
-            &mut string_buffer,
-            "Uptime: {:.2}s",
-            last_time as f32 / 1000f32
-        )
-        .expect("Can't write");
+        write!(&mut string_buffer,
+            "Uptime: {:.2}s\n\n", last_time as f32 / 1000f32
+        ).expect("Can't write");
+        work_cursor = blitstr::Cursor::from_top_left_of(work_clipregion);
         graphics_server::clear_rectangle(graphics_conn, work_clipregion)
             .expect("unable to clear region");
         graphics_server::set_string_clipping(graphics_conn, work_clipregion)
             .expect("unable to set string clip region");
+        graphics_server::set_cursor(graphics_conn, work_cursor);
+        graphics_server::set_glyph(graphics_conn, GlyphSet::Regular).expect("unable to set glyph");
+        graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+
+        string_buffer.clear();
+        write!(&mut string_buffer, "Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.\n           😸     🎩    🔑\n           cat    hat    key\n").expect("Can't write");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
         // draw the ball
-        bouncyball.update();
         graphics_server::clear_region(
             graphics_conn,
-            bouncyball.bounds.top_left().x as _,
-            bouncyball.bounds.top_left().y as _,
-            bouncyball.bounds.bottom_right().x as _,
-            bouncyball.bounds.bottom_right().y as usize + 1,
+            bouncyball.ball_center().x as usize - bouncyball.radius() as usize - 1,
+            bouncyball.ball_center().y as usize - bouncyball.radius() as usize - 1,
+            bouncyball.ball_center().x as usize + bouncyball.radius() as usize + 1,
+            bouncyball.ball_center().y as usize + bouncyball.radius() as usize + 1,
         )
         .expect("unable to clear region");
+        bouncyball.update();
+        graphics_server::draw_line(graphics_conn,
+            Point::new(0, bouncyball.bounds().top_left().y as i16 - 1),
+              Point::new(screensize.x as i16, bouncyball.bounds().top_left().y as i16 - 1));
         graphics_server::draw_circle(graphics_conn, bouncyball.loc, bouncyball.radius as u16)
             .expect("unable to draw to screen");
 

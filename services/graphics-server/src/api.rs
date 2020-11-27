@@ -1,40 +1,10 @@
 use crate::op::PixelColor;
 use xous::{Message, ScalarMessage};
 use core::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
+use blitstr::fonts::GlyphSet;
+use blitstr::fonts::*;
+use blitstr::Cursor;
 
-
-/// Available typeface glyph sets
-#[derive(Debug, Copy, Clone)]
-pub enum GlyphSet {
-    Bold,
-    Regular,
-    Small,
-}
-
-pub fn glyph_to_arg(glyph: GlyphSet) -> usize {
-    match glyph {
-        GlyphSet::Small => 0,
-        GlyphSet::Regular => 1,
-        GlyphSet::Bold => 2,
-    }
-}
-
-pub fn arg_to_glyph(arg: usize) -> GlyphSet {
-    match arg {
-        0 => GlyphSet::Small,
-        1 => GlyphSet::Regular,
-        2 => GlyphSet::Bold,
-        _ => GlyphSet::Regular,
-    }
-}
-
-pub fn glyph_to_height(glyph: GlyphSet) -> usize {
-    match glyph {
-        GlyphSet::Small => crate::fonts::small::MAX_HEIGHT as usize,
-        GlyphSet::Regular => crate::fonts::regular::MAX_HEIGHT as usize,
-        GlyphSet::Bold => crate::fonts::bold::MAX_HEIGHT as usize,
-    }
-}
 /// 2D size.
 ///
 /// `Size` is used to define the width and height of an object.
@@ -614,13 +584,19 @@ pub enum Opcode<'a> {
     ),
 
     /// Clear the specified region
-    ClearRegion(Rect),
+    ClearRegion(blitstr::Rect),
 
     /// Set the current string glyph set for strings
     SetGlyph(GlyphSet),
 
+    /// Set the cursor point for the current string clipping region
+    SetCursor(Cursor),
+
+    /// Retrieve the current cursor porint for the current string clipping region
+    GetCursor,
+
     /// Set the clipping region for the string.
-    SetStringClipping(Rect),
+    SetStringClipping(blitstr::Rect),
 
     /// Render the string inside the clipping region.
     String(&'a str),
@@ -647,19 +623,21 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Color::from(m.arg2),
                     Color::from(m.arg3),
                 )),
-                7 => Ok(Opcode::ClearRegion(Rect::new(
+                7 => Ok(Opcode::ClearRegion(blitstr::Rect::new(
                     m.arg1 as _,
                     m.arg2 as _,
                     m.arg3 as _,
                     m.arg4 as _,
                 ))),
                 9 => Ok(Opcode::SetGlyph(arg_to_glyph(m.arg1))),
-                11 => Ok(Opcode::SetStringClipping(Rect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
+                11 => Ok(Opcode::SetStringClipping(blitstr::Rect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
+                12 => Ok(Opcode::SetCursor(Cursor::new(m.arg1 as _, m.arg2 as _, m.arg3 as _))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
                 8 => Ok(Opcode::ScreenSize),
                 10 => Ok(Opcode::QueryGlyph),
+                13 => Ok(Opcode::GetCursor),
                 _ => Err("unrecognized opcode"),
             },
             Message::Borrow(m) => match m.id {
@@ -728,22 +706,24 @@ impl<'a> Into<Message> for Opcode<'a> {
             }
             Opcode::ClearRegion(rect) => Message::Scalar(ScalarMessage {
                 id: 7,
-                arg1: rect.x0 as _,
-                arg2: rect.y0 as _,
-                arg3: rect.x1 as _,
-                arg4: rect.y1 as _,
+                arg1: rect.min.x as _,
+                arg2: rect.min.y as _,
+                arg3: rect.max.x as _,
+                arg4: rect.max.y as _,
             }),
             Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {id: 8, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
             Opcode::QueryGlyph => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
             Opcode::SetGlyph(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph_to_arg(glyph), arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::SetStringClipping(r) => Message::Scalar(ScalarMessage {
                 id: 11,
-                arg1: r.x0 as _, arg2: r.y0 as _, arg3: r.x1 as _, arg4: r.y1 as _,
+                arg1: r.min.x as _, arg2: r.min.y as _, arg3: r.max.x as _, arg4: r.max.y as _,
             }),
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(1))
-            }
+            },
+            Opcode::SetCursor(c) => Message::Scalar(ScalarMessage { id: 12, arg1: c.pt.x, arg2: c.pt.y, arg3: c.line_height, arg4: 0}),
+            Opcode::GetCursor => Message::BlockingScalar(ScalarMessage { id: 13, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
         }
     }
 }

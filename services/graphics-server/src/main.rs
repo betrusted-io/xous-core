@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use log::info;
+use log::{info, error};
 
 mod backend;
 use backend::XousDisplay;
@@ -10,11 +10,12 @@ mod api;
 use api::Opcode;
 
 mod op;
-mod fonts;
 
 use core::convert::TryFrom;
 
 mod logo;
+
+use blitstr;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(logo::LOGO_MAP);
@@ -30,8 +31,9 @@ fn xmain() -> ! {
     draw_boot_logo(&mut display);
 
     let mut current_color = api::Color::from(0usize);
-    let mut current_glyph = api::GlyphSet::Regular;
-    let mut current_string_clip = op::ClipRegion::screen();
+    let mut current_glyph = blitstr::fonts::GlyphSet::Regular;
+    let mut current_string_clip = blitstr::Rect::full_screen();
+    let mut current_cursor = blitstr::Cursor::from_top_left_of(current_string_clip);
 
     display.redraw();
 
@@ -49,7 +51,7 @@ fn xmain() -> ! {
                     display.redraw();
                 },
                 Opcode::Clear(_color) => {
-                    op::clear_region(display.native_buffer(), op::ClipRegion::screen());
+                    blitstr::clear_region(display.native_buffer(), blitstr::Rect::full_screen());
                 }
                 Opcode::Line(start, end) => {
                     info!("GFX: Drawing line from {:?} to {:?}", start, end);
@@ -82,25 +84,32 @@ fn xmain() -> ! {
                     // });
                 }
                 Opcode::ClearRegion(rect) => {
-                    op::clear_region(display.native_buffer(), op::ClipRegion {
-                        x0: rect.x0 as _,
-                        y0: rect.y0 as _,
-                        x1: rect.x1 as _,
-                        y1: rect.y1 as _,
-                    });
+                    blitstr::clear_region(display.native_buffer(), blitstr::Rect::new(
+                        rect.min.x as _,
+                        rect.min.y as _,
+                        rect.max.x as _,
+                        rect.max.y as _,));
                 }
                 Opcode::String(s) => {
-                    match current_glyph {
-                        api::GlyphSet::Small => op::string_small_left(display.native_buffer(), current_string_clip, s),
-                        api::GlyphSet::Regular => op::string_regular_left(display.native_buffer(), current_string_clip, s),
-                        api::GlyphSet::Bold => op::string_bold_left(display.native_buffer(), current_string_clip, s),
-                    }
+                    blitstr::paint_str(display.native_buffer(), current_string_clip.into(), &mut current_cursor, current_glyph.into(), s);
                 }
                 Opcode::SetGlyph(glyph) => {
                     current_glyph = glyph;
                 }
+                Opcode::SetCursor(c) => {
+                    current_cursor = c;
+                }
+                Opcode::GetCursor => {
+                    let pt: api::Point = api::Point::new(current_cursor.pt.x as i16, current_cursor.pt.y as i16);
+                    xous::return_scalar2(
+                        msg.sender,
+                        pt.into(),
+                        current_cursor.line_height,
+                    )
+                    .expect("GFX: could not return GetCursor request");
+                }
                 Opcode::SetStringClipping(r) => {
-                    current_string_clip = op::ClipRegion::from(r);
+                    current_string_clip = r;
                 }
                 Opcode::ScreenSize => {
                     xous::return_scalar2(
@@ -113,18 +122,15 @@ fn xmain() -> ! {
                 Opcode::QueryGlyph => {
                     xous::return_scalar2(
                         msg.sender,
-                        api::glyph_to_arg(current_glyph),
-                        api::glyph_to_height(current_glyph),
+                        blitstr::fonts::glyph_to_arg(current_glyph),
+                        blitstr::fonts::glyph_to_height(current_glyph),
                     )
                     .expect("GFX: could not return QueryGlyph request");
                 }
             }
         } else {
-            // info!("Couldn't convert opcode");
+            error!("Couldn't convert opcode");
         }
-        // if let Some(mem) = msg.body.memory() {
-        //     xous::return_memory(msg.sender, *mem).expect("couldn't return message");
-        // }
         display.update();
     }
 }

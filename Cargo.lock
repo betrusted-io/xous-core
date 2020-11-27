@@ -66,6 +66,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "blitstr"
+version = "0.2.0"
+
+[[package]]
 name = "bstr"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -261,6 +265,7 @@ dependencies = [
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
+ "blitstr",
  "log",
  "log-server",
  "minifb",
@@ -793,6 +798,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "blitstr",
  "com",
  "graphics-server",
  "log",
