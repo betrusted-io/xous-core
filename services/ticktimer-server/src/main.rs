@@ -4,6 +4,8 @@
 mod api;
 use api::Opcode;
 
+mod os_timer;
+
 use core::convert::TryFrom;
 
 use heapless::binary_heap::{BinaryHeap, Min};
@@ -260,6 +262,9 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    // Start the OS timer which is responsible for setting up preemption.
+    os_timer::init();
+
     log_server::init_wait().unwrap();
 
     // "Sleep" commands get put in here and are ordered as necessary
