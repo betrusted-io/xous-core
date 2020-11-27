@@ -303,6 +303,8 @@ fn put_pixel(fb: &mut LcdFB, x: usize, y: usize, color: PixelColor) {
     } else {
         fb[(x + y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (x % 32))
     }
+    // set the dirty bit on the line that contains the pixel
+    fb[y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
 }
 
 // plotLine(int x0, int y0, int x1, int y1)
