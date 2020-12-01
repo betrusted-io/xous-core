@@ -362,19 +362,23 @@ fn message_ordering() {
             // Sync point waiting to start receiving.
             server_can_start_recv.recv().unwrap();
 
-            let mut previous_value = 0;
+            let mut queue_length = 1;
             // Keep receiving messages until we get a BlockingScalar message
             loop {
-                let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+                let envelope =
+                    xous_kernel::receive_message(sid).expect("couldn't receive messages");
                 match envelope.body {
                     xous_kernel::Message::Scalar(sm) => {
-                        assert_eq!(sm.id, previous_value, "messages were not ordered");
-                        previous_value += 1;
+                        assert_eq!(sm.id, queue_length, "messages were not ordered");
+                        queue_length += 1;
                     }
                     xous_kernel::Message::BlockingScalar(sm) => {
-                        assert_eq!(sm.id, previous_value, "blocking message were not ordered");
-                        previous_value += 1;
-                        xous_kernel::return_scalar(envelope.sender, 0).expect("couldn't return scalar");
+                        assert_eq!(sm.id, queue_length, "blocking message were not ordered");
+                        // The BlockingScalar has exceeded the queue length, so subtract
+                        // 1 from the running total.
+                        queue_length -= 1;
+                        xous_kernel::return_scalar(envelope.sender, queue_length)
+                            .expect("couldn't return scalar");
                         break;
                     }
                     _ => panic!("unexpected message received"),
@@ -382,7 +386,7 @@ fn message_ordering() {
             }
 
             // Return the total number of messages we've seen to the parent
-            server_total_send.send(previous_value).unwrap();
+            server_total_send.send(queue_length).unwrap();
         },
     ))
     .expect("couldn't spawn server process");
@@ -396,7 +400,7 @@ fn message_ordering() {
 
             // Determine the length of the kernel queue.
             let mut queue_length = 0;
-            for i in 0.. {
+            for i in 1.. {
                 if xous_kernel::try_send_message(
                     conn,
                     xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
@@ -413,17 +417,16 @@ fn message_ordering() {
                 }
                 queue_length += 1;
             }
-            queue_length += 1;
-            println!("detected kernel queue_length: {}", queue_length);
 
             // Let the server process messages
             server_can_start_send.send(()).ok();
 
-            // Send one more message, but make it non-blocking so it gets retried.
+            // Send one more message, but make it blocking. This acts as a sentinal
+            // value to let the kernel know things are done.
             xous_kernel::send_message(
                 conn,
                 xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
-                    id: queue_length,
+                    id: queue_length + 1,
                     arg1: 0,
                     arg2: 0,
                     arg3: 0,
@@ -432,6 +435,7 @@ fn message_ordering() {
             )
             .expect("couldn't send message");
 
+            // Report the number of messages to the main thread.
             client_total_send.send(queue_length).unwrap();
         },
     ))
@@ -440,12 +444,14 @@ fn message_ordering() {
     let server_total = server_total_recv.recv().unwrap();
     let client_total = client_total_recv.recv().unwrap();
 
-    
     // Wait for both processes to finish
     crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
     crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
     shutdown_kernel();
-    assert_eq!(client_total, server_total, "client and server processed a different number of messages");
+    assert_eq!(
+        client_total, server_total,
+        "client and server processed a different number of messages"
+    );
 
     main_thread.join().expect("couldn't join kernel process");
 }
