@@ -418,7 +418,7 @@ impl Server {
     pub fn take_next_message(&mut self, sidx: usize) -> Option<xous_kernel::MessageEnvelope> {
         // println!(
         //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}  CID: ((({})))",
-        //     self.queue_head, self.queue_tail, self.queue[self.queue_tail], cid
+        //     self.queue_head, self.queue_tail, self.queue[self.queue_tail], sidx
         // );
         let sender = SenderID {
             idx: self.queue_tail,
