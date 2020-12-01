@@ -333,12 +333,9 @@ impl Server {
         idx: usize,
         buf: Option<&MemoryRange>,
     ) -> Result<WaitingMessage, xous_kernel::Error> {
-        if idx > self.queue.len() {
-            // println!("KERNEL: index exceeds queue length");
-            return Err(xous_kernel::Error::BadAddress);
-        }
-        klog!("memory in queue[{}]: {:?}", idx, self.queue[idx]);
-        let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match self.queue[idx] {
+        let current_val = self.queue.get_mut(idx).ok_or(xous_kernel::Error::BadAddress)?;
+        klog!("memory in queue[{}]: {:?}", idx, val);
+        let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match *current_val {
             QueuedMessage::WaitingReturnMemory(pid, tid, server_addr, client_addr, len) => {
                 (pid, tid, server_addr, client_addr, len, false, true)
             }
@@ -357,10 +354,10 @@ impl Server {
             let buf = buf.expect("memory message expected but no buffer passed!");
             if server_addr != buf.as_ptr() as usize || len != buf.len() {
                 // println!("KERNEL: Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
-                return Err(xous_kernel::Error::BadAddress);
+                Err(xous_kernel::Error::BadAddress)?;
             }
         }
-        self.queue[idx] = QueuedMessage::Empty;
+        *current_val = QueuedMessage::Empty;
         self.queue_tail += 1;
         if self.queue_tail >= self.queue.len() {
             self.queue_tail = 0;
