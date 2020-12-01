@@ -323,7 +323,8 @@ impl SystemServices {
         // Set up our handle with a bogus sp and pc.  These will get updated
         // once a context switch _away_ from the kernel occurs, however we need
         // to make sure other fields such as "thread number" are all valid.
-        ArchProcess::setup_process(PID::new(1).unwrap(), ThreadInit::default()).expect("couldn't setup process");
+        ArchProcess::setup_process(PID::new(1).unwrap(), ThreadInit::default())
+            .expect("couldn't setup process");
     }
 
     /// Add a new entry to the process table. This results in a new address space
@@ -865,7 +866,7 @@ impl SystemServices {
                 ProcessState::Allocated => {
                     ArchProcess::with_inner_mut(|process_inner| process_inner.pid = new_pid);
                     ProcessState::Running(0)
-                },
+                }
                 ProcessState::Free => panic!("process was suddenly Free"),
                 ProcessState::Ready(x) | ProcessState::Running(x) => {
                     ProcessState::Running(x & !(1 << new_tid))
@@ -941,7 +942,7 @@ impl SystemServices {
                 previous_pid, new.state
             ) /*,
               }*/
-;
+            ;
             // if advance_thread {
             //     new.current_thread += 1;
             //     if new.current_thread as TID > arch::process::MAX_CONTEXT {
@@ -1277,7 +1278,7 @@ impl SystemServices {
             ProcessState::Allocated => {
                 ArchProcess::with_inner_mut(|process_inner| process_inner.pid = pid);
                 ProcessState::Ready(1 << new_tid)
-            },
+            }
 
             other => panic!(
                 "error spawning thread: process was in an invalid state {:?}",
@@ -1508,28 +1509,6 @@ impl SystemServices {
         result
     }
 
-    // /// Obtain the connection ID of the server from within the server process.
-    // pub fn server_cid(&mut self, sidx: usize) -> Result<CID, xous_kernel::Error> {
-    //     let current_pid = self.current_pid();
-    //     let result = {
-    //         let server = self
-    //             .server_from_sidx(sidx)
-    //             .ok_or(xous_kernel::Error::ServerNotFound)?;
-    //         let server_pid = server.pid;
-    //         let sid = server.sid;
-    //         {
-    //             let server_process = self.get_process(server_pid)?;
-    //             server_process.mapping.activate().unwrap();
-    //         }
-    //         self.connect_to_server(sid)
-    //     };
-    //     let current_process = self
-    //         .get_process(current_pid)
-    //         .expect("couldn't restore previous process");
-    //     current_process.mapping.activate()?;
-    //     result
-    // }
-
     /// Switch to the server's address space and add a "remember this address"
     /// entry to its server queue, then switch back to the original address space.
     pub fn remember_server_message(
@@ -1552,8 +1531,13 @@ impl SystemServices {
             .server_from_sidx_mut(sidx)
             .expect("couldn't re-discover server index");
         let result = server.queue_response(current_pid, current_thread, message, client_address);
-        let current_process = self.get_process(current_pid).expect("couldn't find old process");
-        current_process.mapping.activate().expect("couldn't switch back to previous address space");
+        let current_process = self
+            .get_process(current_pid)
+            .expect("couldn't find old process");
+        current_process
+            .mapping
+            .activate()
+            .expect("couldn't switch back to previous address space");
         result
     }
 

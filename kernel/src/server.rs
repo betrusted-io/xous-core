@@ -367,7 +367,11 @@ impl Server {
         }
 
         // Destructure the PID and context ID from the `pid_tid` field
-        klog!("taking waiting message and returning to pid: {} tid: {}", pid, tid);
+        klog!(
+            "taking waiting message and returning to pid: {} tid: {}",
+            pid,
+            tid
+        );
 
         if !is_memory {
             return Ok(WaitingMessage::ScalarMessage(
@@ -419,7 +423,8 @@ impl Server {
         let sender = SenderID {
             idx: self.queue_tail,
             sidx,
-        }.into();
+        }
+        .into();
         let (result, response) = match self.queue[self.queue_tail] {
             QueuedMessage::Empty => return None,
             QueuedMessage::WaitingReturnMemory(_, _, _, _, _) => return None,
