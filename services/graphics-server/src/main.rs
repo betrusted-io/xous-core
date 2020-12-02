@@ -16,6 +16,7 @@ use core::convert::TryFrom;
 mod logo;
 
 use blitstr;
+use api::{PixelColor, Rectangle, DrawStyle};
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(logo::LOGO_MAP);
@@ -30,9 +31,8 @@ fn xmain() -> ! {
 
     draw_boot_logo(&mut display);
 
-    let mut current_color = api::Color::from(0usize);
-    let mut current_glyph = blitstr::fonts::GlyphSet::Regular;
-    let mut current_string_clip = blitstr::Rect::full_screen();
+    let mut current_glyph = blitstr::GlyphStyle::Regular;
+    let mut current_string_clip = blitstr::ClipRect::full_screen();
     let mut current_cursor = blitstr::Cursor::from_top_left_of(current_string_clip);
 
     display.redraw();
@@ -50,50 +50,24 @@ fn xmain() -> ! {
                     display.update();
                     display.redraw();
                 },
-                Opcode::Clear(_color) => {
-                    blitstr::clear_region(display.native_buffer(), blitstr::Rect::full_screen());
+                Opcode::Clear => {
+                    let mut r = Rectangle::full_screen();
+                    r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
+                    op::rectangle(display.native_buffer(), r)
                 }
-                Opcode::Line(start, end) => {
-                    info!("GFX: Drawing line from {:?} to {:?}", start, end);
-                    op::line(display.native_buffer(), start.x as _, start.y as _, end.x as _, end.y as _, if current_color.color == 0 { op::PixelColor::Off } else {op::PixelColor::On });
+                Opcode::Line(l) => {
+                    op::line(display.native_buffer(), l);
                 }
-                Opcode::Rectangle(start, end) => {
-                    todo!();
-                    // Line::new(start.into(), end.into())
-                    //     .into_styled(current_style)
-                    //     .draw(&mut display)
-                    //     .ok();
+                Opcode::Rectangle(r) => {
+                    op::rectangle(display.native_buffer(), r);
                 }
-                Opcode::Circle(mid, radius) => {
-                    info!("GFX: Drawing cicrle at {:?} radius {:?}", mid, radius);
-                    op::circle(display.native_buffer(), mid.x as _, mid.y as _, radius as _, 0, op::PixelColor::On);
-                }
-                Opcode::Style(stroke_width, stroke_color, fill_color) => {
-                    current_color = stroke_color;
-                    // todo!();
-                    // current_style.stroke_width = stroke_width;
-                    // current_style.stroke_color = Some(if stroke_color.color == 0 {
-                    //     BinaryColor::Off
-                    // } else {
-                    //     BinaryColor::On
-                    // });
-                    // current_style.fill_color = Some(if fill_color.color == 0 {
-                    //     BinaryColor::Off
-                    // } else {
-                    //     BinaryColor::On
-                    // });
-                }
-                Opcode::ClearRegion(rect) => {
-                    blitstr::clear_region(display.native_buffer(), blitstr::Rect::new(
-                        rect.min.x as _,
-                        rect.min.y as _,
-                        rect.max.x as _,
-                        rect.max.y as _,));
+                Opcode::Circle(c) => {
+                    op::circle(display.native_buffer(), c);
                 }
                 Opcode::String(s) => {
                     blitstr::paint_str(display.native_buffer(), current_string_clip.into(), &mut current_cursor, current_glyph.into(), s);
                 }
-                Opcode::SetGlyph(glyph) => {
+                Opcode::SetGlyphStyle(glyph) => {
                     current_glyph = glyph;
                 }
                 Opcode::SetCursor(c) => {
@@ -119,11 +93,11 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: couldn't return ScreenSize request");
                 }
-                Opcode::QueryGlyph => {
+                Opcode::QueryGlyphStyle => {
                     xous::return_scalar2(
                         msg.sender,
-                        blitstr::fonts::glyph_to_arg(current_glyph),
-                        blitstr::fonts::glyph_to_height(current_glyph),
+                        current_glyph.into(),
+                        blitstr::glyph_to_height_hint(current_glyph),
                     )
                     .expect("GFX: could not return QueryGlyph request");
                 }
