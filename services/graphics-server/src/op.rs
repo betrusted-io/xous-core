@@ -15,78 +15,6 @@ pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
 /// For storing a full-row wide blit pattern
 pub type BlitRow = [u32; LCD_WORDS_PER_LINE];
 
-/// Invert a screen region bounded by (cr.x0,cr.y0)..(cr.x0,cr.y1)
-pub fn invert_region(fb: &mut LcdFB, cr: Rectangle) {
-    if cr.y1() > LCD_LINES || cr.y0() >= cr.y1() || cr.x1() > LCD_PX_PER_LINE || cr.x0() >= cr.x1() {
-        return;
-    }
-    // Calculate word alignment for destination buffer
-    let dest_low_word = cr.x0() >> 5;
-    let dest_high_word = cr.x1() >> 5;
-    let px_in_dest_low_word = 32 - (cr.x0() & 0x1f);
-    let px_in_dest_high_word = cr.x1() & 0x1f;
-    // Blit it
-    for y in cr.y0()..cr.y1() {
-        let base = y * LCD_WORDS_PER_LINE;
-        fb[base + dest_low_word] ^= 0xffffffff << (32 - px_in_dest_low_word);
-        for w in dest_low_word + 1..dest_high_word {
-            fb[base + w] ^= 0xffffffff;
-        }
-        if dest_low_word < dest_high_word {
-            fb[base + dest_high_word] ^= 0xffffffff >> (32 - px_in_dest_high_word);
-        }
-    }
-}
-
-/// Clear a line of the screen
-pub fn line_fill_clear(fb: &mut LcdFB, y: i16) {
-    let mut clip_y = y as usize;
-    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
-
-    let base = clip_y * LCD_WORDS_PER_LINE;
-    for i in 0..=9 {
-        fb[base + i] = 0xffff_ffff;
-    }
-    fb[base + 10] = 0x0000_ffff;
-}
-
-/// Fill a line of the screen with full-width pattern
-pub fn line_fill_pattern(fb: &mut LcdFB, y: usize, pattern: &BlitRow) {
-    let mut clip_y = y;
-    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
-
-    let base = clip_y * LCD_WORDS_PER_LINE;
-    for (i, v) in pattern.iter().enumerate() {
-        fb[base + i] = *v;
-    }
-}
-
-/// Fill a line of the screen with black, padded with clear to left and right
-fn line_fill_padded_solid(fb: &mut LcdFB, y: usize) {
-    let mut clip_y = y;
-    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
-
-    let base = clip_y * LCD_WORDS_PER_LINE;
-    fb[base] = 0x0000_0003;
-    for i in 1..=9 {
-        fb[base + i] = 0x0000_0000;
-    }
-    fb[base + 10] = 0x0000_c000;
-}
-
-/// Fill a line of the screen with clear, bordered by black, padded with clear
-fn line_fill_padded_border(fb: &mut LcdFB, y: usize) {
-    let mut clip_y = y;
-    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
-
-    let base = clip_y * LCD_WORDS_PER_LINE;
-    fb[base] = 0xffff_fffb;
-    for i in 1..=9 {
-        fb[base + i] = 0xffff_ffff;
-    }
-    fb[base + 10] = 0x0000_dfff;
-}
-
 fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
     let mut clip_y: usize = y as usize;
     if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
@@ -144,6 +72,7 @@ pub fn line(fb: &mut LcdFB, l: Line) {
 
 
 /// Pixel iterator for each pixel in the circle border
+/// lifted from embedded-graphics crate
 #[derive(Debug, Copy, Clone)]
 pub struct CircleIterator {
     center: Point,
@@ -224,6 +153,7 @@ pub fn circle(fb: &mut LcdFB, circle: Circle) {
 
 
 /// Pixel iterator for each pixel in the rect border
+/// lifted from embedded-graphics crate
 #[derive(Debug, Clone, Copy)]
 pub struct RectangleIterator {
     top_left: Point,
