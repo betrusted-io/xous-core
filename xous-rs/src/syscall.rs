@@ -288,6 +288,11 @@ pub enum SysCall {
     ///                    be created.
     CreateServer,
 
+    /// Establish a connection in the given process to the given server. This
+    /// call can be used by a nameserver to make server connections without
+    /// disclosing SIDs.
+    ConnectForProcess(PID, SID),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -323,6 +328,7 @@ pub enum SysCallNumber {
     ReturnScalar2 = 27,
     TryReceiveMessage = 28,
     CreateServer = 29,
+    ConnectForProcess = 30,
     Invalid,
 }
 
@@ -358,6 +364,7 @@ impl SysCallNumber {
             27 => ReturnScalar2,
             28 => TryReceiveMessage,
             29 => CreateServer,
+            30 => ConnectForProcess,
             _ => Invalid,
         }
     }
@@ -419,6 +426,19 @@ impl SysCall {
                     s.2 as _,
                     s.3 as _,
                     0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::ConnectForProcess(pid, sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::ConnectForProcess as usize,
+                    pid.get() as _,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
                     0,
                     0,
                 ]
@@ -832,6 +852,10 @@ impl SysCall {
             SysCallNumber::ReturnScalar2 => {
                 SysCall::ReturnScalar2(MessageSender::from_usize(a1), a2, a3)
             }
+            SysCallNumber::ConnectForProcess => SysCall::ConnectForProcess(
+                PID::new(a1 as _).ok_or(Error::InvalidSyscall)?,
+                SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
+            ),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
