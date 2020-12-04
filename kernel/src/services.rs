@@ -1367,6 +1367,20 @@ impl SystemServices {
         self.create_server_with_address(pid, sid)
     }
 
+    /// Connect to a server on behalf of another process.
+    pub fn connect_process_to_server(&mut self, target_pid: PID, sid: SID)  -> Result<CID, xous_kernel::Error>{
+        let original_pid = crate::arch::process::current_pid();
+
+        let process = self.get_process_mut(target_pid)?;
+        process.activate()?;
+
+        let result = self.connect_to_server(sid);
+
+        let process = self.get_process_mut(original_pid)?;
+        process.activate().unwrap();
+
+        result
+    }
     /// Allocate a new server ID for this process and return the address. If the
     /// server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous_kernel::Error> {

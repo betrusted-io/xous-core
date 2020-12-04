@@ -119,6 +119,155 @@ fn shutdown() {
 }
 
 #[test]
+fn connect_for_process() {
+    use xous_kernel::SID;
+    // Start the server in another thread
+    let main_thread = start_kernel(SERVER_SPEC);
+    let nameserver_addr_bytes = b"nameserver-12345";
+    let nameserver_addr = SID::from_bytes(nameserver_addr_bytes).unwrap();
+
+    let (server_addr_send, server_addr_recv) = channel();
+    let (nameserver_send, nameserver_recv) = channel();
+
+    // Spawn the client "process" and wait for the server address.
+    let nameserver_process = xous_kernel::create_process_as_thread(
+        xous_kernel::ProcessArgsAsThread::new("nameserver_process", move || {
+            let sid = xous_kernel::create_server_with_address(&nameserver_addr_bytes)
+                .expect("couldn't create test server");
+            // Indicate that the nameserver is running
+            nameserver_send.send(()).unwrap();
+
+            // Receive the first message, which is the SID to register
+            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            let (msg, other_sid) = if let xous_kernel::Message::Scalar(msg) = envelope.body {
+                (
+                    msg.id,
+                    SID::from_u32(msg.arg1 as _, msg.arg2 as _, msg.arg3 as _, msg.arg4 as _),
+                )
+            } else {
+                panic!("unexpected message")
+            };
+
+            assert!(msg == 1, "unexpected message id");
+
+            // Receive the second message, which is the "name" to "resolve"
+            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            let msg = if let xous_kernel::Message::BlockingScalar(msg) = envelope.body {
+                msg.id
+            } else {
+                panic!("unexpected message")
+            };
+            assert!(msg == 10, "unexpected message id");
+
+            let new_cid_result =
+                xous_kernel::connect_for_process(envelope.sender.pid().unwrap(), other_sid)
+                    .expect("couldn't connect for other process");
+            let new_cid = if let xous_kernel::Result::ConnectionID(c) = new_cid_result {
+                c
+            } else {
+                panic!("Unexpected return value");
+            };
+            xous_kernel::return_scalar(envelope.sender, new_cid).expect("couldn't return scalar");
+        }),
+    )
+    .expect("couldn't spawn client process");
+
+    // Spawn the server "process" (which just lives in a separate thread)
+    // and receive the message. Note that we need to communicate to the
+    // "Client" what our server ID is. Normally this would be done via
+    // an external nameserver.
+    let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message server",
+        move || {
+            let sid = xous_kernel::create_server().expect("couldn't create test server");
+            // Wait for nameserver to start
+            nameserver_recv.recv().unwrap();
+
+            let conn =
+                xous_kernel::try_connect(nameserver_addr).expect("couldn't connect to server");
+            // Register our SID with the nameserver
+            let sid_u32 = sid.to_u32();
+            xous_kernel::send_message(
+                conn,
+                xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    id: 1,
+                    arg1: sid_u32.0 as _,
+                    arg2: sid_u32.1 as _,
+                    arg3: sid_u32.2 as _,
+                    arg4: sid_u32.3 as _,
+                }),
+            )
+            .expect("couldn't send message");
+
+            server_addr_send.send(()).unwrap();
+
+            let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
+            assert_eq!(
+                envelope.body,
+                xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    id: 15,
+                    arg1: 21,
+                    arg2: 31,
+                    arg3: 41,
+                    arg4: 51
+                })
+            );
+        },
+    ))
+    .expect("couldn't spawn server process");
+
+    // Spawn the client "process" and wait for the server address.
+    let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "send_scalar_message client",
+        move || {
+            server_addr_recv.recv().unwrap();
+            let conn =
+                xous_kernel::try_connect(nameserver_addr).expect("couldn't connect to server");
+
+            // Attempt to resolve this address.
+            let other_conn_result = xous_kernel::try_send_message(
+                conn,
+                xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                    id: 10,
+                    arg1: 52,
+                    arg2: 53,
+                    arg3: 54,
+                    arg4: 55,
+                }),
+            )
+            .expect("couldn't send message");
+            let other_conn = if let xous_kernel::Result::Scalar1(r) = other_conn_result {
+                r
+            } else {
+                panic!("unexpected return value");
+            };
+
+            // Send a message to the server we were just connected to.
+            xous_kernel::try_send_message(
+                other_conn,
+                xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                    id: 15,
+                    arg1: 21,
+                    arg2: 31,
+                    arg3: 41,
+                    arg4: 51,
+                }),
+            )
+            .expect("couldn't send message");
+        },
+    ))
+    .expect("couldn't spawn client process");
+
+    // Wait for both processes to finish
+    crate::wait_process_as_thread(xous_server).expect("couldn't join server process");
+    crate::wait_process_as_thread(xous_client).expect("couldn't join client process");
+    crate::wait_process_as_thread(nameserver_process).expect("couldn't join nameserver process");
+    shutdown_kernel();
+
+    main_thread.join().expect("couldn't join kernel process");
+}
+
+#[test]
 fn send_scalar_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);

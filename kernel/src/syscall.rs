@@ -787,6 +787,17 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 Err(e) => Err(e),
             }
         }
+        SysCall::ConnectForProcess(pid, sid) => {
+            let result = SystemServices::with_mut(|ss| {
+                ss.connect_process_to_server(pid, sid)
+                    .map(xous_kernel::Result::ConnectionID)
+            });
+            match result {
+                Ok(o) => Ok(o),
+                Err(xous_kernel::Error::ServerNotFound) => retry_syscall(pid, tid),
+                Err(e) => Err(e),
+            }
+        }
         SysCall::SendMessage(cid, message) => {
             let result = send_message(pid, tid, cid, message);
             match result {
