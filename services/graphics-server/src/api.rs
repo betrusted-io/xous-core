@@ -1,324 +1,112 @@
-use crate::op::PixelColor;
 use xous::{Message, ScalarMessage};
 use core::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
-use blitstr::fonts::GlyphSet;
-use blitstr::fonts::*;
-use blitstr::Cursor;
+use blitstr::{GlyphStyle, ClipRect, Cursor};
+use core::cmp::{min, max};
+use crate::op::{WIDTH, HEIGHT};
 
-/// 2D size.
-///
-/// `Size` is used to define the width and height of an object.
-///
-/// [Nalgebra] support can be enabled with the `nalgebra_support` feature. This implements
-/// `From<Vector2<N>>` and `From<&Vector2<N>>` where `N` is `Scalar + Into<u16>`. This allows use
-/// of Nalgebra's [`Vector2`] with embedded-graphics where `u16`, `u16` or `u8` is used for value
-/// storage.
-///
-/// # Examples
-///
-/// ## Create a `Size` from two integers
-///
-///
-/// ```rust
-/// use embedded_graphics::geometry::Size;
-///
-/// // Create a size using the `new` constructor method
-/// let s = Size::new(10, 20);
-/// ```
-///
-/// ## Create a `Size` from a Nalgebra `Vector2`
-///
-/// _Be sure to enable the `nalgebra_support` feature to get [Nalgebra] integration._
-///
-/// Any `Vector2<N>` can be used where `N: Into<u16> + nalgebra::Scalar`. This includes the primitive types `u16`, `u16` and `u8`.
-///
-/// ```rust
-/// # #[cfg(feature = "nalgebra_support")] {
-/// use nalgebra::Vector2;
-/// use embedded_graphics::geometry::Size;
-///
-/// assert_eq!(Size::from(Vector2::new(10u16, 20)), Size::new(10u16, 20));
-/// assert_eq!(Size::from(Vector2::new(10u16, 20)), Size::new(10u16, 20));
-/// assert_eq!(Size::from(Vector2::new(10u8, 20)), Size::new(10u16, 20));
-/// # }
-/// ```
-///
-/// `.into()` can also be used, but may require more type annotations:
-///
-/// ```rust
-/// # #[cfg(feature = "nalgebra_support")] {
-/// use nalgebra::Vector2;
-/// use embedded_graphics::geometry::Size;
-///
-/// let c: Size = Vector2::new(10u16, 20).into();
-///
-/// assert_eq!(c, Size::new(10u16, 20));
-/// # }
-/// ```
-///
-/// [`Drawable`]: ../drawable/trait.Drawable.html
-/// [`Point`]: struct.Point.html
-/// [`Vector2<N>`]: https://docs.rs/nalgebra/0.18.0/nalgebra/base/type.Vector2.html
-/// [`Vector2`]: https://docs.rs/nalgebra/0.18.0/nalgebra/base/type.Vector2.html
-/// [Nalgebra]: https://docs.rs/nalgebra
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct Size {
-    /// The width.
-    pub width: u16,
-
-    /// The height.
-    pub height: u16,
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PixelColor {
+    Dark,
+    Light,
 }
 
-impl Size {
-    /// Creates a size from a width and a height.
-    pub const fn new(width: u16, height: u16) -> Self {
-        Size { width, height }
-    }
-
-    /// Creates a size with width and height equal to zero.
-    pub const fn zero() -> Self {
-        Size {
-            width: 0,
-            height: 0,
-        }
-    }
-
-    /// Creates a size from two corner points of a bounding box.
-    pub(crate) fn from_bounding_box(corner_1: Point, corner_2: Point) -> Self {
-        let width = (corner_1.x - corner_2.x).abs() as u16;
-        let height = (corner_1.y - corner_2.y).abs() as u16;
-
-        Self { width, height }
+impl From<usize> for PixelColor {
+    fn from(pc: usize) -> Self {
+        if pc != 0 { PixelColor::Dark }
+        else { PixelColor::Light }
     }
 }
 
-impl Add for Size {
-    type Output = Size;
-
-    fn add(self, other: Size) -> Size {
-        Size::new(self.width + other.width, self.height + other.height)
+impl From<bool> for PixelColor {
+    fn from(pc: bool) -> Self {
+        if pc { PixelColor::Dark }
+        else { PixelColor::Light }
     }
 }
 
-impl AddAssign for Size {
-    fn add_assign(&mut self, other: Size) {
-        self.width += other.width;
-        self.height += other.height;
+impl Into<usize> for PixelColor {
+    fn into(self) -> usize {
+        if self == PixelColor::Dark { 1 }
+        else { 0 }
     }
 }
 
-impl Sub for Size {
-    type Output = Size;
-
-    fn sub(self, other: Size) -> Size {
-        Size::new(self.width - other.width, self.height - other.height)
+impl Into<bool> for PixelColor {
+    fn into(self) -> bool {
+        if self == PixelColor::Dark { true }
+        else { false }
     }
 }
-
-impl SubAssign for Size {
-    fn sub_assign(&mut self, other: Size) {
-        self.width -= other.width;
-        self.height -= other.height;
-    }
-}
-
-impl Index<usize> for Size {
-    type Output = u16;
-
-    fn index(&self, idx: usize) -> &u16 {
-        match idx {
-            0 => &self.width,
-            1 => &self.height,
-            _ => panic!("index out of bounds: the len is 2 but the index is {}", idx),
-        }
-    }
-}
-
-impl From<(u16, u16)> for Size {
-    fn from(other: (u16, u16)) -> Self {
-        Size::new(other.0, other.1)
-    }
-}
-
-impl From<[u16; 2]> for Size {
-    fn from(other: [u16; 2]) -> Self {
-        Size::new(other[0], other[1])
-    }
-}
-
-impl From<&[u16; 2]> for Size {
-    fn from(other: &[u16; 2]) -> Self {
-        Size::new(other[0], other[1])
-    }
-}
-
-impl From<Size> for (u16, u16) {
-    fn from(other: Size) -> (u16, u16) {
-        (other.width, other.height)
-    }
-}
-
-impl From<&Size> for (u16, u16) {
-    fn from(other: &Size) -> (u16, u16) {
-        (other.width, other.height)
-    }
-}
-
-#[cfg(feature = "nalgebra_support")]
-use nalgebra::{base::Scalar, Vector2};
-
-#[cfg(feature = "nalgebra_support")]
-impl<N> From<Vector2<N>> for Size
-where
-    N: Into<u16> + Scalar,
-{
-    fn from(other: Vector2<N>) -> Self {
-        Self::new(other[0].into(), other[1].into())
-    }
-}
-
-#[cfg(feature = "nalgebra_support")]
-impl<N> From<&Vector2<N>> for Size
-where
-    N: Into<u16> + Scalar,
-{
-    fn from(other: &Vector2<N>) -> Self {
-        Self::new(other[0].into(), other[1].into())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_can_be_added() {
-        let left = Size::new(10, 20);
-        let right = Size::new(30, 40);
-
-        assert_eq!(left + right, Size::new(40, 60));
-    }
-
-    #[test]
-    fn sizes_can_be_subtracted() {
-        let left = Size::new(30, 40);
-        let right = Size::new(10, 20);
-
-        assert_eq!(left - right, Size::new(20, 20));
-    }
-
-    #[test]
-    fn from_tuple() {
-        assert_eq!(Size::from((20, 30)), Size::new(20, 30));
-    }
-
-    #[test]
-    fn from_array() {
-        assert_eq!(Size::from([20, 30]), Size::new(20, 30));
-    }
-
-    #[test]
-    fn from_array_ref() {
-        assert_eq!(Size::from(&[20, 30]), Size::new(20, 30));
-    }
-
-    #[test]
-    fn index() {
-        let size = Size::new(1, 2);
-
-        assert_eq!(size.width, size[0]);
-        assert_eq!(size.height, size[1]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn index_out_of_bounds() {
-        let size = Size::new(1, 2);
-        let _ = size[2];
-    }
-
-    #[test]
-    #[cfg(feature = "nalgebra_support")]
-    fn nalgebra_support() {
-        let left = nalgebra::Vector2::new(30u16, 40);
-        let right = nalgebra::Vector2::new(10, 20);
-
-        assert_eq!(Size::from(left - right), Size::new(20, 20));
-    }
-}
-
-
 
 /// Style properties for an object
 #[derive(Debug, Copy, Clone)]
-pub struct Style {
+pub struct DrawStyle {
     /// Fill colour of the object
-    ///
-    /// For fonts, this is the background colour of the text
     pub fill_color: Option<PixelColor>,
 
     /// Stroke (border/line) color of the object
-    ///
-    /// For fonts, this is the foreground colour of the text
     pub stroke_color: Option<PixelColor>,
 
     /// Stroke width
-    ///
-    /// Set the stroke width for an object. Has no effect on fonts.
     pub stroke_width: i16,
 }
 
-impl Style
-{
+impl DrawStyle {
+    pub fn new(fill: PixelColor, stroke: PixelColor, width: i16) -> Self {
+        Self { fill_color: Some(fill), stroke_color: Some(stroke), stroke_width: width }
+    }
+
     /// Create a new style with a given stroke value and defaults for everything else
     pub fn stroke_color(stroke_color: PixelColor) -> Self {
         Self {
             stroke_color: Some(stroke_color),
-            ..Style::default()
+            ..DrawStyle::default()
         }
-    }
-
-    /// Returns the stroke width as an `i16`.
-    ///
-    /// If the stroke width is too large to fit into an `i16` the maximum value
-    /// for an `i16` is returned instead.
-    pub(crate) fn stroke_width_i16(&self) -> i16 {
-        self.stroke_width
     }
 }
 
-impl Default for Style
-{
+impl Default for DrawStyle {
     fn default() -> Self {
         Self {
-            fill_color: None,
-            stroke_color: None,
+            fill_color: Some(PixelColor::Dark),
+            stroke_color: Some(PixelColor::Dark),
             stroke_width: 1,
         }
     }
 }
 
-/// Add a style to an object
-pub trait WithStyle
-{
-    /// Add a complete style to the object
-    fn style(self, style: Style) -> Self;
+impl From<usize> for DrawStyle {
+    fn from(s: usize) -> Self {
+        // usize split into these words:
+        //  31 ...  16  15 ... 4     3..2    1..0
+        //    width       rsvd      stroke   fill
+        // where the MSB of stroke/fill encodes Some/None
+        let fc: PixelColor = (s & 0b0001).into();
+        let sc: PixelColor = (s & 0b0100).into();
+        DrawStyle {
+            fill_color:    if s & 0b0010 != 0 {Some(fc)} else {None},
+            stroke_color:  if s & 0b1000 != 0 {Some(sc)} else {None},
+            stroke_width: (s >> 16) as i16,
+        }
+    }
+}
 
-    /// Set the stroke colour for the object
-    ///
-    /// This can be a noop
-    fn stroke_color(self, color: Option<PixelColor>) -> Self;
-
-    /// Set the stroke width for the object
-    ///
-    /// A stroke with a width of zero will not be rendered
-    fn stroke_width(self, width: u16) -> Self;
-
-    /// Set the fill property of the object's style
-    ///
-    /// This can be a noop
-    fn fill_color(self, color: Option<PixelColor>) -> Self;
+impl Into<usize> for DrawStyle {
+    fn into(self) -> usize {
+        let sc: usize;
+        if self.stroke_color.is_some() {
+            sc = 0b10 | self.stroke_color.unwrap() as usize;
+        } else {
+            sc = 0;
+        }
+        let fc: usize;
+        if self.fill_color.is_some() {
+            fc = 0b10 | self.fill_color.unwrap() as usize;
+        } else {
+            fc = 0;
+        }
+        (self.stroke_width as usize) << 16 | sc << 2 | fc
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -347,49 +135,10 @@ impl Add for Point {
     }
 }
 
-impl Add<Size> for Point {
-    type Output = Point;
-
-    /// Offsets a point by adding a size.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `width` or `height` are too large to be represented as an `i16`
-    /// and debug assertions are enabled.
-    fn add(self, other: Size) -> Point {
-        let width = other.width as i16;
-        let height = other.height as i16;
-
-        debug_assert!(width >= 0, "width is too large");
-        debug_assert!(height >= 0, "height is too large");
-
-        Point::new(self.x + width, self.y + height)
-    }
-}
-
 impl AddAssign for Point {
     fn add_assign(&mut self, other: Point) {
         self.x += other.x;
         self.y += other.y;
-    }
-}
-
-impl AddAssign<Size> for Point {
-    /// Offsets a point by adding a size.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `width` or `height` are too large to be represented as an `i16`
-    /// and debug assertions are enabled.
-    fn add_assign(&mut self, other: Size) {
-        let width = other.width as i16;
-        let height = other.height as i16;
-
-        debug_assert!(width >= 0, "width is too large");
-        debug_assert!(height >= 0, "height is too large");
-
-        self.x += width;
-        self.y += height;
     }
 }
 
@@ -401,49 +150,10 @@ impl Sub for Point {
     }
 }
 
-impl Sub<Size> for Point {
-    type Output = Point;
-
-    /// Offsets a point by subtracting a size.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `width` or `height` are too large to be represented as an `i16`
-    /// and debug assertions are enabled.
-    fn sub(self, other: Size) -> Point {
-        let width = other.width as i16;
-        let height = other.height as i16;
-
-        debug_assert!(width >= 0, "width is too large");
-        debug_assert!(height >= 0, "height is too large");
-
-        Point::new(self.x - width, self.y - height)
-    }
-}
-
 impl SubAssign for Point {
     fn sub_assign(&mut self, other: Point) {
         self.x -= other.x;
         self.y -= other.y;
-    }
-}
-
-impl SubAssign<Size> for Point {
-    /// Offsets a point by subtracting a size.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if `width` or `height` are too large to be represented as an `i16`
-    /// and debug assertions are enabled.
-    fn sub_assign(&mut self, other: Size) {
-        let width = other.width as i16;
-        let height = other.height as i16;
-
-        debug_assert!(width >= 0, "width is too large");
-        debug_assert!(height >= 0, "height is too large");
-
-        self.x -= width;
-        self.y -= height;
     }
 }
 
@@ -503,30 +213,6 @@ impl Into<usize> for Point {
     }
 }
 
-/// A single pixel
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Pixel(pub Point, pub PixelColor);
-
-#[derive(Copy, Clone, Debug)]
-pub struct Rect {
-    pub x0: i16,
-    pub y0: i16,
-    pub x1: i16,
-    pub y1: i16,
-}
-
-impl Rect {
-    pub fn new(x0: i16, y0: i16, x1: i16, y1: i16) -> Self {
-        Self { x0, y0, x1, y1 }
-    }
-}
-
-// impl Into<embedded_graphics::geometry::Point> for Point {
-//     fn into(self) -> embedded_graphics::geometry::Point {
-//         embedded_graphics::geometry::Point::new(self.x as _, self.y as _)
-//     }
-// }
-
 impl From<usize> for Point {
     fn from(p: usize) -> Point {
         Point {
@@ -536,27 +222,118 @@ impl From<usize> for Point {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Color {
-    pub color: u16,
-}
-
-impl From<usize> for Color {
-    fn from(c: usize) -> Color {
-        Color { color: c as _ }
-    }
-}
+/// A single pixel
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Pixel(pub Point, pub PixelColor);
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rectangle {
     /// Top left point of the rect
-    pub top_left: Point,
+    pub tl: Point,
 
     /// Bottom right point of the rect
-    pub bottom_right: Point,
+    pub br: Point,
 
-    /// Object style
-    pub style: PixelColor,
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+impl Rectangle {
+    pub fn new(p1: Point, p2: Point) -> Rectangle {
+        // always check point ordering
+        Rectangle {
+            tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
+            br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
+            style: DrawStyle::default()
+        }
+    }
+    pub fn new_coords(x0: i16, y0: i16, x1: i16, y1: i16) -> Rectangle {
+        Rectangle {
+            tl: Point::new(min(x0, x1), min(y0, y1)),
+            br: Point::new(max(x0, x1), max(y0, y1)),
+            style: DrawStyle::default()
+        }
+    }
+    pub fn new_coords_with_style(x0: i16, y0: i16, x1: i16, y1: i16, style: DrawStyle) -> Rectangle {
+        Rectangle {
+            tl: Point::new(min(x0, x1), min(y0, y1)),
+            br: Point::new(max(x0, x1), max(y0, y1)),
+            style: style
+        }
+    }
+    pub fn new_with_style(p1: Point, p2: Point, style: DrawStyle) -> Rectangle {
+        // always check point ordering
+        Rectangle {
+            tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
+            br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
+            style: style
+        }
+    }
+    pub fn x0(&self) -> usize { self.tl.x as usize }
+    pub fn x1(&self) -> usize { self.br.x as usize }
+    pub fn y0(&self) -> usize { self.tl.y as usize }
+    pub fn y1(&self) -> usize { self.br.y as usize }
+
+    /// Make a rectangle of the full screen size
+    pub fn full_screen() -> Rectangle {
+        Rectangle {
+            tl: Point::new(0, 0),
+            br: Point::new(WIDTH, HEIGHT),
+            style: DrawStyle::default()
+        }
+    }
+    /// Make a rectangle of the screen size minus padding
+    pub fn padded_screen() -> Rectangle {
+        let pad = 6;
+        Rectangle {
+            tl: Point::new(pad, pad),
+            br: Point::new(WIDTH - pad, HEIGHT - pad),
+            style: DrawStyle::default()
+        }
+    }
+}
+
+impl Into<ClipRect> for Rectangle {
+    fn into(self) -> ClipRect {
+        ClipRect::new(self.x0(), self.y0(), self.x1(), self.y1())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Line {
+    pub start: Point,
+    pub end: Point,
+
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+impl Line {
+    pub fn new(start: Point, end: Point) -> Line {
+        Line { start: start, end: end, style: DrawStyle::default() }
+    }
+    pub fn new_with_style(start: Point, end: Point, style: DrawStyle) -> Line {
+        Line { start: start, end: end, style: style, }
+    }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub struct Circle {
+    pub center: Point,
+    pub radius: i16,
+
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+impl Circle {
+    pub fn new(c: Point, r: i16) -> Circle {
+        Circle { center: c, radius: r, style: DrawStyle::default() }
+    }
+    pub fn new_with_style(c: Point, r: i16, style: DrawStyle) -> Circle {
+        Circle { center: c, radius: r, style }
+    }
 }
 
 #[derive(Debug)]
@@ -564,30 +341,20 @@ pub enum Opcode<'a> {
     /// Flush the buffer to the screen
     Flush,
 
-    /// Clear the buffer to the specified color
-    Clear(Color),
+    /// Clear the buffer to "light" colored pixels
+    Clear,
 
     /// Draw a line at the specified area
-    Line(Point /* start */, Point /* end */),
+    Line(Line),
 
     /// Draw a rectangle or square at the specified coordinates
-    Rectangle(Point /* upper-left */, Point /* lower-right */),
+    Rectangle(Rectangle),
 
     /// Draw a circle with a specified radius
-    Circle(Point, u16 /* radius */),
-
-    /// Change the style of the current pen
-    Style(
-        u16,   /* stroke width */
-        Color, /* stroke color */
-        Color, /* fill color */
-    ),
-
-    /// Clear the specified region
-    ClearRegion(blitstr::Rect),
+    Circle(Circle),
 
     /// Set the current string glyph set for strings
-    SetGlyph(GlyphSet),
+    SetGlyphStyle(GlyphStyle),
 
     /// Set the cursor point for the current string clipping region
     SetCursor(Cursor),
@@ -596,7 +363,7 @@ pub enum Opcode<'a> {
     GetCursor,
 
     /// Set the clipping region for the string.
-    SetStringClipping(blitstr::Rect),
+    SetStringClipping(ClipRect),
 
     /// Render the string inside the clipping region.
     String(&'a str),
@@ -604,8 +371,8 @@ pub enum Opcode<'a> {
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,
 
-    /// Retrieve the current Glyph characteristics
-    QueryGlyph,
+    /// Retrieve the current Glyph style
+    QueryGlyphStyle,
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -614,29 +381,21 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
         match message {
             Message::Scalar(m) => match m.id {
                 1 => Ok(Opcode::Flush),
-                2 => Ok(Opcode::Clear(Color::from(m.arg1))),
-                3 => Ok(Opcode::Line(Point::from(m.arg1), Point::from(m.arg2))),
-                4 => Ok(Opcode::Rectangle(Point::from(m.arg1), Point::from(m.arg2))),
-                5 => Ok(Opcode::Circle(Point::from(m.arg1), m.arg2 as _)),
-                6 => Ok(Opcode::Style(
-                    m.arg1 as _,
-                    Color::from(m.arg2),
-                    Color::from(m.arg3),
-                )),
-                7 => Ok(Opcode::ClearRegion(blitstr::Rect::new(
-                    m.arg1 as _,
-                    m.arg2 as _,
-                    m.arg3 as _,
-                    m.arg4 as _,
-                ))),
-                9 => Ok(Opcode::SetGlyph(arg_to_glyph(m.arg1))),
-                11 => Ok(Opcode::SetStringClipping(blitstr::Rect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
+                2 => Ok(Opcode::Clear),
+                3 => Ok(Opcode::Line(Line::new_with_style(
+                    Point::from(m.arg1), Point::from(m.arg2), DrawStyle::from(m.arg3)))),
+                4 => Ok(Opcode::Rectangle(Rectangle::new_with_style(
+                    Point::from(m.arg1), Point::from(m.arg2), DrawStyle::from(m.arg3)))),
+                5 => Ok(Opcode::Circle(Circle::new_with_style(
+                    Point::from(m.arg1), m.arg2 as _, DrawStyle::from(m.arg3)))),
+                9 => Ok(Opcode::SetGlyphStyle(GlyphStyle::from(m.arg1))),
+                11 => Ok(Opcode::SetStringClipping(ClipRect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
                 12 => Ok(Opcode::SetCursor(Cursor::new(m.arg1 as _, m.arg2 as _, m.arg3 as _))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
                 8 => Ok(Opcode::ScreenSize),
-                10 => Ok(Opcode::QueryGlyph),
+                10 => Ok(Opcode::QueryGlyphStyle),
                 13 => Ok(Opcode::GetCursor),
                 _ => Err("unrecognized opcode"),
             },
@@ -662,58 +421,36 @@ impl<'a> Into<Message> for Opcode<'a> {
         match self {
             Opcode::Flush => Message::Scalar(ScalarMessage {
                 id: 1,
-                arg1: 0,
-                arg2: 0,
-                arg3: 0,
-                arg4: 0,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
-            Opcode::Clear(color) => Message::Scalar(ScalarMessage {
+            Opcode::Clear => Message::Scalar(ScalarMessage {
                 id: 2,
-                arg1: color.color as _,
-                arg2: 0,
-                arg3: 0,
-                arg4: 0,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
-            Opcode::Line(start, end) => Message::Scalar(ScalarMessage {
+            Opcode::Line(line) => Message::Scalar(ScalarMessage {
                 id: 3,
-                arg1: start.into(),
-                arg2: end.into(),
-                arg3: 0,
+                arg1: line.start.into(),
+                arg2: line.end.into(),
+                arg3: line.style.into(),
                 arg4: 0,
             }),
-            Opcode::Rectangle(start, end) => Message::Scalar(ScalarMessage {
+            Opcode::Rectangle(r) => Message::Scalar(ScalarMessage {
                 id: 4,
-                arg1: start.into(),
-                arg2: end.into(),
-                arg3: 0,
+                arg1: r.tl.into(),
+                arg2: r.br.into(),
+                arg3: r.style.into(),
                 arg4: 0,
             }),
-            Opcode::Circle(center, radius) => Message::Scalar(ScalarMessage {
+            Opcode::Circle(c) => Message::Scalar(ScalarMessage {
                 id: 5,
-                arg1: center.into(),
-                arg2: radius as usize,
-                arg3: 0,
+                arg1: c.center.into(),
+                arg2: c.radius as usize,
+                arg3: c.style.into(),
                 arg4: 0,
-            }),
-            Opcode::Style(stroke_width, stroke_color, fill_color) => {
-                Message::Scalar(ScalarMessage {
-                    id: 6,
-                    arg1: stroke_width as _,
-                    arg2: stroke_color.color as _,
-                    arg3: fill_color.color as _,
-                    arg4: 0,
-                })
-            }
-            Opcode::ClearRegion(rect) => Message::Scalar(ScalarMessage {
-                id: 7,
-                arg1: rect.min.x as _,
-                arg2: rect.min.y as _,
-                arg3: rect.max.x as _,
-                arg4: rect.max.y as _,
             }),
             Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {id: 8, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
-            Opcode::QueryGlyph => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
-            Opcode::SetGlyph(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph_to_arg(glyph), arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::QueryGlyphStyle => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
+            Opcode::SetGlyphStyle(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph as usize, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::SetStringClipping(r) => Message::Scalar(ScalarMessage {
                 id: 11,
                 arg1: r.min.x as _, arg2: r.min.y as _, arg3: r.max.x as _, arg4: r.max.y as _,

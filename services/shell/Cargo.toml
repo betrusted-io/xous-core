@@ -13,7 +13,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 log-server = { path = "../log-server" }
 log = "0.4"
 com = { path = "../com"}
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "7684e03f98cf72d78e7ed148a34aca97a7ee5e25" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
 # blitstr = { path = "../../../blitstr" }
 # com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9" }
 

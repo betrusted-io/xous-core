@@ -9,7 +9,7 @@ description = "Manage the video output"
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
 log = "0.4"
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "7684e03f98cf72d78e7ed148a34aca97a7ee5e25" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
 # blitstr = { path = "../../../blitstr" }
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

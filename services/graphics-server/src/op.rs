@@ -1,7 +1,4 @@
-use blitstr::fonts;
-use blitstr::fonts::{Font, GlyphHeader};
-use crate::api::{Point, Style, Pixel, Rect};
-use blitstr::fonts::GlyphSet;
+use crate::api::{Point, DrawStyle, Pixel, Rectangle, Circle, PixelColor, Line};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -9,14 +6,8 @@ pub const LCD_PX_PER_LINE: usize = 336;
 pub const LCD_LINES: usize = 536;
 pub const LCD_FRAME_BUF_SIZE: usize = LCD_WORDS_PER_LINE * LCD_LINES;
 
-const WIDTH: usize = 336;
-const HEIGHT: usize = 536;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PixelColor {
-    On,
-    Off,
-}
+pub const WIDTH: i16 = 336;
+pub const HEIGHT: i16 = 536;
 
 /// For passing frame buffer references
 pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
@@ -24,66 +15,18 @@ pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
 /// For storing a full-row wide blit pattern
 pub type BlitRow = [u32; LCD_WORDS_PER_LINE];
 
-/// For specifying a vertical region contiguous rows in the frame buffer
-/// Range is yr.0..yr.1 (yr.0 included, yr.1 excluded)
-#[derive(Copy, Clone)]
-pub struct YRegion(pub usize, pub usize);
-
-/// For specifying a region of pixels in the frame buffer
-/// Ranges are x0..x1 and y0..y1 (x0 & y0 are included, x1 & y1 are excluded)
-#[derive(Copy, Clone)]
-pub struct ClipRegion {
-    pub x0: usize,
-    pub x1: usize,
-    pub y0: usize,
-    pub y1: usize,
-}
-
-impl ClipRegion {
-    pub fn screen() -> ClipRegion {
-        ClipRegion {
-            x0: 0,
-            x1: WIDTH - 1,
-            y0: 0,
-            y1: HEIGHT - 1,
-        }
-    }
-}
-
-impl From<Rect> for ClipRegion {
-    fn from(r: Rect) -> Self {
-        let mut cr = r.clone();
-        if cr.x0 < 0 { cr.x0 = 0 };
-        if cr.x0 >= WIDTH as _ { cr.x0 = WIDTH as i16 - 1 };
-        if cr.x1 < 0 { cr.x1 = 0 };
-        if cr.x1 >= WIDTH as _ { cr.x1 = WIDTH as i16 - 1 };
-        if cr.y0 < 0 { cr.y0 = 0 };
-        if cr.y0 >= HEIGHT as _ { cr.y0 = HEIGHT as i16 - 1 };
-        if cr.y1 < 0 { cr.y1 = 0 };
-        if cr.y1 >= HEIGHT as _ { cr.y1 = HEIGHT as i16 - 1 };
-        ClipRegion {x0: cr.x0 as usize, y0: cr.y0 as usize, x1: cr.x1 as usize, y1: cr.y1 as usize}
-    }
-}
-
-use core::cmp::{min, max};
-impl Into<blitstr::Rect> for ClipRegion {
-    fn into(self) -> blitstr::Rect {
-        blitstr::Rect::new( min(self.x0, self. x1), min(self.y0, self.y1), max(self.x0, self.x1), max(self.y0, self.y1) )
-    }
-}
-
 /// Invert a screen region bounded by (cr.x0,cr.y0)..(cr.x0,cr.y1)
-pub fn invert_region(fb: &mut LcdFB, cr: ClipRegion) {
-    if cr.y1 > LCD_LINES || cr.y0 >= cr.y1 || cr.x1 > LCD_PX_PER_LINE || cr.x0 >= cr.x1 {
+pub fn invert_region(fb: &mut LcdFB, cr: Rectangle) {
+    if cr.y1() > LCD_LINES || cr.y0() >= cr.y1() || cr.x1() > LCD_PX_PER_LINE || cr.x0() >= cr.x1() {
         return;
     }
     // Calculate word alignment for destination buffer
-    let dest_low_word = cr.x0 >> 5;
-    let dest_high_word = cr.x1 >> 5;
-    let px_in_dest_low_word = 32 - (cr.x0 & 0x1f);
-    let px_in_dest_high_word = cr.x1 & 0x1f;
+    let dest_low_word = cr.x0() >> 5;
+    let dest_high_word = cr.x1() >> 5;
+    let px_in_dest_low_word = 32 - (cr.x0() & 0x1f);
+    let px_in_dest_high_word = cr.x1() & 0x1f;
     // Blit it
-    for y in cr.y0..cr.y1 {
+    for y in cr.y0()..cr.y1() {
         let base = y * LCD_WORDS_PER_LINE;
         fb[base + dest_low_word] ^= 0xffffffff << (32 - px_in_dest_low_word);
         for w in dest_low_word + 1..dest_high_word {
@@ -95,28 +38,12 @@ pub fn invert_region(fb: &mut LcdFB, cr: ClipRegion) {
     }
 }
 
-/// Outline a full width screen region with pad and border box
-pub fn outline_region(fb: &mut LcdFB, yr: YRegion) {
-    if yr.1 > LCD_LINES || yr.0 + 6 >= yr.1 {
-        return;
-    }
-    line_fill_clear(fb, yr.0);
-    line_fill_clear(fb, yr.0 + 1);
-    line_fill_padded_solid(fb, yr.0 + 2);
-    for y in yr.0 + 3..yr.1 - 3 {
-        line_fill_padded_border(fb, y);
-    }
-    line_fill_padded_solid(fb, yr.1 - 3);
-    line_fill_clear(fb, yr.1 - 2);
-    line_fill_clear(fb, yr.1 - 1);
-}
-
 /// Clear a line of the screen
-pub fn line_fill_clear(fb: &mut LcdFB, y: usize) {
-    if y >= LCD_LINES {
-        return;
-    }
-    let base = y * LCD_WORDS_PER_LINE;
+pub fn line_fill_clear(fb: &mut LcdFB, y: i16) {
+    let mut clip_y = y as usize;
+    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+
+    let base = clip_y * LCD_WORDS_PER_LINE;
     for i in 0..=9 {
         fb[base + i] = 0xffff_ffff;
     }
@@ -125,10 +52,10 @@ pub fn line_fill_clear(fb: &mut LcdFB, y: usize) {
 
 /// Fill a line of the screen with full-width pattern
 pub fn line_fill_pattern(fb: &mut LcdFB, y: usize, pattern: &BlitRow) {
-    if y >= LCD_LINES {
-        return;
-    }
-    let base = y * LCD_WORDS_PER_LINE;
+    let mut clip_y = y;
+    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+
+    let base = clip_y * LCD_WORDS_PER_LINE;
     for (i, v) in pattern.iter().enumerate() {
         fb[base + i] = *v;
     }
@@ -136,10 +63,10 @@ pub fn line_fill_pattern(fb: &mut LcdFB, y: usize, pattern: &BlitRow) {
 
 /// Fill a line of the screen with black, padded with clear to left and right
 fn line_fill_padded_solid(fb: &mut LcdFB, y: usize) {
-    if y >= LCD_LINES {
-        return;
-    }
-    let base = y * LCD_WORDS_PER_LINE;
+    let mut clip_y = y;
+    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+
+    let base = clip_y * LCD_WORDS_PER_LINE;
     fb[base] = 0x0000_0003;
     for i in 1..=9 {
         fb[base + i] = 0x0000_0000;
@@ -149,10 +76,10 @@ fn line_fill_padded_solid(fb: &mut LcdFB, y: usize) {
 
 /// Fill a line of the screen with clear, bordered by black, padded with clear
 fn line_fill_padded_border(fb: &mut LcdFB, y: usize) {
-    if y >= LCD_LINES {
-        return;
-    }
-    let base = y * LCD_WORDS_PER_LINE;
+    let mut clip_y = y;
+    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+
+    let base = clip_y * LCD_WORDS_PER_LINE;
     fb[base] = 0xffff_fffb;
     for i in 1..=9 {
         fb[base + i] = 0xffff_ffff;
@@ -160,43 +87,33 @@ fn line_fill_padded_border(fb: &mut LcdFB, y: usize) {
     fb[base + 10] = 0x0000_dfff;
 }
 
-fn put_pixel(fb: &mut LcdFB, x: usize, y: usize, color: PixelColor) {
-    if (x >= LCD_PX_PER_LINE) || (y >= LCD_LINES) {
-        return;
-    }
-    if color == PixelColor::Off {
-        fb[(x + y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (x % 32)
+fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
+    let mut clip_y: usize = y as usize;
+    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+
+    let clip_x: usize = x as usize;
+    if clip_x >= LCD_PX_PER_LINE { clip_y = LCD_PX_PER_LINE - 1; }
+
+    if color == PixelColor::Dark {
+        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
     } else {
-        fb[(x + y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (x % 32))
+        fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (clip_x % 32))
     }
     // set the dirty bit on the line that contains the pixel
-    fb[y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+    fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
 }
 
-// plotLine(int x0, int y0, int x1, int y1)
-//     dx =  abs(x1-x0);
-//     sx = x0<x1 ? 1 : -1;
-//     dy = -abs(y1-y0);
-//     sy = y0<y1 ? 1 : -1;
-//     err = dx+dy;  /* error value e_xy */
-//     while (true)   /* loop */
-//         plot(x0, y0);
-//         if (x0 == x1 && y0 == y1) break;
-//         e2 = 2*err;
-//         if (e2 >= dy) /* e_xy+e_x > 0 */
-//             err += dy;
-//             x0 += sx;
-//         end if
-//         if (e2 <= dx) /* e_xy+e_y < 0 */
-//             err += dx;
-//             y0 += sy;
-//         end if
-//     end while
-pub fn line(fb: &mut LcdFB, x0: usize, y0: usize, x1: usize, y1: usize, color: PixelColor) {
-    let mut x0 = x0 as i32;
-    let mut y0 = y0 as i32;
-    let x1 = x1 as i32;
-    let y1 = y1 as i32;
+pub fn line(fb: &mut LcdFB, l: Line) {
+    let color: PixelColor;
+    if l.style.stroke_color.is_some() {
+        color = l.style.stroke_color.unwrap();
+    } else {
+        return
+    }
+    let mut x0 = l.start.x;
+    let mut y0 = l.start.y;
+    let x1 = l.end.x;
+    let y1 = l.end.y;
 
     let dx = (x1 - x0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
@@ -231,7 +148,7 @@ pub fn line(fb: &mut LcdFB, x0: usize, y0: usize, x1: usize, y1: usize, color: P
 pub struct CircleIterator {
     center: Point,
     radius: u16,
-    style: Style,
+    style: DrawStyle,
     p: Point,
 }
 
@@ -246,7 +163,7 @@ impl Iterator for CircleIterator
             return None;
         }
 
-        let radius = self.radius as i16 - self.style.stroke_width_i16() + 1;
+        let radius = self.radius as i16 - self.style.stroke_width + 1;
         let outer_radius = self.radius as i16;
 
         let radius_sq = radius * radius;
@@ -292,41 +209,96 @@ impl Iterator for CircleIterator
     }
 }
 
-pub fn circle(fb: &mut LcdFB, x: usize, y: usize, r: usize, stroke_width: usize, color: PixelColor) {
+pub fn circle(fb: &mut LcdFB, circle: Circle) {
     let c = CircleIterator {
-        center: Point{x: x as i16, y: y as i16},
-        radius: r as u16,
-        style: Style{ fill_color: Some(color), stroke_color: Some(color), stroke_width: stroke_width as i16},
-        p: Point::new(-(r as i16), -(r as i16)),
+        center: circle.center,
+        radius: circle.radius as _,
+        style: circle.style,
+        p: Point::new(-(circle.radius as i16), -(circle.radius as i16)),
     };
 
     for pixel in c {
-        put_pixel(fb, pixel.0.x as usize, pixel.0.y as usize, pixel.1);
+        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::fonts;
 
-    #[test]
-    fn bold_font_at_sign() {
-        let offset = fonts::bold::get_glyph_pattern_offset('@');
-        assert_eq!(offset, 197);
-        assert_eq!(fonts::bold::DATA[offset], 0x00121008);
+/// Pixel iterator for each pixel in the rect border
+#[derive(Debug, Clone, Copy)]
+pub struct RectangleIterator {
+    top_left: Point,
+    bottom_right: Point,
+    style: DrawStyle,
+    p: Point,
+}
+
+impl Iterator for RectangleIterator {
+    type Item = Pixel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Don't render anything if the rectangle has no border or fill color.
+        if self.style.stroke_color.is_none() && self.style.fill_color.is_none() {
+            return None;
+        }
+
+        loop {
+            let mut out = None;
+
+            // Finished, i.e. we're below the rect
+            if self.p.y > self.bottom_right.y {
+                break None;
+            }
+
+            let border_width = self.style.stroke_width;
+            let tl = self.top_left;
+            let br = self.bottom_right;
+
+            // Border
+            if (
+                // Top border
+                (self.p.y >= tl.y && self.p.y < tl.y + border_width)
+            // Bottom border
+            || (self.p.y <= br.y && self.p.y > br.y - border_width)
+            // Left border
+            || (self.p.x >= tl.x && self.p.x < tl.x + border_width)
+            // Right border
+            || (self.p.x <= br.x && self.p.x > br.x - border_width)
+            ) && self.style.stroke_color.is_some()
+            {
+                out = Some(Pixel(
+                    self.p,
+                    self.style.stroke_color.expect("Expected stroke"),
+                ));
+            }
+            // Fill
+            else if let Some(fill) = self.style.fill_color {
+                out = Some(Pixel(self.p, fill));
+            }
+
+            self.p.x += 1;
+
+            // Reached end of row? Jump down one line
+            if self.p.x > self.bottom_right.x {
+                self.p.x = self.top_left.x;
+                self.p.y += 1;
+            }
+
+            if out.is_some() {
+                break out;
+            }
+        }
     }
+}
 
-    #[test]
-    fn regular_font_at_sign() {
-        let offset = fonts::regular::get_glyph_pattern_offset('@');
-        assert_eq!(offset, 182);
-        assert_eq!(fonts::regular::DATA[offset], 0x00101008);
-    }
+pub fn rectangle(fb: &mut LcdFB, rect: Rectangle) {
+    let r = RectangleIterator {
+        top_left: rect.tl,
+        bottom_right: rect.br,
+        style: rect.style,
+        p: rect.tl,
+    };
 
-    #[test]
-    fn small_font_at_sign() {
-        let offset = fonts::small::get_glyph_pattern_offset('@');
-        assert_eq!(offset, 143);
-        assert_eq!(fonts::small::DATA[offset], 0x000e1006);
+    for pixel in r {
+        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
 }
