@@ -5,6 +5,7 @@ pub mod exception;
 pub mod irq;
 pub mod mem;
 pub mod process;
+pub mod rand;
 pub mod syscall;
 
 pub use process::Thread;

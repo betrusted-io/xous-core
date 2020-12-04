@@ -1348,6 +1348,25 @@ impl SystemServices {
         Err(xous_kernel::Error::ServerNotFound)
     }
 
+    /// Generate a new server ID for this process and then create a new server.
+    /// If the
+    /// server table is full, or if there is not enough memory to map the server queue,
+    /// return an error.
+    ///
+    /// # Errors
+    ///
+    /// * **OutOfMemory**: A new page could not be assigned to store the server
+    ///   queue.
+    /// * **ServerNotFound**: The server queue was full and a free slot could not
+    ///   be found.
+    pub fn create_server(
+        &mut self,
+        pid: PID,
+    ) -> Result<(SID, CID), xous_kernel::Error> {
+        let sid = SID::from_u32(arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32());
+        self.create_server_with_address(pid, sid)
+    }
+
     /// Allocate a new server ID for this process and return the address. If the
     /// server table is full, return an error.
     pub fn connect_to_server(&mut self, sid: SID) -> Result<CID, xous_kernel::Error> {
