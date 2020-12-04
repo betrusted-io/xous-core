@@ -7,8 +7,33 @@ pub type StackPointer = usize;
 pub type MessageId = usize;
 
 pub type PID = NonZeroU8;
-pub type MessageSender = usize;
 pub type Connection = usize;
+
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
+pub struct MessageSender {
+    data: usize,
+}
+
+impl MessageSender {
+    pub fn to_usize(&self) -> usize {
+        self.data
+    }
+    pub fn from_usize(data: usize) -> Self {
+        MessageSender { data }
+    }
+}
+
+impl core::default::Default for MessageSender {
+    fn default() -> Self {
+        MessageSender { data: 0 }
+    }
+}
+
+impl core::fmt::Display for MessageSender {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "data: {}", self.data)
+    }
+}
 
 /// Server ID
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -343,7 +368,7 @@ impl MessageEnvelope {
             Message::BlockingScalar(m) => (4, m.to_usize()),
         };
         [
-            self.sender,
+            self.sender.to_usize(),
             ret.0,
             ret.1[0],
             ret.1[1],
@@ -574,7 +599,7 @@ impl Result {
                     _ => return Result::Error(Error::InternalError),
                 };
                 Result::Message(MessageEnvelope {
-                    sender,
+                    sender: MessageSender::from_usize(sender),
                     body: message,
                 })
             }

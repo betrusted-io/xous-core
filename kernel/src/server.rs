@@ -1,6 +1,6 @@
 pub use crate::arch::process::Thread;
 use core::mem;
-use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, PID, SID, TID};
+use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, MessageSender, PID, SID, TID};
 
 pub struct SenderID {
     /// The index of the server within the SystemServices table
@@ -21,6 +21,18 @@ impl From<usize> for SenderID {
 impl Into<usize> for SenderID {
     fn into(self) -> usize {
         (self.sidx << 16) | (self.idx & 0xffff)
+    }
+}
+
+impl From<MessageSender> for SenderID {
+    fn from(item: MessageSender) -> SenderID {
+        SenderID::from(item.to_usize())
+    }
+}
+
+impl Into<MessageSender> for SenderID {
+    fn into(self) -> MessageSender {
+        MessageSender::from_usize(self.into())
     }
 }
 

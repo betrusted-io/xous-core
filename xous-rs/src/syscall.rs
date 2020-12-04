@@ -558,7 +558,7 @@ impl SysCall {
             },
             SysCall::ReturnMemory(sender, buf) => [
                 SysCallNumber::ReturnMemory as usize,
-                *sender,
+                sender.to_usize(),
                 buf.as_ptr() as usize,
                 buf.len(),
                 0,
@@ -620,7 +620,7 @@ impl SysCall {
             },
             SysCall::ReturnScalar1(sender, arg1) => [
                 SysCallNumber::ReturnScalar1 as usize,
-                *sender,
+                sender.to_usize(),
                 *arg1,
                 0,
                 0,
@@ -630,7 +630,7 @@ impl SysCall {
             ],
             SysCall::ReturnScalar2(sender, arg1, arg2) => [
                 SysCallNumber::ReturnScalar2 as usize,
-                *sender,
+                sender.to_usize(),
                 *arg1,
                 *arg2,
                 0,
@@ -762,7 +762,9 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnMemory => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?),
+            SysCallNumber::ReturnMemory => {
+                SysCall::ReturnMemory(MessageSender::from_usize(a1), MemoryRange::new(a2, a3)?)
+            }
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -824,8 +826,12 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnScalar1 => SysCall::ReturnScalar1(a1, a2),
-            SysCallNumber::ReturnScalar2 => SysCall::ReturnScalar2(a1, a2, a3),
+            SysCallNumber::ReturnScalar1 => {
+                SysCall::ReturnScalar1(MessageSender::from_usize(a1), a2)
+            }
+            SysCallNumber::ReturnScalar2 => {
+                SysCall::ReturnScalar2(MessageSender::from_usize(a1), a2, a3)
+            }
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
