@@ -300,18 +300,18 @@ impl Process {
                 if result.memory().is_some() {
                     panic!("Result has memory and we're also returning memory!");
                 }
-                klog!("adding {} additional bytes from memory being returned", buf.len());
+                klog!(
+                    "adding {} additional bytes from memory being returned",
+                    buf.len()
+                );
                 klog!("data: {:?}", buf);
                 response.extend_from_slice(&buf);
             }
 
             klog!("setting thread return value to {} bytes", response.len());
-            process
-                .conn
-                .as_mut()
-                .unwrap()
-                .write_all(&response)
-                .expect("Disconnection");
+            let conn = process.conn.as_mut().unwrap();
+            conn.write_all(&response).expect("Disconnection");
+            conn.flush().expect("Disconnection");
         });
     }
 
@@ -380,7 +380,9 @@ impl Process {
             let mut process_table = pt.borrow_mut();
             let current_pid_idx = process_table.current.get() as usize - 1;
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
-            process.conn.as_mut().unwrap().write_all(bytes).unwrap();
+            let conn = process.conn.as_mut().unwrap();
+            conn.write_all(bytes).unwrap();
+            conn.flush().unwrap();
         });
         Ok(())
     }

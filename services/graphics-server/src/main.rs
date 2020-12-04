@@ -37,7 +37,7 @@ fn xmain() -> ! {
 
     display.redraw();
 
-    let sid = xous::create_server(b"graphics-server ").unwrap();
+    let sid = xous::create_server_with_address(b"graphics-server ").unwrap();
     // info!("GFX: Server listening on address {:?}", sid);
     // ::debug_here::debug_here!();
     loop {

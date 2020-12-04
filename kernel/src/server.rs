@@ -333,7 +333,10 @@ impl Server {
         idx: usize,
         buf: Option<&MemoryRange>,
     ) -> Result<WaitingMessage, xous_kernel::Error> {
-        let current_val = self.queue.get_mut(idx).ok_or(xous_kernel::Error::BadAddress)?;
+        let current_val = self
+            .queue
+            .get_mut(idx)
+            .ok_or(xous_kernel::Error::BadAddress)?;
         klog!("memory in queue[{}]: {:?}", idx, val);
         let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match *current_val {
             QueuedMessage::WaitingReturnMemory(pid, tid, server_addr, client_addr, len) => {

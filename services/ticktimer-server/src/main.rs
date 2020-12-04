@@ -271,7 +271,7 @@ fn xmain() -> ! {
     let mut sleep_heap: BinaryHeap<SleepResponse, U32, Min> = BinaryHeap::new();
 
     let ticktimer_server =
-        xous::create_server(b"ticktimer-server").expect("Couldn't create Ticktimer server");
+        xous::create_server_with_address(b"ticktimer-server").expect("Couldn't create Ticktimer server");
 
     // Connect to our own server so we can send the "Recalculate" message
     let ticktimer_client = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())

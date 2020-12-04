@@ -227,7 +227,7 @@ pub enum SysCall {
     /// * **OutOfMemory**: The server table was full and a new server couldn't
     ///                    be created.
     /// * **ServerExists**: The server hash is already in use.
-    CreateServer(SID /* server hash */),
+    CreateServerWithAddress(SID /* server hash */),
 
     /// Connect to a server.   This turns a 128-bit Serever ID into a 32-bit
     /// Connection ID. Blocks until the server is available.
@@ -292,7 +292,7 @@ pub enum SysCallNumber {
     DecreaseHeap = 11,
     UpdateMemoryFlags = 12,
     SetMemRegion = 13,
-    CreateServer = 14,
+    CreateServerWithAddress = 14,
     ReceiveMessage = 15,
     SendMessage = 16,
     Connect = 17,
@@ -326,7 +326,7 @@ impl SysCallNumber {
             11 => DecreaseHeap,
             12 => UpdateMemoryFlags,
             13 => SetMemRegion,
-            14 => CreateServer,
+            14 => CreateServerWithAddress,
             15 => ReceiveMessage,
             16 => SendMessage,
             17 => Connect,
@@ -490,10 +490,10 @@ impl SysCall {
                 0,
             ],
 
-            SysCall::CreateServer(sid) => {
+            SysCall::CreateServerWithAddress(sid) => {
                 let s = sid.to_u32();
                 [
-                    SysCallNumber::CreateServer as usize,
+                    SysCallNumber::CreateServerWithAddress as usize,
                     s.0 as _,
                     s.1 as _,
                     s.2 as _,
@@ -687,8 +687,8 @@ impl SysCall {
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 a4,
             ),
-            SysCallNumber::CreateServer => {
-                SysCall::CreateServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            SysCallNumber::CreateServerWithAddress => {
+                SysCall::CreateServerWithAddress(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
             SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
@@ -1022,10 +1022,10 @@ pub fn claim_interrupt(
 ///
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
-pub fn create_server(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
+pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
     let sid = SID::from_bytes(name_bytes).ok_or(Error::InvalidString)?;
 
-    let result = rsyscall(SysCall::CreateServer(sid))?;
+    let result = rsyscall(SysCall::CreateServerWithAddress(sid))?;
     if let Result::NewServerID(sid, _cid) = result {
         Ok(sid)
     } else if let Result::Error(e) = result {

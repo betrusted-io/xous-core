@@ -1299,7 +1299,11 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(&mut self, pid: PID, sid: SID) -> Result<(SID, CID), xous_kernel::Error> {
+    pub fn create_server_with_address(
+        &mut self,
+        pid: PID,
+        sid: SID,
+    ) -> Result<(SID, CID), xous_kernel::Error> {
         // println!(
         //     "KERNEL({}): Looking through server list for free server",
         //     self.pid.get()

@@ -106,7 +106,7 @@ static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
 fn com_thread(_arg: Option<u32>) {
     let shell_server =
-        xous::create_server(b"shell           ").expect("Couldn't create Shell server");
+        xous::create_server_with_address(b"shell           ").expect("Couldn't create Shell server");
     info!("SHELL|com_thread: starting COM response handler thread");
     loop {
         let envelope =

@@ -132,7 +132,7 @@ fn send_scalar_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
@@ -194,7 +194,7 @@ fn try_receive_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
                 .expect("couldn't create test server");
             let maybe_envelope =
                 xous_kernel::try_receive_message(sid).expect("couldn't receive messages");
@@ -264,7 +264,7 @@ fn send_blocking_scalar_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
@@ -356,7 +356,7 @@ fn message_ordering() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             // Sync point waiting to start receiving.
@@ -470,7 +470,7 @@ fn send_interleved_blocking_scalar_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_scalar_mesg")
+            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
 
@@ -559,7 +559,7 @@ fn send_move_message() {
         "send_move_message server",
         move || {
             // println!("SERVER: Creating server...");
-            let sid = xous_kernel::create_server(b"send_move_messag")
+            let sid = xous_kernel::create_server_with_address(b"send_move_messag")
                 .expect("couldn't create test server");
             // println!("SERVER: Sending server address of {:?} to client", sid);
             server_addr_send.send(sid).unwrap();
@@ -617,7 +617,7 @@ fn send_borrow_message() {
         move || {
             {
                 // println!("SERVER: Creating server...");
-                let sid = xous_kernel::create_server(b"send_borrow_mesg")
+                let sid = xous_kernel::create_server_with_address(b"send_borrow_mesg")
                     .expect("couldn't create test server");
                 server_addr_send.send(sid).unwrap();
                 // println!("SERVER: Receiving message...");
@@ -694,7 +694,7 @@ fn send_mutableborrow_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_mutableborrow_message server",
         move || {
-            let sid = xous_kernel::create_server(b"send_mutborrow_m")
+            let sid = xous_kernel::create_server_with_address(b"send_mutborrow_m")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
@@ -765,7 +765,7 @@ fn send_repeat_mutableborrow_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_mutableborrow_message_repeat server",
         move || {
-            let sid = xous_kernel::create_server(b"send_mutborrow_r")
+            let sid = xous_kernel::create_server_with_address(b"send_mutborrow_r")
                 .expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
 
@@ -865,7 +865,7 @@ fn server_client_same_process() {
     let internal_server = xous_kernel::create_process_as_thread(
         xous_kernel::arch::ProcessArgsAsThread::new("server_client_same_process process", || {
             let server =
-                xous_kernel::create_server(b"s_c_same_process").expect("couldn't create server");
+                xous_kernel::create_server_with_address(b"s_c_same_process").expect("couldn't create server");
             let connection =
                 xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
@@ -905,7 +905,7 @@ fn multiple_contexts() {
     let internal_server = xous_kernel::create_process_as_thread(
         xous_kernel::ProcessArgsAsThread::new("multiple_contexts process", move || {
             let server =
-                xous_kernel::create_server(b"multiple_context").expect("couldn't create server");
+                xous_kernel::create_server_with_address(b"multiple_context").expect("couldn't create server");
             let connection =
                 xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
@@ -971,7 +971,7 @@ fn process_restart_server() {
 
         let xous_server = xous_kernel::create_process_as_thread(
             xous_kernel::ProcessArgsAsThread::new("process_restart_server server", move || {
-                let sid = xous_kernel::create_server(b"test_recreate_se")
+                let sid = xous_kernel::create_server_with_address(b"test_recreate_se")
                     .expect("couldn't create test server");
                 server_addr_send.send(sid).unwrap();
                 let thr = xous_kernel::create_thread(move || {

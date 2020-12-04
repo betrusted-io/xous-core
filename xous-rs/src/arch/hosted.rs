@@ -396,6 +396,7 @@ fn xous_connect_impl(
     match TcpStream::connect(addr) {
         Ok(mut conn) => {
             conn.write_all(&key.0).unwrap(); // Send key to authenticate us as PID 1
+            conn.flush().unwrap();
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                 recv: Arc::new(Mutex::new(conn)),
@@ -678,4 +679,5 @@ fn _xous_syscall_to(
         eprintln!("Server shut down: {}", e);
         std::process::exit(0);
     }
+    xsc.flush().unwrap();
 }

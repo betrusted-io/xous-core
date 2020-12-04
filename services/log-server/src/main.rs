@@ -216,7 +216,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
     writeln!(output, "LOG: Starting log server...").unwrap();
-    let server_addr = xous::create_server(b"xous-log-server ").unwrap();
+    let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 
     let mut counter: usize = 0;
