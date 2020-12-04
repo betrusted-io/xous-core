@@ -1185,6 +1185,24 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
     }
 }
 
+/// Connect to a server on behalf of another process. This can be used by a name
+/// resolution server to securely create connections without disclosing a SID.
+///
+/// # Errors
+///
+/// * **ServerNotFound**: The server does not exist so the connection is now invalid
+/// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
+/// * **ServerQueueFull**: The queue in the server is full, and this call would block
+/// * **Timeout**: The timeout limit has been reached
+pub fn connect_for_process(pid: PID, sid: SID) -> core::result::Result<Result, Error> {
+    let result = rsyscall(SysCall::ConnectForProcess(pid, sid));
+    match result {
+        Ok(Result::ConnectionID(cid)) => Ok(Result::ConnectionID(cid)),
+        Err(e) => Err(e),
+        v => panic!("Unexpected return value: {:?}", v),
+    }
+}
+
 /// Send a message to a server.  Depending on the mesage type (move or borrow), it
 /// will either block (borrow) or return immediately (move).
 /// If the message type is `borrow`, then the memory addresses pointed to will be
