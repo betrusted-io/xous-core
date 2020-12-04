@@ -210,17 +210,16 @@ pub enum SysCall {
     /// Get a list of contexts that can be run in the given PID.
     ReadyThreads(PID),
 
-    /// Create a new Server
+    /// Create a new Server with a specified address
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
-    /// to this server.  This ID will be unique per process.  You may specify an
-    /// additional `usize` value to make the ID unique.  This value will be
-    /// mixed in with the random value.
+    /// to this server, as well as a connection ID.  This connection ID will be
+    /// unique per process, while the server ID is available globally.
     ///
     /// # Returns
     ///
-    /// The ServerId can be assembled to form a 128-bit server ID in native byte
-    /// order.
+    /// The specified SID, along with the connection ID for this process to talk
+    /// to the server.
     ///
     /// # Errors
     ///
@@ -273,6 +272,22 @@ pub enum SysCall {
     /// Shut down the entire system
     Shutdown,
 
+    /// Create a new Server
+    ///
+    /// This will return a 128-bit Server ID that can be used to send messages
+    /// to this server. The returned Derver ID is random.
+    ///
+    /// # Returns
+    ///
+    /// The SID, along with a Connection ID that can be used to immediately
+    /// communicate with this process.
+    ///
+    /// # Errors
+    ///
+    /// * **OutOfMemory**: The server table was full and a new server couldn't
+    ///                    be created.
+    CreateServer,
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -307,6 +322,7 @@ pub enum SysCallNumber {
     ReturnScalar1 = 26,
     ReturnScalar2 = 27,
     TryReceiveMessage = 28,
+    CreateServer = 29,
     Invalid,
 }
 
@@ -341,6 +357,7 @@ impl SysCallNumber {
             26 => ReturnScalar1,
             27 => ReturnScalar2,
             28 => TryReceiveMessage,
+            29 => CreateServer,
             _ => Invalid,
         }
     }
@@ -503,6 +520,7 @@ impl SysCall {
                     0,
                 ]
             }
+            SysCall::CreateServer => [SysCallNumber::CreateServer as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Connect(sid) => {
                 let s = sid.to_u32();
                 [
@@ -690,6 +708,7 @@ impl SysCall {
             SysCallNumber::CreateServerWithAddress => {
                 SysCall::CreateServerWithAddress(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
+            SysCallNumber::CreateServer => SysCall::CreateServer,
             SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
@@ -1020,12 +1039,32 @@ pub fn claim_interrupt(
 ///
 /// # Errors
 ///
+/// * **OutOfMemory**: No more servers may be created
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
 pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
     let sid = SID::from_bytes(name_bytes).ok_or(Error::InvalidString)?;
 
     let result = rsyscall(SysCall::CreateServerWithAddress(sid))?;
+    if let Result::NewServerID(sid, _cid) = result {
+        Ok(sid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Create a new server with a random name.  This enables other processes to
+/// connect to this server to send messages.  A random server ID is generated
+/// by the kernel and returned to the caller. This address can then be registered
+/// to a namserver.
+///
+/// # Errors
+///
+/// * **OutOfMemory**: No more servers may be created
+pub fn create_server() -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {
         Ok(sid)
     } else if let Result::Error(e) = result {
@@ -1081,7 +1120,8 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// # Errors
 ///
 pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
-    let result = rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
+    let result =
+        rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::Message(envelope) = result {
         Ok(Some(envelope))
     } else if result == Result::None {
