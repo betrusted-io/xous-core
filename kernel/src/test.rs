@@ -132,8 +132,7 @@ fn send_scalar_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
-                .expect("couldn't create test server");
+            let sid = xous_kernel::create_server().expect("couldn't create test server");
             server_addr_send.send(sid).unwrap();
             let envelope = xous_kernel::receive_message(sid).expect("couldn't receive messages");
             assert_eq!(
@@ -194,8 +193,7 @@ fn try_receive_message() {
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_scalar_message server",
         move || {
-            let sid = xous_kernel::create_server_with_address(b"send_scalar_mesg")
-                .expect("couldn't create test server");
+            let sid = xous_kernel::create_server().expect("couldn't create test server");
             let maybe_envelope =
                 xous_kernel::try_receive_message(sid).expect("couldn't receive messages");
             assert!(maybe_envelope.is_none(), "some message came back");
@@ -864,8 +862,7 @@ fn server_client_same_process() {
 
     let internal_server = xous_kernel::create_process_as_thread(
         xous_kernel::arch::ProcessArgsAsThread::new("server_client_same_process process", || {
-            let server =
-                xous_kernel::create_server_with_address(b"s_c_same_process").expect("couldn't create server");
+            let server = xous_kernel::create_server().expect("couldn't create server");
             let connection =
                 xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
@@ -904,8 +901,7 @@ fn multiple_contexts() {
 
     let internal_server = xous_kernel::create_process_as_thread(
         xous_kernel::ProcessArgsAsThread::new("multiple_contexts process", move || {
-            let server =
-                xous_kernel::create_server_with_address(b"multiple_context").expect("couldn't create server");
+            let server = xous_kernel::create_server().expect("couldn't create server");
             let connection =
                 xous_kernel::try_connect(server).expect("couldn't connect to our own server");
             let msg_contents = xous_kernel::ScalarMessage {
