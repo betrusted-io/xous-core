@@ -18,8 +18,14 @@ impl MessageSender {
     pub fn to_usize(&self) -> usize {
         self.data
     }
+
     pub fn from_usize(data: usize) -> Self {
         MessageSender { data }
+    }
+
+    pub fn pid(&self) -> Option<PID> {
+        let pid_u8 = ((self.data >> 24) & 0xff) as u8;
+        PID::new(pid_u8)
     }
 }
 

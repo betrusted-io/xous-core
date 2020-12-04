@@ -147,10 +147,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             } else {
                 0
             };
-            let sender = SenderID {
-                sidx,
-                idx: sender_idx,
-            };
+            let sender = SenderID::new(sidx, sender_idx, Some(pid));
             klog!(
                 "server connection data: sidx: {}, idx: {}, server pid: {}",
                 sidx,
