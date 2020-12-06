@@ -91,13 +91,13 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ## Contribution Guidelines
 
 [![Contributor
-Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
+Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)
 
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details on how to make a
+Please see [CONTRIBUTING](../CONTRIBUTING.md) for details on how to make a
 contribution.
 
 Please note that this project is released with a [Contributor Code of
-Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree
+Conduct](../CODE_OF_CONDUCT.md). By participating in this project you agree
 to abide its terms.
 
 ## License
