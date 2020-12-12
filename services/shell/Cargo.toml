@@ -12,10 +12,12 @@ graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 log-server = { path = "../log-server" }
 log = "0.4"
-com = { path = "../com"}
-# blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
-blitstr = { path = "../../../blitstr" }
-# com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9" }
+
+# com = { path = "../com"}
+# blitstr = { path = "../../../blitstr" }
+
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
