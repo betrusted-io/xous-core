@@ -800,6 +800,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "blitstr",
+ "com",
  "com_rs",
  "graphics-server",
  "log",
@@ -1130,17 +1131,6 @@ dependencies = [
  "quote",
  "rand 0.7.3",
  "syn",
-]
-
-[[package]]
-name = "xous-names"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "log",
- "log-server",
- "utralib",
- "xous",
 ]
 
 [[package]]

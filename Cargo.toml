@@ -8,7 +8,7 @@ members = [
     "services/log-server",
     "services/ticktimer-server",
     "services/com",
-    "services/xous-names",
+#    "services/xous-names",
     "svd2utra",
     "xtask",
 ]
@@ -17,7 +17,7 @@ default-members = [
     "services/log-server",
     "services/graphics-server",
     "services/ticktimer-server",
-    "services/xous-names",
+#    "services/xous-names",
     "services/com",
 ]
 
