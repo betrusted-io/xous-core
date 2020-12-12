@@ -45,6 +45,7 @@ mod implementation {
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
+        wdt: utralib::CSR<u32>,
         current_response: Option<SleepResponse>,
         response_start: u64,
         connection: xous::CID,
@@ -77,13 +78,23 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Tick Timer CSR range");
+            let wdt = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::wdt::HW_WDT_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Watchdog timer CSR range");
 
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
                 current_response: None,
                 response_start: 0,
                 connection,
             };
+
+            xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
 
             xous::claim_interrupt(
                 utra::ticktimer::TICKTIMER_IRQ,
@@ -141,6 +152,24 @@ mod implementation {
             self.csr
                 .wo(utra::ticktimer::MSLEEP_TARGET0, irq_target as _);
             self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 1); // Enable the interrupt
+        }
+
+        pub fn reset_wdt(&mut self) {
+            // disarm the WDT
+
+            // why do we write the registers three times? because:
+            //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
+            //    (so you can't defeat the WDT by just pausing the external clock sourc)
+            //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
+            //  - the CPU runs at 100MHz with a tight tolerance
+            //  - presenting the data three times ensures the WDT will pick it up,
+            //    even at the slowest end of tolerance
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
         }
     }
 }
@@ -235,6 +264,10 @@ mod implementation {
                 .send(SleepComms::StartSleep(sender, milliseconds as _))
                 .unwrap();
         }
+
+        pub fn reset_wdt() {
+            // dummy function, does nothing
+        }
     }
 }
 
@@ -281,6 +314,8 @@ fn xmain() -> ! {
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
 
     loop {
+        ticktimer.reset_wdt();
+
         //info!("TickTimer: waiting for message");
         let envelope = xous::receive_message(ticktimer_server).unwrap();
         //info!("TickTimer: Message: {:?}", envelope);

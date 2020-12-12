@@ -1132,6 +1132,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "xous-names"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "log",
+ "log-server",
+ "utralib",
+ "xous",
+]
+
+[[package]]
 name = "xtask"
 version = "0.1.0"
 
