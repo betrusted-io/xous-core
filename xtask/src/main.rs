@@ -145,7 +145,7 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "log-server", "graphics-server", "ticktimer-server", "com", "xous-names"] {
+    for pkg in &["shell", "log-server", "graphics-server", "ticktimer-server", "com"] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -162,7 +162,7 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
 
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
-    let init = ["shell", "log-server", "graphics-server", "ticktimer-server", "com", "xous-names"];
+    let init = ["shell", "log-server", "graphics-server", "ticktimer-server", "com"]; // , "xous-names"
 
     // let mut init_paths = vec![];
     for pkg in &init {

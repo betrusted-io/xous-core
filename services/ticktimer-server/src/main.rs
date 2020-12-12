@@ -265,7 +265,7 @@ mod implementation {
                 .unwrap();
         }
 
-        pub fn reset_wdt() {
+        pub fn reset_wdt(&self) {
             // dummy function, does nothing
         }
     }
