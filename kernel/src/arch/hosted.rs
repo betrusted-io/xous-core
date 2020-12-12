@@ -1,6 +1,7 @@
 pub mod irq;
 pub mod mem;
 pub mod process;
+pub mod rand;
 pub mod syscall;
 
 use std::cell::RefCell;
@@ -59,7 +60,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 
 #[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {
-    use rand::{thread_rng, Rng};
+    use ::rand::{thread_rng, Rng};
     let mut process_key = [0u8; 16];
     let mut rng = thread_rng();
     for b in process_key.iter_mut() {
@@ -236,7 +237,7 @@ fn handle_connection(
                                     | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
                             }
-                            SysCall::ReturnMemory(_sender, ref mut buf) => {
+                            SysCall::ReturnMemory(ref _sender, ref mut buf) => {
                                 let sliced_data = data.into_boxed_slice();
                                 assert_eq!(
                                     sliced_data.len(),
@@ -548,14 +549,15 @@ pub fn idle() -> bool {
                             "Unable to send response to process: {:?} -- terminating",
                             _e
                         );
-                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess)
+                            .ok();
                     });
                     // println!("KERNEL: Done sending");
                 }
 
                 // Handle the syscall within the Xous kernel
-                let response =
-                    crate::syscall::handle(pid, thread_id, false, call).unwrap_or_else(Result::Error);
+                let response = crate::syscall::handle(pid, thread_id, false, call)
+                    .unwrap_or_else(Result::Error);
 
                 // println!("KERNEL({}): Syscall response {:?}", pid, response);
                 // There's a response if it wasn't a blocked process and we're not terminating.
@@ -584,7 +586,8 @@ pub fn idle() -> bool {
                             "KERNEL({}): Unable to send response to process: {:?} -- terminating",
                             pid, _e
                         );
-                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess).ok();
+                        crate::syscall::handle(pid, thread_id, false, SysCall::TerminateProcess)
+                            .ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
                 }

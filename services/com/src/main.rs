@@ -217,7 +217,7 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
     let com_server =
-        xous::create_server(b"com             ").expect("Couldn't create COM server");
+        xous::create_server_with_address(b"com             ").expect("Couldn't create COM server");
 
     let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
     let shell_conn = xous::connect(shell_id).unwrap();

@@ -147,10 +147,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             } else {
                 0
             };
-            let sender = SenderID {
-                sidx,
-                idx: sender_idx,
-            };
+            let sender = SenderID::new(sidx, sender_idx, Some(pid));
             klog!(
                 "server connection data: sidx: {}, idx: {}, server pid: {}",
                 sidx,
@@ -747,8 +744,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             ss.create_process(process_init)
                 .map(xous_kernel::Result::ProcessID)
         }),
-        SysCall::CreateServer(name) => SystemServices::with_mut(|ss| {
-            ss.create_server(pid, name)
+        SysCall::CreateServerWithAddress(name) => SystemServices::with_mut(|ss| {
+            ss.create_server_with_address(pid, name)
+                .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
+        }),
+        SysCall::CreateServer => SystemServices::with_mut(|ss| {
+            ss.create_server(pid)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
         SysCall::TryConnect(sid) => SystemServices::with_mut(|ss| {
@@ -778,6 +779,17 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Connect(sid) => {
             let result = SystemServices::with_mut(|ss| {
                 ss.connect_to_server(sid)
+                    .map(xous_kernel::Result::ConnectionID)
+            });
+            match result {
+                Ok(o) => Ok(o),
+                Err(xous_kernel::Error::ServerNotFound) => retry_syscall(pid, tid),
+                Err(e) => Err(e),
+            }
+        }
+        SysCall::ConnectForProcess(pid, sid) => {
+            let result = SystemServices::with_mut(|ss| {
+                ss.connect_process_to_server(pid, sid)
                     .map(xous_kernel::Result::ConnectionID)
             });
             match result {

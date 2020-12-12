@@ -210,24 +210,23 @@ pub enum SysCall {
     /// Get a list of contexts that can be run in the given PID.
     ReadyThreads(PID),
 
-    /// Create a new Server
+    /// Create a new Server with a specified address
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
-    /// to this server.  This ID will be unique per process.  You may specify an
-    /// additional `usize` value to make the ID unique.  This value will be
-    /// mixed in with the random value.
+    /// to this server, as well as a connection ID.  This connection ID will be
+    /// unique per process, while the server ID is available globally.
     ///
     /// # Returns
     ///
-    /// The ServerId can be assembled to form a 128-bit server ID in native byte
-    /// order.
+    /// The specified SID, along with the connection ID for this process to talk
+    /// to the server.
     ///
     /// # Errors
     ///
     /// * **OutOfMemory**: The server table was full and a new server couldn't
     ///                    be created.
     /// * **ServerExists**: The server hash is already in use.
-    CreateServer(SID /* server hash */),
+    CreateServerWithAddress(SID /* server hash */),
 
     /// Connect to a server.   This turns a 128-bit Serever ID into a 32-bit
     /// Connection ID. Blocks until the server is available.
@@ -273,6 +272,27 @@ pub enum SysCall {
     /// Shut down the entire system
     Shutdown,
 
+    /// Create a new Server
+    ///
+    /// This will return a 128-bit Server ID that can be used to send messages
+    /// to this server. The returned Derver ID is random.
+    ///
+    /// # Returns
+    ///
+    /// The SID, along with a Connection ID that can be used to immediately
+    /// communicate with this process.
+    ///
+    /// # Errors
+    ///
+    /// * **OutOfMemory**: The server table was full and a new server couldn't
+    ///                    be created.
+    CreateServer,
+
+    /// Establish a connection in the given process to the given server. This
+    /// call can be used by a nameserver to make server connections without
+    /// disclosing SIDs.
+    ConnectForProcess(PID, SID),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -292,7 +312,7 @@ pub enum SysCallNumber {
     DecreaseHeap = 11,
     UpdateMemoryFlags = 12,
     SetMemRegion = 13,
-    CreateServer = 14,
+    CreateServerWithAddress = 14,
     ReceiveMessage = 15,
     SendMessage = 16,
     Connect = 17,
@@ -307,6 +327,8 @@ pub enum SysCallNumber {
     ReturnScalar1 = 26,
     ReturnScalar2 = 27,
     TryReceiveMessage = 28,
+    CreateServer = 29,
+    ConnectForProcess = 30,
     Invalid,
 }
 
@@ -326,7 +348,7 @@ impl SysCallNumber {
             11 => DecreaseHeap,
             12 => UpdateMemoryFlags,
             13 => SetMemRegion,
-            14 => CreateServer,
+            14 => CreateServerWithAddress,
             15 => ReceiveMessage,
             16 => SendMessage,
             17 => Connect,
@@ -341,6 +363,8 @@ impl SysCallNumber {
             26 => ReturnScalar1,
             27 => ReturnScalar2,
             28 => TryReceiveMessage,
+            29 => CreateServer,
+            30 => ConnectForProcess,
             _ => Invalid,
         }
     }
@@ -402,6 +426,19 @@ impl SysCall {
                     s.2 as _,
                     s.3 as _,
                     0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::ConnectForProcess(pid, sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::ConnectForProcess as usize,
+                    pid.get() as _,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
                     0,
                     0,
                 ]
@@ -490,10 +527,10 @@ impl SysCall {
                 0,
             ],
 
-            SysCall::CreateServer(sid) => {
+            SysCall::CreateServerWithAddress(sid) => {
                 let s = sid.to_u32();
                 [
-                    SysCallNumber::CreateServer as usize,
+                    SysCallNumber::CreateServerWithAddress as usize,
                     s.0 as _,
                     s.1 as _,
                     s.2 as _,
@@ -503,6 +540,7 @@ impl SysCall {
                     0,
                 ]
             }
+            SysCall::CreateServer => [SysCallNumber::CreateServer as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Connect(sid) => {
                 let s = sid.to_u32();
                 [
@@ -540,7 +578,7 @@ impl SysCall {
             },
             SysCall::ReturnMemory(sender, buf) => [
                 SysCallNumber::ReturnMemory as usize,
-                *sender,
+                sender.to_usize(),
                 buf.as_ptr() as usize,
                 buf.len(),
                 0,
@@ -602,7 +640,7 @@ impl SysCall {
             },
             SysCall::ReturnScalar1(sender, arg1) => [
                 SysCallNumber::ReturnScalar1 as usize,
-                *sender,
+                sender.to_usize(),
                 *arg1,
                 0,
                 0,
@@ -612,7 +650,7 @@ impl SysCall {
             ],
             SysCall::ReturnScalar2(sender, arg1, arg2) => [
                 SysCallNumber::ReturnScalar2 as usize,
-                *sender,
+                sender.to_usize(),
                 *arg1,
                 *arg2,
                 0,
@@ -687,9 +725,10 @@ impl SysCall {
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 a4,
             ),
-            SysCallNumber::CreateServer => {
-                SysCall::CreateServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            SysCallNumber::CreateServerWithAddress => {
+                SysCall::CreateServerWithAddress(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
+            SysCallNumber::CreateServer => SysCall::CreateServer,
             SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
@@ -743,7 +782,9 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnMemory => SysCall::ReturnMemory(a1, MemoryRange::new(a2, a3)?),
+            SysCallNumber::ReturnMemory => {
+                SysCall::ReturnMemory(MessageSender::from_usize(a1), MemoryRange::new(a2, a3)?)
+            }
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -805,8 +846,16 @@ impl SysCall {
                 ),
                 _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
             },
-            SysCallNumber::ReturnScalar1 => SysCall::ReturnScalar1(a1, a2),
-            SysCallNumber::ReturnScalar2 => SysCall::ReturnScalar2(a1, a2, a3),
+            SysCallNumber::ReturnScalar1 => {
+                SysCall::ReturnScalar1(MessageSender::from_usize(a1), a2)
+            }
+            SysCallNumber::ReturnScalar2 => {
+                SysCall::ReturnScalar2(MessageSender::from_usize(a1), a2, a3)
+            }
+            SysCallNumber::ConnectForProcess => SysCall::ConnectForProcess(
+                PID::new(a1 as _).ok_or(Error::InvalidSyscall)?,
+                SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
+            ),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1020,12 +1069,32 @@ pub fn claim_interrupt(
 ///
 /// # Errors
 ///
+/// * **OutOfMemory**: No more servers may be created
 /// * **ServerExists**: A server has already registered with that name
 /// * **InvalidString**: The name was not a valid UTF-8 string
-pub fn create_server(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
+pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result<SID, Error> {
     let sid = SID::from_bytes(name_bytes).ok_or(Error::InvalidString)?;
 
-    let result = rsyscall(SysCall::CreateServer(sid))?;
+    let result = rsyscall(SysCall::CreateServerWithAddress(sid))?;
+    if let Result::NewServerID(sid, _cid) = result {
+        Ok(sid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Create a new server with a random name.  This enables other processes to
+/// connect to this server to send messages.  A random server ID is generated
+/// by the kernel and returned to the caller. This address can then be registered
+/// to a namserver.
+///
+/// # Errors
+///
+/// * **OutOfMemory**: No more servers may be created
+pub fn create_server() -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {
         Ok(sid)
     } else if let Result::Error(e) = result {
@@ -1081,7 +1150,8 @@ pub fn receive_message(server: SID) -> core::result::Result<MessageEnvelope, Err
 /// # Errors
 ///
 pub fn try_receive_message(server: SID) -> core::result::Result<Option<MessageEnvelope>, Error> {
-    let result = rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
+    let result =
+        rsyscall(SysCall::TryReceiveMessage(server)).expect("Couldn't call ReceiveMessage");
     if let Result::Message(envelope) = result {
         Ok(Some(envelope))
     } else if result == Result::None {
@@ -1110,6 +1180,24 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Err(e) => Err(e),
+        v => panic!("Unexpected return value: {:?}", v),
+    }
+}
+
+/// Connect to a server on behalf of another process. This can be used by a name
+/// resolution server to securely create connections without disclosing a SID.
+///
+/// # Errors
+///
+/// * **ServerNotFound**: The server does not exist so the connection is now invalid
+/// * **BadAddress**: The client tried to pass a Memory message using an address it doesn't own
+/// * **ServerQueueFull**: The queue in the server is full, and this call would block
+/// * **Timeout**: The timeout limit has been reached
+pub fn connect_for_process(pid: PID, sid: SID) -> core::result::Result<Result, Error> {
+    let result = rsyscall(SysCall::ConnectForProcess(pid, sid));
+    match result {
+        Ok(Result::ConnectionID(cid)) => Ok(Result::ConnectionID(cid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
