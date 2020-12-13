@@ -5243,6 +5243,58 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
+        <peripheral>
+            <name>WDT</name>
+            <baseAddress>0xF0020000</baseAddress>
+            <groupName>WDT</groupName>
+            <registers>
+                <register>
+                    <name>WATCHDOG</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>reset_code</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write `600d` then `c0de` in sequence to this register to reset the watchdog
+timer]]></description>
+                        </field>
+                        <field>
+                            <name>enable</name>
+                            <msb>16</msb>
+                            <bitRange>[16:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[Enable the watchdog timer. Cannot be disabled once enabled, except with a reset.
+Notably, a watchdog reset will disable the watchdog.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>PERIOD</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x135f1b40</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>period</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Number of 'approximately 65MHz' CFGMCLK cycles before each reset_code must be
+entered. Defaults to a range of 1.67-5.00 seconds]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
     </peripherals>
     <vendorExtensions>
         <memoryRegions>
