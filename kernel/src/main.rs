@@ -87,6 +87,11 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
             println!("    {}", arg);
         }
     }
+
+    // pump the random number generator to test it
+    for _ in 0..100 {
+        arch::rand::get_u32();
+    }
 }
 
 /// Loop through the SystemServices list to determine the next PID to be run.

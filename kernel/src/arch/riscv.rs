@@ -20,6 +20,7 @@ pub fn init() {
         sie::set_ssoft();
         sie::set_sext();
     }
+    rand::init();
 }
 
 /// Put the core to sleep until an interrupt hits. Returns `true`
