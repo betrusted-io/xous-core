@@ -360,7 +360,7 @@ impl Server {
             .queue
             .get_mut(idx)
             .ok_or(xous_kernel::Error::BadAddress)?;
-        klog!("memory in queue[{}]: {:?}", idx, val);
+        klog!("memory in queue[{}]: {:?}", idx, current_val);
         let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match *current_val {
             QueuedMessage::WaitingReturnMemory(pid, tid, server_addr, client_addr, len) => {
                 (pid, tid, server_addr, client_addr, len, false, true)
