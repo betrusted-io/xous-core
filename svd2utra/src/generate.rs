@@ -548,14 +548,14 @@ where
         unsafe { usize_base.add(reg.offset).write_volatile(value_as_usize) };
     }
     /// Zero a field from a provided value
-    pub fn zf(&mut self, field: Field, value: T) -> T {
+    pub fn zf(&self, field: Field, value: T) -> T {
         let value_as_usize: usize = value.try_into().unwrap_or_default();
         (value_as_usize & !(field.mask << field.offset))
             .try_into()
             .unwrap_or_default()
     }
     /// Shift & mask a value to its final field position
-    pub fn ms(&mut self, field: Field, value: T) -> T {
+    pub fn ms(&self, field: Field, value: T) -> T {
         let value_as_usize: usize = value.try_into().unwrap_or_default();
         ((value_as_usize & field.mask) << field.offset)
             .try_into()
