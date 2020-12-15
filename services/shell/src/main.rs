@@ -185,7 +185,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // 0 = kernel, 1 = log
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log
     }
 
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
@@ -264,7 +264,8 @@ fn shell_main() -> ! {
             firsttime = false;
         }
 
-        // ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
+        // rate limit graphics
+        ticktimer_server::sleep_ms(ticktimer_conn, 1000).expect("couldn't sleep");
 
         // draw the ball
         graphics_server::draw_rectangle(

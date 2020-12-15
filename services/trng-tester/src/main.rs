@@ -21,7 +21,8 @@ mod implementation {
         xadc_csr: utralib::CSR<u32>,
         messible_csr: utralib::CSR<u32>,
         messible2_csr: utralib::CSR<u32>,
-        buffer: MemoryRange,
+        buffer_a: MemoryRange,
+        buffer_b: MemoryRange,
     }
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
@@ -48,13 +49,21 @@ mod implementation {
             )
             .expect("couldn't map TRNG xadc CSR range");
 
-            let buff = xous::syscall::map_memory(
-                xous::MemoryAddress::new(HW_SRAM_EXT_MEM + (1024 * 1024 * 8)), // fix this at a known physical address
+            let buff_a = xous::syscall::map_memory(
+                xous::MemoryAddress::new(0x4020_0000), // fix this at a known physical address
                 None,
                 crate::TRNG_BUFF_LEN,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
-            .expect("couldn't map TRNG comms buffer");
+            .expect("couldn't map TRNG comms buffer A");
+
+            let buff_b = xous::syscall::map_memory(
+                xous::MemoryAddress::new(0x4030_0000), // fix this at a known physical address
+                None,
+                crate::TRNG_BUFF_LEN,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map TRNG comms buffer B");
 
             let messible = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::messible::HW_MESSIBLE_BASE),
@@ -75,7 +84,8 @@ mod implementation {
             let mut trng = Trng {
                 server_csr: CSR::new(server_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
-                buffer: buff,
+                buffer_a: buff_a,
+                buffer_b: buff_b,
                 messible_csr: CSR::new(messible.as_mut_ptr() as *mut u32),
                 messible2_csr: CSR::new(messible2.as_mut_ptr() as *mut u32),
             };
@@ -93,19 +103,82 @@ mod implementation {
         pub fn init(&mut self) {
             self.server_csr.wo(utra::trng_server::CONTROL,
                 self.server_csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                | self.server_csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
-                // | self.server_csr.ms(utra::trng_server::CONROL_RO_DIS, 1)  // disable the RO to characterize only the AV
+                | self.server_csr.ms(utra::trng_server::CONTROL_POWERSAVE, 0)
+                | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
             );
             // delay in microseconds for avalanche poweron after powersave
-            self.server_csr.wfo(utra::trng_server::AV_CONFIG_POWERDELAY, 200_000);
+            self.server_csr.wfo(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000);
         }
 
         pub fn messible_send(&mut self, which: WhichMessible, value: u8) {
             match which {
                 WhichMessible::One => self.messible_csr.wfo(utra::messible::IN_IN, value as u32),
-                WhichMessible::Two => self.messible_csr.wfo(utra::messible2::IN_IN, value as u32),
+                WhichMessible::Two => self.messible2_csr.wfo(utra::messible2::IN_IN, value as u32),
             }
         }
+        pub fn messible_get(&mut self, which: WhichMessible) -> u8 {
+            match which {
+                WhichMessible::One => self.messible_csr.rf(utra::messible::OUT_OUT) as u8,
+                WhichMessible::Two => self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8,
+            }
+        }
+        pub fn messible_wait_get(&mut self, which: WhichMessible) -> u8 {
+            match which {
+                WhichMessible::One => {
+                    while self.messible_csr.rf(utra::messible::STATUS_HAVE) == 0 {
+                        xous::yield_slice();
+                    }
+                    self.messible_csr.rf(utra::messible::OUT_OUT) as u8
+                },
+                WhichMessible::Two => {
+                    while self.messible2_csr.rf(utra::messible2::STATUS_HAVE) == 0 {
+                        xous::yield_slice();
+                    }
+                    self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8
+                },
+            }
+        }
+
+        pub fn get_buff_a(&self) -> *mut u32 {
+            self.buffer_a.as_mut_ptr() as *mut u32
+        }
+        pub fn get_buff_b(&self) -> *mut u32 {
+            self.buffer_b.as_mut_ptr() as *mut u32
+        }
+
+        pub fn get_data_eager(&self) -> u32 {
+            while self.server_csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                xous::yield_slice();
+            }
+            self.server_csr.rf(utra::trng_server::DATA_DATA)
+        }
+        pub fn wait_full(&self) {
+            while self.server_csr.rf(utra::trng_server::STATUS_FULL) == 0 {
+                xous::yield_slice();
+            }
+        }
+        pub fn read_temperature(&self) -> f32 {
+            (self.xadc_csr.rf(utra::trng::XADC_TEMPERATURE_XADC_TEMPERATURE) as f32 * 503.975) / 4096.0 - 273.15
+        }
+        pub fn read_vccint(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_VCCINT_XADC_VCCINT) * 3000) / 4096
+        }
+        pub fn read_vccaux(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_VCCAUX_XADC_VCCAUX) * 3000) / 4096
+        }
+        pub fn read_vccbram(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_VCCBRAM_XADC_VCCBRAM) * 3000) / 4096
+        }
+        pub fn read_vbus(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) * 5033) / 1000
+        }
+        pub fn read_usb_p(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_USB_P_XADC_USB_P) * 1000) / 4096
+        }
+        pub fn read_usb_n(&self) -> u32 {
+            (self.xadc_csr.rf(utra::trng::XADC_USB_N_XADC_USB_N) * 1000) / 4096
+        }
+
     }
 }
 
@@ -144,14 +217,56 @@ fn xmain() -> ! {
     // Create a new com object
     let mut trng = Trng::new();
     trng.init();
+    // just create buffers out of pointers. Definitely. Unsafe.
+    let mut buff_a = trng.get_buff_a() as *mut u32;
+    let mut buff_b = trng.get_buff_b() as *mut u32;
 
+    for i in 0..TRNG_BUFF_LEN / 4 {
+        // buff_a[i] = trng.get_data_eager();
+        unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
+    }
+    for i in 0..TRNG_BUFF_LEN / 4 {
+        // buff_b[i] = trng.get_data_eager();
+        unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
+    }
     info!("TRNG: starting service");
-    let mut phase: u8 = 1;
-
-    trng.messible_send(WhichMessible::One, phase);
+    trng.messible_send(WhichMessible::One, 1); // indicate buffer A is ready to go
 
     loop {
-        ticktimer_server::sleep_ms(ticktimer_conn, 100).expect("couldn't sleep");
+        if false {
+            // to test the powerdown feature
+            trng.wait_full();
+            ticktimer_server::sleep_ms(ticktimer_conn, 5000).expect("couldn't sleep");
+        }
 
+        if false {
+            // select this to print XADC data to info!()
+            ticktimer_server::sleep_ms(ticktimer_conn, 20).expect("couldn't sleep"); // sleep to allow xadc sampling in case we're in a very tight TRNG request loop
+            info!("temperature: {}C", trng.read_temperature());
+            info!("vccint: {}mV", trng.read_vccint());
+            info!("vccaux: {}mV", trng.read_vccaux());
+            info!("vccbram: {}mV", trng.read_vccbram());
+            info!("vbus: {}mV", trng.read_vbus());
+            info!("usb_p: {}mV", trng.read_usb_p());
+            info!("usb_n: {}mV", trng.read_usb_n());
+        }
+
+        // to test the full loop
+        let which_buffer_to_fill = trng.messible_wait_get(WhichMessible::Two);
+        if which_buffer_to_fill == 1 {
+            info!("TRNG: filling A");
+            for i in 0..TRNG_BUFF_LEN / 4 {
+                //buff_a[i] = trng.get_data_eager();
+                unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
+            }
+            trng.messible_send(WhichMessible::One, 1);
+        } else {
+            info!("TRNG: filling B");
+            for i in 0..TRNG_BUFF_LEN / 4 {
+                //buff_b[i] = trng.get_data_eager();
+                unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
+            }
+            trng.messible_send(WhichMessible::One, 2);
+        }
     }
 }
