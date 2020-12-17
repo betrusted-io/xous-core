@@ -107,7 +107,20 @@ mod implementation {
                 | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
             );
             // delay in microseconds for avalanche poweron after powersave
-            self.server_csr.wfo(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000);
+            // self.server_csr.rmwf(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000);
+            self.server_csr.wo(utra::trng_server::AV_CONFIG,
+                self.server_csr.ms(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000)
+                | self.server_csr.ms(utra::trng_server::AV_CONFIG_SAMPLES, 20)
+            );
+
+            /* historical note -- for modular noise variants -- do not remove
+            self.xadc_csr.rmwf(utra::trng::MODNOISE_CTL_PERIOD, 495); // to set just the period
+
+            self.xadc_csr.wo(utra::trng::MODNOISE_CTL,  // to set also the deadtime
+                self.xadc_csr.ms(utra::trng::MODNOISE_CTL_ENA, 1)
+                | self.xadc_csr.ms(utra::trng::MODNOISE_CTL_PERIOD, 64)
+                | self.xadc_csr.ms(utra::trng::MODNOISE_CTL_DEADTIME, 5)
+            );*/
         }
 
         pub fn messible_send(&mut self, which: WhichMessible, value: u8) {

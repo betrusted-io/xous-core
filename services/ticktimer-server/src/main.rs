@@ -102,6 +102,7 @@ mod implementation {
                 (&mut xtt) as *mut XousTickTimer as *mut usize,
             )
             .expect("couldn't claim irq");
+
             xtt
         }
 
@@ -157,19 +158,23 @@ mod implementation {
         pub fn reset_wdt(&mut self) {
             // disarm the WDT
 
-            // why do we write the registers three times? because:
+            // why do we have this weird interlock dance?
             //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
             //    (so you can't defeat the WDT by just pausing the external clock sourc)
             //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
             //  - the CPU runs at 100MHz with a tight tolerance
-            //  - presenting the data three times ensures the WDT will pick it up,
-            //    even at the slowest end of tolerance
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+            //  - thus we have to confirm the write of the watchdog data before moving to the next state
+            if self.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
+                if self.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
+                    while self.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
+                        self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
+                    }
+                    self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+                    while self.wdt.rf(utra::wdt::STATE_ARMED2) == 1 {
+                        self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+                    }
+                }
+            }
         }
     }
 }
