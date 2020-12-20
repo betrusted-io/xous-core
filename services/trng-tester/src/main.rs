@@ -101,17 +101,30 @@ mod implementation {
         }
 
         pub fn init(&mut self) {
+            ///// configure power settings and which generator to use
             self.server_csr.wo(utra::trng_server::CONTROL,
                 self.server_csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
                 | self.server_csr.ms(utra::trng_server::CONTROL_POWERSAVE, 0)
-                | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
+               // | self.server_csr.ms(utra::trng_server::CONTROL_AV_DIS, 1)  // disable the AV generator to characterize the RO
+               // | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
             );
+
+            ///// configure avalanche
             // delay in microseconds for avalanche poweron after powersave
             // self.server_csr.rmwf(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000);
             self.server_csr.wo(utra::trng_server::AV_CONFIG,
                 self.server_csr.ms(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000)
-                | self.server_csr.ms(utra::trng_server::AV_CONFIG_SAMPLES, 20)
+                | self.server_csr.ms(utra::trng_server::AV_CONFIG_SAMPLES, 32)
             );
+
+            ///// configure ring oscillator
+            self.server_csr.wo(utra::trng_server::RO_CONFIG,
+                self.server_csr.ms(utra::trng_server::RO_CONFIG_DELAY, 4)
+                | self.server_csr.ms(utra::trng_server::RO_CONFIG_DWELL, 100)
+                | self.server_csr.ms(utra::trng_server::RO_CONFIG_GANG, 1)
+                | self.server_csr.ms(utra::trng_server::RO_CONFIG_FUZZ, 1)
+                | self.server_csr.ms(utra::trng_server::RO_CONFIG_OVERSAMPLING, 3)
+            )
 
             /* historical note -- for modular noise variants -- do not remove
             self.xadc_csr.rmwf(utra::trng::MODNOISE_CTL_PERIOD, 495); // to set just the period
@@ -243,7 +256,8 @@ fn xmain() -> ! {
         unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
     }
     info!("TRNG: starting service");
-    trng.messible_send(WhichMessible::One, 1); // indicate buffer A is ready to go
+    let mut phase = 1;
+    trng.messible_send(WhichMessible::One, phase); // indicate buffer A is ready to go
 
     loop {
         if false {
@@ -265,21 +279,22 @@ fn xmain() -> ! {
         }
 
         // to test the full loop
-        let which_buffer_to_fill = trng.messible_wait_get(WhichMessible::Two);
-        if which_buffer_to_fill == 1 {
+        trng.messible_wait_get(WhichMessible::Two);
+        phase += 1;
+        if phase % 2 == 1 {
             info!("TRNG: filling A");
             for i in 0..TRNG_BUFF_LEN / 4 {
                 //buff_a[i] = trng.get_data_eager();
                 unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
             }
-            trng.messible_send(WhichMessible::One, 1);
+            trng.messible_send(WhichMessible::One, phase);
         } else {
             info!("TRNG: filling B");
             for i in 0..TRNG_BUFF_LEN / 4 {
                 //buff_b[i] = trng.get_data_eager();
                 unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
             }
-            trng.messible_send(WhichMessible::One, 2);
+            trng.messible_send(WhichMessible::One, phase);
         }
     }
 }
