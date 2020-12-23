@@ -13,6 +13,8 @@ i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
 i @peripherals/keyboard.cs
 i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
 
 # Load the Betrusted Renode Platform file
 machine LoadPlatformDescription @betrusted.repl
