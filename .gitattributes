@@ -8,6 +8,9 @@
 *.c text eol=lf
 *.s text eol=lf
 *.S text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
 README.* text eol=lf
 LICENSE text eol=lf
 Makefile text eol=lf
