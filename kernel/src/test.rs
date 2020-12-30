@@ -2,7 +2,7 @@ use crate::kmain;
 use std::thread::JoinHandle;
 
 use std::net::ToSocketAddrs;
-use std::sync::mpsc::channel;
+use crossbeam_channel::unbounded;
 use xous_kernel::{rsyscall, SysCall};
 
 mod shutdown;
@@ -43,7 +43,7 @@ fn start_kernel(server_spec: &str) -> JoinHandle<()> {
     // let server_addr = temp_server.local_addr().unwrap();
     // drop(temp_server);
 
-    let (send_addr, recv_addr) = channel();
+    let (send_addr, recv_addr) = unbounded();
 
     // Launch the main thread. We pass a `send_addr` channel so that the
     // server can notify us when it's ready to listen.
@@ -126,8 +126,8 @@ fn connect_for_process() {
     let nameserver_addr_bytes = b"nameserver-12345";
     let nameserver_addr = SID::from_bytes(nameserver_addr_bytes).unwrap();
 
-    let (server_addr_send, server_addr_recv) = channel();
-    let (nameserver_send, nameserver_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
+    let (nameserver_send, nameserver_recv) = unbounded();
 
     // Spawn the client "process" and wait for the server address.
     let nameserver_process = xous_kernel::create_process_as_thread(
@@ -272,7 +272,7 @@ fn send_scalar_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
 
     // Spawn the server "process" (which just lives in a separate thread)
     // and receive the message. Note that we need to communicate to the
@@ -332,8 +332,8 @@ fn try_receive_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
-    let (client_sent_send, client_sent_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
+    let (client_sent_send, client_sent_recv) = unbounded();
 
     // Spawn the server "process" (which just lives in a separate thread)
     // and receive the message. Note that we need to communicate to the
@@ -402,7 +402,7 @@ fn send_blocking_scalar_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
 
     // Spawn the server "process" (which just lives in a separate thread)
     // and receive the message. Note that we need to communicate to the
@@ -491,10 +491,10 @@ fn message_ordering() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
-    let (server_can_start_send, server_can_start_recv) = channel();
-    let (client_total_send, client_total_recv) = channel();
-    let (server_total_send, server_total_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
+    let (server_can_start_send, server_can_start_recv) = unbounded();
+    let (client_total_send, client_total_recv) = unbounded();
+    let (server_total_send, server_total_recv) = unbounded();
 
     // Spawn the server "process" (which just lives in a separate thread)
     // and receive the message. Note that we need to communicate to the
@@ -608,7 +608,7 @@ fn send_interleved_blocking_scalar_message() {
     // Start the server in another thread
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
 
     // Spawn the server "process" (which just lives in a separate thread)
     // and receive the message. Note that we need to communicate to the
@@ -700,7 +700,7 @@ fn send_move_message() {
 
     let main_thread = start_kernel(SERVER_SPEC);
 
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
 
     let xous_server = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
         "send_move_message server",
@@ -755,7 +755,7 @@ fn send_move_message() {
 #[test]
 fn send_borrow_message() {
     let main_thread = start_kernel(SERVER_SPEC);
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
@@ -834,7 +834,7 @@ fn send_borrow_message() {
 #[test]
 fn send_mutableborrow_message() {
     let main_thread = start_kernel(SERVER_SPEC);
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
@@ -903,7 +903,7 @@ fn send_mutableborrow_message() {
 #[test]
 fn send_repeat_mutableborrow_message() {
     let main_thread = start_kernel(SERVER_SPEC);
-    let (server_addr_send, server_addr_recv) = channel();
+    let (server_addr_send, server_addr_recv) = unbounded();
     let test_str = "Hello, world!";
     let test_bytes = test_str.as_bytes();
 
@@ -1112,7 +1112,7 @@ fn process_restart_server() {
     let main_thread = start_kernel(SERVER_SPEC);
 
     fn create_destroy_server(test_bytes: &'static [u8]) {
-        let (server_addr_send, server_addr_recv) = channel();
+        let (server_addr_send, server_addr_recv) = unbounded();
 
         let xous_server = xous_kernel::create_process_as_thread(
             xous_kernel::ProcessArgsAsThread::new("process_restart_server server", move || {

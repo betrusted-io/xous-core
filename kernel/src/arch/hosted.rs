@@ -9,11 +9,12 @@ use std::convert::TryInto;
 use std::env;
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread_local;
 
 use crate::arch::process::Process;
 use crate::services::SystemServices;
+
+use crossbeam_channel::{unbounded, Receiver, RecvError, RecvTimeoutError, Sender};
 
 use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
 
@@ -138,7 +139,7 @@ fn handle_connection(
         }
     }
 
-    let (sender, receiver) = channel();
+    let (sender, receiver) = unbounded();
     let conn_sender = sender.clone();
     std::thread::Builder::new()
         .name(format!("PID {}: client connection thread", pid))
@@ -349,11 +350,11 @@ fn listen_thread(
         NewConnection(TcpStream),
         Exit,
     };
-    let (sender, receiver) = channel();
+    let (sender, receiver) = unbounded();
     let tcp_sender = sender.clone();
     let exit_sender = sender;
 
-    let (shutdown_listener, shutdown_listener_receiver) = channel();
+    let (shutdown_listener, shutdown_listener_receiver) = unbounded();
 
     // `listener.accept()` has no way to break, so we must put it in nonblocking mode
     listener.set_nonblocking(true).unwrap();
@@ -370,8 +371,8 @@ fn listen_thread(
                     match shutdown_listener_receiver
                         .recv_timeout(std::time::Duration::from_millis(500))
                     {
-                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-                        Ok(()) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        Err(RecvTimeoutError::Timeout) => continue,
+                        Ok(()) | Err(RecvTimeoutError::Disconnected) => {
                             return;
                         }
                     }
@@ -404,7 +405,7 @@ fn listen_thread(
         .name("kernel exit listener".to_owned())
         .spawn(move || match exit_channel.recv() {
             Ok(ExitMessage::Exit) => exit_sender.send(ClientMessage::Exit).unwrap(),
-            Err(std::sync::mpsc::RecvError) => eprintln!("error receiving exit command"),
+            Err(RecvError) => eprintln!("error receiving exit command"),
         })
         .unwrap();
 
@@ -427,9 +428,9 @@ fn listen_thread(
 /// thread that handles network communications, and this function never returns.
 pub fn idle() -> bool {
     // Start listening.
-    let (sender, message_receiver) = channel();
-    let (new_pid_sender, new_pid_receiver) = channel();
-    let (exit_sender, exit_receiver) = channel();
+    let (sender, message_receiver) = unbounded();
+    let (new_pid_sender, new_pid_receiver) = unbounded();
+    let (exit_sender, exit_receiver) = unbounded();
 
     // Allocate PID1 with the key we were passed.
     let pid1_key = PID1_KEY.with(|p1k| *p1k.borrow());
@@ -450,7 +451,7 @@ pub fn idle() -> bool {
 
     #[cfg(not(test))]
     let address_receiver = {
-        let (sender, receiver) = channel();
+        let (sender, receiver) = unbounded();
         set_send_addr(sender);
         receiver
     };
