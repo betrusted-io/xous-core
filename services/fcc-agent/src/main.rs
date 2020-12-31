@@ -120,8 +120,43 @@ impl Write for Uart {
 }
 
 fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Error> {
-    let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
-    let command = tokens[0];
+    /*
+    We want to do this:
+      let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
+    But we can't. Heapless is having big problems with this for lots of reasons, so we make it manually.
+    */
+    let mut tokens = Vec::<_, U16>::new();
+    for i in 0..16 {
+        let mut empty: String<U512> = String::from("");
+        tokens.push(empty).unwrap();
+    }
+
+    let mut tokindex: usize = 0;
+    let mut in_space = true;
+    for c in cmd.as_str().chars() {
+        if in_space && (c == ' ') {
+            continue;
+        } else {
+            if c != ' ' {
+                in_space = false;
+                tokens[tokindex].push(c).unwrap();
+            } else {
+                in_space = true;
+                tokindex += 1;
+                if tokindex >= 16 {
+                    break;
+                }
+            }
+        }
+    }
+
+    /*
+    for token in tokens.iter() {
+        println!("token: {}", token);
+    }
+    return Ok(());*/
+
+    let command = &tokens[0];
 
     if command.len() == 0 {
         return Ok(());
@@ -132,12 +167,14 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Err
                 return Ok(());
             }
             if tokens[1].trim() == "read_agent_version" {
-                println!("1.0.0");
-            } /* else if tokens[1].trim() == "read_fw_version" {
+                println!("1.0.0\n\r");
+            } else if tokens[1].trim() == "--help" {
+                println!("I need all the help I can get.\n\r");
+            } else if tokens[1].trim() == "read_fw_version" {
                 let (major, minor, build) = get_wf200_fw_rev(com_cid).unwrap();
-                println!("{}.{}.{}", major, minor, build);
+                println!("{}.{}.{}\n\r", major, minor, build);
             } else if tokens[1].trim() == "read_driver_version" {
-                println!("n/a");
+                println!("n/a\n\r");
             } else if tokens[1].trim() == "write_test_data" {
                 if tokens.len() != 3 {
                     // wrong command length, ignore
@@ -146,8 +183,9 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Err
                 let pdsline = tokens[2].trim();
                 send_pds_line(com_cid, pdsline.as_bytes())?;
             } else if tokens[1].trim() == "read_rx_stats" {
+                println!("sending rx stats request");
                 get_rx_stats_agent(com_cid).unwrap();
-            } */
+            }
 
         } else {
             println!("{}: command not recognized.", command.trim());
@@ -214,7 +252,7 @@ fn xmain() -> ! {
 
     uart.enable_rx();
 
-    print!("\n\n*** FCC agent ***\n\n");
+    print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
     let mut last_time: u64 = 0;
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
@@ -223,17 +261,18 @@ fn xmain() -> ! {
                 if let Ok(opcode) = Opcode::try_from(&env.body) {
                     match opcode {
                         Opcode::Char(c) => {
-                            print!("{:?}", c as char);
                             if c != b'\r' && c != b'\n' {
+                                print!("{}", c as char);
                                 cmd_string.push(c as char).unwrap();
                             } else {
+                                println!("");
                                 do_agent(&mut cmd_string, com_conn).unwrap();
-                                print!("\nagent@precursor:~$ ");
+                                // print!("agent@precursor:~$ ");
                                 cmd_string.clear();
                             }
                         },
-                        /*
                         Opcode::RxStats(stats) => {
+                            println!("got rxstats message");
                             let mut stats_u: sl_wfx_indication_data_u = sl_wfx_indication_data_u {raw_data: [0; 376]};
                             for i in 0..stats.len() {
                                unsafe{ stats_u.raw_data[i] = stats[i]; }
@@ -243,7 +282,7 @@ fn xmain() -> ! {
                             println!("PER on total number of frames: {}", unsafe{stats_u.rx_stats.per_total});
                             println!("Throughput on correct frames received: {}", unsafe{stats_u.rx_stats.throughput});
                             // TODO: fill in more stats output
-                        },*/
+                        },
                         _ => ()
                     }
                 }

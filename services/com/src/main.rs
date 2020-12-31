@@ -40,7 +40,7 @@ mod implementation {
     use heapless::consts::*;
 
     /*
-    use typenum::{UInt, UTerm};
+    use typenum::{UInt, UTerm};'
     use typenum::bit::{B0, B1};
     type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
 */
@@ -224,12 +224,12 @@ fn xmain() -> ! {
     let shell_conn = xous::connect(shell_id).unwrap();
 
     let agent_conn: usize;
-    if cfg!(feature = "fccagent") {
+    //if cfg!(feature = "fccagent") {
         let agent_id = xous::SID::from_bytes(b"fcc-agent-server").unwrap();
         agent_conn = xous::connect(agent_id).expect("Couldn't connect to fcc-agent! Are you building with the right features enabled?");
-    } else {
-        agent_conn = 0; // bogus value
-    }
+    //} else {
+    //    agent_conn = 0; // bogus value
+    //}
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -306,12 +306,12 @@ fn xmain() -> ! {
                         stats[i*2] = data as u8;
                         stats[i*2+1] = (data >> 8) as u8;
                     }
-                    if cfg!(feature = "fccagent") {
+                    //if cfg!(feature = "fccagent") {
                         // hard-coded from fccagent to break circular dependency of fcc agent on com on agent on com on...
                         let data = xous::carton::Carton::from_bytes(&stats);
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m);
-                    }
+                    //}
                 }
                 _ => error!("unknown opcode"),
             }
