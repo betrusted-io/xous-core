@@ -35,7 +35,7 @@ impl Into<[usize; 2]> for BattStats {
 }
 
 #[derive(Debug)]
-pub enum Opcode {
+pub enum Opcode<'a> {
     /// Battery stats
     BattStats,
 
@@ -76,16 +76,28 @@ pub enum Opcode {
     FlashErase,
 
     /// Program a page of FLASH
-    FlashProgram,
+    FlashProgram(&'a [u8]),
 
     /// Update the SSID list
     SsidScan,
 
     /// Return the latest SSID list
     SsidFetch,
+
+    /// Fetch the git ID of the EC
+    EcGitRev,
+
+    /// Fetch the firmware rev of the WF200
+    Wf200Rev,
+
+    /// Send a line of PDS data
+    Wf200PdsLine(&'a [u8]),
+
+    /// Send Rx stats to fcc-agent
+    RxStatsAgent,
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
+impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
     type Error = &'static str;
     fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
         match message {
@@ -103,6 +115,8 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
                 } else if m.id as u16 == ComState::STAT_RETURN.verb {
                     let raw_stats: [usize; 2] = [m.arg1, m.arg2];
                     Ok(Opcode::BattStatsReturn(raw_stats.into()))
+                } else if m.id as u16 == ComState::WFX_RXSTAT_GET.verb {
+                    Ok(Opcode::RxStatsAgent)
                 } else {
                     Err("unrecognized command")
                 }
@@ -112,6 +126,23 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
                     Ok(Opcode::BattStats)
                 } else if m.id as u16 == ComState::GYRO_READ.verb {
                     Ok(Opcode::ImuAccelRead)
+                } else if m.id as u16 == ComState::WFX_FW_REV_GET.verb {
+                    Ok(Opcode::Wf200Rev)
+                } else if m.id as u16 == ComState::EC_GIT_REV.verb {
+                    Ok(Opcode::EcGitRev)
+                } else {
+                    Err("unrecognized opcode")
+                }
+            },
+            Message::Borrow(m) => {
+                if m.id as u16 == ComState::WFX_PDS_LINE_SET.verb {
+                    let line = unsafe {
+                        core::slice::from_raw_parts(
+                            m.buf.as_ptr(),
+                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
+                        )
+                    };
+                    Ok(Opcode::Wf200PdsLine(line))
                 } else {
                     Err("unrecognized opcode")
                 }
@@ -121,7 +152,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
     }
 }
 
-impl Into<Message> for Opcode {
+impl<'a> Into<Message> for Opcode<'a> {
     fn into(self) -> Message {
         match self {
             Opcode::BoostOn => Message::Scalar(ScalarMessage {
@@ -147,7 +178,17 @@ impl Into<Message> for Opcode {
                     arg3: 0,
                     arg4: 0,
                 })
-            }
+            },
+            Opcode::Wf200Rev => Message::BlockingScalar(ScalarMessage {
+                id: ComState::WFX_FW_REV_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::EcGitRev => Message::BlockingScalar(ScalarMessage {
+                id: ComState::EC_GIT_REV.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::Wf200PdsLine(pdsline) => {
+                let data = xous::carton::Carton::from_bytes(pdsline);
+                Message::Borrow(data.into_message(ComState::WFX_PDS_LINE_SET.verb as _))
+            },
+            Opcode::RxStatsAgent => Message::Scalar(ScalarMessage {
+                id: ComState::WFX_RXSTAT_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             _ => todo!("message type not yet implemented")
         }
     }

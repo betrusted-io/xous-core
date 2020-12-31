@@ -13,8 +13,8 @@ log = "0.4"
 utralib = { path = "../../utralib"}
 
 [features]
-debugprint = []
-logging = []
+debugprint = []  # adding this allocates the UART for debugging the logger
+logging = []  # adding this allocates the UART for logging of Xous
 default = []
 #default = ["logging"]
 #default = ["debugprint"]

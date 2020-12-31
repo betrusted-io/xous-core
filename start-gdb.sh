@@ -8,3 +8,4 @@ then
 fi
 
 riscv64-unknown-elf-gdb -ex 'set riscv use-compressed-breakpoints off' -ex 'file kernel/target/riscv32imac-unknown-none-elf/release/kernel' -ex "tar rem $1:3333"
+#riscv64-unknown-elf-gdb -ex 'set riscv use-compressed-breakpoints off' -ex 'file target/riscv32imac-unknown-none-elf/release/fcc-agent' -ex "tar rem $1:3333"

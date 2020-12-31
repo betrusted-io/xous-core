@@ -43,54 +43,64 @@ pub const DEFAULT: Uart = Uart {};
 
 impl Uart {
     fn map_uart(&self) {
-        /*
-           Note: the memory address and interrupt specified here needs to map to a unique hardware
-           UART resource. Modify in this function as necessary.
-        */
-        let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map debug uart");
-        unsafe{ DEFAULT_UART_ADDR = uart.as_mut_ptr() as _; }
-        println!("Mapped UART @ {:08x}", uart.addr.get());
-        // core::mem::forget(uart);
+        if cfg!(feature = "debugprint") {
+            /*
+            Note: the memory address and interrupt specified here needs to map to a unique hardware
+            UART resource. Modify in this function as necessary.
+            */
+            let uart = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map debug uart");
+            unsafe{ DEFAULT_UART_ADDR = uart.as_mut_ptr() as _; }
+            println!("Mapped UART @ {:08x}", uart.addr.get());
+            // core::mem::forget(uart);
 
-        println!("Allocating IRQ...");
-        xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
-        self.enable_rx();
+            println!("Allocating IRQ...");
+            xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+            self.enable_rx();
+        }
     }
 
     pub fn putc(&self, c: u8) {
-        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
-            self.map_uart();
-        }
-        let mut uart_csr = CSR::new(unsafe{ DEFAULT_UART_ADDR as *mut u32});
+        if cfg!(feature = "debugprint") {
+            if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+                self.map_uart();
+            }
+            let mut uart_csr = CSR::new(unsafe{ DEFAULT_UART_ADDR as *mut u32});
 
-        // Wait until TXFULL is `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {}
-        uart_csr.wo(utra::uart::RXTX, c as u32);
+            // Wait until TXFULL is `0`
+            while uart_csr.r(utra::uart::TXFULL) != 0 {}
+            uart_csr.wo(utra::uart::RXTX, c as u32);
+        }
     }
 
     pub fn enable_rx(&self) {
-        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1 );
+        if cfg!(feature = "debugprint") {
+            let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
+            uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1 );
+        }
     }
 
     pub fn getc(&self) -> Option<u8> {
-        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
-            self.map_uart();
-        }
-        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
-            0 => None,
-            ack => {
-                let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
-                uart_csr.wfo(utra::uart::EV_PENDING_RX, ack);
-                c
+        if cfg!(feature = "debugprint") {
+            if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+                self.map_uart();
             }
+            let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
+            match uart_csr.rf(utra::uart::EV_PENDING_RX) {
+                0 => None,
+                ack => {
+                    let c = Some(uart_csr.rf(utra::uart::RXTX_RXTX) as u8);
+                    uart_csr.wfo(utra::uart::EV_PENDING_RX, ack);
+                    c
+                }
+            }
+        } else {
+            None
         }
     }
 }

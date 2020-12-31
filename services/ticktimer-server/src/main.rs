@@ -94,7 +94,11 @@ mod implementation {
                 connection,
             };
 
-            xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+            if cfg!(feature = "disablewatchdog") {
+                // do nothing
+            } else {
+                xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+            }
 
             xous::claim_interrupt(
                 utra::ticktimer::TICKTIMER_IRQ,

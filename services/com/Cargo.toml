@@ -11,7 +11,7 @@ heapless = "0.5"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 log = "0.4"
-com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "a9e05f414accef08348b77be6fc0f668b319e6ff" }
 typenum = "1.12"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
@@ -21,5 +21,6 @@ utralib = { path = "../../utralib"}
 
 [features]
 debugprint = []
+fccagent = []
 #default = [] # "debugprint"
-default = ["debugprint"]
+default = ["debugprint", "fccagent"]

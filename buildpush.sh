@@ -81,6 +81,11 @@ then
       sudo wishbone-tool --csr-csv $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x500000 --load-flash
     fi
 else
+    
+  md5sum $FPGA_IMAGE
+  md5sum $KERNEL_IMAGE
+  md5sum $CSR_CSV
+  
   if [ $USE_IDENTITY -eq 1 ]
   then
     # there is a private key

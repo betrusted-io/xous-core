@@ -156,7 +156,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9#9a91a81f482ea8eba2f2de5d6c20b9bd399f39a9"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=a9e05f414accef08348b77be6fc0f668b319e6ff#a9e05f414accef08348b77be6fc0f668b319e6ff"
 
 [[package]]
 name = "crc"
@@ -215,6 +215,20 @@ dependencies = [
  "log",
  "regex",
  "termcolor",
+]
+
+[[package]]
+name = "fcc-agent"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "heapless",
+ "log",
+ "log-server",
+ "ticktimer-server",
+ "typenum",
+ "utralib",
+ "xous",
 ]
 
 [[package]]
@@ -801,7 +815,6 @@ dependencies = [
  "bitflags",
  "blitstr",
  "com",
- "com_rs",
  "graphics-server",
  "log",
  "log-server",

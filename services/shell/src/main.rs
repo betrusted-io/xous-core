@@ -265,7 +265,7 @@ fn shell_main() -> ! {
         }
 
         // rate limit graphics
-        ticktimer_server::sleep_ms(ticktimer_conn, 1000).expect("couldn't sleep");
+        // ticktimer_server::sleep_ms(ticktimer_conn, 1000).expect("couldn't sleep");
 
         // draw the ball
         graphics_server::draw_rectangle(

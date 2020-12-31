@@ -9,6 +9,7 @@ members = [
     "services/ticktimer-server",
     "services/com",
     "services/trng-tester",
+    "services/fcc-agent",
 #    "services/xous-names",
     "svd2utra",
     "xtask",
@@ -19,6 +20,7 @@ default-members = [
     "services/graphics-server",
     "services/ticktimer-server",
     "services/trng-tester",
+    "services/fcc-agent",
 #    "services/xous-names",
     "services/com",
 ]

@@ -18,4 +18,6 @@ utralib = { path = "../../utralib"}
 
 [features]
 debugprint = []
-default = [] # "debugprint"
+disablewatchdog = []
+# generally you want to disable watchdog if you're doing development.
+default = ["disablewatchdog"] # "debugprint"

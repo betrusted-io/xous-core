@@ -11,6 +11,8 @@ use log::{error, info};
 use com_rs::*;
 
 use xous::CID;
+
+const STD_TIMEOUT: u32 = 100;
 #[derive(Debug, Copy, Clone)]
 pub struct WorkRequest {
     work: ComSpec,
@@ -31,6 +33,7 @@ mod implementation {
     use xous::CID;
     use log::{error, info};
     use crate::return_battstats;
+    use crate::STD_TIMEOUT;
 
     #[macro_use]
     use heapless::Vec;
@@ -41,8 +44,6 @@ mod implementation {
     use typenum::bit::{B0, B1};
     type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
 */
-    const STD_TIMEOUT: u32 = 100;
-
     pub struct XousCom {
         csr: utralib::CSR<u32>,
         ticktimer: CID,
@@ -222,6 +223,14 @@ fn xmain() -> ! {
     let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
     let shell_conn = xous::connect(shell_id).unwrap();
 
+    let agent_conn: usize;
+    if cfg!(feature = "fccagent") {
+        let agent_id = xous::SID::from_bytes(b"fcc-agent-server").unwrap();
+        agent_conn = xous::connect(agent_id).expect("Couldn't connect to fcc-agent! Are you building with the right features enabled?");
+    } else {
+        agent_conn = 0; // bogus value
+    }
+
     // Create a new com object
     let mut com = XousCom::new();
 
@@ -250,7 +259,61 @@ fn xmain() -> ! {
                 Opcode::BattStatsNb => {
                     com.workqueue.push(WorkRequest { work: ComState::STAT, sender: shell_conn }).unwrap();
                 }
-                    _ => error!("unknown opcode"),
+                Opcode::Wf200Rev => {
+                    com.txrx(ComState::WFX_FW_REV_GET.verb);
+                    let major = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    let minor = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    let build = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    xous::return_scalar(
+                        envelope.sender,
+                        ((major as usize) << 16) | ((minor as usize) << 8) | (build as usize)
+                    )
+                    .expect("COM: couldn't return WF200 firmware rev");
+                }
+                Opcode::EcGitRev => {
+                    com.txrx(ComState::EC_GIT_REV.verb);
+                    let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    xous::return_scalar2(
+                        envelope.sender,
+                        ((rev_msb as usize) << 16) | (rev_lsb as usize),
+                        dirty as usize
+                    )
+                    .expect("COM: couldn't return WF200 firmware rev");
+                }
+                Opcode::Wf200PdsLine(line) => {
+                    let length = line.len() as u16;
+                    com.txrx(ComState::WFX_PDS_LINE_SET.verb);
+                    com.txrx(length);
+                    for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
+                        let word: u16;
+                        if (i * 2 + 1) == (length as usize - 1) { // odd last element
+                            word = line[i * 2] as u16;
+                        } else if i * 2 < length as usize {
+                            word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
+                        } else {
+                            word = 0;
+                        }
+                        com.txrx(word);
+                    }
+                }
+                Opcode::RxStatsAgent => {
+                    let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
+                    com.txrx(ComState::WFX_RXSTAT_GET.verb);
+                    for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
+                        let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                        stats[i*2] = data as u8;
+                        stats[i*2+1] = (data >> 8) as u8;
+                    }
+                    if cfg!(feature = "fccagent") {
+                        // hard-coded from fccagent to break circular dependency of fcc agent on com on agent on com on...
+                        let data = xous::carton::Carton::from_bytes(&stats);
+                        let m = xous::Message::Borrow(data.into_message(2));
+                        xous::send_message(agent_conn, m);
+                    }
+                }
+                _ => error!("unknown opcode"),
             }
         } else {
             error!("couldn't convert opcode");
