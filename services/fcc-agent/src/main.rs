@@ -120,6 +120,13 @@ impl Write for Uart {
 }
 
 fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Error> {
+    if true {
+        let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
+        for token in tokens.iter() {
+            println!("token: {}", token);
+        }
+        return Ok(());
+    }
     /*
     We want to do this:
       let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
