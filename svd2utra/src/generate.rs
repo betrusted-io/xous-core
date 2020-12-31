@@ -495,7 +495,7 @@ impl Field {
     }
 }
 pub struct CSR<T> {
-    base: *mut T,
+    pub base: *mut T,
 }
 impl<T> CSR<T>
 where
