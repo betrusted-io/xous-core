@@ -224,12 +224,12 @@ fn xmain() -> ! {
     let shell_conn = xous::connect(shell_id).unwrap();
 
     let agent_conn: usize;
-    //if cfg!(feature = "fccagent") {
+    if cfg!(feature = "fccagent") {
         let agent_id = xous::SID::from_bytes(b"fcc-agent-server").unwrap();
         agent_conn = xous::connect(agent_id).expect("Couldn't connect to fcc-agent! Are you building with the right features enabled?");
-    //} else {
-    //    agent_conn = 0; // bogus value
-    //}
+    } else {
+        agent_conn = 0; // bogus value
+    }
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -283,6 +283,8 @@ fn xmain() -> ! {
                     .expect("COM: couldn't return WF200 firmware rev");
                 }
                 Opcode::Wf200PdsLine(line) => {
+                    info!("COM: Wf200PdsLine got line {}", unsafe{core::str::from_utf8_unchecked(line)});
+                    /*
                     let length = line.len() as u16;
                     com.txrx(ComState::WFX_PDS_LINE_SET.verb);
                     com.txrx(length);
@@ -296,22 +298,29 @@ fn xmain() -> ! {
                             word = 0;
                         }
                         com.txrx(word);
-                    }
+                    }*/
                 }
                 Opcode::RxStatsAgent => {
+                    xous::send_message(agent_conn, xous::Message::Scalar(
+                        xous::ScalarMessage { id: 1, arg1: '!' as usize, arg2: 0, arg3: 0, arg4: 0}
+                    ));
                     let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
+                    /*
                     com.txrx(ComState::WFX_RXSTAT_GET.verb);
                     for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
                         let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                         stats[i*2] = data as u8;
                         stats[i*2+1] = (data >> 8) as u8;
-                    }
-                    //if cfg!(feature = "fccagent") {
+                    }*/
+                    if cfg!(feature = "fccagent") {
                         // hard-coded from fccagent to break circular dependency of fcc agent on com on agent on com on...
                         let data = xous::carton::Carton::from_bytes(&stats);
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m);
-                    //}
+                    }
+                    xous::send_message(agent_conn, xous::Message::Scalar(
+                        xous::ScalarMessage { id: 1, arg1: '@' as usize, arg2: 0, arg3: 0, arg4: 0}
+                    ));
                 }
                 _ => error!("unknown opcode"),
             }

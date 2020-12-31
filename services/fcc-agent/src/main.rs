@@ -1,8 +1,49 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::Opcode;
+use xous::{Message, ScalarMessage};
+
+#[derive(Debug)]
+pub enum Opcode<'a> {
+    Char(u8),
+    RxStats(&'a [u8]),
+}
+impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+    type Error = &'static str;
+    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+        match message {
+            Message::Scalar(m) => match m.id {
+                1 => Ok(Opcode::Char(m.arg1 as u8)),
+                _ => Err("unrecognized opcode"),
+            },
+            Message::Borrow(m) => match m.id {
+                2 => {
+                    let stats = unsafe {
+                        core::slice::from_raw_parts(
+                            m.buf.as_ptr(),
+                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
+                        )
+                    };
+                    Ok(Opcode::RxStats(stats))
+                }
+                _ => {print!("unhandled opcode"); Err("unrecognized opcode")},
+            }
+            _ => {print!("unhandled message type"); Err("unhandled message type")},
+        }
+    }
+}
+impl<'a> Into<Message> for Opcode<'a> {
+    fn into(self) -> Message {
+        match self {
+            Opcode::Char(c) => Message::Scalar(ScalarMessage {
+                id: 1, arg1: c as usize, arg2: 0, arg3: 0, arg4: 0}),
+            Opcode::RxStats(stats) => {
+                let data = xous::carton::Carton::from_bytes(stats);
+                Message::Borrow(data.into_message(2))
+            }
+        }
+    }
+}
 
 use log::error;
 use core::fmt::{Error, Write};
@@ -13,7 +54,6 @@ use heapless::String;
 use heapless::Vec;
 use heapless::consts::*;
 
-use xous::{Message, ScalarMessage};
 use core::convert::TryFrom;
 
 use com::*;
@@ -67,7 +107,7 @@ impl Uart {
            Note: this function takes over the console UART. Not compatible with console logging.
         */
         let uart = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::console::HW_CONSOLE_BASE),
+            xous::MemoryAddress::new(utra::app_uart::HW_APP_UART_BASE),
             None,
             4096,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -83,7 +123,7 @@ impl Uart {
             UART_STRUCT.rx_conn = connection;
         }
 
-        xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+        xous::claim_interrupt(utra::app_uart::APP_UART_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
 
         uart_struct
     }
@@ -120,7 +160,7 @@ impl Write for Uart {
 }
 
 fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Error> {
-    if true {
+    if false {
         let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
         for token in tokens.iter() {
             println!("token: {}", token);
@@ -181,19 +221,17 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Err
                 let (major, minor, build) = get_wf200_fw_rev(com_cid).unwrap();
                 println!("{}.{}.{}\n\r", major, minor, build);
             } else if tokens[1].trim() == "read_driver_version" {
-                println!("n/a\n\r");
+                println!("0.0.0\n\r");
             } else if tokens[1].trim() == "write_test_data" {
-                if tokens.len() != 3 {
-                    // wrong command length, ignore
-                    return Ok(());
-                }
                 let pdsline = tokens[2].trim();
+                println!("sending line: {}", pdsline);
                 send_pds_line(com_cid, pdsline.as_bytes())?;
             } else if tokens[1].trim() == "read_rx_stats" {
                 println!("sending rx stats request");
                 get_rx_stats_agent(com_cid).unwrap();
+            } else {
+                println!("{}: wfx_test_agent sub-command not recognized.", tokens[1].trim());
             }
-
         } else {
             println!("{}: command not recognized.", command.trim());
         }
@@ -260,7 +298,7 @@ fn xmain() -> ! {
     uart.enable_rx();
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
-    let mut last_time: u64 = 0;
+    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
         match envelope {
@@ -290,7 +328,7 @@ fn xmain() -> ! {
                             println!("Throughput on correct frames received: {}", unsafe{stats_u.rx_stats.throughput});
                             // TODO: fill in more stats output
                         },
-                        _ => ()
+                        _ => println!("Unknown opcode received.")
                     }
                 }
             }
@@ -298,9 +336,12 @@ fn xmain() -> ! {
         }
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 500 {
+            if elapsed_time - last_time > 10_000 {
                 last_time = elapsed_time;
-                //  println!("Agent loop");
+
+                let pdsline = "testingline";
+                println!("sending line: {}", pdsline);
+                send_pds_line(com_conn, pdsline.as_bytes());
             }
         } else {
             error!("error requesting ticktimer!")
