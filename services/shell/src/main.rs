@@ -185,7 +185,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // 0 = kernel, 1 = log, 2 = app_uart
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2); // 0 = kernel, 1 = log, 2 = app_uart
     }
 
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
@@ -202,7 +202,7 @@ fn shell_main() -> ! {
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular).expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
     let mut work_clipregion = Rectangle::new_coords_with_style(4, font_h as i16 + 2, screensize.x, font_h as i16 * 8 + 18, style_light);
-    let mut work_cursor;
+    let mut work_cursor: Cursor;
     graphics_server::draw_rectangle(graphics_conn, work_clipregion)
             .expect("unable to clear region");
 
@@ -241,6 +241,7 @@ fn shell_main() -> ! {
             Point::new(screensize.x as _, font_h as i16),
             style_dark)).expect("can't draw line");
 
+        /*
         // work area
         string_buffer.clear();
         write!(&mut string_buffer,
@@ -263,9 +264,9 @@ fn shell_main() -> ! {
             graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
             firsttime = false;
         }
-
+        */
         // rate limit graphics
-        // ticktimer_server::sleep_ms(ticktimer_conn, 1000).expect("couldn't sleep");
+        //ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
         // draw the ball
         graphics_server::draw_rectangle(
@@ -294,7 +295,7 @@ fn shell_main() -> ! {
 
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 500 {
+            if elapsed_time - last_time > 1000 {
                 last_time = elapsed_time;
                 info!("Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");

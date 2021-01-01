@@ -92,9 +92,10 @@ mod implementation {
         pub fn txrx(&mut self, tx: u16) -> u16 {
             self.csr.wfo(utra::com::TX_TX, tx as u32);  // transaction is automatically initiated on write
             // wait while transaction is in progress. A transaction takes about 80-100 CPU cycles;
-            // not quite enough to be worth the overhead of an interrupt, so we just yield our time slice
+            // not quite enough to be worth the overhead of an interrupt, so we just busy wait
+            // yielding a time slice is a bad idea: we don't get it back until like 1ms later, which causes other problems
             while self.csr.rf(utra::com::STATUS_TIP) == 1 {
-                xous::yield_slice();
+                // xous::yield_slice();
             }
 
             // grab the RX value and return it
@@ -282,15 +283,18 @@ fn xmain() -> ! {
                     )
                     .expect("COM: couldn't return WF200 firmware rev");
                 }
-                Opcode::Wf200PdsLine(line) => {
-                    info!("COM: Wf200PdsLine got line {}", unsafe{core::str::from_utf8_unchecked(line)});
-                    /*
+                Opcode::Wf200PdsLine(l) => {
+                    info!("COM: Wf200PdsLine got line {}", l);
+                    let line = l.as_bytes();
                     let length = line.len() as u16;
+                    //info!("COM: 0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
                     com.txrx(ComState::WFX_PDS_LINE_SET.verb);
+                    //info!("COM: 0x{:04x}", length);
                     com.txrx(length);
-                    for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
+                    //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
+                    for i in 0..128 {
                         let word: u16;
-                        if (i * 2 + 1) == (length as usize - 1) { // odd last element
+                        if (i * 2 + 1) == length as usize { // odd last element
                             word = line[i * 2] as u16;
                         } else if i * 2 < length as usize {
                             word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
@@ -298,7 +302,8 @@ fn xmain() -> ! {
                             word = 0;
                         }
                         com.txrx(word);
-                    }*/
+                        //info!("COM: 0x{:04x}", word);
+                    }
                 }
                 Opcode::RxStatsAgent => {
                     xous::send_message(agent_conn, xous::Message::Scalar(

@@ -7,6 +7,7 @@ pub mod api;
 
 use api::BattStats;
 use xous::{send_message, Error, CID};
+use com_rs::*;
 
 pub fn power_off_soc(cid: CID) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::PowerOffSoc.into()).map(|_| ())
@@ -50,8 +51,9 @@ pub fn get_ec_git_rev(cid: CID) -> Result<(u32, bool), Error> {
     }
 }
 
-pub fn send_pds_line(cid: CID, line: &[u8]) -> Result<(), Error> {
-    send_message(cid, api::Opcode::Wf200PdsLine(line).into()).map(|_| ())
+pub fn send_pds_line(cid: CID, s: &xous::String) -> Result<(), Error> {
+    s.lend(cid, ComState::WFX_PDS_LINE_SET.verb as _).map( |_| ())
+    // send_message(cid, api::Opcode::Wf200PdsLine(line).into()).map(|_| ())
 }
 
 pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {

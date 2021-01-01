@@ -91,7 +91,7 @@ pub enum Opcode<'a> {
     Wf200Rev,
 
     /// Send a line of PDS data
-    Wf200PdsLine(&'a [u8]),
+    Wf200PdsLine(&'a str),
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,
@@ -136,13 +136,13 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
             },
             Message::Borrow(m) => {
                 if m.id as u16 == ComState::WFX_PDS_LINE_SET.verb {
-                    let line = unsafe {
+                    let s = unsafe {
                         core::slice::from_raw_parts(
                             m.buf.as_ptr(),
                             m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
                         )
                     };
-                    Ok(Opcode::Wf200PdsLine(line))
+                    Ok(Opcode::Wf200PdsLine(core::str::from_utf8(s).unwrap()))
                 } else {
                     Err("unrecognized opcode")
                 }
@@ -183,10 +183,10 @@ impl<'a> Into<Message> for Opcode<'a> {
                 id: ComState::WFX_FW_REV_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::EcGitRev => Message::BlockingScalar(ScalarMessage {
                 id: ComState::EC_GIT_REV.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
-            Opcode::Wf200PdsLine(pdsline) => {
+            /*Opcode::Wf200PdsLine(pdsline) => {
                 let data = xous::carton::Carton::from_bytes(pdsline);
                 Message::Borrow(data.into_message(ComState::WFX_PDS_LINE_SET.verb as _))
-            },
+            },*/
             Opcode::RxStatsAgent => Message::Scalar(ScalarMessage {
                 id: ComState::WFX_RXSTAT_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             _ => todo!("message type not yet implemented")

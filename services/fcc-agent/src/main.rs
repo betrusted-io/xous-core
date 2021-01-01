@@ -159,7 +159,7 @@ impl Write for Uart {
     }
 }
 
-fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Error> {
+fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<String<U512>, U16>) -> Result<(), xous::Error> {
     if false {
         let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
         for token in tokens.iter() {
@@ -224,11 +224,24 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID) -> Result<(), xous::Err
                 println!("0.0.0\n\r");
             } else if tokens[1].trim() == "write_test_data" {
                 let pdsline = tokens[2].trim();
-                println!("sending line: {}", pdsline);
-                send_pds_line(com_cid, pdsline.as_bytes())?;
+                let mut stripped: String<U512> = String::from("");
+                for c in pdsline.chars() {
+                    if c != '"' {
+                        stripped.push(c);
+                    }
+                }
+                pds_list.push(stripped);
             } else if tokens[1].trim() == "read_rx_stats" {
-                println!("sending rx stats request");
-                get_rx_stats_agent(com_cid).unwrap();
+                println!("rx stats request disabled!!");
+                //get_rx_stats_agent(com_cid).unwrap();
+            } else if tokens[1].trim() == "commit_pds" {
+                for pds in pds_list.iter() {
+                    let mut sendable_string = xous::String::new(4096);
+                    write!(&mut sendable_string, "{}", pds);
+                    println!("{}", sendable_string);
+                    send_pds_line(com_cid, &sendable_string);
+                }
+                pds_list.clear();
             } else {
                 println!("{}: wfx_test_agent sub-command not recognized.", tokens[1].trim());
             }
@@ -299,6 +312,7 @@ fn xmain() -> ! {
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut pds_list: Vec<String<U512>, U16> = Vec::new();
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
         match envelope {
@@ -311,7 +325,7 @@ fn xmain() -> ! {
                                 cmd_string.push(c as char).unwrap();
                             } else {
                                 println!("");
-                                do_agent(&mut cmd_string, com_conn).unwrap();
+                                do_agent(&mut cmd_string, com_conn, &mut pds_list).unwrap();
                                 // print!("agent@precursor:~$ ");
                                 cmd_string.clear();
                             }
@@ -332,20 +346,20 @@ fn xmain() -> ! {
                     }
                 }
             }
-            _ => (),
+            _ => () //xous::yield_slice(), // no message received, idle
         }
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 10_000 {
                 last_time = elapsed_time;
-
-                let pdsline = "testingline";
-                println!("sending line: {}", pdsline);
-                send_pds_line(com_conn, pdsline.as_bytes());
+                /*
+                let mut string_buffer = xous::String::new(4096);
+                write!(&mut string_buffer, "\"{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}\"").expect("Can't write");
+                println!("sending line: {}", string_buffer);
+                send_pds_line(com_conn, &string_buffer);*/
             }
         } else {
             error!("error requesting ticktimer!")
         }
-        xous::yield_slice();
     }
 }
