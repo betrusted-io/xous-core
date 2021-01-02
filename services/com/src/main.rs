@@ -273,8 +273,8 @@ fn xmain() -> ! {
                 }
                 Opcode::EcGitRev => {
                     com.txrx(ComState::EC_GIT_REV.verb);
-                    let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
-                    let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                    let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                    let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
                     let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
                     xous::return_scalar2(
                         envelope.sender,

@@ -159,7 +159,46 @@ impl Write for Uart {
     }
 }
 
-fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<String<U512>, U16>) -> Result<(), xous::Error> {
+fn was_continuous(cmd: &mut String<U2048>) -> bool {
+    let mut tokens = Vec::<_, U16>::new();
+    for i in 0..16 {
+        let mut empty: String<U512> = String::from("");
+        tokens.push(empty).unwrap();
+    }
+
+    let mut tokindex: usize = 0;
+    let mut in_space = true;
+    for c in cmd.as_str().chars() {
+        if in_space && (c == ' ') {
+            continue;
+        } else {
+            if c != ' ' {
+                in_space = false;
+                tokens[tokindex].push(c).unwrap();
+            } else {
+                in_space = true;
+                tokindex += 1;
+                if tokindex >= 16 {
+                    break;
+                }
+            }
+        }
+    }
+
+    let command = &tokens[0];
+
+    if command.len() == 0 {
+        return false;
+    }  else {
+        if command.trim() == "repeat" {
+            println!("repeating last PDS data");
+            return true;
+        }
+    }
+    false
+}
+
+fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<String<U512>, U16>, info_csr: &utralib::CSR<u32>) -> Result<(), xous::Error> {
     if false {
         let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
         for token in tokens.iter() {
@@ -242,6 +281,20 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
                     send_pds_line(com_cid, &sendable_string);
                 }
                 pds_list.clear();
+            } else if tokens[1].trim() == "ec_version" {
+                let (gitrev, dirty) = get_ec_git_rev(com_cid).unwrap();
+                if dirty {
+                    println!("ecrev: {:08x} dirty", gitrev);
+                } else {
+                    println!("ecrev: {:08x} clean", gitrev);
+                }
+            } else if tokens[1].trim() == "soc_version" {
+                if info_csr.rf(utra::info::GIT_DIRTY_DIRTY) == 1 {
+                    println!("socrev: {:08x} dirty", info_csr.rf(utra::info::GIT_GITREV_GIT_GITREV));
+                } else {
+                    println!("socrev: {:08x} clean", info_csr.rf(utra::info::GIT_GITREV_GIT_GITREV));
+                }
+                println!("DNA: {:08x}{:08x}", info_csr.rf(utra::info::DNA_ID1_DNA_ID), info_csr.rf(utra::info::DNA_ID0_DNA_ID));
             } else {
                 println!("{}: wfx_test_agent sub-command not recognized.", tokens[1].trim());
             }
@@ -308,11 +361,21 @@ fn xmain() -> ! {
 
     let mut cmd_string: String<U2048> = String::from("");
 
+    let info_mem = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::info::HW_INFO_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map INFO CSR range");
+    let info_csr = CSR::new(info_mem.as_mut_ptr() as *mut u32);
+
     uart.enable_rx();
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut pds_list: Vec<String<U512>, U16> = Vec::new();
+    let mut repeat = false;
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
         match envelope {
@@ -325,7 +388,8 @@ fn xmain() -> ! {
                                 cmd_string.push(c as char).unwrap();
                             } else {
                                 println!("");
-                                do_agent(&mut cmd_string, com_conn, &mut pds_list).unwrap();
+                                do_agent(&mut cmd_string, com_conn, &mut pds_list, &info_csr).unwrap();
+                                repeat = was_continuous(&mut cmd_string);
                                 // print!("agent@precursor:~$ ");
                                 cmd_string.clear();
                             }
@@ -350,8 +414,17 @@ fn xmain() -> ! {
         }
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 10_000 {
+            if elapsed_time - last_time > 20_000 {
                 last_time = elapsed_time;
+
+                if repeat {
+                    for pds in pds_list.iter() {
+                        let mut sendable_string = xous::String::new(4096);
+                        write!(&mut sendable_string, "{}", pds);
+                        println!("{}", sendable_string);
+                        send_pds_line(com_conn, &sendable_string);
+                    }
+                }
                 /*
                 let mut string_buffer = xous::String::new(4096);
                 write!(&mut string_buffer, "\"{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}\"").expect("Can't write");
