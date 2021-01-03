@@ -4,6 +4,13 @@
 /*
 
 This is a server that is used as an "agent" to facilitate EMC compliance testing (e.g. FCC/CE testing).
+It's built with the following packages in the cargo xtask hw-image:
+    for pkg in &["shell", "graphics-server", "ticktimer-server", "log-server", "com", "fcc-agent"] {
+
+The configuration is very brittle; the system probably won't work with more or less packages. At a
+minimum, ticktimer-server, log-server, com, and fcc-agent are mandatory; shell and graphics-server
+help give us a notion that the system is running, and also shell is responsible for selecting the
+correct UART port for the agent to work.
 
 The overall setup for testing is as follows:
 
@@ -23,6 +30,12 @@ The basic testing protocol consists of creating custom PDS (platform data set) d
 that need to be loaded into the WF200. Normally this is done under Linux by `cat`ing the ASCII
 text to the appropriate /sys node. Here we take the PDS ASCII data, and ship it off to the `com`
 server, which then packs it into a record that the EC forwards on to the WF200.
+
+Normally, conducted emissions tests are discontinuous, in that they are to be run for
+some dozens of seconds, and then turned off, so they can be script-driver. However, for
+radiated emissions, the unit must be stand-alone. In this case, the 'repeat' keyword should
+be sent, which keeps the transmitter looping indefinitely, and then the device unplugged
+from the serial console and put into the chamber for testing.
 
 Therefore, the entire system must be in sync as far as firmware revisions and capabilities.
 Here are the git commits of the configuration that was tested and working:
