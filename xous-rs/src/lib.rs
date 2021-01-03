@@ -11,6 +11,7 @@ pub mod arch;
 
 pub mod carton;
 pub mod definitions;
+pub mod ipc;
 mod messages;
 pub mod string;
 pub mod syscall;

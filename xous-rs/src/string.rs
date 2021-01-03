@@ -34,19 +34,28 @@ impl<'a> String<'a> {
     }
 
     /// Convert a `MemoryMessage` into a `String`
-    pub fn from_message(message: &'a mut MemoryMessage) -> core::result::Result<String<'a>, core::str::Utf8Error> {
-        let raw_slice = unsafe { core::slice::from_raw_parts_mut(message.buf.as_mut_ptr(), message.buf.len()) };
+    pub fn from_message(
+        message: &'a mut MemoryMessage,
+    ) -> core::result::Result<String<'a>, core::str::Utf8Error> {
+        let raw_slice =
+            unsafe { core::slice::from_raw_parts_mut(message.buf.as_mut_ptr(), message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
         Ok(String {
             raw_slice,
-            s: core::str::from_utf8(unsafe { core::slice::from_raw_parts(message.buf.as_ptr(), starting_length) })?,
+            s: core::str::from_utf8(unsafe {
+                core::slice::from_raw_parts(message.buf.as_ptr(), starting_length)
+            })?,
             len: 0,
         })
     }
 
     /// Perform an immutable lend of this String to the specified server.
     /// This function will block until the server returns.
-    pub fn lend(&self, connection: CID, id: crate::MessageId) -> core::result::Result<Result, Error> {
+    pub fn lend(
+        &self,
+        connection: CID,
+        id: crate::MessageId,
+    ) -> core::result::Result<Result, Error> {
         let memory_range =
             MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
         let msg = MemoryMessage {
@@ -59,7 +68,11 @@ impl<'a> String<'a> {
     }
 
     /// Move this string from the client into the server.
-    pub fn send(self, connection: CID, id: crate::MessageId) -> core::result::Result<Result, Error> {
+    pub fn send(
+        self,
+        connection: CID,
+        id: crate::MessageId,
+    ) -> core::result::Result<Result, Error> {
         let memory_range =
             MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
         let msg = MemoryMessage {

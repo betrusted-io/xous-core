@@ -1,8 +1,8 @@
-use xous::{Message, ScalarMessage};
+use crate::op::{HEIGHT, WIDTH};
+use blitstr::{ClipRect, Cursor, GlyphStyle};
+use core::cmp::{max, min};
 use core::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
-use blitstr::{GlyphStyle, ClipRect, Cursor};
-use core::cmp::{min, max};
-use crate::op::{WIDTH, HEIGHT};
+use xous::{Message, ScalarMessage};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PixelColor {
@@ -12,29 +12,41 @@ pub enum PixelColor {
 
 impl From<usize> for PixelColor {
     fn from(pc: usize) -> Self {
-        if pc != 0 { PixelColor::Dark }
-        else { PixelColor::Light }
+        if pc != 0 {
+            PixelColor::Dark
+        } else {
+            PixelColor::Light
+        }
     }
 }
 
 impl From<bool> for PixelColor {
     fn from(pc: bool) -> Self {
-        if pc { PixelColor::Dark }
-        else { PixelColor::Light }
+        if pc {
+            PixelColor::Dark
+        } else {
+            PixelColor::Light
+        }
     }
 }
 
 impl Into<usize> for PixelColor {
     fn into(self) -> usize {
-        if self == PixelColor::Dark { 1 }
-        else { 0 }
+        if self == PixelColor::Dark {
+            1
+        } else {
+            0
+        }
     }
 }
 
 impl Into<bool> for PixelColor {
     fn into(self) -> bool {
-        if self == PixelColor::Dark { true }
-        else { false }
+        if self == PixelColor::Dark {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -53,7 +65,11 @@ pub struct DrawStyle {
 
 impl DrawStyle {
     pub fn new(fill: PixelColor, stroke: PixelColor, width: i16) -> Self {
-        Self { fill_color: Some(fill), stroke_color: Some(stroke), stroke_width: width }
+        Self {
+            fill_color: Some(fill),
+            stroke_color: Some(stroke),
+            stroke_width: width,
+        }
     }
 
     /// Create a new style with a given stroke value and defaults for everything else
@@ -84,8 +100,8 @@ impl From<usize> for DrawStyle {
         let fc: PixelColor = (s & 0b0001).into();
         let sc: PixelColor = (s & 0b0100).into();
         DrawStyle {
-            fill_color:    if s & 0b0010 != 0 {Some(fc)} else {None},
-            stroke_color:  if s & 0b1000 != 0 {Some(sc)} else {None},
+            fill_color: if s & 0b0010 != 0 { Some(fc) } else { None },
+            stroke_color: if s & 0b1000 != 0 { Some(sc) } else { None },
             stroke_width: (s >> 16) as i16,
         }
     }
@@ -125,7 +141,6 @@ impl Point {
         Point { x: 0, y: 0 }
     }
 }
-
 
 impl Add for Point {
     type Output = Point;
@@ -244,21 +259,27 @@ impl Rectangle {
         Rectangle {
             tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
             br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
-            style: DrawStyle::default()
+            style: DrawStyle::default(),
         }
     }
     pub fn new_coords(x0: i16, y0: i16, x1: i16, y1: i16) -> Rectangle {
         Rectangle {
             tl: Point::new(min(x0, x1), min(y0, y1)),
             br: Point::new(max(x0, x1), max(y0, y1)),
-            style: DrawStyle::default()
+            style: DrawStyle::default(),
         }
     }
-    pub fn new_coords_with_style(x0: i16, y0: i16, x1: i16, y1: i16, style: DrawStyle) -> Rectangle {
+    pub fn new_coords_with_style(
+        x0: i16,
+        y0: i16,
+        x1: i16,
+        y1: i16,
+        style: DrawStyle,
+    ) -> Rectangle {
         Rectangle {
             tl: Point::new(min(x0, x1), min(y0, y1)),
             br: Point::new(max(x0, x1), max(y0, y1)),
-            style: style
+            style: style,
         }
     }
     pub fn new_with_style(p1: Point, p2: Point, style: DrawStyle) -> Rectangle {
@@ -266,20 +287,28 @@ impl Rectangle {
         Rectangle {
             tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
             br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
-            style: style
+            style: style,
         }
     }
-    pub fn x0(&self) -> usize { self.tl.x as usize }
-    pub fn x1(&self) -> usize { self.br.x as usize }
-    pub fn y0(&self) -> usize { self.tl.y as usize }
-    pub fn y1(&self) -> usize { self.br.y as usize }
+    pub fn x0(&self) -> usize {
+        self.tl.x as usize
+    }
+    pub fn x1(&self) -> usize {
+        self.br.x as usize
+    }
+    pub fn y0(&self) -> usize {
+        self.tl.y as usize
+    }
+    pub fn y1(&self) -> usize {
+        self.br.y as usize
+    }
 
     /// Make a rectangle of the full screen size
     pub fn full_screen() -> Rectangle {
         Rectangle {
             tl: Point::new(0, 0),
             br: Point::new(WIDTH, HEIGHT),
-            style: DrawStyle::default()
+            style: DrawStyle::default(),
         }
     }
     /// Make a rectangle of the screen size minus padding
@@ -288,7 +317,7 @@ impl Rectangle {
         Rectangle {
             tl: Point::new(pad, pad),
             br: Point::new(WIDTH - pad, HEIGHT - pad),
-            style: DrawStyle::default()
+            style: DrawStyle::default(),
         }
     }
 }
@@ -310,13 +339,20 @@ pub struct Line {
 
 impl Line {
     pub fn new(start: Point, end: Point) -> Line {
-        Line { start: start, end: end, style: DrawStyle::default() }
+        Line {
+            start: start,
+            end: end,
+            style: DrawStyle::default(),
+        }
     }
     pub fn new_with_style(start: Point, end: Point, style: DrawStyle) -> Line {
-        Line { start: start, end: end, style: style, }
+        Line {
+            start: start,
+            end: end,
+            style: style,
+        }
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct Circle {
@@ -329,10 +365,18 @@ pub struct Circle {
 
 impl Circle {
     pub fn new(c: Point, r: i16) -> Circle {
-        Circle { center: c, radius: r, style: DrawStyle::default() }
+        Circle {
+            center: c,
+            radius: r,
+            style: DrawStyle::default(),
+        }
     }
     pub fn new_with_style(c: Point, r: i16, style: DrawStyle) -> Circle {
-        Circle { center: c, radius: r, style }
+        Circle {
+            center: c,
+            radius: r,
+            style,
+        }
     }
 }
 
@@ -383,14 +427,32 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 1 => Ok(Opcode::Flush),
                 2 => Ok(Opcode::Clear),
                 3 => Ok(Opcode::Line(Line::new_with_style(
-                    Point::from(m.arg1), Point::from(m.arg2), DrawStyle::from(m.arg3)))),
+                    Point::from(m.arg1),
+                    Point::from(m.arg2),
+                    DrawStyle::from(m.arg3),
+                ))),
                 4 => Ok(Opcode::Rectangle(Rectangle::new_with_style(
-                    Point::from(m.arg1), Point::from(m.arg2), DrawStyle::from(m.arg3)))),
+                    Point::from(m.arg1),
+                    Point::from(m.arg2),
+                    DrawStyle::from(m.arg3),
+                ))),
                 5 => Ok(Opcode::Circle(Circle::new_with_style(
-                    Point::from(m.arg1), m.arg2 as _, DrawStyle::from(m.arg3)))),
+                    Point::from(m.arg1),
+                    m.arg2 as _,
+                    DrawStyle::from(m.arg3),
+                ))),
                 9 => Ok(Opcode::SetGlyphStyle(GlyphStyle::from(m.arg1))),
-                11 => Ok(Opcode::SetStringClipping(ClipRect::new(m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _))),
-                12 => Ok(Opcode::SetCursor(Cursor::new(m.arg1 as _, m.arg2 as _, m.arg3 as _))),
+                11 => Ok(Opcode::SetStringClipping(ClipRect::new(
+                    m.arg1 as _,
+                    m.arg2 as _,
+                    m.arg3 as _,
+                    m.arg4 as _,
+                ))),
+                12 => Ok(Opcode::SetCursor(Cursor::new(
+                    m.arg1 as _,
+                    m.arg2 as _,
+                    m.arg3 as _,
+                ))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -421,11 +483,17 @@ impl<'a> Into<Message> for Opcode<'a> {
         match self {
             Opcode::Flush => Message::Scalar(ScalarMessage {
                 id: 1,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::Clear => Message::Scalar(ScalarMessage {
                 id: 2,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::Line(line) => Message::Scalar(ScalarMessage {
                 id: 3,
@@ -448,19 +516,52 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: c.style.into(),
                 arg4: 0,
             }),
-            Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {id: 8, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
-            Opcode::QueryGlyphStyle => Message::BlockingScalar(ScalarMessage {id: 10, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
-            Opcode::SetGlyphStyle(glyph) => Message::Scalar(ScalarMessage { id:9, arg1: glyph as usize, arg2: 0, arg3: 0, arg4: 0 }),
+            Opcode::ScreenSize => Message::BlockingScalar(ScalarMessage {
+                id: 8,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
+            Opcode::QueryGlyphStyle => Message::BlockingScalar(ScalarMessage {
+                id: 10,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
+            Opcode::SetGlyphStyle(glyph) => Message::Scalar(ScalarMessage {
+                id: 9,
+                arg1: glyph as usize,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::SetStringClipping(r) => Message::Scalar(ScalarMessage {
                 id: 11,
-                arg1: r.min.x as _, arg2: r.min.y as _, arg3: r.max.x as _, arg4: r.max.y as _,
+                arg1: r.min.x as _,
+                arg2: r.min.y as _,
+                arg3: r.max.x as _,
+                arg4: r.max.y as _,
             }),
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(1))
-            },
-            Opcode::SetCursor(c) => Message::Scalar(ScalarMessage { id: 12, arg1: c.pt.x, arg2: c.pt.y, arg3: c.line_height, arg4: 0}),
-            Opcode::GetCursor => Message::BlockingScalar(ScalarMessage { id: 13, arg1: 0, arg2: 0, arg3: 0, arg4: 0}),
+            }
+            Opcode::SetCursor(c) => Message::Scalar(ScalarMessage {
+                id: 12,
+                arg1: c.pt.x,
+                arg2: c.pt.y,
+                arg3: c.line_height,
+                arg4: 0,
+            }),
+            Opcode::GetCursor => Message::BlockingScalar(ScalarMessage {
+                id: 13,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
         }
     }
 }

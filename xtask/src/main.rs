@@ -76,7 +76,15 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "graphics-server", "ticktimer-server", "log-server", "com", "fcc-agent"] { // "xous-names", "trng-tester"
+    for pkg in &[
+        "shell",
+        "graphics-server",
+        "ticktimer-server",
+        "log-server",
+        "com",
+    ] {
+        // "xous-names"
+        // "fcc-agent"
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     let loader = build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -145,7 +153,13 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &["shell", "log-server", "graphics-server", "ticktimer-server", "com"] {
+    for pkg in &[
+        "shell",
+        "log-server",
+        "graphics-server",
+        "ticktimer-server",
+        "com",
+    ] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -162,7 +176,13 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
 
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
-    let init = ["shell", "log-server", "graphics-server", "ticktimer-server", "com"]; // , "xous-names"
+    let init = [
+        "shell",
+        "log-server",
+        "graphics-server",
+        "ticktimer-server",
+        "com",
+    ]; // , "xous-names"
 
     // let mut init_paths = vec![];
     for pkg in &init {

@@ -19,14 +19,10 @@ pub fn map_memory_post(
     Ok(range)
 }
 
-pub fn unmap_memory_pre(
-    _range: &MemoryRange
-) -> core::result::Result<(), Error> {
+pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), Error> {
     Ok(())
 }
 
-pub fn unmap_memory_post(
-    _range: MemoryRange
-) -> core::result::Result<(), Error> {
+pub fn unmap_memory_post(_range: MemoryRange) -> core::result::Result<(), Error> {
     Ok(())
 }

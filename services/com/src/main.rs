@@ -19,31 +19,32 @@ pub struct WorkRequest {
     sender: CID,
 }
 
-fn return_battstats(cid: CID, stats: api::BattStats)  -> Result<(), xous::Error> {
+fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> {
     xous::send_message(cid, crate::api::Opcode::BattStatsReturn(stats).into()).map(|_| ())
 }
 
 #[cfg(target_os = "none")]
 mod implementation {
     use crate::api::BattStats;
+    use crate::return_battstats;
     use crate::WorkRequest;
-    use ticktimer_server::*;
     use com_rs::*;
+    use log::{error, info};
+    use ticktimer_server::*;
     use utralib::generated::*;
     use xous::CID;
-    use log::{error, info};
-    use crate::return_battstats;
-    use crate::STD_TIMEOUT;
 
     #[macro_use]
     use heapless::Vec;
     use heapless::consts::*;
 
     /*
-    use typenum::{UInt, UTerm};'
-    use typenum::bit::{B0, B1};
-    type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
-*/
+        use typenum::{UInt, UTerm};
+        use typenum::bit::{B0, B1};
+        type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
+    */
+    const STD_TIMEOUT: u32 = 100;
+
     pub struct XousCom {
         csr: utralib::CSR<u32>,
         ticktimer: CID,
@@ -54,7 +55,8 @@ mod implementation {
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xc = unsafe { &mut *(arg as *mut XousCom) };
         // just clear the pending request, as this is used as a "wait" until request function
-        xc.csr.wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
+        xc.csr
+            .wo(utra::com::EV_PENDING, xc.csr.r(utra::com::EV_PENDING));
     }
 
     impl XousCom {
@@ -90,12 +92,14 @@ mod implementation {
         }
 
         pub fn txrx(&mut self, tx: u16) -> u16 {
-            self.csr.wfo(utra::com::TX_TX, tx as u32);  // transaction is automatically initiated on write
-            // wait while transaction is in progress. A transaction takes about 80-100 CPU cycles;
-            // not quite enough to be worth the overhead of an interrupt, so we just busy wait
-            // yielding a time slice is a bad idea: we don't get it back until like 1ms later, which causes other problems
+            self.csr.wfo(utra::com::TX_TX, tx as u32);
+            /* transaction is automatically initiated on write
+               wait while transaction is in progress. A transaction takes about 80-100 CPU cycles;
+               not quite enough to be worth the overhead of an interrupt, so we just yield our time slice */
             while self.csr.rf(utra::com::STATUS_TIP) == 1 {
                 // xous::yield_slice();
+                /* ... and it turns out yielding the slice is a bad idea, because you may not get re-scheduled
+                 for a very long time, which causes the COM responder to timeout. Just waste the cycles. */
             }
 
             // grab the RX value and return it
@@ -104,11 +108,16 @@ mod implementation {
 
         pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
             if timeout.is_some() {
-                let curtime = ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer");
+                let curtime = ticktimer_server::elapsed_ms(self.ticktimer)
+                    .expect("couldn't connect to ticktimer");
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                    if (ticktimer_server::elapsed_ms(self.ticktimer).expect("couldn't connect to ticktimer") - curtime) > to {
+                    if (ticktimer_server::elapsed_ms(self.ticktimer)
+                        .expect("couldn't connect to ticktimer")
+                        - curtime)
+                        > to
+                    {
                         timed_out = true;
                     }
                     xous::yield_slice();
@@ -130,9 +139,13 @@ mod implementation {
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
                 if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
+                    return_battstats(work_descriptor.sender, stats)
+                        .expect("Could not return BattStatsNb value");
                 } else {
-                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
+                    error!(
+                        "unimplemented work queue responder 0x{:x}",
+                        work_descriptor.work.verb
+                    );
                 }
                 self.busy = false;
             }
@@ -161,10 +174,10 @@ mod implementation {
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use crate::api::BattStats;
-    use crate::WorkRequest;
-    use log::{error, info};
-    use com_rs::*;
     use crate::return_battstats;
+    use crate::WorkRequest;
+    use com_rs::*;
+    use log::{error, info};
 
     #[macro_use]
     use heapless::Vec;
@@ -202,9 +215,13 @@ mod implementation {
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
                 if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats).expect("Could not return BattStatsNb value");
+                    return_battstats(work_descriptor.sender, stats)
+                        .expect("Could not return BattStatsNb value");
                 } else {
-                    error!("unimplemented work queue responder 0x{:x}", work_descriptor.work.verb);
+                    error!(
+                        "unimplemented work queue responder 0x{:x}",
+                        work_descriptor.work.verb
+                    );
                 }
                 self.busy = false;
             }
@@ -221,7 +238,7 @@ fn xmain() -> ! {
     let com_server =
         xous::create_server_with_address(b"com             ").expect("Couldn't create COM server");
 
-    let shell_id =      xous::SID::from_bytes(b"shell           ").unwrap();
+    let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
     let shell_conn = xous::connect(shell_id).unwrap();
 
     let agent_conn: usize;
@@ -250,15 +267,17 @@ fn xmain() -> ! {
                     info!("COM: batt stats request received");
                     let stats = com.get_battstats();
                     let raw_stats: [usize; 2] = stats.into();
-                    xous::return_scalar2(
-                        envelope.sender,
-                        raw_stats[1],
-                        raw_stats[0]
-                    ).expect("COM: couldn't return batt stats request");
+                    xous::return_scalar2(envelope.sender, raw_stats[1], raw_stats[0])
+                        .expect("COM: couldn't return batt stats request");
                     info!("COM: done returning batt stats request");
                 }
                 Opcode::BattStatsNb => {
-                    com.workqueue.push(WorkRequest { work: ComState::STAT, sender: shell_conn }).unwrap();
+                    com.workqueue
+                        .push(WorkRequest {
+                            work: ComState::STAT,
+                            sender: shell_conn,
+                        })
+                        .unwrap();
                 }
                 Opcode::Wf200Rev => {
                     com.txrx(ComState::WFX_FW_REV_GET.verb);

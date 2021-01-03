@@ -29,8 +29,11 @@ impl From<[usize; 2]> for BattStats {
 
 impl Into<[usize; 2]> for BattStats {
     fn into(self) -> [usize; 2] {
-        [ (self.voltage as usize & 0xffff) | ((self.soc as usize) << 16) & 0xFF_0000,
-          (self.remaining_capacity as usize & 0xffff) | ((self.current as usize) << 16) & 0xffff_0000 ]
+        [
+            (self.voltage as usize & 0xffff) | ((self.soc as usize) << 16) & 0xFF_0000,
+            (self.remaining_capacity as usize & 0xffff)
+                | ((self.current as usize) << 16) & 0xffff_0000,
+        ]
     }
 }
 
@@ -120,7 +123,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 } else {
                     Err("unrecognized command")
                 }
-            },
+            }
             Message::BlockingScalar(m) => {
                 if m.id as u16 == ComState::STAT.verb {
                     Ok(Opcode::BattStats)
@@ -146,7 +149,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 } else {
                     Err("unrecognized opcode")
                 }
-            },
+            }
             _ => Err("unhandled message type"),
         }
     }
@@ -156,19 +159,54 @@ impl<'a> Into<Message> for Opcode<'a> {
     fn into(self) -> Message {
         match self {
             Opcode::BoostOn => Message::Scalar(ScalarMessage {
-                id: ComState::CHG_BOOST_ON.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::CHG_BOOST_ON.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::BoostOff => Message::Scalar(ScalarMessage {
-                id: ComState::CHG_BOOST_OFF.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::CHG_BOOST_OFF.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::ShipMode => Message::Scalar(ScalarMessage {
-                id: ComState::POWER_SHIPMODE.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::POWER_SHIPMODE.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::PowerOffSoc => Message::Scalar(ScalarMessage {
-                id: ComState::POWER_OFF.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::POWER_OFF.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::BattStats => Message::BlockingScalar(ScalarMessage {
-                id: ComState::STAT.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::STAT.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::BattStatsNb => Message::Scalar(ScalarMessage {
-                id: ComState::STAT.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::STAT.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::ImuAccelRead => Message::BlockingScalar(ScalarMessage {
-                id: ComState::GYRO_READ.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::GYRO_READ.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::BattStatsReturn(stats) => {
                 let raw_stats: [usize; 2] = stats.into();
                 Message::Scalar(ScalarMessage {
@@ -183,6 +221,7 @@ impl<'a> Into<Message> for Opcode<'a> {
                 id: ComState::WFX_FW_REV_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::EcGitRev => Message::BlockingScalar(ScalarMessage {
                 id: ComState::EC_GIT_REV.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+            // we use the direct string "lend" API -- the code below actually doesn't work
             /*Opcode::Wf200PdsLine(pdsline) => {
                 let data = xous::carton::Carton::from_bytes(pdsline);
                 Message::Borrow(data.into_message(ComState::WFX_PDS_LINE_SET.verb as _))

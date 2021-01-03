@@ -2,7 +2,6 @@
 
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
-
 pub mod api;
 
 use api::BattStats;
@@ -24,7 +23,7 @@ pub fn get_batt_stats(cid: CID) -> Result<BattStats, xous::Error> {
 }
 
 pub fn get_batt_stats_nb(cid: CID) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::BattStatsNb.into()).map(|_|())
+    send_message(cid, api::Opcode::BattStatsNb.into()).map(|_| ())
 }
 
 pub fn get_wf200_fw_rev(cid: CID) -> Result<(u8, u8, u8), xous::Error> {

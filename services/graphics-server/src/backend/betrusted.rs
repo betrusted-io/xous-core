@@ -1,5 +1,5 @@
-use xous::MemoryRange;
 use utralib::generated::*;
+use xous::MemoryRange;
 
 const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;

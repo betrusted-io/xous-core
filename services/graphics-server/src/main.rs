@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use log::{info, error};
+use log::{error, info};
 
 mod backend;
 use backend::XousDisplay;
@@ -15,8 +15,8 @@ use core::convert::TryFrom;
 
 mod logo;
 
+use api::{DrawStyle, PixelColor, Rectangle};
 use blitstr;
-use api::{PixelColor, Rectangle, DrawStyle};
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(logo::LOGO_MAP);
@@ -49,7 +49,7 @@ fn xmain() -> ! {
                 Opcode::Flush => {
                     display.update();
                     display.redraw();
-                },
+                }
                 Opcode::Clear => {
                     let mut r = Rectangle::full_screen();
                     r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
@@ -65,7 +65,13 @@ fn xmain() -> ! {
                     op::circle(display.native_buffer(), c);
                 }
                 Opcode::String(s) => {
-                    blitstr::paint_str(display.native_buffer(), current_string_clip.into(), &mut current_cursor, current_glyph.into(), s);
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s,
+                    );
                 }
                 Opcode::SetGlyphStyle(glyph) => {
                     current_glyph = glyph;
@@ -74,24 +80,17 @@ fn xmain() -> ! {
                     current_cursor = c;
                 }
                 Opcode::GetCursor => {
-                    let pt: api::Point = api::Point::new(current_cursor.pt.x as i16, current_cursor.pt.y as i16);
-                    xous::return_scalar2(
-                        msg.sender,
-                        pt.into(),
-                        current_cursor.line_height,
-                    )
-                    .expect("GFX: could not return GetCursor request");
+                    let pt: api::Point =
+                        api::Point::new(current_cursor.pt.x as i16, current_cursor.pt.y as i16);
+                    xous::return_scalar2(msg.sender, pt.into(), current_cursor.line_height)
+                        .expect("GFX: could not return GetCursor request");
                 }
                 Opcode::SetStringClipping(r) => {
                     current_string_clip = r;
                 }
                 Opcode::ScreenSize => {
-                    xous::return_scalar2(
-                        msg.sender,
-                        336 as usize,
-                        536 as usize,
-                    )
-                    .expect("GFX: couldn't return ScreenSize request");
+                    xous::return_scalar2(msg.sender, 336 as usize, 536 as usize)
+                        .expect("GFX: couldn't return ScreenSize request");
                 }
                 Opcode::QueryGlyphStyle => {
                     xous::return_scalar2(

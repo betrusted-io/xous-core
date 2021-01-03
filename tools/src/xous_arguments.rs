@@ -36,7 +36,9 @@ pub trait XousArgument: fmt::Display {
     fn serialize(&self, output: &mut dyn Write) -> Result<usize>;
 
     /// Any last data that needs to be written.
-    fn last_data(&self) -> &[u8] { &[] }
+    fn last_data(&self) -> &[u8] {
+        &[]
+    }
 }
 
 pub struct XousArguments {
@@ -129,9 +131,12 @@ impl XousArguments {
             let advertised_len = arg.length() as u32;
             let actual_len = arg.serialize(&mut tag_data)? as u32;
             assert_eq!(
-                advertised_len, actual_len,
+                advertised_len,
+                actual_len,
                 "argument {} advertised it would write {} bytes, but it wrote {} bytes",
-                arg.name(), advertised_len, actual_len
+                arg.name(),
+                advertised_len,
+                actual_len
             );
             assert_eq!(
                 tag_data.get_ref().len() as u32,
@@ -153,7 +158,8 @@ impl XousArguments {
 
         // Write any pending data, such as payloads
         for arg in &self.arguments {
-            w.write_all(arg.last_data()).expect("couldn't write extra arg data");
+            w.write_all(arg.last_data())
+                .expect("couldn't write extra arg data");
         }
 
         Ok(())

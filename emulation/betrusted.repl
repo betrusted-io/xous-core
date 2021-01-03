@@ -4,40 +4,35 @@ cpu: CPU.VexRiscv @ sysbus
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
 
 uart: UART.LiteX_UART @ {
-        sysbus 0x60008000;
-        sysbus 0xF0008000 // shadow
+        sysbus 0x60006000;
+        sysbus 0xF0006000 // shadow
     }
     -> cpu@1002
 
 uartconsole: UART.LiteX_UART @ {
-        sysbus 0x6000A000;
-        sysbus 0xF000A000 // shadow
+        sysbus 0x60007000;
+        sysbus 0xF0007000 // shadow
     }
     -> cpu@1003
 
 uartserver0: UART.LiteX_UART @ {
-        sysbus 0x6000C000;
-        sysbus 0xF000C000 // shadow
+        sysbus 0x60008000;
+        sysbus 0xF0008000 // shadow
     }
     -> cpu@1004
 
 uartserver1: UART.LiteX_UART @ {
-        sysbus 0x6000E000;
-        sysbus 0xF000E000 // shadow
+        sysbus 0x60009000;
+        sysbus 0xF0009000 // shadow
     }
     -> cpu@1005
 
 timer0: Timers.LiteX_Timer_32 @ {
-        sysbus 0x60003000;
-        sysbus 0xF0003000 // shadow
+        sysbus 0x60002000;
+        sysbus 0xF0002000 // shadow
     }
     frequency: 100000000
     -> cpu@1001
-
-//spi: SPI.PicoRV_SPI @ {
- //   sysbus 0x60004000;
- //   sysbus 0xe0004000 // shadow
-//}
 
 rom: Memory.MappedMemory @ {
         sysbus 0x00000000;
@@ -54,16 +49,20 @@ sram: Memory.MappedMemory @ {
 fbmem: Memory.MappedMemory @ sysbus 0xB0000000
     size: 0x6000
 
-memlcd: Video.BetrustedLCD @ sysbus 0xF0011000
+memlcd: Video.BetrustedLCD @ sysbus 0xF000C000
 
-kbd: Input.BetrustedKbd @ sysbus 0xF0006000
+keyboard: Input.BetrustedKbd @ sysbus 0xF0015000
+
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001A000
+
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF0019000
 
 cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
     frequency: 100000000
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
 
-ticktimer: Timers.TickTimer @ sysbus 0xF0017000
+ticktimer: Timers.TickTimer @ sysbus 0xF0012000
     periodInMs: 1
     -> cpu @ 1008
 
@@ -78,7 +77,5 @@ flash_mem: Memory.MappedMemory @ {
 
 sysbus:
     init:
-        Tag <0xe0000000 0x800> "CTRL"
-        Tag <0xE0006000 0x800> "REBOOT"
-        Tag <0xE0006800 0x800> "RGB"
-        Tag <0xE0007000 0x800> "VERSION"
+        Tag <0xF0000000 0x1000> "CTRL"
+        Tag <0xF001B000 0x1000> "TRNG"

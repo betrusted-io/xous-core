@@ -11,7 +11,8 @@ fn timer_tick(_irq_no: usize, _arg: *mut usize) {
     //println!(">>> Timer tick");
     let mut timer = CSR::new(TIMER_BASE as *mut u32);
 
-    xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0)).expect("couldn't return to parent");
+    xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0))
+        .expect("couldn't return to parent");
 
     // acknowledge the timer
     timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);

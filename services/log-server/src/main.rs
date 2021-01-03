@@ -214,7 +214,12 @@ fn handle_scalar(
             }
         }
         1200 => writeln!(output, "Terminating process").unwrap(),
-        _ => writeln!(output, "Unrecognized scalar message from {}: {:#?}", sender, msg).unwrap(),
+        _ => writeln!(
+            output,
+            "Unrecognized scalar message from {}: {:#?}",
+            sender, msg
+        )
+        .unwrap(),
     }
 }
 

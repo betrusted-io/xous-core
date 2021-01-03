@@ -2,8 +2,8 @@
 
 // pub mod size;
 pub mod api;
-pub use api::{Point, PixelColor, Rectangle, DrawStyle, Line, Circle};
-pub use blitstr::{Cursor, GlyphStyle, ClipRect};
+pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
+pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
 pub mod op;
 
@@ -48,7 +48,7 @@ pub fn draw_string(cid: CID, s: &String) -> Result<(), xous::Error> {
 }
 
 pub fn set_glyph_style(cid: CID, glyph: GlyphStyle) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::SetGlyphStyle(glyph).into()).map( |_| ())
+    send_message(cid, api::Opcode::SetGlyphStyle(glyph).into()).map(|_| ())
 }
 
 pub fn screen_size(cid: CID) -> Result<Point, xous::Error> {

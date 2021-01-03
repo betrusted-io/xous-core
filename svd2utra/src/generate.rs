@@ -218,9 +218,7 @@ fn generate_interrupts<T: BufRead>(
                     .map_err(|_| ParseError::NonUTF8)?;
                 match tag_name.as_str() {
                     "name" => name = Some(extract_contents(reader)?),
-                    "value" => {
-                        value = Some(parse_usize(extract_contents(reader)?.as_bytes())?)
-                    }
+                    "value" => value = Some(parse_usize(extract_contents(reader)?.as_bytes())?),
                     _ => (),
                 }
             }
@@ -234,11 +232,10 @@ fn generate_interrupts<T: BufRead>(
         }
     }
 
-    interrupts.push(
-        Interrupt {
-            name: name.ok_or(ParseError::MissingValue)?,
-            value: value.ok_or(ParseError::MissingValue)?,
-        });
+    interrupts.push(Interrupt {
+        name: name.ok_or(ParseError::MissingValue)?,
+        value: value.ok_or(ParseError::MissingValue)?,
+    });
 
     Ok(())
 }
@@ -590,7 +587,8 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
         writeln!(
             out,
             "pub const HW_{}_BASE :   usize = 0x{:08x};",
-            peripheral.name.to_uppercase(), peripheral.base
+            peripheral.name.to_uppercase(),
+            peripheral.base
         )?;
     }
     writeln!(out)?;
@@ -607,7 +605,8 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
             writeln!(
                 out,
                 "        pub const {}: crate::Register = crate::Register::new({});",
-                register.name.to_uppercase(), register.offset / 4
+                register.name.to_uppercase(),
+                register.offset / 4
             )?;
             for field in &register.fields {
                 writeln!(
@@ -630,7 +629,12 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
                 interrupt.value
             )?;
         }
-        writeln!(out, "        pub const HW_{}_BASE: usize = 0x{:08x};", peripheral.name.to_uppercase(), peripheral.base)?;
+        writeln!(
+            out,
+            "        pub const HW_{}_BASE: usize = 0x{:08x};",
+            peripheral.name.to_uppercase(),
+            peripheral.base
+        )?;
         writeln!(out, "    }}")?;
     }
     writeln!(out, "}}")?;
@@ -645,24 +649,58 @@ mod tests {
     #[ignore]
     fn compile_check() {
         use super::*;
-"####.as_bytes();
+"####
+        .as_bytes();
     out.write_all(test_header)?;
     for peripheral in peripherals {
         let mod_name = peripheral.name.to_lowercase();
         let per_name = peripheral.name.to_lowercase() + "_csr";
-        writeln!(out, "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);", per_name, peripheral.name.to_uppercase())?;
+        writeln!(
+            out,
+            "        let mut {} = CSR::new(HW_{}_BASE as *mut u32);",
+            per_name,
+            peripheral.name.to_uppercase()
+        )?;
         for register in &peripheral.registers {
             writeln!(out)?;
             let reg_name = register.name.to_uppercase();
-            writeln!(out, "        let foo = {}.r(utra::{}::{});", per_name, mod_name, reg_name)?;
-            writeln!(out, "        {}.wo(utra::{}::{}, foo);", per_name, mod_name, reg_name)?;
+            writeln!(
+                out,
+                "        let foo = {}.r(utra::{}::{});",
+                per_name, mod_name, reg_name
+            )?;
+            writeln!(
+                out,
+                "        {}.wo(utra::{}::{}, foo);",
+                per_name, mod_name, reg_name
+            )?;
             for field in &register.fields {
                 let field_name = format!("{}_{}", reg_name, field.name.to_uppercase());
-                writeln!(out, "        let bar = {}.rf(utra::{}::{});", per_name, mod_name, field_name)?;
-                writeln!(out, "        {}.rmwf(utra::{}::{}, bar);", per_name, mod_name, field_name)?;
-                writeln!(out, "        let mut baz = {}.zf(utra::{}::{}, bar);", per_name, mod_name, field_name)?;
-                writeln!(out, "        baz |= {}.ms(utra::{}::{}, 1);", per_name, mod_name, field_name)?;
-                writeln!(out, "        {}.wfo(utra::{}::{}, baz);", per_name, mod_name, field_name)?;
+                writeln!(
+                    out,
+                    "        let bar = {}.rf(utra::{}::{});",
+                    per_name, mod_name, field_name
+                )?;
+                writeln!(
+                    out,
+                    "        {}.rmwf(utra::{}::{}, bar);",
+                    per_name, mod_name, field_name
+                )?;
+                writeln!(
+                    out,
+                    "        let mut baz = {}.zf(utra::{}::{}, bar);",
+                    per_name, mod_name, field_name
+                )?;
+                writeln!(
+                    out,
+                    "        baz |= {}.ms(utra::{}::{}, 1);",
+                    per_name, mod_name, field_name
+                )?;
+                writeln!(
+                    out,
+                    "        {}.wfo(utra::{}::{}, baz);",
+                    per_name, mod_name, field_name
+                )?;
             }
         }
     }

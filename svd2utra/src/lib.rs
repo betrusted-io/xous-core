@@ -3,8 +3,8 @@ pub use generate::*;
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{File, DirBuilder};
     use super::*;
+    use std::fs::{DirBuilder, File};
     #[test]
     fn basic_generate() {
         let src = File::open("examples/soc.svd").unwrap();

@@ -94,7 +94,10 @@ pub enum ElfReadError {
     SectionRangeError,
 
     /// Section wasn't word-aligned
-    SectionNotAligned(String /* section name */, usize /* section size */),
+    SectionNotAligned(
+        String, /* section name */
+        usize,  /* section size */
+    ),
 
     /// Couldn't seek the file to write the section
     FileSeekError(std::io::Error),
@@ -127,7 +130,8 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
     let mut b = Vec::new();
     {
         let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
-        fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
+        fi.read_to_end(&mut b)
+            .map_err(ElfReadError::ReadFileError)?;
     }
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
@@ -179,7 +183,10 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
         // that something has gone horribly wrong.
         size += (4 - (size & 3)) & 3;
         if size & 3 != 0 {
-            return Err(ElfReadError::SectionNotAligned(name.to_owned(), s.size() as usize));
+            return Err(ElfReadError::SectionNotAligned(
+                name.to_owned(),
+                s.size() as usize,
+            ));
         }
 
         if name == ".data" {
@@ -202,7 +209,8 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
                 let bytes_to_add = s.address() - (text_offset + text_size) as u64;
                 debug!("Padding text size by {} bytes...", bytes_to_add);
                 program_data
-                    .seek(SeekFrom::Current(bytes_to_add as i64)).map_err(ElfReadError::FileSeekError)?;
+                    .seek(SeekFrom::Current(bytes_to_add as i64))
+                    .map_err(ElfReadError::FileSeekError)?;
                 text_size += bytes_to_add as u32;
                 program_offset += bytes_to_add as u64;
                 // panic!(
@@ -232,13 +240,16 @@ pub fn read_program<P: AsRef<Path>>(filename: P) -> Result<ProgramDescription, E
             section_data[0], section_data[1], section_data[2], section_data[3], program_offset
         );
         program_data
-            .seek(SeekFrom::Start(program_offset)).map_err(ElfReadError::FileSeekError)?;
+            .seek(SeekFrom::Start(program_offset))
+            .map_err(ElfReadError::FileSeekError)?;
         program_data
-            .write(section_data).map_err(ElfReadError::WriteSectionError)?;
+            .write(section_data)
+            .map_err(ElfReadError::WriteSectionError)?;
         program_offset += section_data.len() as u64;
     }
     let observed_size = program_data
-        .seek(SeekFrom::End(0)).map_err(ElfReadError::SeekFromEndError)?;
+        .seek(SeekFrom::End(0))
+        .map_err(ElfReadError::SeekFromEndError)?;
 
     debug!("Text size: {} bytes", text_size);
     debug!("Text offset: {:08x}", text_offset);
@@ -262,7 +273,8 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
     let mut b = Vec::new();
     {
         let mut fi = File::open(filename).map_err(ElfReadError::OpenElfError)?;
-        fi.read_to_end(&mut b).map_err(ElfReadError::ReadFileError)?;
+        fi.read_to_end(&mut b)
+            .map_err(ElfReadError::ReadFileError)?;
     }
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
@@ -335,9 +347,11 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
         // If this section gets copied, add it to the program stream.
         if s.get_type() != Ok(ShType::NoBits) {
             program_data
-                .seek(SeekFrom::Start(program_offset)).map_err(ElfReadError::FileSeekError)?;
+                .seek(SeekFrom::Start(program_offset))
+                .map_err(ElfReadError::FileSeekError)?;
             program_data
-                .write(section_data).map_err(ElfReadError::WriteSectionError)?;
+                .write(section_data)
+                .map_err(ElfReadError::WriteSectionError)?;
             program_offset += section_data.len() as u64;
         }
         sections.push(MiniElfSection {
@@ -348,7 +362,8 @@ pub fn read_minielf<P: AsRef<Path>>(filename: P) -> Result<MiniElf, ElfReadError
         });
     }
     let observed_size = program_data
-        .seek(SeekFrom::End(0)).map_err(ElfReadError::SeekFromEndError)?;
+        .seek(SeekFrom::End(0))
+        .map_err(ElfReadError::SeekFromEndError)?;
 
     debug!("Program size: {} bytes", observed_size);
     Ok(MiniElf {
