@@ -670,8 +670,7 @@ fn _xous_syscall_to(
     // Also send memory, if it's present.
     if let Some(memory) = call.memory() {
         use core::slice;
-        let data: &[u8] =
-            unsafe { slice::from_raw_parts(memory.as_ptr(), memory.len()) };
+        let data: &[u8] = unsafe { slice::from_raw_parts(memory.as_ptr(), memory.len()) };
         pkt.extend_from_slice(data);
     }
 

@@ -1,4 +1,4 @@
-use crate::api::{Point, DrawStyle, Pixel, Rectangle, Circle, PixelColor, Line};
+use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -17,10 +17,14 @@ pub type BlitRow = [u32; LCD_WORDS_PER_LINE];
 
 fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
     let mut clip_y: usize = y as usize;
-    if clip_y >= LCD_LINES { clip_y = LCD_LINES - 1; }
+    if clip_y >= LCD_LINES {
+        clip_y = LCD_LINES - 1;
+    }
 
     let clip_x: usize = x as usize;
-    if clip_x >= LCD_PX_PER_LINE { clip_y = LCD_PX_PER_LINE - 1; }
+    if clip_x >= LCD_PX_PER_LINE {
+        clip_y = LCD_PX_PER_LINE - 1;
+    }
 
     if color == PixelColor::Dark {
         fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
@@ -36,7 +40,7 @@ pub fn line(fb: &mut LcdFB, l: Line) {
     if l.style.stroke_color.is_some() {
         color = l.style.stroke_color.unwrap();
     } else {
-        return
+        return;
     }
     let mut x0 = l.start.x;
     let mut y0 = l.start.y;
@@ -70,7 +74,6 @@ pub fn line(fb: &mut LcdFB, l: Line) {
     }
 }
 
-
 /// Pixel iterator for each pixel in the circle border
 /// lifted from embedded-graphics crate
 #[derive(Debug, Copy, Clone)]
@@ -81,8 +84,7 @@ pub struct CircleIterator {
     p: Point,
 }
 
-impl Iterator for CircleIterator
-{
+impl Iterator for CircleIterator {
     type Item = Pixel;
 
     // https://stackoverflow.com/questions/1201200/fast-algorithm-for-drawing-filled-circles
@@ -150,7 +152,6 @@ pub fn circle(fb: &mut LcdFB, circle: Circle) {
         put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
 }
-
 
 /// Pixel iterator for each pixel in the rect border
 /// lifted from embedded-graphics crate

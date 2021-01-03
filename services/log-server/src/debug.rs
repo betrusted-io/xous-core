@@ -24,11 +24,10 @@ macro_rules! println
 	});
 }
 
-
 fn handle_irq(irq_no: usize, arg: *mut usize) {
     print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
-    while let Some(c) = {crate::debug::Uart {}}.getc() {
+    while let Some(c) = { crate::debug::Uart {} }.getc() {
         print!("{}", c as char);
     }
     println!();
@@ -54,20 +53,27 @@ impl Uart {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map debug uart");
-        unsafe{ DEFAULT_UART_ADDR = uart.as_mut_ptr() as _; }
+        unsafe {
+            DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
+        }
         println!("Mapped UART @ {:08x}", uart.addr.get());
         // core::mem::forget(uart);
 
         println!("Allocating IRQ...");
-        xous::claim_interrupt(utra::console::CONSOLE_IRQ, handle_irq, core::ptr::null_mut::<usize>()).expect("unable to allocate IRQ");
+        xous::claim_interrupt(
+            utra::console::CONSOLE_IRQ,
+            handle_irq,
+            core::ptr::null_mut::<usize>(),
+        )
+        .expect("unable to allocate IRQ");
         self.enable_rx();
     }
 
     pub fn putc(&self, c: u8) {
-        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
             self.map_uart();
         }
-        let mut uart_csr = CSR::new(unsafe{ DEFAULT_UART_ADDR as *mut u32});
+        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
 
         // Wait until TXFULL is `0`
         while uart_csr.r(utra::uart::TXFULL) != 0 {}
@@ -75,15 +81,15 @@ impl Uart {
     }
 
     pub fn enable_rx(&self) {
-        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
-        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1 );
+        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
+        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
     pub fn getc(&self) -> Option<u8> {
-        if unsafe{DEFAULT_UART_ADDR} as usize == 0 {
+        if unsafe { DEFAULT_UART_ADDR } as usize == 0 {
             self.map_uart();
         }
-        let mut uart_csr = CSR::new(unsafe{DEFAULT_UART_ADDR as *mut u32});
+        let mut uart_csr = CSR::new(unsafe { DEFAULT_UART_ADDR as *mut u32 });
         match uart_csr.rf(utra::uart::EV_PENDING_RX) {
             0 => None,
             ack => {

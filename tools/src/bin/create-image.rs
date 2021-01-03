@@ -189,7 +189,9 @@ fn main() {
                     region.name.to_lowercase(),
                     tools::utils::CsrMemoryRegion {
                         start: region.base.try_into().unwrap(),
-                        length: (((csr_top - region.base) + PAGE_SIZE) & !(PAGE_SIZE - 1)).try_into().unwrap(),
+                        length: (((csr_top - region.base) + PAGE_SIZE) & !(PAGE_SIZE - 1))
+                            .try_into()
+                            .unwrap(),
                     },
                 );
             } else {

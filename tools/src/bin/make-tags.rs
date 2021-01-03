@@ -22,8 +22,16 @@ fn main() {
         FLASH_SIZE,
         u32::from_le_bytes(*b"ospi"),
     ));
-    regions.add(MemoryRegion::new(IO_START, IO_SIZE, u32::from_le_bytes(*b"ioio")));
-    regions.add(MemoryRegion::new(LCD_START, LCD_SIZE, u32::from_le_bytes(*b"mlcd")));
+    regions.add(MemoryRegion::new(
+        IO_START,
+        IO_SIZE,
+        u32::from_le_bytes(*b"ioio"),
+    ));
+    regions.add(MemoryRegion::new(
+        LCD_START,
+        LCD_SIZE,
+        u32::from_le_bytes(*b"mlcd"),
+    ));
     args.add(regions);
 
     // let init = Init::new(
