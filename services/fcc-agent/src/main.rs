@@ -1,6 +1,94 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+/*
+
+This is a server that is used as an "agent" to facilitate EMC compliance testing (e.g. FCC/CE testing).
+
+The overall setup for testing is as follows:
+
+A Raspberry Pi is used to run a Python-based master control script:
+https://github.com/betrusted-io/wfx-common-tools/blob/master/test-feature/fcc_test.py
+
+This control scripts issues commands over a UART interface; originally drafted for
+a command-ine shell, `fcc-agent` emulates a degenerate shell-like interface, insofar as
+parsing and responding to the very limited set of commands allowed by the testing program.
+
+`fcc-agent` requires `betrusted-soc` to have an `app_uart`. This is a third uart (in addition
+to the kernel and logging UART). It needs to be muxed to the FPGA UART pins on boot; in this
+version of `xous-core`, it is handled by the shell
+(see https://github.com/betrusted-io/xous-core/blob/1359db06f4422ea8013d9c2beff4c3017f5346ba/services/shell/src/main.rs#L188).
+
+The basic testing protocol consists of creating custom PDS (platform data set) descriptors
+that need to be loaded into the WF200. Normally this is done under Linux by `cat`ing the ASCII
+text to the appropriate /sys node. Here we take the PDS ASCII data, and ship it off to the `com`
+server, which then packs it into a record that the EC forwards on to the WF200.
+
+Therefore, the entire system must be in sync as far as firmware revisions and capabilities.
+Here are the git commits of the configuration that was tested and working:
+
+xous-core: 1359db06f4422ea8013d9c2beff4c3017f5346ba
+betrusted-soc: 5acef1d9d4d23caf5a0691c8e83e5696afb64879
+betrusted-ec: 60f9459876ad42ec251ee5b5f86b85714bcd03bb
+com_rs: d61bc3a5e91e2abdeaafc605ebf4f471b025ec7b
+betrusted-scripts: 4710f5cbc7fb2c4624b5ebb005d3b47fd7ed5b43
+betrusted-scripts/wfx-firmware: 3c6ba6828354a7a158b251f3ebb99a5d7bc59e40 (3.3.2)
+wfx-common-tools: cfd4ec82ea53e17c26f8a11c15f6229bc418e8b3
+
+Example run (channel 6, 802.11b, 1Mbps, 40 second burst):
+
+pi@betrusted-dev:~/code/wfx-common-tools/test-feature $ sudo ./fcc_test.py
+reset EC
+reset SOC
+wait for boot...
+Serial: Configuring a UART connection using /dev/ttyS0/
+user:
+
+
+Serial connected
+wfx_test_agent read_fw_version
+got fw_version string: 3.3.2
+Serial: fw_version retrieved from HW (3.3.2)
+wfx_test_agent --help
+Serial: tree filled for FW3.3.2
+wfx_test_agent read_agent_version
+UART /dev/ttyS0/115200/8/N/1 agent_reply: 1.0.0
+UART sending  'wfx_test_agent ec_version'
+wfx_test_agent ec_version
+UART received <wfx_test_agent ec_version>
+UART received <ecrev: 60f94598 clean>
+UART sending  'wfx_test_agent soc_version'
+wfx_test_agent soc_version
+UART received <wfx_test_agent soc_version>
+UART received <socrev: 5acef1d9 clean>
+UART received <DNA: 005cb5ce5458c854>
+Serial   SET|   TEST_IND  1000000
+Serial   SET|   FRAME_SIZE_BYTE  4091     IFS_US  0
+Serial   SET|   RF_PORTS  TX1_RX1
+UART sending  'wfx_test_agent write_test_data  "{j:{a:0}}"'
+wfx_test_agent write_test_data  "{j:{a:0}}"
+UART received <wfx_test_agent write_test_data  "{j:{a:0}}">
+Serial   SET|   TEST_CHANNEL_FREQ  6
+Serial   SET|   HT_PARAM  MM     RATE  B_1Mbps
+Serial   SET|   TEST_MODE  tx_packet     NB_FRAME  0
+UART sending  'wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:0,f:4},e:{}}}"'
+wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:0,f:4},e:{}}}"
+UART received <wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:0,f:4},e:{}}}">
+UART sending  'wfx_test_agent commit_pds'
+wfx_test_agent commit_pds
+UART received <wfx_test_agent commit_pds>
+UART received <{j:{a:0}}>
+UART received <{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:0,f:4},e:{}}}>
+Serial   SET|   TEST_MODE  tx_packet     NB_FRAME  100
+UART sending  'wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:64,f:4},e:{}}}"'
+wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:64,f:4},e:{}}}"
+UART received <wfx_test_agent write_test_data  "{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:64,f:4},e:{}}}">
+UART sending  'wfx_test_agent commit_pds'
+wfx_test_agent commit_pds
+UART received <wfx_test_agent commit_pds>
+UART received <{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:64,f:4},e:{}}}>
+
+*/
 use xous::{Message, ScalarMessage};
 
 #[derive(Debug)]
