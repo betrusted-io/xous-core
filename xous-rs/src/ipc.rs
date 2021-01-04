@@ -151,7 +151,7 @@ impl<T: Send> Sendable<T> {
         result
     }
 
-    /// Perform a mutable lend of this Carton to the server.
+    /// Perform a move of this Carton to the server.
     pub fn send(
         mut self,
         connection: crate::CID,

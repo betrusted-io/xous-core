@@ -10,6 +10,7 @@ bitflags = "1.2.1"
 xous = { path = "../../xous-rs" }
 graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
 log-server = { path = "../log-server" }
 log = "0.4"
 

@@ -7,6 +7,8 @@ use core::fmt::Write;
 use graphics_server::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
 use log::{error, info};
 use xous::String;
+use xous::ipc::*;
+use xous_names::api::Registration;
 
 use core::convert::TryFrom;
 
@@ -136,11 +138,13 @@ fn shell_main() -> ! {
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id = xous::SID::from_bytes(b"com             ").unwrap();
+    let ns_id = xous::SID::from_bytes(b"xousnames-server").unwrap();
 
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
     let com_conn = xous::connect(com_id).unwrap();
+    let ns_conn = xous::connect(ns_id).unwrap();
 
     info!(
         "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {} Com: {}",
@@ -184,7 +188,7 @@ fn shell_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2); // 0 = kernel, 1 = log, 2 = app_uart
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
     }
 
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
@@ -215,6 +219,14 @@ fn shell_main() -> ! {
         .expect("unable to clear region");
 
     let mut firsttime = true;
+    let mut registration = Registration {
+        sid: xous::SID::from_u32(0, 0, 0, 0,),
+        name: *b"test name                                                       ",
+        name_len: b"test name".len(),
+        success: false
+    };
+    let mut sendable_registration = Sendable::new(registration)
+        .expect("can't create sendable registration structure");
     loop {
         // status bar
         graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
@@ -275,7 +287,6 @@ fn shell_main() -> ! {
         )
         .expect("can't draw line");
 
-        /*
         // work area
         string_buffer.clear();
         write!(
@@ -303,7 +314,7 @@ fn shell_main() -> ! {
                 .expect("unable to draw string");
             firsttime = false;
         }
-        */
+
         // rate limit graphics
         //ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
@@ -344,10 +355,15 @@ fn shell_main() -> ! {
 
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 1000 {
+            if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
                 info!("Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+                info!("Test NS lookup");
+                sendable_registration.success = false;
+                info!("NS lookup input: {:?}", sendable_registration.success);
+                sendable_registration.lend_mut(ns_conn, xous_names::api::ID_REGISTER_NAME);
+                info!("NS lookup result: {:?}", sendable_registration.success);
             }
         } else {
             error!("error requesting ticktimer!")

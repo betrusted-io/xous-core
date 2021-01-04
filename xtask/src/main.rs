@@ -82,6 +82,7 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
         "ticktimer-server",
         "log-server",
         "com",
+        "xous-names",
     ] {
         // "xous-names"
         // "fcc-agent"

@@ -821,6 +821,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-names",
 ]
 
 [[package]]
@@ -1157,6 +1158,17 @@ dependencies = [
  "quote",
  "rand 0.7.3",
  "syn",
+]
+
+[[package]]
+name = "xous-names"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "log",
+ "log-server",
+ "utralib",
+ "xous",
 ]
 
 [[package]]
