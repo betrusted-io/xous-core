@@ -36,7 +36,7 @@ impl Into<[usize; 2]> for BattStats {
         ]
     }
 }
-
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Opcode<'a> {
     /// Battery stats

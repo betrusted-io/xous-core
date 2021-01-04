@@ -18,13 +18,18 @@ operating system. These must all claim names in the name space before
 any further processes are started, to prevent later processes from
 claiming their names.
 
-The exception to random SIDs are the `xous-name-server` and
-`xous-log-server ` (note the trailing space). These are two well known names that have a defined,
+The exception to random SIDs are the `xous-name-server`,
+`xous-log-server ` (note the trailing space), and `ticktimer-server`.
+These are three well known names that have a defined,
 fixed SID so that all processes can talk to them; `xous-name-server` is
 necessarily well-known as it is the mechanism to resolve further
 names, `xous-log-server ` is necessary for debugging, so that bugs upstream
 of name resolution can be logged. `xous-name-server` was picked because
-`name-server` already has a meaning in the context of DNS.
+`name-server` already has a meaning in the context of DNS. `ticktimer-server`
+is necessary for implementing deterministic timing delays in
+`xous-name-server` upon failure, and also for other processes to
+wait a fixed period of time on initialization while the initial set
+of name registrations occur.
 
 A new process that intends to receive messages initializes using the
 following procedure:

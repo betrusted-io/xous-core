@@ -298,6 +298,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc0efbd154a17cddc3616d83faef479c0076d871a2143c157b310cc7ca799a2"
+dependencies = [
+ "proc-macro2 0.3.8",
+ "quote 0.5.2",
+ "syn 0.13.11",
+]
+
+[[package]]
 name = "heapless"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -494,11 +505,20 @@ checksum = "237a5ed80e274dbc66f86bd59c1e25edc039660be53194b5fe0a482e0f2612ea"
 
 [[package]]
 name = "proc-macro2"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b06e2f335f48d24442b35a19df506a835fb3547bc3c06ef27340da9acf5cae7"
+dependencies = [
+ "unicode-xid 0.1.0",
+]
+
+[[package]]
+name = "proc-macro2"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04f5f085b5d71e2188cb8271e5da0161ad52c3f227a661a3c135fdf28e258b12"
 dependencies = [
- "unicode-xid",
+ "unicode-xid 0.2.1",
 ]
 
 [[package]]
@@ -518,11 +538,20 @@ dependencies = [
 
 [[package]]
 name = "quote"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9949cfe66888ffe1d53e6ec9d9f3b70714083854be20fd5e271b232a017401e8"
+dependencies = [
+ "proc-macro2 0.3.8",
+]
+
+[[package]]
+name = "quote"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa563d17ecb180e500da1cfd2b028310ac758de548efdd203e18f283af693f37"
 dependencies = [
- "proc-macro2",
+ "proc-macro2 1.0.19",
 ]
 
 [[package]]
@@ -853,13 +882,24 @@ dependencies = [
 
 [[package]]
 name = "syn"
+version = "0.13.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14f9bf6292f3a61d2c716723fdb789a41bbe104168e6f496dc6497e531ea1b9b"
+dependencies = [
+ "proc-macro2 0.3.8",
+ "quote 0.5.2",
+ "unicode-xid 0.1.0",
+]
+
+[[package]]
+name = "syn"
 version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e69abc24912995b3038597a7a593be5053eb0fb44f3cc5beec0deb421790c1f4"
 dependencies = [
- "proc-macro2",
- "quote",
- "unicode-xid",
+ "proc-macro2 1.0.19",
+ "quote 1.0.7",
+ "unicode-xid 0.2.1",
 ]
 
 [[package]]
@@ -955,6 +995,12 @@ checksum = "9337591893a19b88d8d87f2cec1e73fad5cdfd10e5a6f349f498ad6ea2ffb1e3"
 
 [[package]]
 name = "unicode-xid"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
+
+[[package]]
+name = "unicode-xid"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
@@ -1046,8 +1092,8 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f45ddc08a8078f3efa96b5f413268cc9c53b30712891de081fbc1d5846fbc736"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.19",
+ "quote 1.0.7",
  "xml-rs",
 ]
 
@@ -1154,19 +1200,22 @@ dependencies = [
 name = "xous-macros"
 version = "0.1.0"
 dependencies = [
- "proc-macro2",
- "quote",
+ "proc-macro2 1.0.19",
+ "quote 1.0.7",
  "rand 0.7.3",
- "syn",
+ "syn 1.0.38",
 ]
 
 [[package]]
 name = "xous-names"
 version = "0.1.0"
 dependencies = [
+ "hash32",
+ "hash32-derive",
  "heapless",
  "log",
  "log-server",
+ "ticktimer-server",
  "utralib",
  "xous",
 ]

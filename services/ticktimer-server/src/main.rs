@@ -321,6 +321,7 @@ fn xmain() -> ! {
 
     // Create a new ticktimer object
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
+    ticktimer.reset(); // make sure the time starts from zero
 
     loop {
         ticktimer.reset_wdt();
@@ -331,10 +332,10 @@ fn xmain() -> ! {
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             //info!("TickTimer: Opcode: {:?}", opcode);
             match opcode {
-                Opcode::Reset => {
+                /*Opcode::Reset => {
                     info!("TickTimer: reset called");
                     ticktimer.reset();
-                }
+                }*/
                 Opcode::ElapsedMs => {
                     let time = ticktimer.elapsed_ms();
                     //info!("TickTimer: returning time of {:?}", time);

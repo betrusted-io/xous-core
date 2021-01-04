@@ -13,9 +13,11 @@ pub fn elapsed_ms(cid: CID) -> Result<u64, Error> {
     }
 }
 
+/*
 pub fn reset(cid: CID) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::Reset.into()).map(|_| ())
 }
+*/
 
 pub fn sleep_ms(cid: CID, ms: usize) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::SleepMs(ms).into()).map(|_| ())

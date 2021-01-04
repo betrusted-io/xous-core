@@ -3,7 +3,7 @@ use xous::{Message, ScalarMessage};
 #[derive(Debug)]
 pub enum Opcode {
     /// Reset the timer
-    Reset,
+    // Reset,  // This is a bad idea, in retrospect.
 
     /// Get the elapsed time in milliseconds
     ElapsedMs,
@@ -20,7 +20,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
     fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
-                1 => Ok(Opcode::Reset),
+                // 1 => Ok(Opcode::Reset),
                 131072 => Ok(Opcode::RecalculateSleep),
                 _ => Err("unrecognized opcode"),
             },
@@ -37,13 +37,13 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
 impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
-            Opcode::Reset => Message::Scalar(ScalarMessage {
+            /* Opcode::Reset => Message::Scalar(ScalarMessage {
                 id: 1,
                 arg1: 0,
                 arg2: 0,
                 arg3: 0,
                 arg4: 0,
-            }),
+            }),*/
             Opcode::RecalculateSleep => Message::Scalar(ScalarMessage {
                 id: 131072,
                 arg1: 0,

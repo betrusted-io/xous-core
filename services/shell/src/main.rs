@@ -5,7 +5,7 @@ use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;
 use graphics_server::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
-use xous_names::api::Registration;
+use xous_names::api::{Registration, Lookup};
 
 use log::{error, info};
 use xous::String;
@@ -195,8 +195,6 @@ fn shell_main() -> ! {
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
-    let mut last_time: u64 = 0;
-    ticktimer_server::reset(ticktimer_conn).unwrap();
     let mut string_buffer = String::new(4096);
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
@@ -220,9 +218,7 @@ fn shell_main() -> ! {
         .expect("unable to clear region");
 
     let mut firsttime = true;
-    let mut registration = Registration::new();
-    let mut sendable_registration = Sendable::new(registration)
-        .expect("can't create sendable registration structure");
+    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     loop {
         // status bar
         graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
@@ -355,14 +351,29 @@ fn shell_main() -> ! {
                 last_time = elapsed_time;
                 info!("Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
-                info!("Test NS lookup");
-                sendable_registration.success = false;
+
+                info!("Test NS registration");
+                let registration = Registration::new();
+                let mut sendable_registration = Sendable::new(registration)
+                    .expect("can't create sendable registration structure");
                 let test_name = b"A test Name!";
-                sendable_registration.name[..test_name.len()].clone_from_slice(test_name);
-                sendable_registration.name_len = test_name.len();
-                info!("NS lookup input: {:?}", sendable_registration.success);
-                sendable_registration.lend_mut(ns_conn, sendable_registration.mid());
-                info!("NS lookup result: {:?}", sendable_registration.success);
+                sendable_registration.name.name[..test_name.len()].clone_from_slice(test_name);
+                info!("namserver registration input: {:?}", sendable_registration.success);
+                sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
+                info!("nameserver registration result: {:?}, {:?}", sendable_registration.success, sendable_registration.sid);
+
+                info!("Test NS lookup");
+                let lookup = Lookup::new();
+                info!("making sendable");
+                let mut sendable_lookup = Sendable::new(lookup)
+                   .expect("can't create sendable lookup structure");
+                info!("making a test name");
+                let another_name = b"A test Name!";
+                info!("cloning into slice");
+                sendable_lookup.name.name[..another_name.len()].clone_from_slice(another_name);
+                info!("nameserver lookup input: {:?}", sendable_lookup.success);
+                sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
+                info!("nameserver lookup result: {:?}, {:?}", sendable_lookup.success, sendable_lookup.cid);
             }
         } else {
             error!("error requesting ticktimer!")

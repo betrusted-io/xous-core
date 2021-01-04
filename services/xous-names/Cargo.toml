@@ -9,7 +9,10 @@ description = ""
 xous = { path = "../../xous-rs" }
 heapless = "0.5"
 log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
 log = "0.4"
+hash32 = "0.1.0"
+hash32-derive = "0.1.0"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

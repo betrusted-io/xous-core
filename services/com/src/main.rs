@@ -29,12 +29,10 @@ mod implementation {
     use crate::return_battstats;
     use crate::WorkRequest;
     use com_rs::*;
-    use log::{error, info};
-    use ticktimer_server::*;
+    use log::error;
     use utralib::generated::*;
     use xous::CID;
 
-    #[macro_use]
     use heapless::Vec;
     use heapless::consts::*;
 
@@ -252,12 +250,12 @@ fn xmain() -> ! {
     // Create a new com object
     let mut com = XousCom::new();
 
+    info!("COM: starting main loop");
     loop {
-        info!("COM: waiting for message");
         let envelope = xous::receive_message(com_server).unwrap();
-        info!("COM: Message: {:?}", envelope);
+        // info!("COM: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            info!("COM: Opcode: {:?}", opcode);
+            // info!("COM: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::PowerOffSoc => {
                     info!("COM: power off called");
@@ -325,26 +323,19 @@ fn xmain() -> ! {
                     }
                 }
                 Opcode::RxStatsAgent => {
-                    xous::send_message(agent_conn, xous::Message::Scalar(
-                        xous::ScalarMessage { id: 1, arg1: '!' as usize, arg2: 0, arg3: 0, arg4: 0}
-                    ));
-                    let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
-                    /*
-                    com.txrx(ComState::WFX_RXSTAT_GET.verb);
-                    for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
-                        let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                        stats[i*2] = data as u8;
-                        stats[i*2+1] = (data >> 8) as u8;
-                    }*/
                     if cfg!(feature = "fccagent") {
+                        let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
+                        com.txrx(ComState::WFX_RXSTAT_GET.verb);
+                        for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
+                            let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                            stats[i*2] = data as u8;
+                            stats[i*2+1] = (data >> 8) as u8;
+                        }
                         // hard-coded from fccagent to break circular dependency of fcc agent on com on agent on com on...
                         let data = xous::carton::Carton::from_bytes(&stats);
                         let m = xous::Message::Borrow(data.into_message(2));
-                        xous::send_message(agent_conn, m);
+                        xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
                     }
-                    xous::send_message(agent_conn, xous::Message::Scalar(
-                        xous::ScalarMessage { id: 1, arg1: '@' as usize, arg2: 0, arg3: 0, arg4: 0}
-                    ));
                 }
                 _ => error!("unknown opcode"),
             }
