@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::op::{HEIGHT, WIDTH};
 use blitstr::{ClipRect, Cursor, GlyphStyle};
 use core::cmp::{max, min};

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use xous::{SID, CID};
 use hash32_derive::*;
 

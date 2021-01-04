@@ -12,9 +12,6 @@ pub const HEIGHT: i16 = 536;
 /// For passing frame buffer references
 pub type LcdFB = [u32; LCD_FRAME_BUF_SIZE];
 
-/// For storing a full-row wide blit pattern
-pub type BlitRow = [u32; LCD_WORDS_PER_LINE];
-
 fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
     let mut clip_y: usize = y as usize;
     if clip_y >= LCD_LINES {

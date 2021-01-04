@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-#[macro_use]
 extern crate hash32_derive;
 
 mod api;
