@@ -15,7 +15,9 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
     let name_server =
-        xous::create_server_with_address(b"xousnames-server").expect("Couldn't create xousnames-server");
+        xous::create_server_with_address(b"xous-name-server").expect("Couldn't create xousnames-server");
+
+    xous::create_server();
 
     info!("NS: started");
     loop {
@@ -30,7 +32,7 @@ fn xmain() -> ! {
                 let name: String<U64> = String::from_utf8(namevec).unwrap();
                 info!("NS: registration request for {}", name);
                 registration.success = true;
-                xous::return_memory(envelope.sender, m.buf).unwrap();
+                // memory is automatically returend upon exit, no need for explicit return of memory
             } else {
                 error!("NS: unknown message ID received");
             }

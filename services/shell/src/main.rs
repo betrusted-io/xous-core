@@ -5,10 +5,11 @@ use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;
 use graphics_server::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
+use xous_names::api::Registration;
+
 use log::{error, info};
 use xous::String;
 use xous::ipc::*;
-use xous_names::api::Registration;
 
 use core::convert::TryFrom;
 
@@ -138,7 +139,7 @@ fn shell_main() -> ! {
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id = xous::SID::from_bytes(b"com             ").unwrap();
-    let ns_id = xous::SID::from_bytes(b"xousnames-server").unwrap();
+    let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
 
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
@@ -219,12 +220,7 @@ fn shell_main() -> ! {
         .expect("unable to clear region");
 
     let mut firsttime = true;
-    let mut registration = Registration {
-        sid: xous::SID::from_u32(0, 0, 0, 0,),
-        name: *b"test name                                                       ",
-        name_len: b"test name".len(),
-        success: false
-    };
+    let mut registration = Registration::new();
     let mut sendable_registration = Sendable::new(registration)
         .expect("can't create sendable registration structure");
     loop {
@@ -361,8 +357,11 @@ fn shell_main() -> ! {
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
                 info!("Test NS lookup");
                 sendable_registration.success = false;
+                let test_name = b"A test Name!";
+                sendable_registration.name[..test_name.len()].clone_from_slice(test_name);
+                sendable_registration.name_len = test_name.len();
                 info!("NS lookup input: {:?}", sendable_registration.success);
-                sendable_registration.lend_mut(ns_conn, xous_names::api::ID_REGISTER_NAME);
+                sendable_registration.lend_mut(ns_conn, sendable_registration.mid());
                 info!("NS lookup result: {:?}", sendable_registration.success);
             }
         } else {
