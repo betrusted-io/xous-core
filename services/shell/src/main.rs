@@ -356,8 +356,7 @@ fn shell_main() -> ! {
                 let registration = Registration::new();
                 let mut sendable_registration = Sendable::new(registration)
                     .expect("can't create sendable registration structure");
-                let test_name = b"A test Name!";
-                sendable_registration.name.name[..test_name.len()].clone_from_slice(test_name);
+                write!(sendable_registration.name, "A test Name!");
                 info!("namserver registration input: {:?}", sendable_registration.success);
                 sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
                 info!("nameserver registration result: {:?}, {:?}", sendable_registration.success, sendable_registration.sid);
@@ -368,9 +367,7 @@ fn shell_main() -> ! {
                 let mut sendable_lookup = Sendable::new(lookup)
                    .expect("can't create sendable lookup structure");
                 info!("making a test name");
-                let another_name = b"A test Name!";
-                info!("cloning into slice");
-                sendable_lookup.name.name[..another_name.len()].clone_from_slice(another_name);
+                write!(sendable_lookup.name, "A test Name!");
                 info!("nameserver lookup input: {:?}", sendable_lookup.success);
                 sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
                 info!("nameserver lookup result: {:?}, {:?}", sendable_lookup.success, sendable_lookup.cid);

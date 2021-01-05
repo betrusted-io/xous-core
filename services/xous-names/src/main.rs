@@ -35,9 +35,7 @@ fn xmain() -> ! {
                 let registration: &mut Registration = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Registration)
                 };
-                let namevec: Vec<u8, U32> = Vec::from_slice(&registration.name.name).unwrap();
-                let name: String<U32> = String::from_utf8(namevec).unwrap();
-                info!("NS: registration request for {}", name);
+                info!("NS: registration request for {}", registration.name);
                 if !name_table.contains_key(&registration.name) {
                     let new_sid = xous::create_server().expect("NS: create server failed, maybe OOM?");
                     name_table.insert(registration.name, new_sid).expect("NS: register name failure, maybe out of HashMap capacity?");
@@ -59,10 +57,8 @@ fn xmain() -> ! {
                 let lookup: &mut Lookup = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Lookup)
                 };
-                let namevec: Vec<u8, U32> = Vec::from_slice(&lookup.name.name).unwrap();
-                let name: String<U32> = String::from_utf8(namevec).unwrap();
-                info!("NS: Lookup request for {}", name);
-                lookup.cid = 1337;
+                info!("NS: Lookup request for {}", lookup.name);
+                // lookup.cid = 1337;
                 lookup.success = true;
             } else {
                 error!("NS: unknown message ID received");

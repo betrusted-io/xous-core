@@ -198,6 +198,10 @@ mod implementation {
             0xDEAD as u16
         }
 
+        pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
+            0xDEAD as u16
+        }
+
         pub fn get_battstats(&mut self) -> BattStats {
             BattStats {
                 voltage: 3700,

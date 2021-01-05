@@ -183,7 +183,8 @@ fn run(debug: bool) -> Result<(), DynError> {
         "graphics-server",
         "ticktimer-server",
         "com",
-    ]; // , "xous-names"
+        "xous-names",
+    ];
 
     // let mut init_paths = vec![];
     for pkg in &init {
