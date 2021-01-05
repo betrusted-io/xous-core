@@ -11,9 +11,7 @@ Calls are made using the xous::ipc::Sendable IPC wrapper, for example:
     let mut sendable_registration = Sendable::new(registration)
         .expect("can't create sendable registration structure");
 
-    let test_name = b"A test Name!";
-    sendable_registration.name[..test_name.len()].clone_from_slice(test_name);
-    sendable_registration.name_len = test_name.len();
+    write!(sendable_registration.name, "I'm a server, call me Fred!");
 
     sendable_registration.lend_mut(ns_conn, sendable_registration.mid());
 

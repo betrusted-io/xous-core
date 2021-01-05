@@ -6,8 +6,7 @@ extern crate hash32_derive;
 mod api;
 use api::*;
 
-use heapless::String;
-use heapless::Vec;
+// use heapless::String;
 use heapless::FnvIndexMap;
 use heapless::consts::*;
 

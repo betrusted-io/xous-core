@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use xous::{SID, CID};
-use hash32_derive::*;
+use hash32::{Hash, Hasher};
 
 use core::cmp::Eq;
 
@@ -13,11 +13,21 @@ pub const AUTHENTICATE_TIMEOUT: usize = 10_000; // time in ms that a process has
 
 //////////////////////// handle throwing strings across IPC boundary with hash comparison
 
-#[derive(Hash32, Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct XousServerName {
-    pub name: [u8; 32],
+    pub name: [u8; 64],
     pub length: usize,
+}
+
+impl hash32::Hash for XousServerName {
+    fn hash<H>(&self, state: &mut H)
+    where
+    H: Hasher,
+    {
+        Hash::hash(&self.name[..], state);
+        Hash::hash(&self.length, state)
+    }
 }
 
 impl XousServerName {
@@ -36,7 +46,7 @@ impl XousServerName {
 impl Default for XousServerName {
     fn default() -> Self {
         XousServerName {
-            name: [0; 32],
+            name: [0; 64],
             length: 0,
         }
     }
