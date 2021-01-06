@@ -452,15 +452,15 @@ interrupts.]]></description>
                 <register>
                     <name>UARTSEL</name>
                     <description><![CDATA[Used to select which UART is routed to physical pins, 00 = kernel debug, 01 =
-console, others undefined]]></description>
+console, others reserved based on build]]></description>
                     <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
                             <name>uartsel</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
                             <lsb>0</lsb>
                         </field>
                     </fields>
@@ -1051,8 +1051,192 @@ register to disable individual events.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>INFO</name>
+            <name>APP_UART_PHY</name>
             <baseAddress>0xF000A000</baseAddress>
+            <groupName>APP_UART_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x4b7f5a</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>APP_UART</name>
+            <baseAddress>0xF000B000</baseAddress>
+            <groupName>APP_UART</groupName>
+            <registers>
+                <register>
+                    <name>RXTX</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxtx</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXFULL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXEMPTY</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
+this register have no effect.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``tx`` event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``rx`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
+clear the Event, set the corresponding bit in this register.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
+register to disable individual events.]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tx</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
+                        </field>
+                        <field>
+                            <name>rx</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXEMPTY</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txempty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXFULL</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxfull</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>app_uart</name>
+                <value>4</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>INFO</name>
+            <baseAddress>0xF000C000</baseAddress>
             <groupName>INFO</groupName>
             <registers>
                 <register>
@@ -1136,10 +1320,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``00000000``, so this value is 0, which should be enough to check out the exact
-git version used to build this firmware.]]></description>
+``3ea245d3``, so this value is 1050822099, which should be enough to check out
+the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x3ea245d3</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1156,7 +1340,7 @@ git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x02</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1252,7 +1436,7 @@ modifications.]]></description>
         </peripheral>
         <peripheral>
             <name>SRAM_EXT</name>
-            <baseAddress>0xF000B000</baseAddress>
+            <baseAddress>0xF000D000</baseAddress>
             <groupName>SRAM_EXT</groupName>
             <registers>
                 <register>
@@ -1294,7 +1478,7 @@ modifications.]]></description>
         </peripheral>
         <peripheral>
             <name>MEMLCD</name>
-            <baseAddress>0xF000C000</baseAddress>
+            <baseAddress>0xF000E000</baseAddress>
             <groupName>MEMLCD</groupName>
             <registers>
                 <register>
@@ -1410,7 +1594,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>COM</name>
-            <baseAddress>0xF000D000</baseAddress>
+            <baseAddress>0xF000F000</baseAddress>
             <groupName>COM</groupName>
             <registers>
                 <register>
@@ -1569,12 +1753,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>com</name>
-                <value>4</value>
+                <value>5</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>I2C</name>
-            <baseAddress>0xF000E000</baseAddress>
+            <baseAddress>0xF0010000</baseAddress>
             <groupName>I2C</groupName>
             <registers>
                 <register>
@@ -1822,12 +2006,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>i2c</name>
-                <value>5</value>
+                <value>6</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>BTEVENTS</name>
-            <baseAddress>0xF000F000</baseAddress>
+            <baseAddress>0xF0011000</baseAddress>
             <groupName>BTEVENTS</groupName>
             <registers>
                 <register>
@@ -1911,12 +2095,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>btevents</name>
-                <value>6</value>
+                <value>7</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>MESSIBLE</name>
-            <baseAddress>0xF0010000</baseAddress>
+            <baseAddress>0xF0012000</baseAddress>
             <groupName>MESSIBLE</groupName>
             <registers>
                 <register>
@@ -1982,7 +2166,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>MESSIBLE2</name>
-            <baseAddress>0xF0011000</baseAddress>
+            <baseAddress>0xF0013000</baseAddress>
             <groupName>MESSIBLE2</groupName>
             <registers>
                 <register>
@@ -2048,7 +2232,7 @@ register advances the read pointer automatically.]]></description>
         </peripheral>
         <peripheral>
             <name>TICKTIMER</name>
-            <baseAddress>0xF0012000</baseAddress>
+            <baseAddress>0xF0014000</baseAddress>
             <groupName>TICKTIMER</groupName>
             <registers>
                 <register>
@@ -2193,12 +2377,12 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>ticktimer</name>
-                <value>7</value>
+                <value>8</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>POWER</name>
-            <baseAddress>0xF0013000</baseAddress>
+            <baseAddress>0xF0015000</baseAddress>
             <groupName>POWER</groupName>
             <registers>
                 <register>
@@ -2343,7 +2527,7 @@ reset fashion]]></description>
         </peripheral>
         <peripheral>
             <name>SPINOR</name>
-            <baseAddress>0xF0014000</baseAddress>
+            <baseAddress>0xF0016000</baseAddress>
             <groupName>SPINOR</groupName>
             <registers>
                 <register>
@@ -2624,7 +2808,7 @@ checked]]></description>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
-            <baseAddress>0xF0015000</baseAddress>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
@@ -2834,19 +3018,19 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
             <interrupt>
                 <name>keyboard</name>
-                <value>8</value>
+                <value>9</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>SEED</name>
-            <baseAddress>0xF0016000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x2bab99b7</resetValue>
+                    <resetValue>0x59f86187</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2861,7 +3045,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x364d429c</resetValue>
+                    <resetValue>0x5df4998c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2881,7 +3065,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>ROMTEST</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>ROMTEST</groupName>
             <registers>
                 <register>
@@ -2923,7 +3107,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -3290,12 +3474,12 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>audio</name>
-                <value>9</value>
+                <value>10</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>TRNG_KERNEL</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>TRNG_KERNEL</groupName>
             <registers>
                 <register>
@@ -3426,12 +3610,12 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>trng_kernel</name>
-                <value>10</value>
+                <value>11</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>TRNG_SERVER</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>TRNG_SERVER</groupName>
             <registers>
                 <register>
@@ -3539,7 +3723,7 @@ when cleared, TRNGs are always on]]></description>
                 <register>
                     <name>AV_CONFIG</name>
                     <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x30d40</resetValue>
+                    <resetValue>0x200c350</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3549,12 +3733,29 @@ when cleared, TRNGs are always on]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Delay in microseconds for avalanche generator to stabilize]]></description>
                         </field>
+                        <field>
+                            <name>samples</name>
+                            <msb>27</msb>
+                            <bitRange>[27:20]</bitRange>
+                            <lsb>20</lsb>
+                            <description><![CDATA[Number of samples to fold into a single result. Smaller values increase rate but
+decrease quality. Default is 32.]]></description>
+                        </field>
+                        <field>
+                            <name>test</name>
+                            <msb>28</msb>
+                            <bitRange>[28:28]</bitRange>
+                            <lsb>28</lsb>
+                            <description><![CDATA[When set, puts the generator into test mode -- full-size, raw ADC samples are
+directly placed into the FIFO at full rate, creating a 'virtual oscilloscope'
+snapshot of the avalanche generator waveform.]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>RO_CONFIG</name>
                     <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x10000c9</resetValue>
+                    <resetValue>0x38080c9</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3566,8 +3767,8 @@ when cleared, TRNGs are always on]]></description>
                         </field>
                         <field>
                             <name>dwell</name>
-                            <msb>20</msb>
-                            <bitRange>[20:1]</bitRange>
+                            <msb>12</msb>
+                            <bitRange>[12:1]</bitRange>
                             <lsb>1</lsb>
                             <description><![CDATA[Prescaler to set dwell-time of entropy collection.  Controls the period of how
 long the oscillators are in a metastable state to collect entropy  before
@@ -3576,14 +3777,32 @@ period.]]></description>
                         </field>
                         <field>
                             <name>delay</name>
-                            <msb>30</msb>
-                            <bitRange>[30:21]</bitRange>
-                            <lsb>21</lsb>
+                            <msb>22</msb>
+                            <bitRange>[22:13]</bitRange>
+                            <lsb>13</lsb>
                             <description><![CDATA[Sampler delay time. Sets the delay between when the small rings are merged
 together, and when the final entropy result is sampled. Value encodes number of
 sysclk edges to pass during the delay period. Delay should be long enough for
 the signal to propagate around the merged ring, but longer times also means more
 coupling of the deterministic sysclk noise into the rings.]]></description>
+                        </field>
+                        <field>
+                            <name>fuzz</name>
+                            <msb>23</msb>
+                            <bitRange>[23:23]</bitRange>
+                            <lsb>23</lsb>
+                            <description><![CDATA[Modulate the `delay`/`dwell` parameter slightly from run-to-run,  based on
+previous run's random values. May help to break ring oscillator resonances
+trained by the delay/dwell periodicity.]]></description>
+                        </field>
+                        <field>
+                            <name>oversampling</name>
+                            <msb>31</msb>
+                            <bitRange>[31:24]</bitRange>
+                            <lsb>24</lsb>
+                            <description><![CDATA[Number of stages to oversample entropy. Normally, each bit is just sampled and
+shifted once (so 32 times for 32-bit word). Each increment of oversampling will
+add another stage.]]></description>
                         </field>
                     </fields>
                 </register>
@@ -3723,12 +3942,12 @@ to max field size]]></description>
             </addressBlock>
             <interrupt>
                 <name>trng_server</name>
-                <value>11</value>
+                <value>12</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>TRNG</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>TRNG</groupName>
             <registers>
                 <register>
@@ -4010,471 +4229,8 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>AES</name>
-            <baseAddress>0xF001C000</baseAddress>
-            <groupName>AES</groupName>
-            <registers>
-                <register>
-                    <name>KEY_0_Q</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[least significant key word]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_1_Q</name>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 1]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_2_Q</name>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 2]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_3_Q</name>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 3]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_4_Q</name>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_4</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 4]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_5_Q</name>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_5</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 5]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_6_Q</name>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_6</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[key word 6]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>KEY_7_Q</name>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>key_7</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[most significant key word]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAOUT_0</name>
-                    <addressOffset>0x0020</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data output from cipher]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAOUT_1</name>
-                    <addressOffset>0x0024</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data output from cipher]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAOUT_2</name>
-                    <addressOffset>0x0028</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data output from cipher]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAOUT_3</name>
-                    <addressOffset>0x002c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data output from cipher]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAIN_0</name>
-                    <addressOffset>0x0030</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data input]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAIN_1</name>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data input]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAIN_2</name>
-                    <addressOffset>0x0038</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data input]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DATAIN_3</name>
-                    <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>data_3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[data input]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>IV_0</name>
-                    <addressOffset>0x0040</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>iv_0</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[iv]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>IV_1</name>
-                    <addressOffset>0x0044</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>iv_1</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[iv]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>IV_2</name>
-                    <addressOffset>0x0048</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>iv_2</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[iv]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>IV_3</name>
-                    <addressOffset>0x004c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>iv_3</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[iv]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>CTRL</name>
-                    <addressOffset>0x0050</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>mode</name>
-                            <msb>2</msb>
-                            <bitRange>[2:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[set cipher mode. Illegal values mapped to `AES_ECB`]]></description>
-                        </field>
-                        <field>
-                            <name>key_len</name>
-                            <msb>5</msb>
-                            <bitRange>[5:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[length of the aes block. Illegal values mapped to `AES128`]]></description>
-                        </field>
-                        <field>
-                            <name>manual_operation</name>
-                            <msb>6</msb>
-                            <bitRange>[6:6]</bitRange>
-                            <lsb>6</lsb>
-                            <description><![CDATA[If `1`, operation starts when `trigger` bit `start` is written, otherwise
-automatically on data and IV ready]]></description>
-                        </field>
-                        <field>
-                            <name>operation</name>
-                            <msb>7</msb>
-                            <bitRange>[7:7]</bitRange>
-                            <lsb>7</lsb>
-                            <description><![CDATA[Sets encrypt/decrypt operation. `0` = encrypt, `1` = decrypt]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>STATUS</name>
-                    <addressOffset>0x0054</addressOffset>
-                    <resetValue>0x09</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>idle</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Core idle]]></description>
-                        </field>
-                        <field>
-                            <name>stall</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Core stall]]></description>
-                        </field>
-                        <field>
-                            <name>output_valid</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Data output valid]]></description>
-                        </field>
-                        <field>
-                            <name>input_ready</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Input value has been latched and it is OK to update to a new value]]></description>
-                        </field>
-                        <field>
-                            <name>operation_rbk</name>
-                            <msb>4</msb>
-                            <bitRange>[4:4]</bitRange>
-                            <lsb>4</lsb>
-                            <description><![CDATA[Operation readback]]></description>
-                        </field>
-                        <field>
-                            <name>mode_rbk</name>
-                            <msb>7</msb>
-                            <bitRange>[7:5]</bitRange>
-                            <lsb>5</lsb>
-                            <description><![CDATA[Actual mode selected by hardware readback]]></description>
-                        </field>
-                        <field>
-                            <name>key_len_rbk</name>
-                            <msb>10</msb>
-                            <bitRange>[10:8]</bitRange>
-                            <lsb>8</lsb>
-                            <description><![CDATA[Actual key length selected by the hardware readback]]></description>
-                        </field>
-                        <field>
-                            <name>manual_operation_rbk</name>
-                            <msb>11</msb>
-                            <bitRange>[11:11]</bitRange>
-                            <lsb>11</lsb>
-                            <description><![CDATA[Manual operation readback]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>TRIGGER</name>
-                    <addressOffset>0x0058</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>start</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Triggers an AES computation if manual_start is selected]]></description>
-                        </field>
-                        <field>
-                            <name>key_clear</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Clears the key]]></description>
-                        </field>
-                        <field>
-                            <name>iv_clear</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Clears the IV]]></description>
-                        </field>
-                        <field>
-                            <name>data_in_clear</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Clears data input]]></description>
-                        </field>
-                        <field>
-                            <name>data_out_clear</name>
-                            <msb>4</msb>
-                            <bitRange>[4:4]</bitRange>
-                            <lsb>4</lsb>
-                            <description><![CDATA[Clears the data output]]></description>
-                        </field>
-                        <field>
-                            <name>prng_reseed</name>
-                            <msb>5</msb>
-                            <bitRange>[5:5]</bitRange>
-                            <lsb>5</lsb>
-                            <description><![CDATA[Reseed PRNG]]></description>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x5c</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
             <name>SHA512</name>
-            <baseAddress>0xF001D000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
@@ -4964,12 +4720,12 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>12</value>
+                <value>13</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>ENGINE</name>
-            <baseAddress>0xF001E000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>ENGINE</groupName>
             <registers>
                 <register>
@@ -5193,12 +4949,12 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>13</value>
+                <value>14</value>
             </interrupt>
         </peripheral>
         <peripheral>
             <name>JTAG</name>
-            <baseAddress>0xF001F000</baseAddress>
+            <baseAddress>0xF0020000</baseAddress>
             <groupName>JTAG</groupName>
             <registers>
                 <register>
@@ -5256,7 +5012,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
         </peripheral>
         <peripheral>
             <name>WDT</name>
-            <baseAddress>0xF0020000</baseAddress>
+            <baseAddress>0xF0021000</baseAddress>
             <groupName>WDT</groupName>
             <registers>
                 <register>
@@ -5299,10 +5055,46 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>STATE</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>enabled</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[WDT has been enabled]]></description>
+                        </field>
+                        <field>
+                            <name>armed1</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[WDT in the armed1 state]]></description>
+                        </field>
+                        <field>
+                            <name>armed2</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[WDT in the armed2 state]]></description>
+                        </field>
+                        <field>
+                            <name>disarmed</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[WDT in the disarmed state]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x8</size>
+                <size>0xc</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
