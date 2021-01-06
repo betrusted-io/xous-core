@@ -74,6 +74,8 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
 
+    std::fs::copy(path, std::path::Path::new("emulation/renode.svd"))?;
+
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &[
