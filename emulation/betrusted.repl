@@ -4,28 +4,22 @@ cpu: CPU.VexRiscv @ sysbus
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
 
 uart: UART.LiteX_UART @ {
-        sysbus 0x60006000;
-        sysbus 0xF0006000 // shadow
+        sysbus 0x60007000;
+        sysbus 0xF0007000 // shadow
     }
     -> cpu@1002
 
 uartconsole: UART.LiteX_UART @ {
-        sysbus 0x60007000;
-        sysbus 0xF0007000 // shadow
+        sysbus 0x60009000;
+        sysbus 0xF0009000 // shadow
     }
     -> cpu@1003
 
 uartserver0: UART.LiteX_UART @ {
-        sysbus 0x60008000;
-        sysbus 0xF0008000 // shadow
+        sysbus 0x6000B000;
+        sysbus 0xF000B000 // shadow
     }
     -> cpu@1004
-
-uartserver1: UART.LiteX_UART @ {
-        sysbus 0x60009000;
-        sysbus 0xF0009000 // shadow
-    }
-    -> cpu@1005
 
 timer0: Timers.LiteX_Timer_32 @ {
         sysbus 0x60002000;
@@ -49,20 +43,20 @@ sram: Memory.MappedMemory @ {
 fbmem: Memory.MappedMemory @ sysbus 0xB0000000
     size: 0x6000
 
-memlcd: Video.BetrustedLCD @ sysbus 0xF000C000
+memlcd: Video.BetrustedLCD @ sysbus 0xF000E000
 
-keyboard: Input.BetrustedKbd @ sysbus 0xF0015000
+keyboard: Input.BetrustedKbd @ sysbus 0xF0017000
 
-trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001A000
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF001B000
 
-trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF0019000
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001C000
 
 cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
     frequency: 100000000
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
 
-ticktimer: Timers.TickTimer @ sysbus 0xF0012000
+ticktimer: Timers.TickTimer @ sysbus 0xF0014000
     periodInMs: 1
     -> cpu @ 1008
 
@@ -78,4 +72,3 @@ flash_mem: Memory.MappedMemory @ {
 sysbus:
     init:
         Tag <0xF0000000 0x1000> "CTRL"
-        Tag <0xF001B000 0x1000> "TRNG"
