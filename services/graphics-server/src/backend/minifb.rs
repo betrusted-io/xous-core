@@ -76,27 +76,19 @@ impl XousDisplay {
     }
 
     fn emulated_to_native(&mut self) {
-        for y in 0..HEIGHT {
-            for x in 0..WIDTH {
-                // print!("({}, {}): {} @ {}: ", x, y, (x + y * 44 * 8) / 8, self.emulated_buffer.len());
-                // println!("{:08x}", self.emulated_buffer[(x + y * 44 * 8) / 8]);
-                if ((x + y * 11 * 32) / 32) >= self.emulated_buffer.len() {
-                    panic!(
-                        "Value exceeds src buffer ({}, {}) @ {}",
-                        x,
-                        y,
-                        self.emulated_buffer.len()
-                    );
-                }
-                if (x + y * WIDTH) > self.native_buffer.len() {
-                    panic!("Value exceeds dest buffer");
-                }
-                self.native_buffer[x + y * WIDTH] =
-                    if ((self.emulated_buffer[(x + y * 11 * 32) / 32] >> (x % 32)) & 1) > 0 {
+        for (dest_row, src_row) in self
+            .native_buffer
+            .chunks_mut(WIDTH as _)
+            .zip(self.emulated_buffer.chunks(WIDTH_WORDS as _))
+        {
+            for (dest_cell, src_cell) in dest_row.chunks_mut(32).zip(src_row) {
+                for (bit, dest) in dest_cell.iter_mut().enumerate() {
+                    *dest = if src_cell & (1 << bit) != 0 {
                         DARK_COLOUR
                     } else {
                         LIGHT_COLOUR
                     };
+                }
             }
         }
     }
