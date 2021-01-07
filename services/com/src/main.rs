@@ -250,6 +250,7 @@ fn xmain() -> ! {
     } else {
         agent_conn = 0; // bogus value
     }
+    info!("COM: assigned SID: {:?}", com_sid);
 
     // Create a new com object
     let mut com = XousCom::new();
