@@ -81,7 +81,7 @@ asking for access to the `ticktimer` or other public services.
 B. flat denial: `xous-name-server` simply returns a message saying the
 request was denied by setting `success` to `false`. This is also the case
 when the request is malformed or incorrect. No information shall be leaked about the
-nature of the denial. Denials are also delayed to the nearest 0.5 second interval since boot
+nature of the denial. Denials are also delayed to the nearest 0.1 second interval since boot
 to eliminate side channels and to rate limit fuzzing requests. Some
 services (such as the key server) are restricted to only a set of
 trusted process loaded at boot, and therefore it should not be

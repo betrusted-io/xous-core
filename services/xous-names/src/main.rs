@@ -12,6 +12,8 @@ use heapless::consts::*;
 
 use log::{error, info};
 
+const FAIL_TIMEOUT_MS: u64 = 100;
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -43,8 +45,8 @@ fn xmain() -> ! {
                     registration.success = true;
                 } else {
                     registration.success = false;
-                    // compute the next interval that is 0.5s away
-                    let target_time: u64 = ((ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() / 500) + 1) * 500;
+                    // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
+                    let target_time: u64 = ((ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() / FAIL_TIMEOUT_MS) + 1) * FAIL_TIMEOUT_MS;
                     info!("NS: request failed, waiting for deterministic timeout");
                     while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() < target_time {
                         xous::yield_slice();
@@ -56,9 +58,17 @@ fn xmain() -> ! {
                 let lookup: &mut Lookup = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Lookup)
                 };
+                /*
                 info!("NS: Lookup request for {}", lookup.name);
-                // lookup.cid = 1337;
-                lookup.success = true;
+                if let Ok(server_sid) = name_table.get(lookup) {
+                    lookup.success = true;
+                    let sender_pid = &envelope.sender.pid()?;
+                    let connection_id = xous::connect_for_process(sender_pid, server_sid).expect("NS: can't broker connection");
+                    lookup.cid = connection_id;
+                } else {
+                    lookup.success = false;
+                    // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
+                }*/
             } else {
                 error!("NS: unknown message ID received");
             }

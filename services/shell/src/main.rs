@@ -345,32 +345,25 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
+        /* test code to exhaust memory allocation */
+        let mut iter = 0;
+        info!("Test memory allocation");
+        loop {
+            let lookup = Lookup::new();
+            let mut sendable_lookup = Sendable::new(lookup)
+            .expect("can't create sendable lookup structure");
+            write!(sendable_lookup.name, "A test Name!").unwrap();
+            sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
+            info!("memtest: iter {}", iter);
+            iter += 1;
+        }
+
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
                 info!("Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
-
-                info!("Test NS registration");
-                let registration = Registration::new();
-                let mut sendable_registration = Sendable::new(registration)
-                    .expect("can't create sendable registration structure");
-                write!(sendable_registration.name, "A test Name!").unwrap();
-                info!("namserver registration input: {:?}", sendable_registration.success);
-                sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
-                info!("nameserver registration result: {:?}, {:?}", sendable_registration.success, sendable_registration.sid);
-
-                info!("Test NS lookup");
-                let lookup = Lookup::new();
-                info!("making sendable");
-                let mut sendable_lookup = Sendable::new(lookup)
-                   .expect("can't create sendable lookup structure");
-                info!("making a test name");
-                write!(sendable_lookup.name, "A test Name!").unwrap();
-                info!("nameserver lookup input: {:?}", sendable_lookup.success);
-                sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
-                info!("nameserver lookup result: {:?}, {:?}", sendable_lookup.success, sendable_lookup.cid);
             }
         } else {
             error!("error requesting ticktimer!")

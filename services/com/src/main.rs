@@ -243,6 +243,16 @@ fn xmain() -> ! {
     let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
     let shell_conn = xous::connect(shell_id).unwrap();
 
+    /*
+    info!("Test NS registration");
+    let registration = Registration::new();
+    let mut sendable_registration = Sendable::new(registration)
+        .expect("can't create sendable registration structure");
+    write!(sendable_registration.name, "A test Name!").unwrap();
+    info!("namserver registration input: {:?}", sendable_registration.success);
+    sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
+    info!("nameserver registration result: {:?}, {:?}", sendable_registration.success, sendable_registration.sid);
+*/
     let agent_conn: usize;
     if cfg!(feature = "fccagent") {
         let agent_id = xous::SID::from_bytes(b"fcc-agent-server").unwrap();
