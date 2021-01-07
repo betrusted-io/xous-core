@@ -126,7 +126,8 @@ pub extern "C" fn trap_handler(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x}",
                     pid, ex, pc, addr
                 );
-                let entry = crate::arch::mem::pagetable_entry(addr).unwrap_or_else(|x| {
+                let virt = addr & !0xfff;
+                let entry = crate::arch::mem::pagetable_entry(virt).unwrap_or_else(|x| {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
                     panic!(
@@ -153,7 +154,6 @@ pub extern "C" fn trap_handler(
                         flush_mmu();
 
                         // Zero-out the page
-                        let virt = addr & !0xfff;
                         (virt as *mut usize)
                             .write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
 
