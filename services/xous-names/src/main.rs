@@ -58,17 +58,19 @@ fn xmain() -> ! {
                 let lookup: &mut Lookup = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Lookup)
                 };
-                /*
                 info!("NS: Lookup request for {}", lookup.name);
-                if let Ok(server_sid) = name_table.get(lookup) {
-                    lookup.success = true;
-                    let sender_pid = &envelope.sender.pid()?;
-                    let connection_id = xous::connect_for_process(sender_pid, server_sid).expect("NS: can't broker connection");
-                    lookup.cid = connection_id;
+                if let Some(server_sid) = name_table.get(&lookup.name) {
+                    let sender_pid = envelope.sender.pid().expect("NS: can't extract sender PID on Lookup");
+                    match xous::connect_for_process(sender_pid, *server_sid).expect("NS: can't broker connection") {
+                        xous::Result::ConnectionID(connection_id) => {
+                            lookup.cid = connection_id;
+                            lookup.success = true},
+                        _ => lookup.success = false
+                    }
                 } else {
                     lookup.success = false;
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
-                }*/
+                }
             } else {
                 error!("NS: unknown message ID received");
             }

@@ -357,7 +357,7 @@ fn shell_main() -> ! {
             info!("memtest: iter {}", iter);
             iter += 1;
         }
-
+        
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {

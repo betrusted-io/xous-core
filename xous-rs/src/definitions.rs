@@ -154,6 +154,7 @@ pub enum Error {
     InvalidThread = 20,
     InvalidPID = 21,
     UnknownError = 22,
+    AccessDenied = 23,
 }
 
 impl Error {
@@ -182,6 +183,7 @@ impl Error {
             19 => ShareViolation,
             20 => InvalidThread,
             21 => InvalidPID,
+            23 => AccessDenied,
             _ => UnknownError,
         }
     }
@@ -210,6 +212,7 @@ impl Error {
             ShareViolation => 19,
             InvalidThread => 20,
             InvalidPID => 21,
+            AccessDenied => 23,
             UnknownError => usize::MAX,
         }
     }

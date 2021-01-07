@@ -10,6 +10,7 @@ xous = { path = "../../xous-rs" }
 heapless = "0.5"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
 log = "0.4"
 com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "a9e05f414accef08348b77be6fc0f668b319e6ff" }
 #com_rs = { path = "../../../betrusted-ec/sw/com_rs" }
