@@ -122,8 +122,8 @@ pub extern "C" fn trap_handler(
         match ex {
             RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
                 #[cfg(any(feature = "debug-print", feature = "print-panics"))]
-                println!(
-                    "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x}",
+                print!(
+                    "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
                     pid, ex, pc, addr
                 );
                 let virt = addr & !0xfff;
@@ -164,6 +164,7 @@ pub extern "C" fn trap_handler(
                         flush_mmu();
                     };
 
+                    println!("Handing page {:08x} to process", new_page);
                     ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(
                             current_pid().get() == 1,
@@ -171,6 +172,7 @@ pub extern "C" fn trap_handler(
                         )
                     });
                 }
+                println!("Page was not allocated");
             }
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
                 // If we hit this address, then an ISR has just returned.  Since

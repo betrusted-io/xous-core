@@ -228,7 +228,7 @@ pub enum SysCall {
     /// * **ServerExists**: The server hash is already in use.
     CreateServerWithAddress(SID /* server hash */),
 
-    /// Connect to a server.   This turns a 128-bit Serever ID into a 32-bit
+    /// Connect to a server.   This turns a 128-bit Server ID into a 32-bit
     /// Connection ID. Blocks until the server is available.
     ///
     /// # Errors
@@ -236,7 +236,7 @@ pub enum SysCall {
     /// None
     Connect(SID /* server id */),
 
-    /// Try to connect to a server.   This turns a 128-bit Serever ID into a 32-bit
+    /// Try to connect to a server.   This turns a 128-bit Server ID into a 32-bit
     /// Connection ID.
     ///
     /// # Errors
@@ -275,7 +275,7 @@ pub enum SysCall {
     /// Create a new Server
     ///
     /// This will return a 128-bit Server ID that can be used to send messages
-    /// to this server. The returned Derver ID is random.
+    /// to this server. The returned Server ID is random.
     ///
     /// # Returns
     ///

@@ -23,7 +23,6 @@ machine StartGdbServer 3333 true
 showAnalyzer uart
 showAnalyzer uartconsole
 showAnalyzer uartserver0
-showAnalyzer uartserver1
 showAnalyzer memlcd
 
 logLevel -1 kbd
