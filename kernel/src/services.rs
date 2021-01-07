@@ -1367,6 +1367,13 @@ impl SystemServices {
         self.create_server_with_address(pid, sid)
     }
 
+    /// Generate a random server ID and return it to the caller. Doesn't create
+    /// any processes.
+    pub fn create_server_id(&mut self) -> Result<SID, xous_kernel::Error> {
+        let sid = SID::from_u32(arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32());
+        Ok(sid)
+    }
+
     /// Connect to a server on behalf of another process.
     pub fn connect_process_to_server(&mut self, target_pid: PID, sid: SID)  -> Result<CID, xous_kernel::Error>{
         let original_pid = crate::arch::process::current_pid();

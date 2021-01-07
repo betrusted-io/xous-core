@@ -19,7 +19,8 @@ pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
     write!(sendable_registration.name, "{}", name).unwrap();
     sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
 
-    ticktimer_server::sleep_ms(ticktimer_conn, 100).expect("Failed to wait for server boot");
+    xous::create_server_with_sid(sendable_registration.sid).expect("can't auto-register server");
+    ticktimer_server::sleep_ms(ticktimer_conn, 250).expect("Failed to wait for server boot");
 
     if sendable_registration.success {
         Ok(sendable_registration.sid)
@@ -48,4 +49,10 @@ pub fn request_connection(name: &str) -> Result<xous::CID, xous::Error> {
             Err(xous::Error::ServerNotFound)
         }
     }
+}
+
+pub fn init_wait() {
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    ticktimer_server::sleep_ms(ticktimer_conn, 250).expect("Failed to wait for server boot");
 }

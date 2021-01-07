@@ -237,10 +237,11 @@ fn xmain() -> ! {
 
     log_server::init_wait().unwrap();
 
+    info!("COM: registering com SID");
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
 
-    //  let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
-    //  let shell_conn = xous::connect(shell_id).unwrap();
+    //let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
+    //let shell_conn = xous::connect(shell_id).unwrap();
     let shell_conn = xous_names::request_connection(xous::names::SERVER_NAME_SHELL).expect("COM: couldn't establish shell connection");
 
     let agent_conn: usize;
@@ -258,7 +259,7 @@ fn xmain() -> ! {
     info!("COM: starting main loop");
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
-        // info!("COM: Message: {:?}", envelope);
+        info!("COM: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("COM: Opcode: {:?}", opcode);
             match opcode {

@@ -288,6 +288,10 @@ pub enum SysCall {
     ///                    be created.
     CreateServer,
 
+    /// Returns a 128-bit server ID, but does not create the server itself.
+    /// basically an API to access the TRNG inside the kernel.
+    CreateServerId,
+
     /// Establish a connection in the given process to the given server. This
     /// call can be used by a nameserver to make server connections without
     /// disclosing SIDs.
@@ -329,6 +333,7 @@ pub enum SysCallNumber {
     TryReceiveMessage = 28,
     CreateServer = 29,
     ConnectForProcess = 30,
+    CreateServerId = 31,
     Invalid,
 }
 
@@ -365,6 +370,7 @@ impl SysCallNumber {
             28 => TryReceiveMessage,
             29 => CreateServer,
             30 => ConnectForProcess,
+            31 => CreateServerId,
             _ => Invalid,
         }
     }
@@ -443,6 +449,8 @@ impl SysCall {
                     0,
                 ]
             }
+            SysCall::CreateServerId =>
+                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::ReturnToParent(a1, a2) => [
                 SysCallNumber::ReturnToParent as usize,
                 a1.get() as usize,
@@ -856,6 +864,7 @@ impl SysCall {
                 PID::new(a1 as _).ok_or(Error::InvalidSyscall)?,
                 SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
             ),
+            SysCallNumber::CreateServerId => SysCall::CreateServerId,
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1085,6 +1094,27 @@ pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result
     }
 }
 
+/// Create a new server with the given SID.  This enables other processes to
+/// connect to this server to send messages.  The name is a unique 128-bit SID.
+/// That way, if a process crashes and is restarted, it can keep the same
+/// name.  However, other processes cannot spoof this process.
+///
+/// # Errors
+///
+/// * **OutOfMemory**: No more servers may be created
+/// * **ServerExists**: A server has already registered with that name
+/// * **InvalidString**: The name was not a valid UTF-8 string
+pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServerWithAddress(sid))?;
+    if let Result::NewServerID(sid, _cid) = result {
+        Ok(sid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
 /// Create a new server with a random name.  This enables other processes to
 /// connect to this server to send messages.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
@@ -1096,6 +1126,24 @@ pub fn create_server_with_address(name_bytes: &[u8; 16]) -> core::result::Result
 pub fn create_server() -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {
+        Ok(sid)
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Fetch a random server ID from the kernel. This is used
+/// exclusively by the name server.  A random server ID is generated
+/// by the kernel and returned to the caller. This address can then be registered
+/// to a namserver by the caller in their memory space.
+///
+/// # Errors
+///
+pub fn create_server_id() -> core::result::Result<SID, Error> {
+    let result = rsyscall(SysCall::CreateServerId)?;
+    if let Result::ServerID(sid) = result {
         Ok(sid)
     } else if let Result::Error(e) = result {
         Err(e)

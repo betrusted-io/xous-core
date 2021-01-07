@@ -105,7 +105,10 @@ static BATT_STATS_CURRENT: AtomicI16 = AtomicI16::new(-150);
 static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
 static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
-fn com_thread(shell_server: xous::SID) {
+fn com_thread(_arg: usize) {
+    info!("SHELL|com_thread: registering shell SID");
+    let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
+
     info!("SHELL|com_thread: starting COM response handler thread");
     loop {
         let envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
@@ -130,37 +133,43 @@ fn com_thread(shell_server: xous::SID) {
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
 
-    let shell_sid = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
-
-    // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
-    let com_id = xous::SID::from_bytes(b"com             ").unwrap();
+    //let com_id = xous::SID::from_bytes(b"com             ").unwrap();
 
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
-    let com_conn = xous::connect(com_id).unwrap();
 
     info!(
-        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {} Com: {}",
-        log_conn, graphics_conn, ticktimer_conn, com_conn,
+        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {}",
+        log_conn, graphics_conn, ticktimer_conn,
     );
 
-    assert_ne!(
-        log_conn, graphics_conn,
-        "SHELL: graphics and log connections are the same!"
-    );
-
-    assert_ne!(
-        ticktimer_conn, graphics_conn,
-        "SHELL: graphics and ticktimer connections are the same!"
-    );
+    let com_conn = xous_names::request_connection(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
+    info!("SHELL: connected to COM: {:?}", com_conn);
 
     // make a thread to catch responses from the COM
-    xous::create_thread_simple(com_thread, shell_sid).unwrap();
+    xous::create_thread_simple(com_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
+
+    //let shell_server2 = xous_names::register_name("unused server").expect("SHELL: can't register server");
+    //info!("SHELL: unused server {:?}", shell_server2);
+
+    // xous_names::init_wait();
+    // ticktimer_server::sleep_ms(ticktimer_conn, 250).expect("Failed to wait for server boot");
+
+    //let com_conn = xous::connect(com_id).unwrap();
+    /*
+    let com_conn: xous::CID;
+    loop {
+        info!("SHELL: attempting COM connection");
+        match xous_names::request_connection(xous::names::SERVER_NAME_COM) {
+            Ok(cc) => {com_conn = cc; break;},
+            _ => xous::yield_slice(),
+        }
+    }*/
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
@@ -358,7 +367,7 @@ fn shell_main() -> ! {
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
-                info!("Requesting batt stats from COM");
+                info!("SHELL: Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
             }
         } else {

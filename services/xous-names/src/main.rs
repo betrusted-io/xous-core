@@ -11,6 +11,7 @@ use heapless::FnvIndexMap;
 use heapless::consts::*;
 
 use log::{error, info};
+use core::sync::atomic::Ordering;
 
 const FAIL_TIMEOUT_MS: u64 = 100;
 
@@ -18,6 +19,7 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
+    info!("NS: creating my address");
     let name_server =
         xous::create_server_with_address(b"xous-name-server").expect("Couldn't create xousnames-server");
 
@@ -38,7 +40,8 @@ fn xmain() -> ! {
                 };
                 info!("NS: registration request for {}", registration.name);
                 if !name_table.contains_key(&registration.name) {
-                    let new_sid = xous::create_server().expect("NS: create server failed, maybe OOM?");
+                    let sender_pid = envelope.sender.pid().expect("NS: can't extract sender PID on Lookup");
+                    let new_sid = xous::create_server_id().expect("NS: create server failed, maybe OOM?");
                     name_table.insert(registration.name, new_sid).expect("NS: register name failure, maybe out of HashMap capacity?");
                     info!("NS: request successful, SID is {:?}", new_sid);
                     registration.sid = new_sid; // query: do we even need to return this?
