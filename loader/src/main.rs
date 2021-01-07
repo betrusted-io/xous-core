@@ -220,18 +220,24 @@ impl MiniElf {
         allocator.change_owner(pid as XousPid, satp_address);
 
         // Turn the satp address into a pointer
+        println!("    Pagetable");
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
         allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W);
 
-        // Allocate context for this process
-        let context_address = allocator.alloc() as usize;
-        allocator.map_page(satp, context_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        // Allocate thread 1 for this process
+        println!("    Thread");
+        let thread_address = allocator.alloc() as usize;
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Ensure the pagetables are mapped as well
+        println!("    Pagetables");
         let pt_addr = allocator.alloc() as usize;
         allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
+        allocator.change_owner(pid as XousPid, pt_addr as usize);
 
         // Allocate stack pages.
+        println!("    Stack");
         for i in 0..STACK_PAGE_COUNT {
             let sp_page = allocator.alloc() as usize;
             allocator.map_page(
@@ -257,6 +263,7 @@ impl MiniElf {
         // Example: Page starts at oxf0c0 and is 128 bytes long
         // 1. Copy 128 bytes to page 1
         for section in self.sections {
+            println!("    Section @ {:08x}", section.virt as usize);
             let flag_defaults = FLG_U
                 | FLG_R
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
@@ -273,6 +280,7 @@ impl MiniElf {
             // this section and the previous one are all zeroed out.
             if this_page != page_addr {
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
                 top -= PAGE_SIZE;
                 this_page += PAGE_SIZE;
@@ -288,6 +296,7 @@ impl MiniElf {
             // Part 2: Copy any full pages.
             while bytes_to_copy > PAGE_SIZE {
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
                 top -= PAGE_SIZE;
                 this_page += PAGE_SIZE;
@@ -298,9 +307,9 @@ impl MiniElf {
             if bytes_to_copy > 0 {
                 let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
+                allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
                 top -= PAGE_SIZE;
-                // this_page += PAGE_SIZE;
             }
 
             previous_addr = section.virt as usize + section.len();
@@ -397,14 +406,17 @@ impl ProgramDescription {
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
         allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W);
+        allocator.change_owner(pid as XousPid, satp_address as usize);
 
         // Allocate context for this process
-        let context_address = allocator.alloc() as usize;
-        allocator.map_page(satp, context_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        let thread_address = allocator.alloc() as usize;
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Ensure the pagetables are mapped as well
         let pt_addr = allocator.alloc() as usize;
         allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
+        allocator.change_owner(pid as XousPid, pt_addr as usize);
 
         // Allocate stack pages.
         for i in 0..STACK_PAGE_COUNT {
@@ -921,6 +933,7 @@ impl BootConfig {
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE,
                 FLG_R | FLG_W,
             );
+            self.change_owner(1 as XousPid, new_addr as usize);
         }
     }
 }
@@ -1112,9 +1125,6 @@ pub fn phase_2(cfg: &mut BootConfig) {
         if tag.name == u32::from_le_bytes(*b"IniE") {
             let inie = MiniElf::new(&tag);
             println!("Mapping program into memory");
-            // let init = unsafe { &*(tag.data.as_ptr() as *const ProgramDescription) };
-            // let load_size_rounded = ((init.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
-            //     + (((init.data_size + init.bss_size) as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1));
             process_offset -= inie.load(cfg, process_offset, pid);
             pid += 1;
         } else if tag.name == u32::from_le_bytes(*b"XKrn") {
@@ -1142,6 +1152,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             addr + KERNEL_ARGUMENT_OFFSET,
             FLG_R | FLG_W,
         );
+        cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
     }
 
     // Copy the kernel's "MMU Page 1023" into every process.
