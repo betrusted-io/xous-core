@@ -5,11 +5,9 @@ use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;
 use graphics_server::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
-use xous_names::api::{Registration, Lookup};
 
 use log::{error, info};
 use xous::String;
-use xous::ipc::*;
 
 use core::convert::TryFrom;
 
@@ -107,9 +105,7 @@ static BATT_STATS_CURRENT: AtomicI16 = AtomicI16::new(-150);
 static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
 static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
-fn com_thread(_arg: Option<u32>) {
-    let shell_server = xous::create_server_with_address(b"shell           ")
-        .expect("Couldn't create Shell server");
+fn com_thread(shell_server: xous::SID) {
     info!("SHELL|com_thread: starting COM response handler thread");
     loop {
         let envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
@@ -134,18 +130,18 @@ fn com_thread(_arg: Option<u32>) {
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
 
+    let shell_sid = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
+
     // let log_server_id = xous::SID::from_bytes(b"xous-logs-output").unwrap();
     let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let com_id = xous::SID::from_bytes(b"com             ").unwrap();
-    let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
 
     let log_conn = xous::connect(log_server_id).unwrap();
     let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
     let com_conn = xous::connect(com_id).unwrap();
-    let ns_conn = xous::connect(ns_id).unwrap();
 
     info!(
         "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {} Com: {}",
@@ -163,7 +159,7 @@ fn shell_main() -> ! {
     );
 
     // make a thread to catch responses from the COM
-    xous::create_thread_simple(com_thread, None).unwrap();
+    xous::create_thread_simple(com_thread, shell_sid).unwrap();
     info!("SHELL: COM responder thread started");
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
@@ -345,7 +341,7 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
-        /* test code to exhaust memory allocation */
+        /* test code to exhaust memory allocation
         let mut iter = 0;
         info!("Test memory allocation");
         loop {
@@ -357,7 +353,7 @@ fn shell_main() -> ! {
             info!("memtest: iter {}", iter);
             iter += 1;
         }
-        
+        */
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {

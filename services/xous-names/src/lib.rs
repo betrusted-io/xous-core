@@ -6,7 +6,10 @@ use xous::ipc::*;
 use api::{Registration, Lookup};
 use core::fmt::Write;
 
-pub fn register_name(name: &str) -> Result<bool, xous::Error> {
+pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
     let ns_conn = xous::connect(ns_id).unwrap();
 
@@ -16,7 +19,13 @@ pub fn register_name(name: &str) -> Result<bool, xous::Error> {
     write!(sendable_registration.name, "{}", name).unwrap();
     sendable_registration.lend_mut(ns_conn, sendable_registration.mid()).expect("nameserver registration failure!");
 
-    Ok(sendable_registration.success)
+    ticktimer_server::sleep_ms(ticktimer_conn, 100).expect("Failed to wait for server boot");
+
+    if sendable_registration.success {
+        Ok(sendable_registration.sid)
+    } else {
+        Err(xous::Error::InternalError)
+    }
 }
 
 /// note: if this throws an AccessDenied error, you can retry with a request_authenticat_connection() call (to be written)

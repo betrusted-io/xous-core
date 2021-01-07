@@ -16,6 +16,8 @@ mod messages;
 pub mod string;
 pub mod syscall;
 
+pub mod names;
+
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;

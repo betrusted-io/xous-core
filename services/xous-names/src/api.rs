@@ -107,7 +107,7 @@ impl AsRef<str> for XousServerName {
 #[repr(C)]
 pub struct Registration {
     mid: usize,
-    pub sid: SID, // query: do we even want to return this to the registering process??
+    pub sid: SID,
 
     // we use fixed-length, u8-only records to pass server names. This is different from
     // your typical Rust String object; but, a key restriction on IPC calls is that the size
