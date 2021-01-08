@@ -158,7 +158,6 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
         "graphics-server",
         "ticktimer-server",
         "com",
-        "xous-names",
     ] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
