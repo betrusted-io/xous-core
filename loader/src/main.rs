@@ -468,7 +468,7 @@ impl ProgramDescription {
                 self.text_offset as usize + offset,
                 flag_defaults | FLG_X,
             );
-            allocator.change_owner(pid as XousPid, load_offset + offset);
+            allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
 
         // Map the process data section into RAM.
