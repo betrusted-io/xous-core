@@ -58,6 +58,8 @@ set -- "${POSITIONAL[@]}"
 DESTDIR=code/precursors
 
 cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
+cp ../betrusted-soc/build/software/soc.svd svd2utra/examples/soc.svd
+cp ../betrusted-soc/build/software/soc.svd emulation/renode.svd
 
 if [ $? -ne 0 ]
 then
