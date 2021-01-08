@@ -449,16 +449,15 @@ pub union sl_wfx_indication_data_u {
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
-    let agent_server_sid = xous::create_server_with_address(b"fcc-agent-server").expect("Couldn't create FCC Agent server");
-    let agent_server_client = xous::connect(xous::SID::from_bytes(b"fcc-agent-server").unwrap()).expect("couldn't connect to self");
-
-    let mut uart = Uart::new(agent_server_client);
-
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
-    let com_id = xous::SID::from_bytes(b"com             ").unwrap();
-    let com_conn = xous::connect(com_id).unwrap();
+    let agent_server_sid = xous_names::register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
+    let agent_server_client = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+
+    let mut uart = Uart::new(agent_server_client);
+
+    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("FCCAGENT: can't connect to COM");
 
     let mut cmd_string: String<U2048> = String::from("");
 

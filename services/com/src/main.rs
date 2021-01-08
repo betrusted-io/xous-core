@@ -237,21 +237,17 @@ fn xmain() -> ! {
 
     log_server::init_wait().unwrap();
 
-    info!("COM: registering com SID");
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
+    info!("COM: registered with NS -- {:?}", com_sid);
 
-    //let shell_id = xous::SID::from_bytes(b"shell           ").unwrap();
-    //let shell_conn = xous::connect(shell_id).unwrap();
-    let shell_conn = xous_names::request_connection(xous::names::SERVER_NAME_SHELL).expect("COM: couldn't establish shell connection");
+    let shell_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("COM: couldn't establish shell connection");
 
     let agent_conn: usize;
     if cfg!(feature = "fccagent") {
-        let agent_id = xous::SID::from_bytes(b"fcc-agent-server").unwrap();
-        agent_conn = xous::connect(agent_id).expect("Couldn't connect to fcc-agent! Are you building with the right features enabled?");
+        agent_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
     } else {
         agent_conn = 0; // bogus value
     }
-    info!("COM: assigned SID: {:?}", com_sid);
 
     // Create a new com object
     let mut com = XousCom::new();

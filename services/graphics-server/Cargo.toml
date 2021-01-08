@@ -8,6 +8,7 @@ description = "Manage the video output"
 [dependencies]
 xous = { path = "../../xous-rs" }
 log-server = { path = "../log-server" }
+xous-names = { path = "../xous-names" }
 log = "0.4"
 blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
 # blitstr = { path = "../../../blitstr" }

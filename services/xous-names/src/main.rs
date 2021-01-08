@@ -11,7 +11,6 @@ use heapless::FnvIndexMap;
 use heapless::consts::*;
 
 use log::{error, info};
-use core::sync::atomic::Ordering;
 
 const FAIL_TIMEOUT_MS: u64 = 100;
 
@@ -19,7 +18,6 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
-    info!("NS: creating my address");
     let name_server =
         xous::create_server_with_address(b"xous-name-server").expect("Couldn't create xousnames-server");
 
@@ -38,9 +36,8 @@ fn xmain() -> ! {
                 let registration: &mut Registration = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Registration)
                 };
-                info!("NS: registration request for {}", registration.name);
+                info!("NS: registration request for '{}'", registration.name);
                 if !name_table.contains_key(&registration.name) {
-                    let sender_pid = envelope.sender.pid().expect("NS: can't extract sender PID on Lookup");
                     let new_sid = xous::create_server_id().expect("NS: create server failed, maybe OOM?");
                     name_table.insert(registration.name, new_sid).expect("NS: register name failure, maybe out of HashMap capacity?");
                     info!("NS: request successful, SID is {:?}", new_sid);
@@ -61,16 +58,27 @@ fn xmain() -> ! {
                 let lookup: &mut Lookup = unsafe {
                     &mut *(m.buf.as_mut_ptr() as *mut Lookup)
                 };
-                info!("NS: Lookup request for {}", lookup.name);
+                info!("NS: Lookup request for '{}'", lookup.name);
                 if let Some(server_sid) = name_table.get(&lookup.name) {
                     let sender_pid = envelope.sender.pid().expect("NS: can't extract sender PID on Lookup");
                     match xous::connect_for_process(sender_pid, *server_sid).expect("NS: can't broker connection") {
                         xous::Result::ConnectionID(connection_id) => {
+                            info!("NS: lookup success, returning connection {}", connection_id);
                             lookup.cid = connection_id;
                             lookup.success = true},
-                        _ => lookup.success = false
+                        _ => {
+                            info!("NS: Can't find request '{}' in table, dumping table:", lookup.name);
+                            for (key, val) in name_table.iter() {
+                                info!("NS: name: '{}', sid: '{:?}'", key, val);
+                            }
+                            lookup.success = false;
+                        }
                     }
                 } else {
+                    info!("NS: Can't find request '{}' in table, dumping table:", lookup.name);
+                    for (key, val) in name_table.iter() {
+                        info!("NS: name: '{}', sid: '{:?}'", key, val);
+                    }
                     lookup.success = false;
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                 }

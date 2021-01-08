@@ -133,43 +133,23 @@ fn com_thread(_arg: usize) {
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
 
-    let graphics_server_id = xous::SID::from_bytes(b"graphics-server ").unwrap();
+    info!("SHELL: ticktimer");
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
-    //let com_id = xous::SID::from_bytes(b"com             ").unwrap();
-
-    let log_conn = xous::connect(log_server_id).unwrap();
-    let graphics_conn = xous::connect(graphics_server_id).unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
+    let graphics_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("SHELL: can't connect to COM");
+
     info!(
-        "SHELL: Connected to Log server: {}  Graphics server: {}  Ticktimer server: {}",
-        log_conn, graphics_conn, ticktimer_conn,
+        "SHELL: Connected to Graphics server: {}  Ticktimer server: {}",
+        graphics_conn, ticktimer_conn,
     );
 
-    let com_conn = xous_names::request_connection(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
+    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
     info!("SHELL: connected to COM: {:?}", com_conn);
 
     // make a thread to catch responses from the COM
     xous::create_thread_simple(com_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
-
-    //let shell_server2 = xous_names::register_name("unused server").expect("SHELL: can't register server");
-    //info!("SHELL: unused server {:?}", shell_server2);
-
-    // xous_names::init_wait();
-    // ticktimer_server::sleep_ms(ticktimer_conn, 250).expect("Failed to wait for server boot");
-
-    //let com_conn = xous::connect(com_id).unwrap();
-    /*
-    let com_conn: xous::CID;
-    loop {
-        info!("SHELL: attempting COM connection");
-        match xous_names::request_connection(xous::names::SERVER_NAME_COM) {
-            Ok(cc) => {com_conn = cc; break;},
-            _ => xous::yield_slice(),
-        }
-    }*/
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 

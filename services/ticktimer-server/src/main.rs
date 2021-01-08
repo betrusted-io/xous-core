@@ -314,6 +314,7 @@ fn xmain() -> ! {
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
         .expect("Couldn't create Ticktimer server");
+    info!("TICKTIMER: Server started with SID {:?}", ticktimer_server);
 
     // Connect to our own server so we can send the "Recalculate" message
     let ticktimer_client = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())
