@@ -1,5 +1,6 @@
 # xous-names
 
+## Specification
 Server IDs (SIDs) are used by processes to send messages to
 servers. It is thus an attack surface. Furthermore, if a process can
 forge an SID before a server can claim it, it can “become” the
@@ -114,3 +115,22 @@ are bigger problems.
 The `AUTHENTICATE_TIMEOUT` field is used to give `xous-name-server`
 a chance to depopulate the response table over time, so that it
 does not "leak" memory.
+
+## Current Implementation
+
+The current implementation is a hash map that matches randomly generated
+names with a list of names each server selects for itself. Currently, any
+request to lookup and connect to a server will succeed, but the hooks
+are there to enforce permissions and deny connections, and/or request
+authentication for connection.
+
+A list of canonical names for servers is stored in `xous-rs/names.rs`.
+The intention is that this is a list of "public" services that should
+be well-known and generally all processes are allowed to connect to
+these.
+
+Later on, we may implement servers that handle sensitive information;
+and also, user processes can start private servers that should be isolated
+from others, and thus have restricted permissions. These names may not
+appear in this list, or they may appear but also we'll have annotations
+for permissions and security.
