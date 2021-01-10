@@ -5,9 +5,10 @@ use hash32::{Hash, Hasher};
 
 use core::cmp::Eq;
 
-pub const ID_REGISTER_NAME: usize = 0;
-pub const ID_LOOKUP_NAME: usize = 1;
-pub const ID_AUTHENTICATE: usize = 2;
+// bottom 8 bits are reserved for structure re-use by other servers
+pub const ID_REGISTER_NAME: usize = 0x0_00;
+pub const ID_LOOKUP_NAME: usize = 0x1_00;
+pub const ID_AUTHENTICATE: usize = 0x2_00;
 
 pub const AUTHENTICATE_TIMEOUT: usize = 10_000; // time in ms that a process has to respond to an authentication request
 
@@ -103,7 +104,7 @@ impl AsRef<str> for XousServerName {
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Registration {
     mid: usize,
@@ -120,6 +121,9 @@ pub struct Registration {
 
 impl Registration {
     pub fn mid(&self) -> usize { self.mid }
+
+    pub fn get_subtype(&self) -> u8 { (self.mid & 0xFF) as u8 }
+    pub fn set_subtype(&mut self, subtype: u8) { self.mid = (self.mid & 0xFFFF_FF_00) | (subtype as usize); }
 
     pub fn new() -> Self {
         Registration {

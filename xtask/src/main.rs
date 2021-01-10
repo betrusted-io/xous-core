@@ -85,8 +85,8 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
         "log-server",
         "com",
         "xous-names",
+        "keyboard",
     ] {
-        // "xous-names"
         // "fcc-agent"
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }

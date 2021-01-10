@@ -11,6 +11,7 @@ members = [
     "services/trng-tester",
     "services/fcc-agent",
     "services/xous-names",
+    "services/keyboard",
     "svd2utra",
     "xtask",
 ]
@@ -22,6 +23,7 @@ default-members = [
     "services/trng-tester",
     "services/fcc-agent",
     "services/xous-names",
+    "services/keyboard",
     "services/com",
 ]
 
