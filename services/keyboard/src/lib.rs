@@ -11,13 +11,9 @@ fn request_core(name: &str, kbd_conn: xous::CID, subtype: u8) -> Result<xous::Re
         .expect("can't create sendable registration structure");
     sendable_registration.set_subtype(subtype);
     write!(sendable_registration.name, "{}", name).unwrap();
-    sendable_registration.lend_mut(kbd_conn, sendable_registration.mid()).expect("keyboard event request registration failure!");
+    sendable_registration.lend(kbd_conn, sendable_registration.mid()).expect("keyboard event request registration failure!");
 
-    if sendable_registration.success {
-        Ok(xous::Result::Ok)
-    } else {
-        Err(xous::Error::InternalError)
-    }
+    Ok(xous::Result::Ok)
 }
 
 pub fn request_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, xous::Error> {

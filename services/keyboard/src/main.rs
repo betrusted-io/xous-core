@@ -282,18 +282,22 @@ mod implementation {
         /// which is structured as (row : col), where each of row and col are a u8.
         /// Option "none" means no keys were pressed during this scan.
         fn kbd_getcodes(&self) -> Option<Vec<(usize,usize), U16>> {
-            let mut keys = Vec::new();
+            let mut keys: Vec<(usize, usize), U16> = Vec::new();
 
             for r in 0..KBD_ROWS {
                 let cols: u16 = self.kbd_getrow(r as u8);
                 for c in 0..KBD_COLS {
                     if (cols & (1 << c)) != 0 {
+                        info!("KBD: kbd_getcodes() pushing r{} c{}", r, c);
                         keys.push( (r, c) ).unwrap();
                     }
                 }
             }
 
             if keys.len() > 0 {
+                for &(r, c) in keys.iter() {
+                    info!("KBD: verified r{} c{}", r, c);
+                }
                 Some(keys)
             } else {
                 None
@@ -340,15 +344,16 @@ mod implementation {
 
                 // if there's keys pressed, continue to increment the debounce counter
                 if let Some(code) = &self.lastcode {
-                    for (row, col) in code.iter() {
-                        if self.debounce[*row][*col] < self.threshold {
-                            self.debounce[*row][*col] += increment;
+                    for &(row, col) in code.iter() {
+                        info!("Debouncing row{} col{}", row, col);
+                        if self.debounce[row][col] < self.threshold {
+                            self.debounce[row][col] += increment;
                             // now check if we've passed the debounce threshold, and report a keydown
-                            if self.debounce[*row][*col] >= self.threshold {
-                                keydowns.push((*row,*col)).expect("KBD hw: probably ran out of space to track keydowns");
+                            if self.debounce[row][col] >= self.threshold {
+                                keydowns.push((row,col)).expect("KBD hw: probably ran out of space to track keydowns");
                             }
                         }
-                        downs[*row][*col] = true;  // record that we processed the key
+                        downs[row][col] = true;  // record that we processed the key
                     }
                 }
 

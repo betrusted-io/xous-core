@@ -157,7 +157,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
                         unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
                     }))
                 } else {
-                    Err("KBD api: unknown MutableBorrow ID")
+                    Err("KBD api: unknown Borrow ID")
                 }
             },
             _ => Err("KBD api: unhandled message type"),
