@@ -734,6 +734,11 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
+    use heapless::Vec;
+    use heapless::consts::*;
+    use crate::api::*;
+    use crate::{map_dvorak, map_qwerty};
+    use log::{error, info};
 
     pub struct Keyboard {
         map: KeyMap,
@@ -757,16 +762,16 @@ mod implementation {
         }
         pub fn get_map(&self) -> KeyMap {self.map}
 
-        pub fn update() -> Option<KeyStates> {
-            None
+        pub fn update(&self) -> ( Option<Vec<RowCol, U16>>, Option<Vec<RowCol, U16>> ) {
+            (None, None)
         }
 
-        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> KeyStates {
-            KeyStates::new()
+        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+            Vec::new()
         }
 
-        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> KeyStates {
-            KeyStates::new()
+        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+            Vec::new()
         }
 
         pub fn set_repeat(&mut self, rate: usize, delay: usize) {

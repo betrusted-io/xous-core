@@ -187,6 +187,7 @@ fn run(debug: bool) -> Result<(), DynError> {
         "ticktimer-server",
         "com",
         "xous-names",
+        "keyboard",
     ];
 
     // let mut init_paths = vec![];
