@@ -13,8 +13,10 @@ use core::convert::TryFrom;
 use log::{error, info};
 
 /// Compute the dvorak key mapping of row/col to key tuples
-fn map_dvorak(code: (usize,usize)) -> ScanCode {
-    match code {
+fn map_dvorak(code: RowCol) -> ScanCode {
+    let rc = (code.r, code.c);
+
+    match rc {
         (0, 0) => ScanCode{key: Some('1'), shift: Some('1'), hold: None, alt: None},
         (0, 1) => ScanCode{key: Some('2'), shift: Some('2'), hold: None, alt: None},
         (0, 2) => ScanCode{key: Some('3'), shift: Some('3'), hold: None, alt: None},
@@ -85,8 +87,10 @@ fn map_dvorak(code: (usize,usize)) -> ScanCode {
 
 
 /// Compute the dvorak key mapping of row/col to key tuples
-fn map_qwerty(code: (usize,usize)) -> ScanCode {
-    match code {
+fn map_qwerty(code: RowCol) -> ScanCode {
+    let rc = (code.r, code.c);
+
+    match rc {
         (0, 0) => ScanCode{key: Some('1'), shift: Some('1'), hold: None, alt: None},
         (0, 1) => ScanCode{key: Some('2'), shift: Some('2'), hold: None, alt: None},
         (0, 2) => ScanCode{key: Some('3'), shift: Some('3'), hold: None, alt: None},
@@ -176,7 +180,7 @@ mod implementation {
         /// last timestamp (in ms) since last call
         timestamp: u64,
         /// remember the last keycode since a change event
-        lastcode: Option<Vec<(usize, usize), U16>>,
+        lastcode: Option<Vec<RowCol, U16>>,
         /// connection to the timer for real-time events
         ticktimer: xous::CID,
         /// mapping for ScanCode translation
@@ -281,22 +285,20 @@ mod implementation {
         /// pressed as key codes. Return format is an option-wrapped vector of u8,
         /// which is structured as (row : col), where each of row and col are a u8.
         /// Option "none" means no keys were pressed during this scan.
-        fn kbd_getcodes(&self) -> Option<Vec<(usize,usize), U16>> {
-            let mut keys: Vec<(usize, usize), U16> = Vec::new();
+        fn kbd_getcodes(&self) -> Option<Vec<RowCol, U16>> {
+            let mut keys: Vec<RowCol, U16> = Vec::new();
 
             for r in 0..KBD_ROWS {
                 let cols: u16 = self.kbd_getrow(r as u8);
                 for c in 0..KBD_COLS {
                     if (cols & (1 << c)) != 0 {
-                        info!("KBD: kbd_getcodes() pushing r{} c{}", r, c);
-                        keys.push( (r, c) ).unwrap();
+                        keys.push( RowCol{r: r as _, c: c as _} ).unwrap();
                     }
                 }
             }
 
             if keys.len() > 0 {
-                for &(r, c) in keys.iter() {
-                    info!("KBD: verified r{} c{}", r, c);
+                for &rc in keys.iter() {
                 }
                 Some(keys)
             } else {
@@ -311,10 +313,10 @@ mod implementation {
         ///
         /// returns a struct of (keydown, keyup) scan codes.
 
-        pub fn update(&mut self) -> ( Option<Vec<(usize, usize), U16>>, Option<Vec<(usize, usize), U16>> ) {
+        pub fn update(&mut self) -> ( Option<Vec<RowCol, U16>>, Option<Vec<RowCol, U16>> ) {
             let mut downs: [[bool; KBD_COLS]; KBD_ROWS] = [[false; KBD_COLS]; KBD_ROWS];
-            let mut keydowns: Vec<(usize, usize), U16> = Vec::new();
-            let mut keyups: Vec<(usize, usize), U16> = Vec::new();
+            let mut keydowns: Vec<RowCol, U16> = Vec::new();
+            let mut keyups: Vec<RowCol, U16> = Vec::new();
 
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
@@ -344,13 +346,13 @@ mod implementation {
 
                 // if there's keys pressed, continue to increment the debounce counter
                 if let Some(code) = &self.lastcode {
-                    for &(row, col) in code.iter() {
-                        info!("Debouncing row{} col{}", row, col);
+                    for &rc in code.iter() {
+                        let row = rc.r as usize; let col = rc.c as usize;
                         if self.debounce[row][col] < self.threshold {
                             self.debounce[row][col] += increment;
                             // now check if we've passed the debounce threshold, and report a keydown
                             if self.debounce[row][col] >= self.threshold {
-                                keydowns.push((row,col)).expect("KBD hw: probably ran out of space to track keydowns");
+                                keydowns.push(RowCol{r: row as _, c: col as _}).expect("KBD hw: probably ran out of space to track keydowns");
                             }
                         }
                         downs[row][col] = true;  // record that we processed the key
@@ -368,20 +370,20 @@ mod implementation {
                             }
 
                             if self.debounce[r][c] == 0 {
-                                keyups.push((r, c)).expect("KBD hw: probably ran out of space to track keyups");
+                                keyups.push(RowCol{r: r as _, c: c as _}).expect("KBD hw: probably ran out of space to track keyups");
                             }
                         }
                    }
                 }
 
-                let retdowns: Option<Vec<(usize, usize), U16>>;
+                let retdowns: Option<Vec<RowCol, U16>>;
                 if keydowns.len() > 0 {
                     retdowns = Some(keydowns);
                 } else {
                     retdowns = None;
                 }
 
-                let retups: Option<Vec<(usize, usize), U16>>;
+                let retups: Option<Vec<RowCol, U16>>;
                 if keyups.len() > 0 {
                     retups = Some(keyups);
                 } else {
@@ -392,7 +394,7 @@ mod implementation {
             }
         }
 
-        pub fn track_chord(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> Vec<char, U4> {
+        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol, U16>>, keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
             /*
             Chording algorithm:
 
@@ -404,13 +406,13 @@ mod implementation {
             6. Return scancodes
              */
             if let Some(kds) = &keydowns {
-                for &(r, c) in kds.iter() {
-                    self.chord[r][c] = true;
+                for &rc in kds.iter() {
+                    self.chord[rc.r as usize][rc.c as usize] = true;
                 }
             }
             if let Some(kus) = &keyups {
-                for &(r, c) in kus.iter() {
-                    self.chord[r][c] = false;
+                for &rc in kus.iter() {
+                    self.chord[rc.r as usize][rc.c as usize] = false;
                 }
             }
 
@@ -514,7 +516,7 @@ mod implementation {
             keystates
         }
 
-        pub fn track_keys(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> Vec<char, U4> {
+        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol, U16>>, keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
             /*
               "conventional" keyboard algorithm. The goals of this are to differentiate
               the cases of "shift", "alt", and "hold".
@@ -529,16 +531,16 @@ mod implementation {
 
             // first check for shift and alt keys
             if let Some(kds) = &keydowns {
-                for &(r, c) in kds.iter() {
+                for &rc in kds.iter() {
                     match self.map {
                         KeyMap::Azerty => {
-                            if (r == 8) && (c == 5) { // left shift (orange)
+                            if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
                                 if self.alt_up == false {
                                     self.alt_down = true;
                                 } else {
                                     self.alt_up = false;
                                 }
-                            } else if (r == 8) && (c == 9) { // right shift (yellow)
+                            } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
                                 if self.shift_up == false {
                                     self.shift_down = true;
                                 } else {
@@ -547,7 +549,7 @@ mod implementation {
                             }
                         },
                         _ => { // the rest just have one color of shift
-                            if ((r == 8) && (c == 5)) || ((r == 8) && (c == 9)) {
+                            if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                 // if the shift key was tapped twice, remove the shift modifier
                                 if self.shift_up == false {
                                     self.shift_down = true;
@@ -559,35 +561,35 @@ mod implementation {
                     }
                 }
             }
-            let keyups_noshift: Option<Vec<(usize, usize), U16>> =
+            let keyups_noshift: Option<Vec<RowCol, U16>> =
                 if let Some(kus) = &keyups {
-                    let mut ku_ns: Vec<(usize, usize), U16> = Vec::new();
-                    for &(r, c) in kus.iter() {
+                    let mut ku_ns: Vec<RowCol, U16> = Vec::new();
+                    for &rc in kus.iter() {
                         match self.map {
                             KeyMap::Azerty => {
-                                if (r == 8) && (c == 5) { // left shift (orange)
+                                if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
                                     if self.alt_down {
                                         self.alt_up = true;
                                     }
                                     self.alt_down = false;
-                                } else if (r == 8) && (c == 9) { // right shift (yellow)
+                                } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
                                     if self.shift_down {
                                         self.shift_up = true;
                                     }
                                     self.shift_down = false;
                                 } else {
-                                    ku_ns.push((r,c)).unwrap();
+                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
                                 }
                             },
                             _ => { // the rest just have one color of shift
-                                if ((r == 8) && (c == 5)) || ((r == 8) && (c == 9)) {
+                                if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                     // only set the shift-up if we didn't previously clear it with a double-tap of shift
                                     if self.shift_down {
                                         self.shift_up = true;
                                     }
                                     self.shift_down = false;
                                 } else {
-                                    ku_ns.push((r, c)).unwrap();
+                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
                                 }
                             }
                         }
@@ -601,10 +603,10 @@ mod implementation {
             if let Some(kds) = &keydowns {
                 self.chord_timestamp = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
                 // if more than one is held, the key that gets picked for the repeat function is arbitrary!
-                for &(r, c) in kds.iter() {
+                for &rc in kds.iter() {
                     let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty((r, c)),
-                        KeyMap::Dvorak => map_dvorak((r, c)),
+                        KeyMap::Qwerty => map_qwerty(rc),
+                        KeyMap::Dvorak => map_dvorak(rc),
                         _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                     };
                     if code.hold == None { // if there isn't a pre-defined meaning if the key is held, it's a repeating key
@@ -628,10 +630,10 @@ mod implementation {
             fn report_ok(k: char) -> Result<(), ()> { error!("KBD: ran out of space saving char: {}", k); Ok(()) }
 
             if let Some(kus) = &keyups_noshift {
-                for &(r, c) in kus.iter() {
+                for &rc in kus.iter() {
                     let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty((r, c)),
-                        KeyMap::Dvorak => map_dvorak((r, c)),
+                        KeyMap::Qwerty => map_qwerty(rc),
+                        KeyMap::Dvorak => map_dvorak(rc),
                         _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                     };
                     // delete the key repeat if there is one
@@ -743,11 +745,11 @@ mod implementation {
             None
         }
 
-        pub fn track_chord(&mut self, _keyups: Option<Vec<(usize, usize), U16>>, _keydowns: Option<Vec<(usize, usize), U16>>) -> KeyStates {
+        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> KeyStates {
             KeyStates::new()
         }
 
-        pub fn track_keys(&mut self, _keyups: Option<Vec<(usize, usize), U16>>, _keydowns: Option<Vec<(usize, usize), U16>>) -> KeyStates {
+        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> KeyStates {
             KeyStates::new()
         }
 

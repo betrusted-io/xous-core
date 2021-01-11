@@ -17,12 +17,18 @@ pub struct ScanCode {
     pub alt: Option<char>,
 }
 
+#[derive(Debug, Default, Copy, Clone)]
+pub struct RowCol {
+    pub r: u8,
+    pub c: u8,
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub struct KeyRawStates {
     mid: usize,
-    pub keydowns: Vec<(usize, usize), U16>,
-    pub keyups: Vec<(usize, usize), U16>,
+    pub keydowns: Vec<RowCol, U16>,
+    pub keyups: Vec<RowCol, U16>,
 }
 impl KeyRawStates {
     pub fn mid(&self) -> usize { self.mid }
