@@ -115,7 +115,7 @@ fn event_thread(_arg: usize) {
     info!("SHELL|event_thread: starting COM response handler thread");
     loop {
         let envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
-        info!("SHELL|event_thread: got message {:?}", envelope);
+        // info!("SHELL|event_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 com::api::Opcode::BattStatsEvent(stats) => {
@@ -361,7 +361,6 @@ fn shell_main() -> ! {
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
-                info!("SHELL: Requesting batt stats from COM");
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
             }
         } else {

@@ -255,7 +255,7 @@ fn xmain() -> ! {
     info!("COM: starting main loop");
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
-        info!("COM: Message: {:?}", envelope);
+        // info!("COM: Message: {:?}", envelope);
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("COM: Opcode: {:?}", opcode);
             match opcode {

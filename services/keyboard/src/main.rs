@@ -74,7 +74,7 @@ fn map_dvorak(code: RowCol) -> ScanCode {
         (3, 8) => ScanCode{key: Some(0x13_u8.into()), shift: Some(0x13_u8.into()), hold: Some(0x13_u8.into()), alt: Some(0x13_u8.into())}, // DC3 (F3)
         // the F4/ctrl key also doubles as a power key
         (3, 9) => ScanCode{key: Some(0x14_u8.into()), shift: Some(0x14_u8.into()), hold: Some(0x14_u8.into()), alt: Some(0x14_u8.into())}, // DC4 (F4)
-        (4, 3) => ScanCode{key: Some('←'), shift: Some('←'), hold: None, alt: Some('←')},
+        (8, 3) => ScanCode{key: Some('←'), shift: Some('←'), hold: None, alt: Some('←')},
         (3, 6) => ScanCode{key: Some('→'), shift: Some('→'), hold: None, alt: Some('→')},
         (6, 4) => ScanCode{key: Some('↑'), shift: Some('↑'), hold: None, alt: Some('↑')},
         (8, 2) => ScanCode{key: Some('↓'), shift: Some('↓'), hold: None, alt: Some('↓')},
@@ -147,7 +147,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
         (3, 8) => ScanCode{key: Some(0x13_u8.into()), shift: Some(0x13_u8.into()), hold: Some(0x13_u8.into()), alt: Some(0x13_u8.into())}, // DC3 (F3)
         // the F4/ctrl key also doubles as a power key
         (3, 9) => ScanCode{key: Some(0x14_u8.into()), shift: Some(0x14_u8.into()), hold: Some(0x14_u8.into()), alt: Some(0x14_u8.into())}, // DC4 (F4)
-        (4, 3) => ScanCode{key: Some('←'), shift: Some('←'), hold: None, alt: Some('←')},
+        (8, 3) => ScanCode{key: Some('←'), shift: Some('←'), hold: None, alt: Some('←')},
         (3, 6) => ScanCode{key: Some('→'), shift: Some('→'), hold: None, alt: Some('→')},
         (6, 4) => ScanCode{key: Some('↑'), shift: Some('↑'), hold: None, alt: Some('↑')},
         (8, 2) => ScanCode{key: Some('↓'), shift: Some('↓'), hold: None, alt: Some('↓')},
@@ -298,8 +298,6 @@ mod implementation {
             }
 
             if keys.len() > 0 {
-                for &rc in keys.iter() {
-                }
                 Some(keys)
             } else {
                 None
@@ -324,73 +322,84 @@ mod implementation {
             if self.csr.rf(utra::keyboard::EV_PENDING_KEYPRESSED) != 0 {
                 // only do the getcodes() call if we saw a change to key state
                 self.lastcode = self.kbd_getcodes();
+                /*
+                info!("KBD: pending detected");
+                if let Some(lc) = &self.lastcode {
+                    for &code in lc.iter() {
+                        info!("KBD: {:?}", code);
+                    }
+                } else {
+                    info!("KBD: lastcode is None");
+                }*/
                 // clear the pending bit
                 self.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1);
-            }
 
-            let elapsed = ticktimer_server::elapsed_ms(self.ticktimer).unwrap() - self.timestamp;
-            if (elapsed <= 1) || self.lastcode.is_none() {
-                // skip debounce processing if time elapsed is too short or there's no key updates
-                (None, None)
-            } else {
-                self.timestamp = elapsed;
-
-                // in case a lot of time has elapsed, saturate the debounce increment at the threshold so we don't
-                // overflow the debounce counter's u8
-                let increment: u8;
-                if elapsed > self.threshold as u64 {
-                    increment = self.threshold;
+                let elapsed = ticktimer_server::elapsed_ms(self.ticktimer).unwrap() - self.timestamp;
+                if elapsed <= 1 {
+                    // skip debounce processing if time elapsed is too short
+                    (None, None)
                 } else {
-                    increment = elapsed as u8;
-                }
+                    self.timestamp = elapsed;
 
-                // if there's keys pressed, continue to increment the debounce counter
-                if let Some(code) = &self.lastcode {
-                    for &rc in code.iter() {
-                        let row = rc.r as usize; let col = rc.c as usize;
-                        if self.debounce[row][col] < self.threshold {
-                            self.debounce[row][col] += increment;
-                            // now check if we've passed the debounce threshold, and report a keydown
-                            if self.debounce[row][col] >= self.threshold {
-                                keydowns.push(RowCol{r: row as _, c: col as _}).expect("KBD hw: probably ran out of space to track keydowns");
-                            }
-                        }
-                        downs[row][col] = true;  // record that we processed the key
+                    // in case a lot of time has elapsed, saturate the debounce increment at the threshold so we don't
+                    // overflow the debounce counter's u8
+                    let increment: u8;
+                    if elapsed > self.threshold as u64 {
+                        increment = self.threshold;
+                    } else {
+                        increment = elapsed as u8;
                     }
-                }
 
-                // now decrement debounce couter for all elements that don't have a press
-                for r in 0..KBD_ROWS {
-                    for c in 0..KBD_COLS {
-                        if !downs[r][c] && (self.debounce[r][c] > 0) {
-                            if self.debounce[r][c] >= increment {
-                                self.debounce[r][c] -= increment;
-                            } else {
-                                self.debounce[r][c] = 0;
+                    // if there's keys pressed, continue to increment the debounce counter
+                    if let Some(code) = &self.lastcode {
+                        for &rc in code.iter() {
+                            let row = rc.r as usize; let col = rc.c as usize;
+                            if self.debounce[row][col] < self.threshold {
+                                self.debounce[row][col] += increment;
+                                // now check if we've passed the debounce threshold, and report a keydown
+                                if self.debounce[row][col] >= self.threshold {
+                                    keydowns.push(RowCol{r: row as _, c: col as _}).expect("KBD hw: probably ran out of space to track keydowns");
+                                }
                             }
+                            downs[row][col] = true;  // record that we processed the key
+                        }
+                    }
 
-                            if self.debounce[r][c] == 0 {
-                                keyups.push(RowCol{r: r as _, c: c as _}).expect("KBD hw: probably ran out of space to track keyups");
+                    // now decrement debounce couter for all elements that don't have a press
+                    for r in 0..KBD_ROWS {
+                        for c in 0..KBD_COLS {
+                            if !downs[r][c] && (self.debounce[r][c] > 0) {
+                                if self.debounce[r][c] >= increment {
+                                    self.debounce[r][c] -= increment;
+                                } else {
+                                    self.debounce[r][c] = 0;
+                                }
+
+                                if self.debounce[r][c] == 0 {
+                                    keyups.push(RowCol{r: r as _, c: c as _}).expect("KBD hw: probably ran out of space to track keyups");
+                                }
                             }
                         }
-                   }
-                }
+                    }
 
-                let retdowns: Option<Vec<RowCol, U16>>;
-                if keydowns.len() > 0 {
-                    retdowns = Some(keydowns);
-                } else {
-                    retdowns = None;
-                }
+                    let retdowns: Option<Vec<RowCol, U16>>;
+                    if keydowns.len() > 0 {
+                        retdowns = Some(keydowns);
+                    } else {
+                        retdowns = None;
+                    }
 
-                let retups: Option<Vec<RowCol, U16>>;
-                if keyups.len() > 0 {
-                    retups = Some(keyups);
-                } else {
-                    retups = None;
-                }
+                    let retups: Option<Vec<RowCol, U16>>;
+                    if keyups.len() > 0 {
+                        retups = Some(keyups);
+                    } else {
+                        retups = None;
+                    }
 
-                (retdowns, retups)
+                    (retdowns, retups)
+                }
+            } else {
+                (None, None)
             }
         }
 
@@ -552,8 +561,10 @@ mod implementation {
                             if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                 // if the shift key was tapped twice, remove the shift modifier
                                 if self.shift_up == false {
+                                    //info!("KBD: shift down true");
                                     self.shift_down = true;
                                 } else {
+                                    //info!("KBD: shift up false");
                                     self.shift_up = false;
                                 }
                             }
@@ -585,10 +596,13 @@ mod implementation {
                                 if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                     // only set the shift-up if we didn't previously clear it with a double-tap of shift
                                     if self.shift_down {
+                                        //info!("KBD: shift up true");
                                         self.shift_up = true;
                                     }
+                                    //info!("KBD: shift down false");
                                     self.shift_down = false;
                                 } else {
+                                    //info!("KBD: adding non-shift entry {:?}", rc);
                                     ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
                                 }
                             }
@@ -631,6 +645,7 @@ mod implementation {
 
             if let Some(kus) = &keyups_noshift {
                 for &rc in kus.iter() {
+                    // info!("KBD: interpreting keyups_noshift entry {:?}", rc);
                     let code = match self.map {
                         KeyMap::Qwerty => map_qwerty(rc),
                         KeyMap::Dvorak => map_dvorak(rc),
@@ -694,6 +709,7 @@ mod implementation {
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
+                                    // info!("KBD: appeding normal key '{}'", keycode);
                                     ks.push(keycode).or_else(report_ok).ok();
                                 }
                             }
@@ -815,8 +831,19 @@ fn xmain() -> ! {
             _ => xous::yield_slice(),
         }
 
-        let (keyups, keydowns) = kbd.update();
-
+        let (keydowns, keyups) = kbd.update();
+        /*
+        if let Some(ku) = &keyups {
+            for &kus in ku.iter() {
+                info!("KBD: keyup r{} c{}", kus.r, kus.c);
+            }
+        }
+        if let Some(kd) = &keydowns {
+            for &kds in kd.iter() {
+                info!("KBD: keydown r{} c{}", kds.r, kds.c);
+            }
+        }
+        */
         if keyups.is_some() || keydowns.is_some() {
             // send the raw codes
             for conn in raw_conns.iter() {
@@ -852,9 +879,10 @@ fn xmain() -> ! {
         if kc.len() > 0 {
             let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
             for i in 0..kc.len() {
+                // info!("KBD: sending key '{}'", kc[i]);
                 keys[i] = kc[i];
             }
-            for conn in raw_conns.iter() {
+            for conn in normal_conns.iter() {
                 xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
             }
         }
