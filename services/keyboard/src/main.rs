@@ -241,6 +241,8 @@ mod implementation {
                 chord_active: false,
             };
 
+            info!("KBD: hardware initialized"); // gratuitous info statement to keep clippy quiet about unused info import
+
             kbd
         }
 
@@ -385,7 +387,7 @@ mod implementation {
             }
         }
 
-        pub fn track_chord(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> KeyStates {
+        pub fn track_chord(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> Vec<char, U4> {
             /*
             Chording algorithm:
 
@@ -397,17 +399,17 @@ mod implementation {
             6. Return scancodes
              */
             if let Some(kds) = &keydowns {
-                for (r, c) in kds.iter() {
-                    self.chord[*r][*c] = true;
+                for &(r, c) in kds.iter() {
+                    self.chord[r][c] = true;
                 }
             }
             if let Some(kus) = &keyups {
-                for (r, c) in kus.iter() {
-                    self.chord[*r][*c] = false;
+                for &(r, c) in kus.iter() {
+                    self.chord[r][c] = false;
                 }
             }
 
-            let mut keystates = KeyStates::new();
+            let mut keystates: Vec<char, U4> = Vec::new();
 
             if self.chord_active || keydowns.is_some() {
                 let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
@@ -475,28 +477,28 @@ mod implementation {
                         _ => '🈯',
                     };
                     if keychar != '🈯' {
-                        keystates.keys.push(keychar).unwrap();
+                        keystates.push(keychar).unwrap();
                     }
 
                     let up = self.chord[6][4];
-                    if up { keystates.keys.push('↑').unwrap(); }
+                    if up { keystates.push('↑').unwrap(); }
 
                     let left = self.chord[8][3];
-                    if left { keystates.keys.push('←').unwrap(); }
+                    if left { keystates.push('←').unwrap(); }
                     let right = self.chord[3][6];
-                    if right { keystates.keys.push('→').unwrap(); }
+                    if right { keystates.push('→').unwrap(); }
                     let down = self.chord[8][2];
-                    if down { keystates.keys.push('↓').unwrap(); }
+                    if down { keystates.push('↓').unwrap(); }
                     let center = self.chord[5][2];
-                    if center { keystates.keys.push('∴').unwrap(); }
+                    if center { keystates.push('∴').unwrap(); }
 
                     let space = self.chord[2][3];
-                    if space { keystates.keys.push(' ').unwrap(); }
+                    if space { keystates.push(' ').unwrap(); }
 
                     let esc = self.chord[8][6];
-                    if esc { keystates.keys.push('🔙').unwrap(); }
+                    if esc { keystates.push('🔙').unwrap(); }
                     let func = self.chord[7][5];
-                    if func { keystates.keys.push('🏁').unwrap(); }
+                    if func { keystates.push('🏁').unwrap(); }
                 }
             }
             // not sure if this is the right way to handle keyups, but let's try it.
@@ -507,7 +509,7 @@ mod implementation {
             keystates
         }
 
-        pub fn track_keys(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> KeyStates {
+        pub fn track_keys(&mut self, keyups: Option<Vec<(usize, usize), U16>>, keydowns: Option<Vec<(usize, usize), U16>>) -> Vec<char, U4> {
             /*
               "conventional" keyboard algorithm. The goals of this are to differentiate
               the cases of "shift", "alt", and "hold".
@@ -518,20 +520,20 @@ mod implementation {
               then for all others, we note the down time, and compare it to the current time
               to determine if a "hold" modifier applies
              */
-            let mut ks = KeyStates::new();
+            let mut ks: Vec<char, U4> = Vec::new();
 
             // first check for shift and alt keys
             if let Some(kds) = &keydowns {
-                for (r, c) in kds.iter() {
+                for &(r, c) in kds.iter() {
                     match self.map {
                         KeyMap::Azerty => {
-                            if (*r == 8) && (*c == 5) { // left shift (orange)
+                            if (r == 8) && (c == 5) { // left shift (orange)
                                 if self.alt_up == false {
                                     self.alt_down = true;
                                 } else {
                                     self.alt_up = false;
                                 }
-                            } else if (*r == 8) && (*c == 9) { // right shift (yellow)
+                            } else if (r == 8) && (c == 9) { // right shift (yellow)
                                 if self.shift_up == false {
                                     self.shift_down = true;
                                 } else {
@@ -540,7 +542,7 @@ mod implementation {
                             }
                         },
                         _ => { // the rest just have one color of shift
-                            if ((*r == 8) && (*c == 5)) || ((*r == 8) && (*c == 9)) {
+                            if ((r == 8) && (c == 5)) || ((r == 8) && (c == 9)) {
                                 // if the shift key was tapped twice, remove the shift modifier
                                 if self.shift_up == false {
                                     self.shift_down = true;
@@ -555,32 +557,32 @@ mod implementation {
             let keyups_noshift: Option<Vec<(usize, usize), U16>> =
                 if let Some(kus) = &keyups {
                     let mut ku_ns: Vec<(usize, usize), U16> = Vec::new();
-                    for (r, c) in kus.iter() {
+                    for &(r, c) in kus.iter() {
                         match self.map {
                             KeyMap::Azerty => {
-                                if (*r == 8) && (*c == 5) { // left shift (orange)
+                                if (r == 8) && (c == 5) { // left shift (orange)
                                     if self.alt_down {
                                         self.alt_up = true;
                                     }
                                     self.alt_down = false;
-                                } else if (*r == 8) && (*c == 9) { // right shift (yellow)
+                                } else if (r == 8) && (c == 9) { // right shift (yellow)
                                     if self.shift_down {
                                         self.shift_up = true;
                                     }
                                     self.shift_down = false;
                                 } else {
-                                    ku_ns.push((*r,*c)).unwrap();
+                                    ku_ns.push((r,c)).unwrap();
                                 }
                             },
                             _ => { // the rest just have one color of shift
-                                if ((*r == 8) && (*c == 5)) || ((*r == 8) && (*c == 9)) {
+                                if ((r == 8) && (c == 5)) || ((r == 8) && (c == 9)) {
                                     // only set the shift-up if we didn't previously clear it with a double-tap of shift
                                     if self.shift_down {
                                         self.shift_up = true;
                                     }
                                     self.shift_down = false;
                                 } else {
-                                    ku_ns.push((*r, *c)).unwrap();
+                                    ku_ns.push((r, c)).unwrap();
                                 }
                             }
                         }
@@ -594,10 +596,10 @@ mod implementation {
             if let Some(kds) = &keydowns {
                 self.chord_timestamp = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
                 // if more than one is held, the key that gets picked for the repeat function is arbitrary!
-                for (r, c) in kds.iter() {
+                for &(r, c) in kds.iter() {
                     let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty((*r, *c)),
-                        KeyMap::Dvorak => map_dvorak((*r, *c)),
+                        KeyMap::Qwerty => map_qwerty((r, c)),
+                        KeyMap::Dvorak => map_dvorak((r, c)),
                         _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                     };
                     if code.hold == None { // if there isn't a pre-defined meaning if the key is held, it's a repeating key
@@ -618,11 +620,13 @@ mod implementation {
                 hold = false;
             }
 
+            fn report_ok(k: char) -> Result<(), ()> { error!("KBD: ran out of space saving char: {}", k); Ok(()) }
+
             if let Some(kus) = &keyups_noshift {
-                for (r, c) in kus.iter() {
+                for &(r, c) in kus.iter() {
                     let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty((*r, *c)),
-                        KeyMap::Dvorak => map_dvorak((*r, *c)),
+                        KeyMap::Qwerty => map_qwerty((r, c)),
+                        KeyMap::Dvorak => map_dvorak((r, c)),
                         _ => ScanCode {key: None, shift: None, hold: None, alt: None},
                     };
                     // delete the key repeat if there is one
@@ -635,42 +639,43 @@ mod implementation {
                             }
                         }
                     }
+
                     match self.map {
                         KeyMap::Azerty => {
                             if self.shift_down || self.shift_up {
                                 if let Some(shiftcode) = code.shift {
-                                    ks.keys.push(shiftcode).unwrap();
+                                    ks.push(shiftcode).or_else(report_ok).ok();
                                 } else if let Some(keycode) = code.key {
-                                    ks.keys.push(keycode).unwrap();
+                                    ks.push(keycode).or_else(report_ok).ok();
                                 }
                                 self.shift_down = false;
                                 self.shift_up = false;
                             } else if self.alt_down || self.alt_up {
                                 if let Some(altcode) = code.alt {
-                                    ks.keys.push(altcode).unwrap();
+                                    ks.push(altcode).or_else(report_ok).ok();
                                 } else if let Some(shiftcode) = code.shift {
-                                    ks.keys.push(shiftcode).unwrap();
+                                    ks.push(shiftcode).or_else(report_ok).ok();
                                 } else if let Some(keycode) = code.key {
-                                    ks.keys.push(keycode).unwrap();
+                                    ks.push(keycode).or_else(report_ok).ok();
                                 }
                                 self.alt_down = false;
                                 self.alt_up = false;
                             } else if hold {
                                 if let Some(holdcode) = code.hold {
-                                    ks.keys.push(holdcode).unwrap();
+                                    ks.push(holdcode).or_else(report_ok).ok();
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
-                                    ks.keys.push(keycode).unwrap();
+                                    ks.push(keycode).or_else(report_ok).ok();
                                 }
                             }
                         },
                         _ => {
                             if self.shift_down || self.alt_down || self.shift_up || self.alt_up {
                                 if let Some(shiftcode) = code.shift {
-                                    ks.keys.push(shiftcode).unwrap();
+                                    ks.push(shiftcode).or_else(report_ok).ok();
                                 } else if let Some(keycode) = code.key {
-                                    ks.keys.push(keycode).unwrap();
+                                    ks.push(keycode).or_else(report_ok).ok();
                                 }
                                 self.shift_down = false;
                                 self.alt_down = false;
@@ -678,11 +683,11 @@ mod implementation {
                                 self.alt_up = false;
                             } else if hold {
                                 if let Some(holdcode) = code.hold {
-                                    ks.keys.push(holdcode).unwrap();
+                                    ks.push(holdcode).or_else(report_ok).ok();
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
-                                    ks.keys.push(keycode).unwrap();
+                                    ks.push(keycode).or_else(report_ok).ok();
                                 }
                             }
                         }
@@ -694,7 +699,7 @@ mod implementation {
             if hold && ((now - self.rate_timestamp) >= self.rate as u64) && self.repeating_key.is_some() {
                 self.rate_timestamp = now;
                 if let Some(repeatkey) = self.repeating_key {
-                    ks.keys.push(repeatkey).unwrap();
+                    ks.push(repeatkey).or_else(report_ok).ok();
                 }
             }
 
@@ -792,6 +797,9 @@ fn xmain() -> ! {
                         Opcode::SetChordInterval(delay) => {
                             kbd.set_chord_interval(delay);
                         },
+                        Opcode::KeyboardEvent(_keys) => {
+                            error!("KBD: somehow received an outgoing event code, this shouldn't happen!");
+                        }
                     }
                 } else {
                     error!("KBD: couldn't convert opcode");
@@ -807,13 +815,13 @@ fn xmain() -> ! {
             for conn in raw_conns.iter() {
                 let mut rs: KeyRawStates = KeyRawStates::new();
                 if let Some(ku) = &keyups {
-                    for k in ku.iter() {
-                        rs.keyups.push(*k).unwrap();
+                    for &k in ku.iter() {
+                        rs.keyups.push(k).unwrap();
                     }
                 }
                 if let Some(kd) = &keydowns {
-                    for k in kd.iter() {
-                        rs.keydowns.push(*k).unwrap();
+                    for &k in kd.iter() {
+                        rs.keydowns.push(k).unwrap();
                     }
                 }
                 let sendable_rs = Sendable::new(rs).expect("KBD: can't create sendable raw codes structure");
@@ -824,7 +832,7 @@ fn xmain() -> ! {
 
         // interpret scan codes
         // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
-        let kc: KeyStates = match kbd.get_map() {
+        let kc: Vec<char, U4> = match kbd.get_map() {
             KeyMap::Braille => {
                 kbd.track_chord(keyups, keydowns)
             },
@@ -832,11 +840,15 @@ fn xmain() -> ! {
                 kbd.track_keys(keyups, keydowns)
             },
         };
+
         // send keys, if any
-        if kc.keys.len() > 0 {
+        if kc.len() > 0 {
+            let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+            for i in 0..kc.len() {
+                keys[i] = kc[i];
+            }
             for conn in raw_conns.iter() {
-                let sendable_kc = Sendable::new(kc.copy()).expect("KBD: can't create sendable scan codes structure");
-                sendable_kc.send(*conn, kc.mid()).expect("KBD: can't send scan code");
+                xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
             }
         }
     }

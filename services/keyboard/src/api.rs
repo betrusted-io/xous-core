@@ -4,8 +4,6 @@ use heapless::consts::*;
 
 pub const SUBTYPE_REGISTER_BASIC_LISTENER: u8 = 0;
 pub const SUBTYPE_REGISTER_RAW_LISTENER: u8 = 1;
-pub const ID_KEYSTATE: usize     = 0x01_00_0000;
-pub const ID_RAW_KEYSTATE: usize = 0x01_00_0001;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -31,7 +29,7 @@ impl KeyRawStates {
 
     pub fn new() -> Self {
         KeyRawStates {
-            mid: ID_RAW_KEYSTATE,
+            mid: xous::names::GID_KEYBOARD_RAW_KEYSTATE_EVENT,
             keydowns: Vec::new(),
             keyups: Vec::new(),
         }
@@ -50,6 +48,7 @@ impl KeyRawStates {
     }
 }
 
+/*
 #[derive(Debug)]
 #[repr(C)]
 pub struct KeyStates {
@@ -73,7 +72,7 @@ impl KeyStates {
         }
         ks
     }
-}
+}*/
 
 #[derive(Debug, Copy, Clone)]
 pub enum KeyMap {
@@ -126,6 +125,9 @@ pub enum Opcode {
 
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
     SetChordInterval(usize),
+
+    /// keyboard events (as sent to listeners)
+    KeyboardEvent([char; 4]),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -136,6 +138,13 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 0 => Ok(Opcode::SelectKeyMap(KeyMap::from(m.arg1))),
                 1 => Ok(Opcode::SetRepeat(m.arg1, m.arg2)),
                 2 => Ok(Opcode::SetChordInterval(m.arg1)),
+                xous::names::GID_KEYBOARD_KEYSTATE_EVENT =>
+                     Ok(Opcode::KeyboardEvent([
+                        if let Some(a) = core::char::from_u32(m.arg1 as u32) { a } else { '\u{0000}' },
+                        if let Some(a) = core::char::from_u32(m.arg2 as u32) { a } else { '\u{0000}' },
+                        if let Some(a) = core::char::from_u32(m.arg3 as u32) { a } else { '\u{0000}' },
+                        if let Some(a) = core::char::from_u32(m.arg4 as u32) { a } else { '\u{0000}' }
+                         ])),
                 _ => Err("KBD api: unknown Scalar ID"),
             },
             Message::Borrow(m) => {
@@ -176,6 +185,13 @@ impl Into<Message> for Opcode {
                 id: 2,
                 arg1: period,
                 arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::KeyboardEvent(keys) => Message::Scalar(ScalarMessage {
+                id: xous::names::GID_KEYBOARD_KEYSTATE_EVENT,
+                arg1: keys[0] as u32 as usize,
+                arg2: keys[1] as u32 as usize,
+                arg3: keys[2] as u32 as usize,
+                arg4: keys[3] as u32 as usize,
             }),
             _ => panic!("KBD api: Opcode type not handled by Into(), refer to helper method"),
         }

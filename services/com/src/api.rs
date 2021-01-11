@@ -46,7 +46,7 @@ pub enum Opcode<'a> {
     BattStatsNb,
 
     /// Battery stats return
-    BattStatsReturn(BattStats),
+    BattStatsEvent(BattStats),
 
     /// Query Full charge capacity of the battery
     BattFullCapacity,
@@ -115,9 +115,9 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Ok(Opcode::PowerOffSoc)
                 } else if m.id as u16 == ComState::STAT.verb {
                     Ok(Opcode::BattStatsNb)
-                } else if m.id as u16 == ComState::STAT_RETURN.verb {
+                } else if m.id == xous::names::GID_COM_BATTSTATS_EVENT {
                     let raw_stats: [usize; 2] = [m.arg1, m.arg2];
-                    Ok(Opcode::BattStatsReturn(raw_stats.into()))
+                    Ok(Opcode::BattStatsEvent(raw_stats.into()))
                 } else if m.id as u16 == ComState::WFX_RXSTAT_GET.verb {
                     Ok(Opcode::RxStatsAgent)
                 } else {
@@ -207,10 +207,10 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: 0,
                 arg4: 0,
             }),
-            Opcode::BattStatsReturn(stats) => {
+            Opcode::BattStatsEvent(stats) => {
                 let raw_stats: [usize; 2] = stats.into();
                 Message::Scalar(ScalarMessage {
-                    id: ComState::STAT_RETURN.verb as usize,
+                    id: xous::names::GID_COM_BATTSTATS_EVENT as usize,
                     arg1: raw_stats[0],
                     arg2: raw_stats[1],
                     arg3: 0,

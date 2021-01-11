@@ -20,7 +20,7 @@ pub struct WorkRequest {
 }
 
 fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> {
-    xous::send_message(cid, crate::api::Opcode::BattStatsReturn(stats).into()).map(|_| ())
+    xous::send_message(cid, crate::api::Opcode::BattStatsEvent(stats).into()).map(|_| ())
 }
 
 #[cfg(target_os = "none")]

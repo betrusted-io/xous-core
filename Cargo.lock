@@ -860,6 +860,7 @@ dependencies = [
  "blitstr",
  "com",
  "graphics-server",
+ "keyboard",
  "log",
  "log-server",
  "ticktimer-server",

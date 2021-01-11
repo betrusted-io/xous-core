@@ -105,23 +105,37 @@ static BATT_STATS_CURRENT: AtomicI16 = AtomicI16::new(-150);
 static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
 static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
 
-fn com_thread(_arg: usize) {
-    info!("SHELL|com_thread: registering shell SID");
+fn event_thread(_arg: usize) {
+    info!("SHELL|event_thread: registering shell SID");
     let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
 
-    info!("SHELL|com_thread: starting COM response handler thread");
+    let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("SHELL|event_thread: can't connect to KBD");
+    keyboard::request_events(xous::names::SERVER_NAME_SHELL, kbd_conn).expect("SHELL:event_thread: couldn't request events from keyboard");
+
+    info!("SHELL|event_thread: starting COM response handler thread");
     loop {
         let envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
-        info!("SHELL|com_thread: got message {:?}", envelope);
+        info!("SHELL|event_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
             match opcode {
-                com::api::Opcode::BattStatsReturn(stats) => {
+                com::api::Opcode::BattStatsEvent(stats) => {
                     BATT_STATS_VOLTAGE.store(stats.voltage, Ordering::Relaxed);
                     BATT_STATS_CURRENT.store(stats.current, Ordering::Relaxed);
                     BATT_STATS_SOC.store(stats.soc, Ordering::Relaxed);
                     BATT_STATS_REMAINING.store(stats.remaining_capacity, Ordering::Relaxed);
-                }
-                _ => error!("shell received an opcode that wasn't expected"),
+                },
+                _ => error!("shell received COM event opcode that wasn't expected"),
+            }
+        } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
+            match opcode {
+                keyboard::api::Opcode::KeyboardEvent(keys) => {
+                    for &k in keys.iter() {
+                        if k != '\u{0000}' {
+                            info!("SHELL:event_thread: got key '{}'", k);
+                        }
+                    }
+                },
+                _ => error!("shell received KBD event opcode that wasn't expected"),
             }
         } else {
             error!("couldn't convert opcode");
@@ -148,7 +162,7 @@ fn shell_main() -> ! {
     info!("SHELL: connected to COM: {:?}", com_conn);
 
     // make a thread to catch responses from the COM
-    xous::create_thread_simple(com_thread, 0).unwrap();
+    xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");

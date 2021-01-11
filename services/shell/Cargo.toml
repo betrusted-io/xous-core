@@ -12,6 +12,7 @@ graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log-server = { path = "../log-server" }
+keyboard = { path = "../keyboard" }
 log = "0.4"
 
 com = { path = "../com"}
