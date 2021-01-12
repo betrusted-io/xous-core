@@ -411,8 +411,11 @@ pub enum Opcode<'a> {
     /// Set the clipping region for the string.
     SetStringClipping(ClipRect),
 
-    /// Render the string inside the clipping region.
+    /// Overwrite the string inside the clipping region.
     String(&'a str),
+
+    /// Xor the string inside the clipping region.
+    StringXor(&'a str),
 
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,
@@ -472,7 +475,16 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                         )
                     };
                     Ok(Opcode::String(core::str::from_utf8(s).unwrap()))
-                }
+                },
+                2 => {
+                    let s = unsafe {
+                        core::slice::from_raw_parts(
+                            m.buf.as_ptr(),
+                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
+                        )
+                    };
+                    Ok(Opcode::StringXor(core::str::from_utf8(s).unwrap()))
+                },
                 _ => Err("unrecognized opcode"),
             },
             _ => Err("unhandled message type"),
@@ -549,6 +561,10 @@ impl<'a> Into<Message> for Opcode<'a> {
             Opcode::String(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(1))
+            }
+            Opcode::StringXor(string) => {
+                let region = xous::carton::Carton::from_bytes(string.as_bytes());
+                Message::Borrow(region.into_message(2))
             }
             Opcode::SetCursor(c) => Message::Scalar(ScalarMessage {
                 id: 12,

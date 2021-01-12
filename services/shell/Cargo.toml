@@ -13,12 +13,13 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log-server = { path = "../log-server" }
 keyboard = { path = "../keyboard" }
+heapless = "0.5"
 log = "0.4"
 
 com = { path = "../com"}
 
 # blitstr = { path = "../../../blitstr" }
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "69f7c04b9f44a20571c4792c8fc9166f5d6b548d" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

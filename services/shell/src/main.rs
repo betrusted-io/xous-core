@@ -96,7 +96,7 @@ impl Bounce {
     }
 }
 
-use core::sync::atomic::{AtomicI16, AtomicU16, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicI16, AtomicU16, AtomicU8, Ordering, AtomicU32, AtomicBool};
 
 // need atomic global constants to pass data between threads
 // as we do not yet have a "Mutex" in Xous
@@ -104,6 +104,8 @@ static BATT_STATS_VOLTAGE: AtomicU16 = AtomicU16::new(3700);
 static BATT_STATS_CURRENT: AtomicI16 = AtomicI16::new(-150);
 static BATT_STATS_SOC: AtomicU8 = AtomicU8::new(50);
 static BATT_STATS_REMAINING: AtomicU16 = AtomicU16::new(750);
+static INCOMING_CHAR: AtomicU32 = AtomicU32::new(0);
+static INCOMING_FRESH: AtomicBool = AtomicBool::new(false);
 
 fn event_thread(_arg: usize) {
     info!("SHELL|event_thread: registering shell SID");
@@ -134,7 +136,9 @@ fn event_thread(_arg: usize) {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
                     for &k in keys.iter() {
                         if k != '\u{0000}' {
-                            info!("SHELL:event_thread: got key '{}'", k);
+                            // info!("SHELL:event_thread: got key '{}'", k);
+                            INCOMING_CHAR.store(k as u32, Ordering::Relaxed);
+                            INCOMING_FRESH.store(true, Ordering::Relaxed);
                         }
                     }
                 },
@@ -198,19 +202,21 @@ fn shell_main() -> ! {
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
     let mut string_buffer = String::new(4096);
+    let mut input_buf = String::new(4096);
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
     let status_clipregion =
-        Rectangle::new_coords_with_style(4, 0, screensize.x, font_h as _, style_light);
+        Rectangle::new_coords_with_style(4, 0, screensize.x, font_h as i16 * 2, style_light);
     let mut status_cursor;
+    let small_font_h = font_h;
 
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
     let mut work_clipregion = Rectangle::new_coords_with_style(
         4,
-        font_h as i16 + 2,
+        small_font_h as i16 * 2,
         screensize.x,
         font_h as i16 * 8 + 18,
         style_light,
@@ -219,10 +225,10 @@ fn shell_main() -> ! {
     graphics_server::draw_rectangle(graphics_conn, work_clipregion)
         .expect("unable to clear region");
 
-    let mut firsttime = true;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut first_time = true;
     loop {
-        // status bar
+        //////////////// status bar
         graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
             .expect("unable to set glyph");
 
@@ -271,17 +277,7 @@ fn shell_main() -> ! {
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
-        graphics_server::draw_line(
-            graphics_conn,
-            Line::new_with_style(
-                Point::new(0, font_h as i16),
-                Point::new(screensize.x as _, font_h as i16),
-                style_dark,
-            ),
-        )
-        .expect("can't draw line");
-
-        // work area
+        //////////////// uptime
         string_buffer.clear();
         write!(
             &mut string_buffer,
@@ -289,30 +285,52 @@ fn shell_main() -> ! {
             last_time as f32 / 1000f32
         )
         .expect("Can't write");
-        work_cursor = Cursor::from_top_left_of(work_clipregion.into());
-        work_clipregion.br = Point::new(screensize.x, font_h as i16 * 3);
-        graphics_server::draw_rectangle(graphics_conn, work_clipregion)
-            .expect("unable to clear region");
-        work_clipregion.br = Point::new(screensize.x, font_h as i16 * 8);
-        graphics_server::set_string_clipping(graphics_conn, work_clipregion.into())
-            .expect("unable to set string clip region");
-        graphics_server::set_cursor(graphics_conn, work_cursor).expect("can't set cursor");
-        graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)
-            .expect("unable to set glyph");
+        status_cursor.pt.x = 4; status_cursor.pt.y = small_font_h;
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
-        if firsttime {
-            string_buffer.clear();
-            write!(&mut string_buffer, "Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.\n           😸     🎩    🔑\n           cat    hat    key\n").expect("Can't write");
-            graphics_server::draw_string(graphics_conn, &string_buffer)
-                .expect("unable to draw string");
-            firsttime = false;
+        // a line under the status area
+        graphics_server::draw_line(
+            graphics_conn,
+            Line::new_with_style(
+                Point::new(0, status_clipregion.br.y + 2),
+                Point::new(screensize.x as _, status_clipregion.br.y + 2),
+                style_dark,
+            ),
+        )
+        .expect("can't draw line");
+
+
+
+        //////////////// work area
+        if INCOMING_FRESH.load(Ordering::Relaxed) {
+            INCOMING_FRESH.store(false, Ordering::Relaxed);
+            write!(&mut input_buf, "{}", core::char::from_u32(INCOMING_CHAR.load(Ordering::Relaxed)).unwrap()).expect("unable to copy to Xous string");
+
+            graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)
+            .expect("unable to set glyph");
+
+            // define the text area
+            work_clipregion.tl = Point::new(4, font_h as i16 * 2);
+            work_clipregion.br = Point::new(screensize.x, bouncyball.bounds.tl.y);
+            work_cursor = Cursor::from_top_left_of(work_clipregion.into());
+
+            // clear the text area, set string clipping and cursor
+            if first_time {
+                info!("SHELL: first time clear of work area");
+                graphics_server::draw_rectangle(graphics_conn, work_clipregion)
+                   .expect("unable to clear region");
+                first_time = false;
+            }
+            graphics_server::set_string_clipping(graphics_conn, work_clipregion.into())
+                .expect("unable to set string clip region");
+            graphics_server::set_cursor(graphics_conn, work_cursor).expect("can't set cursor");
+
+            // info!("SHELL: attempting to render {}", input_buf);
+            graphics_server::draw_string(graphics_conn, &input_buf).expect("unable to draw string");
         }
 
-        // rate limit graphics
-        //ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
 
-        // draw the ball
+        //////////////// draw the ball
         graphics_server::draw_rectangle(
             graphics_conn,
             Rectangle::new_with_style(
@@ -371,5 +389,8 @@ fn shell_main() -> ! {
         }
 
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
+
+        // rate limit graphics
+        //ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
     }
 }

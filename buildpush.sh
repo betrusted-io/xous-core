@@ -57,6 +57,11 @@ set -- "${POSITIONAL[@]}"
 
 DESTDIR=code/precursors
 
+# this didn't work. Timestamping is actually kinda broken, because
+# you end up capturing just the time that you managed to trigger a
+# full rebuild, and not just an incremental rebuild. :-/
+#touch services/log-server/src/main.rs # bump the build time in the log server
+
 cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
 
 # only copy if changed, othrewise it seems to trigger extra build effort...

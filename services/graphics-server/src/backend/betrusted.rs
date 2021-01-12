@@ -7,26 +7,36 @@ const FB_LINES: usize = 536;
 const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 
-const COMMAND_OFFSET: usize = 0;
-const BUSY_OFFSET: usize = 1;
-const PRESCALER_OFFSET: usize = 2;
-
 pub struct XousDisplay {
     fb: MemoryRange,
-    control: MemoryRange,
+    hwfb: MemoryRange,
+    csr: utralib::CSR<u32>,
 }
 
 impl XousDisplay {
     pub fn new() -> XousDisplay {
         let fb = xous::syscall::map_memory(
+            None,
+            None,
+            ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map backing frame buffer");
+        let temp: *mut [u32; FB_SIZE] = fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
+        }
+
+        let hwfb = xous::syscall::map_memory(
             xous::MemoryAddress::new(HW_MEMLCD_MEM),
             None,
             ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-        .expect("couldn't map frame buffer");
-        for mem_offset in 0..(FB_SIZE / 4) {
-            unsafe { fb.as_mut_ptr().add(mem_offset).write_volatile(0) };
+        .expect("couldn't map hardware frame buffer");
+        let temp: *mut [u32; FB_SIZE] = hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
         }
 
         let control = xous::syscall::map_memory(
@@ -36,7 +46,12 @@ impl XousDisplay {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
         .expect("couldn't map control port");
-        let mut display = XousDisplay { fb, control };
+
+        let mut display = XousDisplay {
+            fb: fb,
+            hwfb: hwfb,
+            csr: CSR::new(control.as_mut_ptr() as *mut u32),
+         };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
         display.sync_clear();
@@ -45,10 +60,25 @@ impl XousDisplay {
     }
 
     pub fn redraw(&mut self) {
-        while self.busy() {}
+        while self.busy() {xous::yield_slice()}
+        let fb: *mut [u32; FB_SIZE] = self.fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe {
+                (*hwfb)[words] = (*fb)[words];
+            }
+        }
         self.update_dirty();
+        // clear all the dirty bits, under the theory that it's time-wise cheaper on average
+        // to visit every line and clear the dirty bits than it is to do an update_all()
+        for lines in 0..FB_LINES {
+            unsafe {
+                (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
+            }
+        }
     }
 
+    // note: this API is used by emulation, don't remove calls to it
     pub fn update(&mut self) {}
 
     pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] {
@@ -72,27 +102,15 @@ impl XousDisplay {
 
     ///
     fn set_clock(&mut self, clk_mhz: u32) {
-        unsafe {
-            (self.control.as_ptr() as *mut u32)
-                .add(PRESCALER_OFFSET)
-                .write_volatile((clk_mhz / 2_000_000) - 1);
-        }
+        self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
 
     fn update_all(&mut self) {
-        unsafe {
-            (self.control.as_ptr() as *mut u32)
-                .add(COMMAND_OFFSET)
-                .write_volatile(2)
-        };
+        self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1);
     }
 
     fn update_dirty(&mut self) {
-        unsafe {
-            (self.control.as_ptr() as *mut u32)
-                .add(COMMAND_OFFSET)
-                .write_volatile(1)
-        };
+        self.csr.wfo(utra::memlcd::COMMAND_UPDATEDIRTY, 1);
     }
 
     /// "synchronous clear" -- must be called on init, so that the state of the LCD
@@ -111,11 +129,6 @@ impl XousDisplay {
     }
 
     fn busy(&self) -> bool {
-        unsafe {
-            (self.control.as_ptr() as *mut u32)
-                .add(BUSY_OFFSET)
-                .read_volatile()
-                == 1
-        }
+        self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
     }
 }
