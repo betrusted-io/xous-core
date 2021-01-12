@@ -136,7 +136,7 @@ fn event_thread(_arg: usize) {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
                     for &k in keys.iter() {
                         if k != '\u{0000}' {
-                            info!("SHELL:event_thread: got key '{}'", k);
+                            // info!("SHELL:event_thread: got key '{}'", k);
                             INCOMING_CHAR.store(k as u32, Ordering::Relaxed);
                             INCOMING_FRESH.store(true, Ordering::Relaxed);
                         }
@@ -201,7 +201,6 @@ fn shell_main() -> ! {
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
-    info!("SHELL: 1");
     let mut string_buffer = String::new(4096);
     let mut input_buf = String::new(4096);
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
@@ -212,7 +211,6 @@ fn shell_main() -> ! {
     let mut status_cursor;
     let small_font_h = font_h;
 
-    info!("SHELL: 2");
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
@@ -227,8 +225,8 @@ fn shell_main() -> ! {
     graphics_server::draw_rectangle(graphics_conn, work_clipregion)
         .expect("unable to clear region");
 
-    info!("SHELL: 3");
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut first_time = true;
     loop {
         //////////////// status bar
         graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
@@ -317,16 +315,19 @@ fn shell_main() -> ! {
             work_cursor = Cursor::from_top_left_of(work_clipregion.into());
 
             // clear the text area, set string clipping and cursor
-            graphics_server::draw_rectangle(graphics_conn, work_clipregion)
-                .expect("unable to clear region");
+            if first_time {
+                info!("SHELL: first time clear of work area");
+                graphics_server::draw_rectangle(graphics_conn, work_clipregion)
+                   .expect("unable to clear region");
+                first_time = false;
+            }
             graphics_server::set_string_clipping(graphics_conn, work_clipregion.into())
                 .expect("unable to set string clip region");
             graphics_server::set_cursor(graphics_conn, work_cursor).expect("can't set cursor");
 
-            info!("SHELL: attempting to render {}", input_buf);
+            // info!("SHELL: attempting to render {}", input_buf);
             graphics_server::draw_string(graphics_conn, &input_buf).expect("unable to draw string");
         }
-
 
 
         //////////////// draw the ball

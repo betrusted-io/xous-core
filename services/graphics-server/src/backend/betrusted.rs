@@ -9,20 +9,34 @@ const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 
 pub struct XousDisplay {
     fb: MemoryRange,
+    hwfb: MemoryRange,
     csr: utralib::CSR<u32>,
 }
 
 impl XousDisplay {
     pub fn new() -> XousDisplay {
         let fb = xous::syscall::map_memory(
+            None,
+            None,
+            ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map backing frame buffer");
+        let temp: *mut [u32; FB_SIZE] = fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
+        }
+
+        let hwfb = xous::syscall::map_memory(
             xous::MemoryAddress::new(HW_MEMLCD_MEM),
             None,
             ((FB_WIDTH_WORDS * FB_LINES * 4) + 4096) & !4095,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         )
-        .expect("couldn't map frame buffer");
-        for mem_offset in 0..(FB_SIZE / 4) {
-            unsafe { fb.as_mut_ptr().add(mem_offset).write_volatile(0) };
+        .expect("couldn't map hardware frame buffer");
+        let temp: *mut [u32; FB_SIZE] = hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
         }
 
         let control = xous::syscall::map_memory(
@@ -35,6 +49,7 @@ impl XousDisplay {
 
         let mut display = XousDisplay {
             fb: fb,
+            hwfb: hwfb,
             csr: CSR::new(control.as_mut_ptr() as *mut u32),
          };
 
@@ -46,7 +61,21 @@ impl XousDisplay {
 
     pub fn redraw(&mut self) {
         while self.busy() {xous::yield_slice()}
+        let fb: *mut [u32; FB_SIZE] = self.fb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+        for words in 0..FB_SIZE {
+            unsafe {
+                (*hwfb)[words] = (*fb)[words];
+            }
+        }
         self.update_dirty();
+        // clear all the dirty bits, under the theory that it's time-wise cheaper on average
+        // to visit every line and clear the dirty bits than it is to do an update_all()
+        for lines in 0..FB_LINES {
+            unsafe {
+                (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
+            }
+        }
     }
 
     // note: this API is used by emulation, don't remove calls to it

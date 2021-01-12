@@ -35,11 +35,10 @@ fn xmain() -> ! {
     let mut current_string_clip = blitstr::ClipRect::full_screen();
     let mut current_cursor = blitstr::Cursor::from_top_left_of(current_string_clip);
 
-    display.redraw();
-
     let sid = xous_names::register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
     info!("GFX: Server listening on address {:?}", sid);
 
+    display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
         // info!("GFX: Message: {:?}", msg);
@@ -71,6 +70,17 @@ fn xmain() -> ! {
                         &mut current_cursor,
                         current_glyph.into(),
                         s,
+                        false,
+                    );
+                }
+                Opcode::StringXor(s) => {
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s,
+                        true,
                     );
                 }
                 Opcode::SetGlyphStyle(glyph) => {
