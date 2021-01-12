@@ -57,7 +57,10 @@ set -- "${POSITIONAL[@]}"
 
 DESTDIR=code/precursors
 
-touch services/log-server/src/main.rs # bump the build time in the log server
+# this didn't work. Timestamping is actually kinda broken, because
+# you end up capturing just the time that you managed to trigger a
+# full rebuild, and not just an incremental rebuild. :-/
+#touch services/log-server/src/main.rs # bump the build time in the log server
 
 cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
 

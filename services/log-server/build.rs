@@ -7,8 +7,6 @@ use vergen::{ConstantsFlags, generate_cargo_keys};
 fn main() {
     let target = env::var("TARGET").unwrap();
 
-    generate_cargo_keys(ConstantsFlags::SHA | ConstantsFlags::BUILD_TIMESTAMP).unwrap();
-
     let target_os = target.split('-').nth(2).unwrap_or("none");
 
     // If we're not running on a desktop-class operating system, emit the "baremetal"
@@ -18,5 +16,9 @@ fn main() {
         println!("cargo:rustc-cfg=baremetal");
     }
 
+    generate_cargo_keys(ConstantsFlags::SHA /*| ConstantsFlags::BUILD_TIMESTAMP*/).unwrap();
+    // BUILD_TIMESTAMP doesn't work -- it doesn't update because of the below line
+    // removing the below line causes a lengthy full-rebuild just to capture a timestamp.
+    // so, we're removing the timestamp.
     println!("cargo:rerun-if-changed=build.rs");
 }

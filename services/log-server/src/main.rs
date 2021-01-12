@@ -228,7 +228,10 @@ fn reader_thread(mut output: implementation::OutputWriter) {
 
     writeln!(output, "LOG: ****************************************************************").unwrap();
     writeln!(output, "LOG: *** Welcome to Xous {:40} ***", env!("VERGEN_SHA")).unwrap();
-    writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
+    // time stamp isn't actually the time stamp of the build, unfortunately. It's the time stamp of the
+    // last time you managed to force a rebuild that also causes log-server to be rebuilt, not necessarily
+    // capturing the build time of the very most recent change!
+    // writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
     writeln!(output, "LOG: ****************************************************************").unwrap();
     let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
