@@ -203,6 +203,7 @@ fn shell_main() -> ! {
 
     info!("SHELL: 1");
     let mut string_buffer = String::new(4096);
+    let mut input_buf = String::new(4096);
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
@@ -228,7 +229,6 @@ fn shell_main() -> ! {
 
     info!("SHELL: 3");
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-    let mut input_buf = String::new(4096);
     loop {
         //////////////// status bar
         graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
