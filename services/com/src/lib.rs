@@ -58,3 +58,11 @@ pub fn send_pds_line(cid: CID, s: &xous::String) -> Result<(), Error> {
 pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {
     send_message(cid, api::Opcode::RxStatsAgent.into()).map(|_| ())
 }
+
+
+// event relay request API
+pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::Result, xous::Error> {
+    xous_names::request_core(name, com_conn, api::SUBTYPE_REGISTER_BATTSTATS_LISTENER)
+}
+
+// note to future self: add other event listener registrations (such as network events) here

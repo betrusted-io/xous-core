@@ -2,8 +2,8 @@ use xous::{Message, ScalarMessage};
 use heapless::Vec;
 use heapless::consts::*;
 
-pub const SUBTYPE_REGISTER_BASIC_LISTENER: u8 = 0;
-pub const SUBTYPE_REGISTER_RAW_LISTENER: u8 = 1;
+pub const SUBTYPE_REGISTER_BASIC_LISTENER: u16 = 0;
+pub const SUBTYPE_REGISTER_RAW_LISTENER: u16 = 1;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -154,11 +154,11 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 _ => Err("KBD api: unknown Scalar ID"),
             },
             Message::Borrow(m) => {
-                if (m.id & 0xFF) as u8 == SUBTYPE_REGISTER_BASIC_LISTENER {
+                if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BASIC_LISTENER) {
                     Ok(Opcode::RegisterListener({
                         unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
                     }))
-                } else if (m.id & 0xFF) as u8 == SUBTYPE_REGISTER_RAW_LISTENER {
+                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_RAW_LISTENER) {
                     Ok(Opcode::RegisterRawListener({
                         unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
                     }))

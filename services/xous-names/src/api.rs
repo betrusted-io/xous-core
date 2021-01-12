@@ -5,10 +5,10 @@ use hash32::{Hash, Hasher};
 
 use core::cmp::Eq;
 
-// bottom 8 bits are reserved for structure re-use by other servers
-pub const ID_REGISTER_NAME: usize = 0x0_00;
-pub const ID_LOOKUP_NAME: usize = 0x1_00;
-pub const ID_AUTHENTICATE: usize = 0x2_00;
+// bottom 16 bits are reserved for structure re-use by other servers
+pub const ID_REGISTER_NAME: usize = 0x1_0000;
+pub const ID_LOOKUP_NAME: usize   = 0x2_0000;
+pub const ID_AUTHENTICATE: usize  = 0x3_0000;
 
 pub const AUTHENTICATE_TIMEOUT: usize = 10_000; // time in ms that a process has to respond to an authentication request
 
@@ -122,8 +122,12 @@ pub struct Registration {
 impl Registration {
     pub fn mid(&self) -> usize { self.mid }
 
-    pub fn get_subtype(&self) -> u8 { (self.mid & 0xFF) as u8 }
-    pub fn set_subtype(&mut self, subtype: u8) { self.mid = (self.mid & 0xFFFF_FF_00) | (subtype as usize); }
+    pub fn get_subtype(&self) -> u16 { (self.mid & 0xFFFF) as u16 }
+    pub fn set_subtype(&mut self, subtype: u16) { self.mid = (self.mid & 0xFFFF_0000) | (subtype as usize); }
+
+    pub fn match_subtype(id: usize, subtype: u16) -> bool {
+        ((id & 0xFFFF) as u16 == subtype) && ((id & 0xFFFF_0000) == (ID_REGISTER_NAME & 0xFFFF_0000))
+    }
 
     pub fn new() -> Self {
         Registration {

@@ -4,6 +4,10 @@ use xous::{Message, ScalarMessage};
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 use com_rs::*;
+
+// subtype constants for registering service listeners from the COM
+pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
+
 #[derive(Debug, Default)]
 pub struct BattStats {
     /// instantaneous voltage in mV
@@ -98,6 +102,9 @@ pub enum Opcode<'a> {
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,
+
+    /// request for a listener to BattStats events
+    RegisterBattStatsListener(xous_names::api::Registration),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -146,8 +153,12 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                         )
                     };
                     Ok(Opcode::Wf200PdsLine(core::str::from_utf8(s).unwrap()))
+                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BATTSTATS_LISTENER) {
+                    Ok(Opcode::RegisterBattStatsListener({
+                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
+                    }))
                 } else {
-                    Err("unrecognized opcode")
+                    Err("COM: unknown borrow ID")
                 }
             }
             _ => Err("unhandled message type"),
@@ -221,14 +232,10 @@ impl<'a> Into<Message> for Opcode<'a> {
                 id: ComState::WFX_FW_REV_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
             Opcode::EcGitRev => Message::BlockingScalar(ScalarMessage {
                 id: ComState::EC_GIT_REV.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
-            // we use the direct string "lend" API -- the code below actually doesn't work
-            /*Opcode::Wf200PdsLine(pdsline) => {
-                let data = xous::carton::Carton::from_bytes(pdsline);
-                Message::Borrow(data.into_message(ComState::WFX_PDS_LINE_SET.verb as _))
-            },*/
+            // Wf200PdsLine() uses the direct string "lend" API
             Opcode::RxStatsAgent => Message::Scalar(ScalarMessage {
                 id: ComState::WFX_RXSTAT_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
-            _ => todo!("message type not yet implemented")
+            _ => panic!("opcode not handled -- maybe you meant to use one of the direct APIs")
         }
     }
 }
