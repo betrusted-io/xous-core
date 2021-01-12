@@ -70,3 +70,15 @@ pub fn request_connection_blocking(name: &str) -> Result<xous::CID, xous::Error>
         }
     }
 }
+
+/// API for other processes to re-use the Registration record for brokering requests
+pub fn request_core(name: &str, conn: xous::CID, subtype: u16) -> Result<xous::Result, xous::Error> {
+    let registration = Registration::new();
+    let mut sendable_registration = Sendable::new(registration)
+        .expect("can't create sendable registration structure");
+    sendable_registration.set_subtype(subtype);
+    write!(sendable_registration.name, "{}", name).unwrap();
+    sendable_registration.lend(conn, sendable_registration.mid()).expect("event request registration failure!");
+
+    Ok(xous::Result::Ok)
+}

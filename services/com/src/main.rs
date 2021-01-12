@@ -234,13 +234,13 @@ mod implementation {
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::XousCom;
+    use heapless::Vec;
+    use heapless::consts::*;
 
     log_server::init_wait().unwrap();
 
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);
-
-    let shell_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("COM: couldn't establish shell connection");
 
     let agent_conn: usize;
     if cfg!(feature = "fccagent") {
@@ -251,6 +251,10 @@ fn xmain() -> ! {
 
     // Create a new com object
     let mut com = XousCom::new();
+
+    // create a Vec to track return connections for battery stats
+    let mut battstats_conns: Vec<xous::CID, U64> = Vec::new();
+    // other future notification vectors shall go here
 
     info!("COM: starting main loop");
     loop {
@@ -272,12 +276,14 @@ fn xmain() -> ! {
                     info!("COM: done returning batt stats request");
                 }
                 Opcode::BattStatsNb => {
-                    com.workqueue
-                        .push(WorkRequest {
-                            work: ComState::STAT,
-                            sender: shell_conn,
-                        })
-                        .unwrap();
+                    for &conn in battstats_conns.iter() {
+                        com.workqueue
+                            .push(WorkRequest {
+                                work: ComState::STAT,
+                                sender: conn,
+                            })
+                            .unwrap();
+                    }
                 }
                 Opcode::Wf200Rev => {
                     com.txrx(ComState::WFX_FW_REV_GET.verb);
@@ -326,6 +332,7 @@ fn xmain() -> ! {
                 }
                 Opcode::RxStatsAgent => {
                     if cfg!(feature = "fccagent") {
+                        // note -- this code never worked, but wasn't needed. just hanging out as bread crumbs for future work in case this is needed.
                         let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
                         com.txrx(ComState::WFX_RXSTAT_GET.verb);
                         for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
@@ -338,6 +345,10 @@ fn xmain() -> ! {
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
                     }
+                }
+                Opcode::RegisterBattStatsListener(registration) => {
+                    let cid = xous_names::request_connection_blocking(registration.name.to_str()).expect("COM: can't connect to requested listener for reporting events");
+                    battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
                 }
                 _ => error!("unknown opcode"),
             }

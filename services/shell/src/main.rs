@@ -110,7 +110,10 @@ fn event_thread(_arg: usize) {
     let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
 
     let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("SHELL|event_thread: can't connect to KBD");
-    keyboard::request_events(xous::names::SERVER_NAME_SHELL, kbd_conn).expect("SHELL:event_thread: couldn't request events from keyboard");
+    keyboard::request_events(xous::names::SERVER_NAME_SHELL, kbd_conn).expect("SHELL|event_thread: couldn't request events from keyboard");
+
+    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL|event_thread: can't connect to COM");
+    com::request_battstat_events(xous::names::SERVER_NAME_SHELL, com_conn).expect("SHELL|event_thread: couldn't request events from COM");
 
     info!("SHELL|event_thread: starting COM response handler thread");
     loop {
