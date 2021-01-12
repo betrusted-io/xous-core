@@ -1,8 +1,13 @@
 // NOTE: Adapted from cortex-m/build.rs
 use std::env;
 
+extern crate vergen;
+use vergen::{ConstantsFlags, generate_cargo_keys};
+
 fn main() {
     let target = env::var("TARGET").unwrap();
+
+    generate_cargo_keys(ConstantsFlags::SHA | ConstantsFlags::BUILD_TIMESTAMP).unwrap();
 
     let target_os = target.split('-').nth(2).unwrap_or("none");
 

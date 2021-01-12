@@ -57,6 +57,8 @@ set -- "${POSITIONAL[@]}"
 
 DESTDIR=code/precursors
 
+touch services/log-server/src/main.rs # bump the build time in the log server
+
 cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
 
 # only copy if changed, othrewise it seems to trigger extra build effort...

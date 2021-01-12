@@ -9,6 +9,9 @@ description = "Log output program"
 xous = { path = "../../xous-rs" }
 log = "0.4"
 
+[build-dependencies]
+vergen = "3"
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
