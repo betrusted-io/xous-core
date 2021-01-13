@@ -155,7 +155,12 @@ fn xmain() -> ! {
     let trng_sid = xous_names::register_name(xous::names::SERVER_NAME_TRNG).expect("TRNG: can't register server");
     info!("TRNG: registered with NS -- {:?}", trng_sid);
 
+    #[cfg(target_os = "none")]
+    let trng = Trng::new();
+
+    #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
+
     info!("TRNG: ready to accept requests");
 
     loop {
