@@ -65,7 +65,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
             memory_manager
                 .map_range(
                     utra::uart::HW_UART_BASE as *mut u8,
-                    ((debug::SUPERVISOR_UART.base as u32) & !4095) as *mut u8,
+                    ((debug::SUPERVISOR_UART_ADDR as u32) & !4095) as *mut u8,
                     4096,
                     PID::new(1).unwrap(),
                     MemoryFlags::R | MemoryFlags::W,
@@ -74,7 +74,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
                 .expect("unable to map serial port")
         });
         println!("KMAIN: Supervisor mode started...");
-        debug::SUPERVISOR_UART.enable_rx();
+        debug::Uart{}.enable_rx();
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
         xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
             .expect("Couldn't claim debug interrupt");
