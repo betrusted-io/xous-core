@@ -121,7 +121,7 @@ pub extern "C" fn trap_handler(
         // it with one if necessary.
         match ex {
             RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
-                #[cfg(any(feature = "debug-print", feature = "print-panics"))]
+                #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                 print!(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
                     pid, ex, pc, addr
@@ -130,6 +130,11 @@ pub extern "C" fn trap_handler(
                 let entry = crate::arch::mem::pagetable_entry(virt).unwrap_or_else(|x| {
                     // MemoryManagerHandle::get().print_ownership();
                     MemoryMapping::current().print_map();
+                    #[cfg(not(any(feature = "debug-print", feature = "print-panics")))]
+                    print!(
+                        "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
+                        pid, ex, pc, addr
+                    );
                     panic!(
                         "error {:?} at {:08x}: memory not mapped or reserved for addr {:08x}",
                         x, pc, addr
@@ -164,6 +169,7 @@ pub extern "C" fn trap_handler(
                         flush_mmu();
                     };
 
+                    #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                     println!("Handing page {:08x} to process", new_page);
                     ArchProcess::with_current_mut(|process| {
                         crate::arch::syscall::resume(
@@ -171,6 +177,12 @@ pub extern "C" fn trap_handler(
                             process.current_thread(),
                         )
                     });
+
+                    #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
+                    print!(
+                        "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
+                        pid, ex, pc, addr
+                    );
                 }
                 println!("Page was not allocated");
             }
