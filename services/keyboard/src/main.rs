@@ -801,6 +801,7 @@ fn xmain() -> ! {
     let mut raw_conns: Vec<xous::CID, U64> = Vec::new();
 
     info!("KBD: starting main loop");
+    let mut injected_keys: Vec<char, U64> = Vec::new();
     loop {
         let maybe_env = xous::try_receive_message(kbd_sid).unwrap();
         match maybe_env {
@@ -827,6 +828,9 @@ fn xmain() -> ! {
                         },
                         Opcode::KeyboardEvent(_keys) => {
                             error!("KBD: somehow received an outgoing event code, this shouldn't happen!");
+                        },
+                        Opcode::HostModeInjectKey(key) => {
+                            injected_keys.push(key).unwrap();
                         }
                     }
                 } else {
@@ -881,7 +885,29 @@ fn xmain() -> ! {
         };
 
         // send keys, if any
-        if kc.len() > 0 {
+        if kc.len() > 0 || injected_keys.len() > 0 {
+            // this is used for hosted mode emulation injection of keys
+            if injected_keys.len() > 0 {
+                let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+                let mut i = 0;
+                while i < injected_keys.len() && i < 4 {
+                    keys[i] = injected_keys[i];
+                    i = i + 1;
+                }
+                if injected_keys.len() < 4 {
+                    injected_keys.clear();
+                } else {
+                    let mut temp: Vec<char, U64> = Vec::new();
+                    for i in 4..injected_keys.len() {
+                        temp.push(injected_keys[i]).unwrap();
+                    }
+                    injected_keys = temp;
+                }
+                for conn in normal_conns.iter() {
+                    xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
+                }
+            }
+
             let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
             for i in 0..kc.len() {
                 // info!("KBD: sending key '{}'", kc[i]);

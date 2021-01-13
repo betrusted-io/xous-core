@@ -1,4 +1,4 @@
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions, KeyRepeat};
 
 const WIDTH: usize = 336;
 const HEIGHT: usize = 536;
@@ -15,6 +15,7 @@ pub struct XousDisplay {
     native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
     window: Window,
+    kbd_conn: xous::CID,
 }
 
 impl XousDisplay {
@@ -43,10 +44,13 @@ impl XousDisplay {
             .update_with_buffer(&native_buffer, WIDTH, HEIGHT)
             .unwrap();
 
+        let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("GFX|hosted: can't connect to KBD for emulation");
+
         XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
+            kbd_conn,
         }
     }
 
@@ -73,6 +77,17 @@ impl XousDisplay {
         if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
             std::process::exit(0);
         }
+
+        let pressed = self.window.get_keys_pressed(KeyRepeat::No);
+        if let Some(keys) = pressed {
+            for k in keys {
+                log::info!("GFX|hosted: sending key {:?}", k);
+                let c = self.decode_key(k);
+                if c != '\u{0000}' {
+                    xous::send_message(self.kbd_conn, keyboard::api::Opcode::HostModeInjectKey(c).into()).map(|_| ()).unwrap();
+                }
+            }
+        }
     }
 
     fn emulated_to_native(&mut self) {
@@ -91,5 +106,116 @@ impl XousDisplay {
                 }
             }
         }
+    }
+
+    fn decode_key(&mut self, k: Key) -> char {
+        let mut shift = false;
+        if self.window.is_key_pressed(Key::LeftShift, KeyRepeat::Yes) ||
+           self.window.is_key_pressed(Key::RightShift, KeyRepeat::Yes) {
+            shift = true;
+        }
+        let base: char =
+            if shift == false {
+                match k {
+                    Key::A => 'a',
+                    Key::B => 'b',
+                    Key::C => 'c',
+                    Key::D => 'd',
+                    Key::E => 'e',
+                    Key::F => 'f',
+                    Key::G => 'g',
+                    Key::H => 'h',
+                    Key::I => 'i',
+                    Key::J => 'j',
+                    Key::K => 'k',
+                    Key::L => 'l',
+                    Key::M => 'm',
+                    Key::N => 'n',
+                    Key::O => 'o',
+                    Key::P => 'p',
+                    Key::Q => 'q',
+                    Key::R => 'r',
+                    Key::S => 's',
+                    Key::T => 't',
+                    Key::U => 'u',
+                    Key::V => 'v',
+                    Key::W => 'w',
+                    Key::X => 'x',
+                    Key::Y => 'y',
+                    Key::Z => 'z',
+                    Key::Key0 => '0',
+                    Key::Key1 => '1',
+                    Key::Key2 => '2',
+                    Key::Key3 => '3',
+                    Key::Key4 => '4',
+                    Key::Key5 => '5',
+                    Key::Key6 => '6',
+                    Key::Key7 => '7',
+                    Key::Key8 => '8',
+                    Key::Key9 => '9',
+                    Key::Left => '←',
+                    Key::Right => '→',
+                    Key::Up => '↑',
+                    Key::Down => '↓',
+                    Key::Home => '∴',
+                    Key::Backspace => 0x8_u8.into(),
+                    Key::Delete => 0x8_u8.into(),
+                    Key::Space => ' ',
+                    Key::Comma => ',',
+                    Key::Period => '.',
+                    _ => '\u{0000}',
+                }
+            } else {
+                match k {
+                    Key::A => 'A',
+                    Key::B => 'B',
+                    Key::C => 'C',
+                    Key::D => 'D',
+                    Key::E => 'E',
+                    Key::F => 'F',
+                    Key::G => 'G',
+                    Key::H => 'H',
+                    Key::I => 'I',
+                    Key::J => 'J',
+                    Key::K => 'K',
+                    Key::L => 'L',
+                    Key::M => 'M',
+                    Key::N => 'N',
+                    Key::O => 'O',
+                    Key::P => 'P',
+                    Key::Q => 'Q',
+                    Key::R => 'R',
+                    Key::S => 'S',
+                    Key::T => 'T',
+                    Key::U => 'U',
+                    Key::V => 'V',
+                    Key::W => 'W',
+                    Key::X => 'X',
+                    Key::Y => 'Y',
+                    Key::Z => 'Z',
+                    Key::Key0 => ')',
+                    Key::Key1 => '!',
+                    Key::Key2 => '@',
+                    Key::Key3 => '#',
+                    Key::Key4 => '$',
+                    Key::Key5 => '%',
+                    Key::Key6 => '^',
+                    Key::Key7 => '&',
+                    Key::Key8 => '*',
+                    Key::Key9 => '(',
+                    Key::Left => '←',
+                    Key::Right => '→',
+                    Key::Up => '↑',
+                    Key::Down => '↓',
+                    Key::Home => '∴',
+                    Key::Backspace => 0x8_u8.into(),
+                    Key::Delete => 0x8_u8.into(),
+                    Key::Space => ' ',
+                    Key::Comma => '<',
+                    Key::Period => '>',
+                    _ => '\u{0000}',
+                }
+            };
+        base
     }
 }

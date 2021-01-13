@@ -11,19 +11,11 @@ use xous::String;
 
 use core::convert::TryFrom;
 
-fn move_lfsr(mut lfsr: u32) -> u32 {
-    lfsr ^= lfsr >> 7;
-    lfsr ^= lfsr << 9;
-    lfsr ^= lfsr >> 13;
-    lfsr
-}
-
 pub struct Bounce {
     vector: Point,
     radius: u16,
     bounds: Rectangle,
     loc: Point,
-    lfsr: u32,
 }
 
 impl Bounce {
@@ -36,7 +28,6 @@ impl Bounce {
                 (bounds.br.x - bounds.tl.x) / 2,
                 (bounds.br.y - bounds.tl.y) / 2,
             ),
-            lfsr: 0xace1u32,
         }
     }
 
@@ -51,11 +42,6 @@ impl Bounce {
     }
 
     pub fn next_rand(&mut self, trng_conn: xous::CID) -> i16 {
-        /*
-        let mut ret = move_lfsr(self.lfsr);
-        self.lfsr = ret;
-        ret *= 3; // make the ball move faster
-        */
         let ret = trng::get_u32(trng_conn).expect("SHELL: can't get TRNG") * 3;
 
         (ret % 12) as i16
@@ -100,6 +86,8 @@ impl Bounce {
 }
 
 use core::sync::atomic::{AtomicI16, AtomicU16, AtomicU8, Ordering, AtomicU32, AtomicBool};
+use heapless::Vec;
+use heapless::consts::U64;
 
 // need atomic global constants to pass data between threads
 // as we do not yet have a "Mutex" in Xous
@@ -121,7 +109,18 @@ fn event_thread(_arg: usize) {
     com::request_battstat_events(xous::names::SERVER_NAME_SHELL, com_conn).expect("SHELL|event_thread: couldn't request events from COM");
 
     info!("SHELL|event_thread: starting COM response handler thread");
+    let mut key_queue: Vec<char, U64> = Vec::new();
     loop {
+        if key_queue.len() > 0 {
+            for i in 0..key_queue.len() {
+                INCOMING_CHAR.store(key_queue[i] as u32, Ordering::Relaxed);
+                INCOMING_FRESH.store(true, Ordering::Relaxed);
+                while INCOMING_FRESH.load(Ordering::Relaxed) {
+                    xous::yield_slice();
+                }
+            }
+            key_queue.clear();
+        }
         let envelope = xous::syscall::receive_message(shell_server).expect("couldn't get address");
         // info!("SHELL|event_thread: got message {:?}", envelope);
         if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
@@ -139,9 +138,8 @@ fn event_thread(_arg: usize) {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
                     for &k in keys.iter() {
                         if k != '\u{0000}' {
+                            key_queue.push(k).unwrap();
                             // info!("SHELL:event_thread: got key '{}'", k);
-                            INCOMING_CHAR.store(k as u32, Ordering::Relaxed);
-                            INCOMING_FRESH.store(true, Ordering::Relaxed);
                         }
                     }
                 },

@@ -134,6 +134,9 @@ pub enum Opcode {
 
     /// keyboard events (as sent to listeners)
     KeyboardEvent([char; 4]),
+
+    /// used by host mode emulation to inject keys
+    HostModeInjectKey(char),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -151,6 +154,8 @@ impl core::convert::TryFrom<& Message> for Opcode {
                         if let Some(a) = core::char::from_u32(m.arg3 as u32) { a } else { '\u{0000}' },
                         if let Some(a) = core::char::from_u32(m.arg4 as u32) { a } else { '\u{0000}' }
                          ])),
+                3 => Ok(Opcode::HostModeInjectKey(
+                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {a} else { '\u{0000}'} )),
                 _ => Err("KBD api: unknown Scalar ID"),
             },
             Message::Borrow(m) => {
@@ -198,6 +203,11 @@ impl Into<Message> for Opcode {
                 arg2: keys[1] as u32 as usize,
                 arg3: keys[2] as u32 as usize,
                 arg4: keys[3] as u32 as usize,
+            }),
+            Opcode::HostModeInjectKey(key) => Message::Scalar(ScalarMessage {
+                id: 3,
+                arg1: key as u32 as usize,
+                arg2: 0, arg3: 0, arg4: 0,
             }),
             _ => panic!("KBD api: Opcode type not handled by Into(), refer to helper method"),
         }
