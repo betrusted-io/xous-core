@@ -13,6 +13,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log-server = { path = "../log-server" }
 keyboard = { path = "../keyboard" }
+trng = { path = "../trng" }
 heapless = "0.5"
 log = "0.4"
 

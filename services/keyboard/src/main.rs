@@ -794,7 +794,7 @@ fn xmain() -> ! {
     let kbd_sid = xous_names::register_name(xous::names::SERVER_NAME_KBD).expect("KBD: can't register server");
     info!("KBD: registered with NS -- {:?}", kbd_sid);
 
-    // Create a new com object
+    // Create a new kbd object
     let mut kbd = Keyboard::new();
 
     let mut normal_conns: Vec<xous::CID, U64> = Vec::new();

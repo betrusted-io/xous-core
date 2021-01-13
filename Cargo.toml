@@ -12,6 +12,7 @@ members = [
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
+    "services/trng",
     "svd2utra",
     "xtask",
 ]
@@ -25,6 +26,7 @@ default-members = [
     "services/xous-names",
     "services/keyboard",
     "services/com",
+    "services/trng"
 ]
 
 # These packages have custom RUSTFLAGS, so if they

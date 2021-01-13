@@ -50,15 +50,18 @@ impl Bounce {
         self.bounds
     }
 
-    pub fn next_rand(&mut self) -> i16 {
+    pub fn next_rand(&mut self, trng_conn: xous::CID) -> i16 {
+        /*
         let mut ret = move_lfsr(self.lfsr);
         self.lfsr = ret;
         ret *= 3; // make the ball move faster
+        */
+        let ret = trng::get_u32(trng_conn).expect("SHELL: can't get TRNG") * 3;
 
         (ret % 12) as i16
     }
 
-    pub fn update(&mut self) -> &mut Self {
+    pub fn update(&mut self, trng_conn: xous::CID) -> &mut Self {
         let mut x: i16;
         let mut y: i16;
         // update the new ball location
@@ -72,19 +75,19 @@ impl Bounce {
             || (y <= (self.bounds.tl.y + r))
         {
             if x >= (self.bounds.br.x - r - 1) {
-                self.vector.x = -self.next_rand();
+                self.vector.x = -self.next_rand(trng_conn);
                 x = self.bounds.br.x - r;
             }
             if x <= self.bounds.tl.x + r + 1 {
-                self.vector.x = self.next_rand();
+                self.vector.x = self.next_rand(trng_conn);
                 x = self.bounds.tl.x + r;
             }
             if y >= (self.bounds.br.y - r - 1) {
-                self.vector.y = -self.next_rand();
+                self.vector.y = -self.next_rand(trng_conn);
                 y = self.bounds.br.y - r;
             }
             if y <= (self.bounds.tl.y + r + 1) {
-                self.vector.y = self.next_rand();
+                self.vector.y = self.next_rand(trng_conn);
                 y = self.bounds.tl.y + r;
             }
         }
@@ -168,6 +171,8 @@ fn shell_main() -> ! {
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
     info!("SHELL: connected to COM: {:?}", com_conn);
 
+    let trng_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("SHELL: can't connect to TRNG");
+
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
@@ -181,7 +186,7 @@ fn shell_main() -> ! {
             Point::new(screensize.x as _, screensize.y as i16 - 1),
         ),
     );
-    bouncyball.update();
+    bouncyball.update(trng_conn);
 
     #[cfg(baremetal)]
     {
@@ -346,7 +351,7 @@ fn shell_main() -> ! {
             ),
         )
         .expect("unable to clear ball region");
-        bouncyball.update();
+        bouncyball.update(trng_conn);
 
         // draw the top line that contains the ball
         graphics_server::draw_line(
