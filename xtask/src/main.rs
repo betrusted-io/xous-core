@@ -86,6 +86,7 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
         "com",
         "xous-names",
         "keyboard",
+        "trng",
     ] {
         // "fcc-agent"
         init.push(build(pkg, debug, Some(TARGET), None)?);
@@ -188,6 +189,7 @@ fn run(debug: bool) -> Result<(), DynError> {
         "com",
         "xous-names",
         "keyboard",
+        "trng",
     ];
 
     // let mut init_paths = vec![];

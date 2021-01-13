@@ -879,6 +879,7 @@ dependencies = [
  "log",
  "log-server",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
  "xous-names",
@@ -1008,6 +1009,19 @@ dependencies = [
  "log",
  "svd2utra",
  "xmas-elf",
+]
+
+[[package]]
+name = "trng"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "log",
+ "log-server",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]
