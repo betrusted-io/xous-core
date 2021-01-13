@@ -754,7 +754,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateServerId => SystemServices::with_mut(|ss| {
             ss.create_server_id()
-            .map(|(sid)| xous_kernel::Result::ServerID(sid))
+            .map(|sid| xous_kernel::Result::ServerID(sid))
         }),
         SysCall::TryConnect(sid) => SystemServices::with_mut(|ss| {
             ss.connect_to_server(sid)
