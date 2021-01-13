@@ -124,7 +124,7 @@ mod implementation {
             }
         }
 
-        fn move_lfsr(mut lfsr: u32) -> u32 {
+        fn move_lfsr(&self, mut lfsr: u32) -> u32 {
             lfsr ^= lfsr >> 7;
             lfsr ^= lfsr << 9;
             lfsr ^= lfsr >> 13;
@@ -133,12 +133,12 @@ mod implementation {
 
         pub fn wait_full(&self) { }
 
-        pub fn get_trng(&mut self, count: usize) -> [u32; 2] {
+        pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
             info!("TRNG: hosted mode TRNG is *not* random, it is an LFSR");
-            let ret: [u32; 2];
-            self.seed = move_lfsr(self.seed);
+            let mut ret: [u32; 2] = [0; 2];
+            self.seed = self.move_lfsr(self.seed);
             ret[0] = self.seed;
-            self.seed = move_lfsr(self.seed);
+            self.seed = self.move_lfsr(self.seed);
             ret[1] = self.seed;
 
             ret
@@ -155,7 +155,7 @@ fn xmain() -> ! {
     let trng_sid = xous_names::register_name(xous::names::SERVER_NAME_TRNG).expect("TRNG: can't register server");
     info!("TRNG: registered with NS -- {:?}", trng_sid);
 
-    let trng = Trng::new();
+    let mut trng = Trng::new();
     info!("TRNG: ready to accept requests");
 
     loop {
