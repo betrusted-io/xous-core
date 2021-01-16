@@ -1,0 +1,32 @@
+[package]
+name = "gam"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Graphical Abstraction Manager for Xous"
+
+[dependencies]
+bitflags = "1.2.1"
+xous = { path = "../../xous-rs" }
+graphics-server = { path = "../graphics-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log-server = { path = "../log-server" }
+keyboard = { path = "../keyboard" }
+trng = { path = "../trng" }
+heapless = "0.5"
+log = "0.4"
+
+com = { path = "../com"}
+
+# blitstr = { path = "../../../blitstr" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
+
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+# default = ["debugprint"] # "debugprint"
+default = []

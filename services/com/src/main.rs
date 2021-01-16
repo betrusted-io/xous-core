@@ -266,6 +266,7 @@ fn xmain() -> ! {
                 Opcode::PowerOffSoc => {
                     info!("COM: power off called");
                     com.txrx(ComState::POWER_OFF.verb);
+                    com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used
                 }
                 Opcode::BattStats => {
                     info!("COM: batt stats request received");

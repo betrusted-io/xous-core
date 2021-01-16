@@ -79,7 +79,8 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &[
-        "shell",
+        //"shell",
+        "gam",
         "graphics-server",
         "ticktimer-server",
         "log-server",

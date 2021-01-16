@@ -1,5 +1,17 @@
 #![allow(dead_code)]
 
+/*
+  Primitives needed:
+
+  - clipping rectangles (for drawing)
+  - rounded rectangles
+  - inverse text
+  - icons/sprites
+  - width of a text string with a given font (to compute alignments)
+  - untrusted backgrounds
+  - bitmaps
+
+*/
 use crate::op::{HEIGHT, WIDTH};
 use blitstr::{ClipRect, Cursor, GlyphStyle};
 use core::cmp::{max, min};
@@ -270,6 +282,43 @@ impl Rectangle {
             br: Point::new(max(x0, x1), max(y0, y1)),
             style: DrawStyle::default(),
         }
+    }
+    // stack a new rectangle on top of the current one (same width)
+    // positive widths go *below*, negative go *above* in screen coordinate space. borders are non-overlapping.
+    pub fn new_v_stack(reference: Rectangle, width: i16) -> Rectangle {
+        if width >= 0 { // rectangle below
+            Rectangle::new_coords(reference.tl.x, reference.br.y + 1,
+            reference.br.x, reference.br.y + width + 1)
+        } else { // rectangle above
+            Rectangle::new_coords(reference.tl.x, reference.tl.y + width - 1,
+            reference.br.x, reference.tl.y - 1)
+        }
+    }
+    // make a new rectangle than spans between the above and below rectangles. the borders are non-overlapping.
+    pub fn new_v_span(above: Rectangle, below: Rectangle) -> Rectangle {
+        Rectangle::new_coords(above.tl.x, above.br.y + 1, below.br.x, below.tl.y - 1)
+    }
+    // "stack" a rectangle to the left or right of the current one (same height)
+    // positive widths go to the right, negative to the left. borders are non-overlapping
+    pub fn new_h_stack(reference: Rectangle, width: i16) -> Rectangle {
+        if width >= 0 { // stack to the right
+            Rectangle::new_coords(reference.br.x + 1, reference.tl.y,
+            reference.br.x + width + 1, reference.br.y)
+        } else { // stack to the left
+            Rectangle::new_coords(reference.tl.x + width - 1, reference.tl.y,
+            reference.tl.x - 1, reference.br.y)
+        }
+    }
+    // make a new rectangle than spans between the left and right rectangles. borders are non-overlapping
+    pub fn new_h_span(left: Rectangle, right: Rectangle) -> Rectangle {
+        Rectangle::new_coords(left.br.x + 1, left.tl.y, right.tl.x - 1, right.br.y)
+    }
+    pub fn intersects(&self, other: Rectangle) -> bool {
+        ((other.tl.x >= self.tl.x) && (other.tl.x <= self.br.x)) &&
+        ((other.tl.y >= self.tl.y) && (other.tl.y <= self.br.y))
+        ||
+        ((other.br.x >= self.tl.x) && (other.br.x <= self.br.x)) &&
+        ((other.br.y >= self.tl.y) && (other.br.y <= self.br.y))
     }
     pub fn new_coords_with_style(
         x0: i16,

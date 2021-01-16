@@ -312,6 +312,21 @@ fn reader_thread(mut output: implementation::OutputWriter) {
 
 #[xous::xous_main]
 fn some_main() -> ! {
+    #[cfg(baremetal)]
+    {
+        // use this to select which UART to monitor in the main loop
+        use utralib::generated::*;
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
+    }
+
     let mut output = implementation::init();
     let writer = output.get_writer();
     println!("LOG: Creating the reader thread");

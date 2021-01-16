@@ -8,6 +8,9 @@ use xous::ipc::Sendable;
 use heapless::Vec;
 use heapless::consts::*;
 
+#[cfg(not(target_os = "none"))]
+use heapless::spsc::Queue;
+
 use core::convert::TryFrom;
 
 use log::{error, info};
@@ -801,7 +804,10 @@ fn xmain() -> ! {
     let mut raw_conns: Vec<xous::CID, U64> = Vec::new();
 
     info!("KBD: starting main loop");
-    let mut injected_keys: Vec<char, U64> = Vec::new();
+    #[cfg(not(target_os = "none"))]
+    let mut injected_keys: Queue<char, U64, _> = Queue::u8();
+    #[cfg(not(target_os = "none"))]
+    let (mut key_enqueue, mut key_dequeue) = injected_keys.split();
     loop {
         let maybe_env = xous::try_receive_message(kbd_sid).unwrap();
         match maybe_env {
@@ -830,7 +836,9 @@ fn xmain() -> ! {
                             error!("KBD: somehow received an outgoing event code, this shouldn't happen!");
                         },
                         Opcode::HostModeInjectKey(key) => {
-                            injected_keys.push(key).unwrap();
+                            info!("KBD: injecting emulation key press '{}'", key);
+                            #[cfg(not(target_os = "none"))]
+                            key_enqueue.enqueue(key).unwrap();
                         }
                     }
                 } else {
@@ -884,30 +892,25 @@ fn xmain() -> ! {
             },
         };
 
-        // send keys, if any
-        if kc.len() > 0 || injected_keys.len() > 0 {
-            // this is used for hosted mode emulation injection of keys
-            if injected_keys.len() > 0 {
-                let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
-                let mut i = 0;
-                while i < injected_keys.len() && i < 4 {
-                    keys[i] = injected_keys[i];
-                    i = i + 1;
-                }
-                if injected_keys.len() < 4 {
-                    injected_keys.clear();
-                } else {
-                    let mut temp: Vec<char, U64> = Vec::new();
-                    for i in 4..injected_keys.len() {
-                        temp.push(injected_keys[i]).unwrap();
-                    }
-                    injected_keys = temp;
-                }
+        // this is used for hosted mode emulation injection of keys
+        #[cfg(not(target_os = "none"))]
+        {
+            let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+            let mut i = 0;
+            while let Some(c) = key_dequeue.dequeue() {
+                keys[i] = c;
+                i = i + 1;
+                if i == 4 { break; } // see https://github.com/rust-lang/rfcs/pull/2497 for why this can't be at the top of the loop conditional
+            };
+            if i != 0 {
                 for conn in normal_conns.iter() {
                     xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
                 }
             }
+        }
 
+        // send keys, if any
+        if kc.len() > 0 {
             let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
             for i in 0..kc.len() {
                 // info!("KBD: sending key '{}'", kc[i]);

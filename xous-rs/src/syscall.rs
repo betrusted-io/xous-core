@@ -1139,6 +1139,8 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 /// by the kernel and returned to the caller. This address can then be registered
 /// to a namserver by the caller in their memory space.
 ///
+/// The implementation is just a call to the kernel-exclusive TRNG to fetch random numbers.
+///
 /// # Errors
 ///
 pub fn create_server_id() -> core::result::Result<SID, Error> {

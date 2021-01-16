@@ -186,21 +186,6 @@ fn shell_main() -> ! {
     );
     bouncyball.update(trng_conn);
 
-    #[cfg(baremetal)]
-    {
-        // use this to select which UART to monitor in the main loop
-        use utralib::generated::*;
-        let gpio_base = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map GPIO CSR range");
-        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
-    }
-
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
@@ -307,6 +292,22 @@ fn shell_main() -> ! {
         //////////////// work area
         if INCOMING_FRESH.load(Ordering::Relaxed) {
             INCOMING_FRESH.store(false, Ordering::Relaxed);
+            if INCOMING_CHAR.load(Ordering::Relaxed) == 0x14 {
+                power_off_soc(com_conn).expect("SHELL: can't power down");
+                #[cfg(baremetal)]
+                {
+                    use utralib::generated::*;
+                    let power_base = xous::syscall::map_memory(
+                        xous::MemoryAddress::new(utra::power::HW_POWER_BASE),
+                        None,
+                        4096,
+                        xous::MemoryFlags::R | xous::MemoryFlags::W,
+                    )
+                    .expect("couldn't map POWER CSR range");
+                    let mut power = CSR::new(power_base.as_mut_ptr() as *mut u32);
+                    power.wo(utra::power::POWER, 0);
+                }
+            }
             write!(&mut input_buf, "{}", core::char::from_u32(INCOMING_CHAR.load(Ordering::Relaxed)).unwrap()).expect("unable to copy to Xous string");
 
             graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)

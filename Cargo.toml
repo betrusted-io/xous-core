@@ -13,6 +13,7 @@ members = [
     "services/xous-names",
     "services/keyboard",
     "services/trng",
+    "services/gam",
     "svd2utra",
     "xtask",
 ]
@@ -26,7 +27,8 @@ default-members = [
     "services/xous-names",
     "services/keyboard",
     "services/com",
-    "services/trng"
+    "services/trng",
+    "services/gam",
 ]
 
 # These packages have custom RUSTFLAGS, so if they

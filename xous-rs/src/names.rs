@@ -14,6 +14,7 @@ pub const SERVER_NAME_GFX: &str      = "_Graphics_";
 pub const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
 pub const SERVER_NAME_KBD: &str      = "_Matrix keyboard driver_";
 pub const SERVER_NAME_TRNG: &str     = "_TRNG manager_";
+pub const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
 
 /*
 
