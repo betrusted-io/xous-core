@@ -471,6 +471,9 @@ pub enum Opcode<'a> {
 
     /// Retrieve the current Glyph style
     QueryGlyphStyle,
+
+    /// gets info about the current glyph to assist with layout
+    QueryGlyphProps(GlyphStyle),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -507,6 +510,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     m.arg2 as _,
                     m.arg3 as _,
                 ))),
+                14 => Ok(Opcode::QueryGlyphProps(GlyphStyle::from(m.arg1))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -625,6 +629,13 @@ impl<'a> Into<Message> for Opcode<'a> {
             Opcode::GetCursor => Message::BlockingScalar(ScalarMessage {
                 id: 13,
                 arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
+            Opcode::QueryGlyphProps(glyph) => Message::Scalar(ScalarMessage {
+                id: 14,
+                arg1: glyph as usize,
                 arg2: 0,
                 arg3: 0,
                 arg4: 0,

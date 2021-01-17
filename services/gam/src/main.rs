@@ -67,12 +67,8 @@ fn add_modal_layout(trng_conn: xous::CID, canvases: &mut BinaryHeap<Canvas, U32,
 fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut BinaryHeap<Canvas, U32, Max>) -> Result<ChatLayout, xous::Error> {
     let screensize = graphics_server::screen_size(gfx_conn).expect("GAM: Couldn't get screen size");
     // get the height of various text regions to compute the layout
-    graphics_server::set_glyph_style(gfx_conn, GlyphStyle::Small).expect("GAM: couldn't set glyph style");
-    let (_, small_height_tuple) = graphics_server::query_glyph(gfx_conn).expect("GAM: couldn't get glyph height");
-    let small_height: i16 = small_height_tuple as i16;
-    graphics_server::set_glyph_style(gfx_conn, GlyphStyle::Regular).expect("GAM: couldn't set glyph style");
-    let (_, regular_height_tuple) = graphics_server::query_glyph(gfx_conn).expect("GAM: couldn't get glyph height");
-    let regular_height: i16 = regular_height_tuple as i16;
+    let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, GlyphStyle::Small).expect("GAM: couldn't get glyph height") as i16;
+    let regular_height: i16 = graphics_server::glyph_height_hint(gfx_conn, GlyphStyle::Regular).expect("GAM: couldn't get glyph height") as i16;
 
     // allocate canvases in structures, and record their GID for future reference
     let status_canvas = Canvas::new(
@@ -106,6 +102,19 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Bin
         predictive: predictive_canvas.gid(),
         input: input_canvas.gid(),
     })
+}
+
+fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
+    /*
+       1. figure out text bounds
+       2. clear background, if requested
+       3. draw surrounding rectangle, if requested
+       4. draw text
+     */
+
+    // figure out text bounds: figure out how wide our text is, to start with.
+
+    Ok(())
 }
 
 #[xous::xous_main]
@@ -167,7 +176,11 @@ fn xmain() -> ! {
                     match TextOp::from(m.id) {
                         TextOp::Nop => (),
                         TextOp::Render => {
-
+                            let mut tv: &mut TextView = unsafe {
+                                &mut *(m.buf.as_mut_ptr() as *mut TextView)
+                            };
+                            info!("GAM: render request for {:?}", tv);
+                            tv_draw(gfx_conn, trng_conn, &mut tv).expect("GAM: can't render TextView");
                         },
                         TextOp::ComputeBounds => {
 

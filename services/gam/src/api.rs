@@ -68,34 +68,35 @@ impl From<usize> for TextOp {
 pub struct TextView<'a> {
     operation: TextOp,
 
-    untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
-    token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
-    invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
+    pub untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
+    pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
+    pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
 
     // lower numbers are drawn last
-    draw_order: usize,
+    pub draw_order: usize,
 
     // offsets for text drawing -- exactly one of the following options should be specified
-    bounds_hint: TextBounds,
-    bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+    pub bounds_hint: TextBounds,
+    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
 
-    style: GlyphStyle,
-    text: xous::String<'a>,
-    alignment: TextAlignment,
+    pub style: GlyphStyle,
+    pub text: xous::String<'a>,
+    pub alignment: TextAlignment,
 
-    draw_border: bool,
-    border_width: u16,
-    rounded_border: bool,
-    x_margin: u16,
-    y_margin: u16,
+    pub draw_border: bool,
+    pub clear_area: bool,
+    pub border_width: u16,
+    pub rounded_border: bool,
+    pub x_margin: u16,
+    pub y_margin: u16,
 
     // this field specifies the beginning and end of a "selected" region of text
-    selected: Option<[usize; 2]>,
+    pub selected: Option<[usize; 2]>,
 
     canvas: Gid, // GID of the canvas to draw on
 }
 impl<'a> TextView<'a> {
-    pub fn new(maxlen: usize, draw_order: usize, bounds_hint: TextBounds, canvas: Gid) -> Self {
+    pub fn new(canvas: Gid, maxlen: usize, draw_order: usize, bounds_hint: TextBounds) -> Self {
         TextView {
             operation: TextOp::Nop,
             untrusted: true,
@@ -114,6 +115,7 @@ impl<'a> TextView<'a> {
             y_margin: 4,
             selected: None,
             canvas,
+            clear_area: true,
         }
     }
     pub fn set_op(&mut self, op: TextOp) { self.operation = op; }

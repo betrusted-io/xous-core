@@ -8,7 +8,7 @@ use com_rs::*;
 // subtype constants for registering service listeners from the COM
 pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct BattStats {
     /// instantaneous voltage in mV
     pub voltage: u16,

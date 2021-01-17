@@ -4,6 +4,7 @@ use heapless::FnvIndexMap;
 use heapless::Vec;
 use heapless::consts::*;
 use graphics_server::{Rectangle, Point};
+use xous::ipc::Sendable;
 
 use crate::api::*;
 
@@ -81,6 +82,16 @@ pub fn recompute_canvases(mut canvases: BinaryHeap<Canvas, U32, Max>, screen: Re
     }
 
     (higher_clipregions, map)
+}
+
+// Crate-level draw_textview() call for "local" services that can't use the lib.rs API
+pub fn draw_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
+    let mut sendable_tv = Sendable::new(tv).expect("can't create sendable textview");
+    sendable_tv.set_op(TextOp::Render);
+    sendable_tv.lend_mut(gam_cid, sendable_tv.get_op().into()).expect("draw_textview operation failure");
+
+    sendable_tv.set_op(TextOp::Nop);
+    Ok(())
 }
 
 impl Canvas {

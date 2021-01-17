@@ -68,3 +68,12 @@ pub fn query_glyph(cid: CID) -> Result<(GlyphStyle, usize), xous::Error> {
         panic!("unexpected return value: {:#?}", response);
     }
 }
+
+pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Error> {
+    let response = send_message(cid, api::Opcode::QueryGlyphProps(glyph).into())?;
+    if let xous::Result::Scalar2(_, h) = response {
+        Ok(h)
+    } else {
+        panic!("unexpected return value: {:#?}", response);
+    }
+}

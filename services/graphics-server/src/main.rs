@@ -110,6 +110,14 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: could not return QueryGlyph request");
                 }
+                Opcode::QueryGlyphProps(glyph) => {
+                    xous::return_scalar2(
+                        msg.sender,
+                        glyph.into(),
+                        blitstr::glyph_to_height_hint(glyph),
+                    )
+                    .expect("GFX: could not return QueryGlyphProps request");
+                }
             }
         } else {
             error!("Couldn't convert opcode");
