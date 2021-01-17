@@ -50,7 +50,15 @@ pub struct TextView<'a> {
     canvas: [u32; 4], // GID of the canvas to draw on
 }
 
-//#[derive(Debug)]
+impl<'a> core::fmt::Debug for TextView<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // this should definitely be extended to print more relevant data, but for now just render the string itself
+        write!(f, "{}", self.text)
+    }
+}
+
+
+#[derive(Debug)]
 pub enum Opcode<'a> {
     // clears a canvas with a given GID
     ClearCanvas([u32; 4]),
