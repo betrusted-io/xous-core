@@ -259,6 +259,8 @@ dependencies = [
  "blitstr",
  "com",
  "graphics-server",
+ "hash32",
+ "hash32-derive",
  "heapless",
  "keyboard",
  "log",

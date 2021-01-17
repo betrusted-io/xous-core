@@ -5,6 +5,8 @@ use heapless::Vec;
 use heapless::consts::*;
 use graphics_server::{Rectangle, Point};
 
+use crate::api::*;
+
 #[derive(Debug, Copy, Clone)]
 pub enum CanvasState {
     // the initial state of every Canvas. Not drawable.
@@ -33,14 +35,14 @@ pub struct Canvas {
     state: CanvasState,
 
     // unique, random identifier for the Canvas
-    gid: [u32; 4],
+    gid: Gid,
 
     // enables scroll/pan of objects within a region
     pan_offset: Point,
 }
 
 // we need the "screen" parameter so we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(mut canvases: BinaryHeap<Canvas, U32, Max>, screen: Rectangle) -> (BinaryHeap<Canvas, U32, Max>, FnvIndexMap<[u32; 4], Canvas, U32>) {
+pub fn recompute_canvases(mut canvases: BinaryHeap<Canvas, U32, Max>, screen: Rectangle) -> (BinaryHeap<Canvas, U32, Max>, FnvIndexMap<Gid, Canvas, U32>) {
     let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
 
     let mut trust_level: u8 = 255;
@@ -73,7 +75,7 @@ pub fn recompute_canvases(mut canvases: BinaryHeap<Canvas, U32, Max>, screen: Re
         higher_clipregions.push(canvas).unwrap();
     }
 
-    let mut map: FnvIndexMap<[u32; 4], Canvas, U32> = FnvIndexMap::new();
+    let mut map: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
     for &c in higher_clipregions.iter() {
         map.insert(c.gid(), c).unwrap();
     }
@@ -95,16 +97,16 @@ impl Canvas {
 
         Ok(if pan_offset.is_some() {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::Created, gid, pan_offset: pan_offset.unwrap()
+                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: pan_offset.unwrap()
             }
         } else {
             Canvas {
-                clip_rect, trust_level, state: CanvasState::Created, gid, pan_offset: Point::new(0, 0)
+                clip_rect, trust_level, state: CanvasState::Created, gid: Gid::new(gid), pan_offset: Point::new(0, 0)
             }
         })
     }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
-    pub fn gid(&self) -> [u32; 4] { self.gid }
+    pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
     pub fn state(&self) -> CanvasState { self.state }
     pub fn set_state(&mut self, state: CanvasState) { self.state = state; }
