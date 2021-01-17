@@ -119,3 +119,9 @@ impl<'a> core::fmt::Write for String<'a> {
         Ok(())
     }
 }
+
+impl<'a> core::fmt::Debug for String<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.s)
+    }
+}
