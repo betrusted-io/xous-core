@@ -2,7 +2,7 @@ use crate::api::*;
 
 use log::{error, info};
 use com::api::BattStats;
-use graphics_server::{Point, Rectangle};
+use graphics_server::*;
 
 use core::fmt::Write;
 use core::convert::TryFrom;

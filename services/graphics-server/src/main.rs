@@ -131,6 +131,9 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: could not return QueryGlyphProps request");
                 }
+                Opcode::TextView(tv) => {
+
+                }
             }
         } else {
             error!("Couldn't convert opcode");

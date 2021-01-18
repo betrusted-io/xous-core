@@ -263,8 +263,6 @@ dependencies = [
  "blitstr 0.3.0",
  "com",
  "graphics-server",
- "hash32",
- "hash32-derive",
  "heapless",
  "keyboard",
  "log",
@@ -320,6 +318,8 @@ name = "graphics-server"
 version = "0.1.0"
 dependencies = [
  "blitstr 0.3.0",
+ "hash32",
+ "hash32-derive",
  "keyboard",
  "log",
  "log-server",

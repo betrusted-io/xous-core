@@ -17,6 +17,7 @@ use blitstr::{ClipRect, Cursor, GlyphStyle};
 use core::cmp::{max, min};
 use core::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 use xous::{Message, ScalarMessage};
+use hash32::{Hash, Hasher};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PixelColor {
@@ -477,6 +478,9 @@ pub enum Opcode<'a> {
 
     /// gets info about the current glyph to assist with layout
     QueryGlyphProps(GlyphStyle),
+
+    /// draws a textview
+    TextView(&'a TextView<'a>),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -552,6 +556,15 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 },
                 _ => Err("unrecognized opcode"),
             },
+            Message::MutableBorrow(m) => match m.id {
+                0x100 => {
+                    let tv: &mut TextView = unsafe {
+                        &mut *(m.buf.as_mut_ptr() as *mut TextView)
+                    };
+                    Ok(Opcode::TextView(tv))
+                },
+                _ => Err("unrecognized opcode"),
+            }
             _ => Err("unhandled message type"),
         }
     }
@@ -656,6 +669,138 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: 0,
                 arg4: 0,
             }),
+            _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
         }
+    }
+}
+
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Gid {
+    gid: [u32; 4],
+}
+impl Gid {
+    pub fn new(id: [u32; 4]) -> Self { Gid{gid: id} }
+    pub fn gid(&self) -> [u32; 4] { self.gid }
+}
+impl hash32::Hash for Gid {
+    fn hash<H>(&self, state: &mut H)
+    where
+    H: Hasher,
+    {
+        Hash::hash(&self.gid[..], state);
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum TextAlignment {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum TextBounds {
+    // fixed width and height in a rectangle
+    BoundingBox(Rectangle),
+    // fixed width, grows up from bottom right
+    GrowableFromBr(Point, u16),
+    // fixed width, grows down from top left
+    GrowableFromTl(Point, u16),
+    // fixed width, grows up from bottom left
+    GrowableFromBl(Point, u16),
+}
+
+#[derive(Debug, Copy, Clone)]
+// operations that may be requested of a TextView when sent to GAM
+pub enum TextOp {
+    Nop,
+    Render,
+    ComputeBounds,
+}
+impl Into<usize> for TextOp {
+    fn into(self) -> usize {
+        match self {
+            TextOp::Nop => 0,
+            TextOp::Render => 1,
+            TextOp::ComputeBounds => 2,
+        }
+    }
+}
+impl From<usize> for TextOp {
+    fn from(code: usize) -> Self {
+        match code {
+            1 => TextOp::Render,
+            2 => TextOp::ComputeBounds,
+            _ => TextOp::Nop,
+        }
+    }
+}
+
+#[repr(C)]
+pub struct TextView<'a> {
+    operation: TextOp,
+
+    pub untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
+    pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
+    pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
+
+    // lower numbers are drawn last
+    pub draw_order: usize,
+
+    // offsets for text drawing -- exactly one of the following options should be specified
+    pub bounds_hint: TextBounds,
+    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+
+    pub style: GlyphStyle,
+    pub text: xous::String<'a>,
+    pub alignment: TextAlignment,
+    pub cursor: blitstr::Cursor,
+
+    pub draw_border: bool,
+    pub clear_area: bool,
+    pub border_width: u16,
+    pub rounded_border: bool,
+    pub x_margin: u16,
+    pub y_margin: u16,
+
+    // this field specifies the beginning and end of a "selected" region of text
+    pub selected: Option<[usize; 2]>,
+
+    canvas: Gid, // GID of the canvas to draw on
+}
+impl<'a> TextView<'a> {
+    pub fn new(canvas: Gid, maxlen: usize, draw_order: usize, bounds_hint: TextBounds) -> Self {
+        TextView {
+            operation: TextOp::Nop,
+            untrusted: true,
+            token: None,
+            invert: false,
+            draw_order,
+            bounds_hint,
+            bounds_computed: None,
+            style: GlyphStyle::Regular,
+            text: xous::String::new(maxlen),
+            alignment: TextAlignment::Left,
+            cursor: blitstr::Cursor::new(0,0,0),
+            draw_border: true,
+            border_width: 1,
+            rounded_border: false,
+            x_margin: 4,
+            y_margin: 4,
+            selected: None,
+            canvas,
+            clear_area: true,
+        }
+    }
+    pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
+    pub fn get_op(&self) -> TextOp { self.operation }
+    pub fn get_canvas_gid(&self) -> Gid { self.canvas }
+}
+
+impl<'a> core::fmt::Debug for TextView<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // this should definitely be extended to print more relevant data, but for now just render the string itself
+        write!(f, "{}", self.text)
     }
 }

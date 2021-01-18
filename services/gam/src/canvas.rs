@@ -3,7 +3,7 @@ use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
 use heapless::Vec;
 use heapless::consts::*;
-use graphics_server::{Rectangle, Point};
+use graphics_server::*;
 use xous::ipc::Sendable;
 use log::{error, info};
 

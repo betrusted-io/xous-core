@@ -11,6 +11,8 @@ log-server = { path = "../log-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
 keyboard = { path = "../keyboard" }
+hash32 = "0.1.0"
+hash32-derive = "0.1.0"
 # blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
 blitstr = { path = "../../../blitstr" }
 

@@ -11,7 +11,7 @@ use canvas::*;
 use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;
-use graphics_server::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle};
+use graphics_server::*;
 
 use log::{error, info};
 use xous::String;
@@ -116,6 +116,7 @@ fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap
         // first, figure out if we should even be drawing to this canvas.
         if canvas.is_drawable() {
             // figure out text bounds: figure out how wide our text is, to start with.
+            graphics_server::set_string_clipping(gfx_conn, canvas.clip_rect().into()).expect("GAM: can't set clipping");
 
         } else {
             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
