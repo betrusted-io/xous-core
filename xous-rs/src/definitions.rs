@@ -155,6 +155,8 @@ pub enum Error {
     InvalidPID = 21,
     UnknownError = 22,
     AccessDenied = 23,
+    UseBeforeInit = 24,
+    DoubleFree = 25,
 }
 
 impl Error {
@@ -184,6 +186,8 @@ impl Error {
             20 => InvalidThread,
             21 => InvalidPID,
             23 => AccessDenied,
+            24 => UseBeforeInit,
+            25 => DoubleFree,
             _ => UnknownError,
         }
     }
@@ -213,6 +217,8 @@ impl Error {
             InvalidThread => 20,
             InvalidPID => 21,
             AccessDenied => 23,
+            UseBeforeInit => 24,
+            DoubleFree => 25,
             UnknownError => usize::MAX,
         }
     }
