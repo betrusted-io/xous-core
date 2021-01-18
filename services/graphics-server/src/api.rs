@@ -466,6 +466,9 @@ pub enum Opcode<'a> {
     /// Xor the string inside the clipping region.
     StringXor(&'a str),
 
+    /// Simulate the string on the clipping region (for computing text widths)
+    SimulateString(&'a str),
+
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,
 
@@ -537,6 +540,15 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                         )
                     };
                     Ok(Opcode::StringXor(core::str::from_utf8(s).unwrap()))
+                },
+                3 => {
+                    let s = unsafe {
+                        core::slice::from_raw_parts(
+                            m.buf.as_ptr(),
+                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
+                        )
+                    };
+                    Ok(Opcode::SimulateString(core::str::from_utf8(s).unwrap()))
                 },
                 _ => Err("unrecognized opcode"),
             },
@@ -618,6 +630,10 @@ impl<'a> Into<Message> for Opcode<'a> {
             Opcode::StringXor(string) => {
                 let region = xous::carton::Carton::from_bytes(string.as_bytes());
                 Message::Borrow(region.into_message(2))
+            }
+            Opcode::SimulateString(string) => {
+                let region = xous::carton::Carton::from_bytes(string.as_bytes());
+                Message::Borrow(region.into_message(3))
             }
             Opcode::SetCursor(c) => Message::Scalar(ScalarMessage {
                 id: 12,

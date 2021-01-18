@@ -38,24 +38,24 @@ struct ModalCanvases {
     pub alert: Gid,
 }
 
-fn add_modal_layout(trng_conn: xous::CID, canvases: &mut BinaryHeap<Canvas, U32, Max>) -> Result<ModalCanvases, xous::Error> {
+fn add_modal_layout(trng_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<ModalCanvases, xous::Error> {
     let password_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
         0, trng_conn, None
     ).expect("GAM: couldn't create password canvas");
-    canvases.push(password_canvas).expect("GAM: can't store password canvas");
+    canvases.insert(password_canvas.gid(), password_canvas).expect("GAM: can't store password canvas");
 
     let menu_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
         0, trng_conn, None
     ).expect("GAM: couldn't create menu canvas");
-    canvases.push(menu_canvas).expect("GAM: can't store menu canvas");
+    canvases.insert(menu_canvas.gid(), menu_canvas).expect("GAM: can't store menu canvas");
 
     let alert_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
         0, trng_conn, None
     ).expect("GAM: couldn't create alert canvas");
-    canvases.push(alert_canvas).expect("GAM: can't store alert canvas");
+    canvases.insert(alert_canvas.gid(), alert_canvas).expect("GAM: can't store alert canvas");
 
     Ok(ModalCanvases {
         password: password_canvas.gid(),
@@ -64,7 +64,7 @@ fn add_modal_layout(trng_conn: xous::CID, canvases: &mut BinaryHeap<Canvas, U32,
     })
 }
 
-fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut BinaryHeap<Canvas, U32, Max>) -> Result<ChatLayout, xous::Error> {
+fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<ChatLayout, xous::Error> {
     let screensize = graphics_server::screen_size(gfx_conn).expect("GAM: Couldn't get screen size");
     // get the height of various text regions to compute the layout
     let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, GlyphStyle::Small).expect("GAM: couldn't get glyph height") as i16;
@@ -75,26 +75,26 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Bin
         Rectangle::new_coords(0, 0, screensize.x, small_height),
         0, trng_conn, None
     ).expect("GAM: couldn't create status canvas");
-    canvases.push(status_canvas).expect("GAM: can't store status canvus");
+    canvases.insert(status_canvas.gid(), status_canvas).expect("GAM: can't store status canvus");
 
     let predictive_canvas = Canvas::new(
         Rectangle::new_coords(0, screensize.y - regular_height, screensize.x, screensize.y),
         1,
         trng_conn, None
     ).expect("GAM: couldn't create predictive text canvas");
-    canvases.push(predictive_canvas).expect("GAM: couldn't store predictive canvas");
+    canvases.insert(predictive_canvas.gid(), predictive_canvas).expect("GAM: couldn't store predictive canvas");
 
     let input_canvas = Canvas::new(
         Rectangle::new_v_stack(predictive_canvas.clip_rect(), -regular_height),
         1, trng_conn, None
     ).expect("GAM: couldn't create input text canvas");
-    canvases.push(input_canvas).expect("GAM: couldn't store input canvas");
+    canvases.insert(input_canvas.gid(), input_canvas).expect("GAM: couldn't store input canvas");
 
     let content_canvas = Canvas::new(
         Rectangle::new_v_span(status_canvas.clip_rect(), input_canvas.clip_rect()),
         2, trng_conn, None
     ).expect("GAM: couldn't create content canvas");
-    canvases.push(content_canvas).expect("GAM: can't store content canvas");
+    canvases.insert(content_canvas.gid(), content_canvas).expect("GAM: can't store content canvas");
 
     Ok(ChatLayout {
         status: status_canvas.gid(),
@@ -104,7 +104,7 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Bin
     })
 }
 
-fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
+fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>, tv: &mut TextView) -> Result<(), xous::Error> {
     /*
        1. figure out text bounds
        2. clear background, if requested
@@ -112,9 +112,24 @@ fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, tv: &mut TextView) -> Resu
        4. draw text
      */
 
-    // figure out text bounds: figure out how wide our text is, to start with.
+    if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
+        // first, figure out if we should even be drawing to this canvas.
+        if canvas.is_drawable() {
+            // figure out text bounds: figure out how wide our text is, to start with.
+
+        } else {
+            info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
+            return Ok(())
+        }
+
+
+    } else {
+        info!("GAM: bogus GID in TextView, not doing anything in response to draw request.");
+        return Ok(()) // silently fail if a bogus Gid is given???
+    }
 
     Ok(())
+
 }
 
 #[xous::xous_main]
@@ -130,18 +145,15 @@ fn xmain() -> ! {
 
     let screensize = graphics_server::screen_size(gfx_conn).expect("GAM: Couldn't get screen size");
 
-    let mut canvases: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
+    // a map of canvases accessable by Gid
+    let mut canvases: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
     let modallayout = add_modal_layout(trng_conn, &mut canvases).expect("GAM: can't add modal layouts");
     let chatlayout = add_chat_layout(gfx_conn, trng_conn, &mut canvases).expect("GAM: couldn't create chat layout");
-
-    // canvas_map is a copy of the canvases, but searchable by GID
-    let canvas_map: FnvIndexMap<Gid, Canvas, U32>;
 
     // now that all the initial canvases have been allocated, compute what canvases are drawable
     // this _replaces_ the original canvas structure, to avoid complications of tracking mutable references through compound data structures
     // this is broken into two steps because of https://github.com/rust-lang/rust/issues/71126
-    let (c_tuple, m_tuple) = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
-    canvases = c_tuple; canvas_map = m_tuple;
+    canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
     // make a thread to manage the status bar
     xous::create_thread_simple(status_thread, chatlayout.status).expect("GAM: couldn't create status thread");
@@ -157,7 +169,7 @@ fn xmain() -> ! {
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     match opcode {
                         Opcode::ClearCanvas(gid) => {
-                            match canvas_map.get(&gid) {
+                            match canvases.get(&gid) {
                                 Some(c) => {
                                     let mut rect = c.clip_rect();
                                     rect.style = DrawStyle {
@@ -180,7 +192,7 @@ fn xmain() -> ! {
                                 &mut *(m.buf.as_mut_ptr() as *mut TextView)
                             };
                             info!("GAM: render request for {:?}", tv);
-                            tv_draw(gfx_conn, trng_conn, &mut tv).expect("GAM: can't render TextView");
+                            tv_draw(gfx_conn, trng_conn, &mut canvases, &mut tv).expect("GAM: can't render TextView");
                         },
                         TextOp::ComputeBounds => {
 

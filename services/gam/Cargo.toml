@@ -21,8 +21,8 @@ hash32-derive = "0.1.0"
 
 com = { path = "../com"}
 
-# blitstr = { path = "../../../blitstr" }
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
+blitstr = { path = "../../../blitstr" }
+# blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

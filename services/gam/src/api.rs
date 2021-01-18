@@ -120,6 +120,7 @@ impl<'a> TextView<'a> {
     }
     pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
     pub fn get_op(&self) -> TextOp { self.operation }
+    pub fn get_canvas_gid(&self) -> Gid { self.canvas }
 }
 
 impl<'a> core::fmt::Debug for TextView<'a> {

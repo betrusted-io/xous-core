@@ -71,6 +71,7 @@ fn xmain() -> ! {
                         current_glyph.into(),
                         s,
                         false,
+                        blitstr::xor_char
                     );
                 }
                 Opcode::StringXor(s) => {
@@ -81,6 +82,18 @@ fn xmain() -> ! {
                         current_glyph.into(),
                         s,
                         true,
+                        blitstr::xor_char
+                    );
+                }
+                Opcode::SimulateString(s) => {
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s,
+                        false,
+                        blitstr::simulate_char
                     );
                 }
                 Opcode::SetGlyphStyle(glyph) => {
