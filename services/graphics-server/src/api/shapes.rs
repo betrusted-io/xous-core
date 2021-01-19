@@ -1,0 +1,188 @@
+use crate::op::{HEIGHT, WIDTH};
+use crate::api::{Point, DrawStyle};
+use blitstr::{ClipRect};
+use core::cmp::{max, min};
+
+#[derive(Debug, Clone, Copy)]
+pub struct Rectangle {
+    /// Top left point of the rect
+    pub tl: Point,
+
+    /// Bottom right point of the rect
+    pub br: Point,
+
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+//////////////////////////// RECTANGLE
+
+impl Rectangle {
+    pub fn new(p1: Point, p2: Point) -> Rectangle {
+        // always check point ordering
+        Rectangle {
+            tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
+            br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
+            style: DrawStyle::default(),
+        }
+    }
+    pub fn new_coords(x0: i16, y0: i16, x1: i16, y1: i16) -> Rectangle {
+        Rectangle {
+            tl: Point::new(min(x0, x1), min(y0, y1)),
+            br: Point::new(max(x0, x1), max(y0, y1)),
+            style: DrawStyle::default(),
+        }
+    }
+    // stack a new rectangle on top of the current one (same width)
+    // positive widths go *below*, negative go *above* in screen coordinate space. borders are non-overlapping.
+    pub fn new_v_stack(reference: Rectangle, width: i16) -> Rectangle {
+        if width >= 0 { // rectangle below
+            Rectangle::new_coords(reference.tl.x, reference.br.y + 1,
+            reference.br.x, reference.br.y + width + 1)
+        } else { // rectangle above
+            Rectangle::new_coords(reference.tl.x, reference.tl.y + width - 1,
+            reference.br.x, reference.tl.y - 1)
+        }
+    }
+    // make a new rectangle than spans between the above and below rectangles. the borders are non-overlapping.
+    pub fn new_v_span(above: Rectangle, below: Rectangle) -> Rectangle {
+        Rectangle::new_coords(above.tl.x, above.br.y + 1, below.br.x, below.tl.y - 1)
+    }
+    // "stack" a rectangle to the left or right of the current one (same height)
+    // positive widths go to the right, negative to the left. borders are non-overlapping
+    pub fn new_h_stack(reference: Rectangle, width: i16) -> Rectangle {
+        if width >= 0 { // stack to the right
+            Rectangle::new_coords(reference.br.x + 1, reference.tl.y,
+            reference.br.x + width + 1, reference.br.y)
+        } else { // stack to the left
+            Rectangle::new_coords(reference.tl.x + width - 1, reference.tl.y,
+            reference.tl.x - 1, reference.br.y)
+        }
+    }
+    // make a new rectangle than spans between the left and right rectangles. borders are non-overlapping
+    pub fn new_h_span(left: Rectangle, right: Rectangle) -> Rectangle {
+        Rectangle::new_coords(left.br.x + 1, left.tl.y, right.tl.x - 1, right.br.y)
+    }
+    pub fn intersects(&self, other: Rectangle) -> bool {
+        ((other.tl.x >= self.tl.x) && (other.tl.x <= self.br.x)) &&
+        ((other.tl.y >= self.tl.y) && (other.tl.y <= self.br.y))
+        ||
+        ((other.br.x >= self.tl.x) && (other.br.x <= self.br.x)) &&
+        ((other.br.y >= self.tl.y) && (other.br.y <= self.br.y))
+    }
+    pub fn new_coords_with_style(
+        x0: i16,
+        y0: i16,
+        x1: i16,
+        y1: i16,
+        style: DrawStyle,
+    ) -> Rectangle {
+        Rectangle {
+            tl: Point::new(min(x0, x1), min(y0, y1)),
+            br: Point::new(max(x0, x1), max(y0, y1)),
+            style: style,
+        }
+    }
+    pub fn new_with_style(p1: Point, p2: Point, style: DrawStyle) -> Rectangle {
+        // always check point ordering
+        Rectangle {
+            tl: Point::new(min(p1.x, p2.x), min(p1.y, p2.y)),
+            br: Point::new(max(p1.x, p2.x), max(p1.y, p2.y)),
+            style: style,
+        }
+    }
+    pub fn x0(&self) -> usize {
+        self.tl.x as usize
+    }
+    pub fn x1(&self) -> usize {
+        self.br.x as usize
+    }
+    pub fn y0(&self) -> usize {
+        self.tl.y as usize
+    }
+    pub fn y1(&self) -> usize {
+        self.br.y as usize
+    }
+
+    /// Make a rectangle of the full screen size
+    pub fn full_screen() -> Rectangle {
+        Rectangle {
+            tl: Point::new(0, 0),
+            br: Point::new(WIDTH, HEIGHT),
+            style: DrawStyle::default(),
+        }
+    }
+    /// Make a rectangle of the screen size minus padding
+    pub fn padded_screen() -> Rectangle {
+        let pad = 6;
+        Rectangle {
+            tl: Point::new(pad, pad),
+            br: Point::new(WIDTH - pad, HEIGHT - pad),
+            style: DrawStyle::default(),
+        }
+    }
+}
+
+impl Into<ClipRect> for Rectangle {
+    fn into(self) -> ClipRect {
+        ClipRect::new(self.x0(), self.y0(), self.x1(), self.y1())
+    }
+}
+
+
+//////////////////////////// LINE
+
+#[derive(Debug, Clone, Copy)]
+pub struct Line {
+    pub start: Point,
+    pub end: Point,
+
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+impl Line {
+    pub fn new(start: Point, end: Point) -> Line {
+        Line {
+            start: start,
+            end: end,
+            style: DrawStyle::default(),
+        }
+    }
+    pub fn new_with_style(start: Point, end: Point, style: DrawStyle) -> Line {
+        Line {
+            start: start,
+            end: end,
+            style: style,
+        }
+    }
+}
+
+
+//////////////////////////// CIRCLE
+
+#[derive(Debug, Clone, Copy)]
+pub struct Circle {
+    pub center: Point,
+    pub radius: i16,
+
+    /// Drawing style
+    pub style: DrawStyle,
+}
+
+impl Circle {
+    pub fn new(c: Point, r: i16) -> Circle {
+        Circle {
+            center: c,
+            radius: r,
+            style: DrawStyle::default(),
+        }
+    }
+    pub fn new_with_style(c: Point, r: i16, style: DrawStyle) -> Circle {
+        Circle {
+            center: c,
+            radius: r,
+            style,
+        }
+    }
+}
