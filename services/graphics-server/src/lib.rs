@@ -97,8 +97,8 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
     }
 }
 
-pub fn draw_textview(cid: CID, tv: TextView) -> Result<(), xous::Error> {
+pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
     let mut sendable_tv = Sendable::new(tv)
       .expect("can't create sendable TextView structure");
-    sendable_tv.lend(cid, 0x100).map(|_| ())
+    sendable_tv.lend_mut(cid, 0x100).map(|_| ())
 }

@@ -146,7 +146,7 @@ pub fn recompute_canvases(mut canvases: FnvIndexMap<Gid, Canvas, U32>, screen: R
     // so jush pushing it into a max binary heap does the trick.
     let mut sorted_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
     for (_, &c) in canvases.iter() {
-        sorted_clipregions.push(c);
+        sorted_clipregions.push(c).unwrap(); // always succeeds because incoming type is the same size
     }
 
     // now, descend through trust levels and compute intersections, putting the updated drawable states into higher_clipregions
@@ -180,14 +180,4 @@ pub fn recompute_canvases(mut canvases: FnvIndexMap<Gid, Canvas, U32>, screen: R
     }
 
     map
-}
-
-// Crate-level draw_textview() call for "local" services that can't use the lib.rs API
-pub fn draw_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    let mut sendable_tv = Sendable::new(tv).expect("can't create sendable textview");
-    sendable_tv.set_op(TextOp::Render);
-    sendable_tv.lend_mut(gam_cid, sendable_tv.get_op().into()).expect("draw_textview operation failure");
-
-    sendable_tv.set_op(TextOp::Nop);
-    Ok(())
 }

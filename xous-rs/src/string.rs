@@ -94,6 +94,10 @@ impl<'a> String<'a> {
             ))
         };
     }
+
+    pub fn to_str(&self) -> &str {
+        self.s
+    }
 }
 
 impl<'a> core::fmt::Display for String<'a> {

@@ -17,17 +17,20 @@ pub fn status_thread(status_gid: Gid) {
     let gfx_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM|status: can't connect to COM");
     let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
+    info!("GAM|status: getting screen size");
     let screensize = graphics_server::screen_size(gfx_conn).expect("GAM|status: Couldn't get screen size");
+    info!("GAM|status: getting height hints");
     let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, blitstr::GlyphStyle::Small).expect("GAM|status: couldn't get glyph height") as i16;
 
-    let mut uptime_tv = TextView::new(status_gid, 128, 0,
+    info!("GAM|status: building textview objects");
+    let mut uptime_tv = TextView::new(status_gid, 4096, 0,
          TextBounds::BoundingBox(Rectangle::new(Point::new(0,0), Point::new(screensize.x / 2, small_height))));
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
     uptime_tv.x_margin = 0; uptime_tv.y_margin = 0;
 
-    let mut battstats_tv = TextView::new(status_gid, 128, 0,
+    let mut battstats_tv = TextView::new(status_gid, 4096, 0,
         TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0), Point::new(screensize.x, small_height))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
@@ -37,6 +40,7 @@ pub fn status_thread(status_gid: Gid) {
     let mut stats: BattStats = BattStats::default();
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut stats_phase: usize = 0;
+    info!("GAM|status: starting main loop");
     loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
@@ -46,14 +50,14 @@ pub fn status_thread(status_gid: Gid) {
                     match opcode {
                         com::api::Opcode::BattStatsEvent(s) => {
                             stats = s.clone();
-                            battstats_tv.text.clear();
+                            battstats_tv.clear_str();
                             if stats_phase > 4 {
-                                write!(&mut battstats_tv.text, "{}mV {}mA", stats.voltage, stats.current).expect("GAM|status: can't write string");
+                                write!(&mut battstats_tv, "{}mV {}mA", stats.voltage, stats.current).expect("GAM|status: can't write string");
                             } else {
-                                write!(&mut battstats_tv.text, "{}mAh {}%", stats.remaining_capacity, stats.soc).expect("GAM|status: can't write string");
+                                write!(&mut battstats_tv, "{}mAh {}%", stats.remaining_capacity, stats.soc).expect("GAM|status: can't write string");
                             }
                             stats_phase = (stats_phase + 1) % 8;
-                            crate::canvas::draw_textview(gam_conn, &mut battstats_tv).expect("GAM|status: can't draw battery stats");
+                            graphics_server::draw_textview(gfx_conn, &mut battstats_tv).expect("GAM|status: can't draw battery stats");
                         },
                         _ => error!("GAM|status received COM event opcode that wasn't expected"),
                     }
@@ -66,11 +70,12 @@ pub fn status_thread(status_gid: Gid) {
 
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
+                // info!("GAM|status: periodic tasks: updating uptime, requesting battstats");
                 last_time = elapsed_time;
                 com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
-                uptime_tv.text.clear();
-                write!(&mut uptime_tv.text, "Up {:02}:{:2}:{:2}", (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, (elapsed_time / 1000) % 60).expect("GAM|status: can't write string");
-                crate::canvas::draw_textview(gam_conn, &mut uptime_tv).expect("GAM|status: can't draw uptime");
+                uptime_tv.clear_str();
+                write!(&mut uptime_tv, "Up {:02}:{:2}:{:2}", (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, (elapsed_time / 1000) % 60).expect("GAM|status: can't write string");
+                graphics_server::draw_textview(gfx_conn, &mut uptime_tv).expect("GAM|status: can't draw uptime");
             }
         } else {
             error!("error requesting ticktimer!")

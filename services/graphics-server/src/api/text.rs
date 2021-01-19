@@ -48,6 +48,8 @@ impl From<usize> for TextOp {
 
 #[repr(C)]
 pub struct TextView<'a> {
+    // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
+    // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
     operation: TextOp,
 
     pub untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
@@ -59,10 +61,10 @@ pub struct TextView<'a> {
 
     // offsets for text drawing -- exactly one of the following options should be specified
     pub bounds_hint: TextBounds,
-    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+    bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
 
     pub style: GlyphStyle,
-    pub text: xous::String<'a>,
+    text: xous::String<'a>,
     pub alignment: TextAlignment,
     pub cursor: Cursor,
 
@@ -105,11 +107,35 @@ impl<'a> TextView<'a> {
     pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
     pub fn get_op(&self) -> TextOp { self.operation }
     pub fn get_canvas_gid(&self) -> Gid { self.canvas }
+    pub fn get_bounds_computed(&self) -> Option<Rectangle> { self.bounds_computed }
+    pub fn compute_bounds(&mut self) -> Result<(), xous::Error> {
+        match self.bounds_hint {
+            TextBounds::BoundingBox(r) => self.bounds_computed = Some(r),
+            _=> todo!("other dynamic bounds computations not yet implemented"),
+        }
+        Ok(())
+    }
+    pub fn clear_str(&mut self) { self.text.clear() }
+    pub fn to_str(&self) -> &str { self.text.to_str() }
 }
 
 impl<'a> core::fmt::Debug for TextView<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // this should definitely be extended to print more relevant data, but for now just render the string itself
         write!(f, "{}", self.text)
+    }
+}
+
+
+impl<'a> core::fmt::Display for TextView<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+impl<'a> core::fmt::Write for TextView<'a> {
+    fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
+        self.bounds_computed = None;
+        self.text.write_str(s)
     }
 }

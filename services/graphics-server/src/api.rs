@@ -96,7 +96,7 @@ pub enum Opcode<'a> {
     QueryGlyphProps(GlyphStyle),
 
     /// draws a textview
-    TextView(&'a TextView<'a>),
+    TextView(&'a mut TextView<'a>),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -133,13 +133,13 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     m.arg2 as _,
                     m.arg3 as _,
                 ))),
-                14 => Ok(Opcode::QueryGlyphProps(GlyphStyle::from(m.arg1))),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
                 8 => Ok(Opcode::ScreenSize),
                 10 => Ok(Opcode::QueryGlyphStyle),
                 13 => Ok(Opcode::GetCursor),
+                14 => Ok(Opcode::QueryGlyphProps(GlyphStyle::from(m.arg1))),
                 _ => Err("unrecognized opcode"),
             },
             Message::Borrow(m) => match m.id {
@@ -278,7 +278,7 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: 0,
                 arg4: 0,
             }),
-            Opcode::QueryGlyphProps(glyph) => Message::Scalar(ScalarMessage {
+            Opcode::QueryGlyphProps(glyph) => Message::BlockingScalar(ScalarMessage {
                 id: 14,
                 arg1: glyph as usize,
                 arg2: 0,

@@ -137,7 +137,9 @@ fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
+    let gam_sid = xous_names::register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
     info!("GAM: starting up...");
+
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
@@ -159,8 +161,7 @@ fn xmain() -> ! {
     // make a thread to manage the status bar
     xous::create_thread_simple(status_thread, chatlayout.status).expect("GAM: couldn't create status thread");
 
-    let gam_sid = xous_names::register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
-
+    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
@@ -204,6 +205,10 @@ fn xmain() -> ! {
             _ => xous::yield_slice(),
         }
 
-        graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
+        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+            if elapsed_time - last_time > 33 {  // rate limit updates to 30fps
+                graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
+            }
+        }
     }
 }

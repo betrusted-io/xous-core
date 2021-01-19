@@ -183,7 +183,8 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
     let init = [
-        "shell",
+        //"shell",
+        "gam",
         "log-server",
         "graphics-server",
         "ticktimer-server",
