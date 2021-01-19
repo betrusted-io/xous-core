@@ -132,7 +132,7 @@ fn xmain() -> ! {
                     .expect("GFX: could not return QueryGlyphProps request");
                 }
                 Opcode::TextView(tv) => {
-                    info!("GFX: got draw of {}", tv);
+                    info!("GFX: got draw of '{:?}'", tv);
                     op::textview(display.native_buffer(), tv);
                 }
             }

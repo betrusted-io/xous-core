@@ -96,7 +96,7 @@ pub enum Opcode<'a> {
     QueryGlyphProps(GlyphStyle),
 
     /// draws a textview
-    TextView(&'a mut TextView<'a>),
+    TextView(&'a mut TextView),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {

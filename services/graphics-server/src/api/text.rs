@@ -1,6 +1,8 @@
 use crate::api::{Point, Rectangle, Gid};
 use blitstr::{GlyphStyle, Cursor};
 
+use log::{error, info};
+
 #[derive(Debug, Copy, Clone)]
 pub enum TextAlignment {
     Left,
@@ -46,8 +48,12 @@ impl From<usize> for TextOp {
     }
 }
 
+// roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
+const TEXTVIEW_LEN: usize = 3072;
+
 #[repr(C)]
-pub struct TextView<'a> {
+#[derive(Copy, Clone)]
+pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
     operation: TextOp,
@@ -64,7 +70,8 @@ pub struct TextView<'a> {
     bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
 
     pub style: GlyphStyle,
-    text: xous::String<'a>,
+    text: [u8; TEXTVIEW_LEN],
+    length: usize,
     pub alignment: TextAlignment,
     pub cursor: Cursor,
 
@@ -80,8 +87,8 @@ pub struct TextView<'a> {
 
     canvas: Gid, // GID of the canvas to draw on
 }
-impl<'a> TextView<'a> {
-    pub fn new(canvas: Gid, maxlen: usize, draw_order: usize, bounds_hint: TextBounds) -> Self {
+impl TextView {
+    pub fn new(canvas: Gid, draw_order: usize, bounds_hint: TextBounds) -> Self {
         TextView {
             operation: TextOp::Nop,
             untrusted: true,
@@ -91,7 +98,8 @@ impl<'a> TextView<'a> {
             bounds_hint,
             bounds_computed: None,
             style: GlyphStyle::Regular,
-            text: xous::String::new(maxlen),
+            text: [0; TEXTVIEW_LEN],
+            length: 0,
             alignment: TextAlignment::Left,
             cursor: Cursor::new(0,0,0),
             draw_border: true,
@@ -110,32 +118,94 @@ impl<'a> TextView<'a> {
     pub fn get_bounds_computed(&self) -> Option<Rectangle> { self.bounds_computed }
     pub fn compute_bounds(&mut self) -> Result<(), xous::Error> {
         match self.bounds_hint {
-            TextBounds::BoundingBox(r) => self.bounds_computed = Some(r),
+            TextBounds::BoundingBox(r) => {
+                info!("GFX/text - r {:?}", r);
+                self.bounds_computed = Some(r);
+                info!("GFX/text - bounds_computed {:?}", self.bounds_computed);
+            },
             _=> todo!("other dynamic bounds computations not yet implemented"),
         }
         Ok(())
     }
-    pub fn clear_str(&mut self) { self.text.clear() }
-    pub fn to_str(&self) -> &str { self.text.to_str() }
+
+    pub fn to_str(&self) -> &str {
+        core::str::from_utf8(unsafe {
+            core::slice::from_raw_parts(self.text.as_ptr(), self.length)
+        })
+        .unwrap()
+    }
+
+    pub fn clear_str(&mut self) { self.text = [0; TEXTVIEW_LEN] }
+
+    pub fn populate_from(&mut self, t: &TextView) {
+        self.operation = t.operation;
+        self.untrusted = t.untrusted;
+        self.token = t.token;
+        self.invert = t.invert;
+        self.draw_order = t.draw_order;
+        self.bounds_hint = t.bounds_hint;
+        self.bounds_computed = t.bounds_computed;
+        self.style = t.style;
+        self.text = t.text;
+        self.length = t.length;
+        self.alignment = t.alignment;
+        self.cursor = t.cursor;
+        self.draw_border = t.draw_border;
+        self.clear_area = t.clear_area;
+        self.border_width = t.border_width;
+        self.rounded_border = t.rounded_border;
+        self.x_margin = t.x_margin;
+        self.y_margin = t.y_margin;
+        self.selected = t.selected;
+        self.canvas = t.canvas;
+    }
 }
 
-impl<'a> core::fmt::Debug for TextView<'a> {
+// Allow a `&TextView` to be used anywhere that expects a `&str`
+impl AsRef<str> for TextView {
+    fn as_ref(&self) -> &str {
+        self.to_str()
+    }
+}
+
+impl core::fmt::Debug for TextView {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // this should definitely be extended to print more relevant data, but for now just render the string itself
-        write!(f, "{}", self.text)
+        write!(f, "{:?}, {:?}, {:?}, {:?}, {}",
+            self.get_op(), self.bounds_hint, self.cursor, self.get_canvas_gid(), self.to_str())
     }
 }
 
-
-impl<'a> core::fmt::Display for TextView<'a> {
+// allow printing of the text
+impl core::fmt::Display for TextView {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.text)
+        write!(f, "{}", self.to_str())
     }
 }
 
-impl<'a> core::fmt::Write for TextView<'a> {
+// allow `write!()` macro on a` &TextView`
+impl core::fmt::Write for TextView {
     fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
         self.bounds_computed = None;
-        self.text.write_str(s)
+
+        let b = s.bytes();
+
+        // Ensure the length is acceptable
+        if b.len() + self.length > self.text.len() {
+            Err(core::fmt::Error)?;
+        }
+        // append the write to the array
+        for c in s.bytes() {
+            if self.length < self.text.len() {
+                self.text[self.length] = c;
+                self.length += 1;
+            }
+        }
+        // Attempt to convert the string to UTF-8 to validate it's correct UTF-8.
+        core::str::from_utf8(unsafe {
+            core::slice::from_raw_parts(self.text.as_ptr(), self.length)
+        })
+        .map_err(|_| core::fmt::Error)?;
+        Ok(())
     }
 }

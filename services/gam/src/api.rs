@@ -3,12 +3,12 @@ use graphics_server::{Point, Rectangle, TextView, Gid};
 use blitstr::{GlyphStyle, Cursor};
 
 #[derive(Debug)]
-pub enum Opcode<'a> {
+pub enum Opcode {
     // clears a canvas with a given GID
     ClearCanvas(Gid),
 
     // renders a TextView
-    RenderTextView(TextView<'a>),
+    RenderTextView(TextView),
 
     // returns a GID to the "content" Canvas; requires an authentication token
     RequestContentCanvas(Gid),
@@ -23,9 +23,9 @@ pub enum Opcode<'a> {
     HasInput(bool),
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+    fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::ClearCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
@@ -36,7 +36,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
     }
 }
 
-impl<'a> Into<Message> for Opcode<'a> {
+impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::ClearCanvas(gid) => Message::Scalar(ScalarMessage {
