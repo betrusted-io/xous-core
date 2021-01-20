@@ -1,4 +1,5 @@
 use crate::api::{Point, Rectangle, Gid};
+use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
 use log::{error, info};

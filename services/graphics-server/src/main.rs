@@ -16,7 +16,7 @@ use core::convert::TryFrom;
 mod logo;
 
 use api::{DrawStyle, PixelColor, Rectangle};
-use blitstr;
+use blitstr_ref as blitstr;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(logo::LOGO_MAP);

@@ -7,6 +7,8 @@ use graphics_server::*;
 use core::fmt::Write;
 use core::convert::TryFrom;
 
+use blitstr_ref as blitstr;
+
 pub fn status_thread(canvas_gid: [u32; 4]) {
     let status_gid: Gid = Gid::new(canvas_gid);
 

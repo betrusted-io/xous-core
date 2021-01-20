@@ -1,6 +1,7 @@
 #![cfg_attr(baremetal, no_main)]
 #![cfg_attr(baremetal, no_std)]
 
+use blitstr_ref as blitstr;
 use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;

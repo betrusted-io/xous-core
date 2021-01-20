@@ -8,6 +8,7 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
+use com_rs_ref as com_rs;
 use com_rs::*;
 
 use xous::CID;
@@ -28,6 +29,7 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
+    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
@@ -174,6 +176,7 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
+    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::{error, info};
 

@@ -1,0 +1,22 @@
+[package]
+name = "blitstr-ref"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "blitstr import package"
+
+[dependencies]
+# blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
+blitstr = { path = "../../../blitstr" }
+
+
+# targeting hardware
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+
+
+# targeting hosted mode
+[target.'cfg(any(windows,unix))'.dependencies]
+
+
+[features]
+default = []

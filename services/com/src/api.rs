@@ -3,6 +3,7 @@ use xous::{Message, ScalarMessage};
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
+use com_rs_ref as com_rs;
 use com_rs::*;
 
 // subtype constants for registering service listeners from the COM

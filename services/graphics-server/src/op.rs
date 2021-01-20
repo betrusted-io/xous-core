@@ -1,5 +1,6 @@
 use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView};
 use log::{error, info};
+use blitstr_ref as blitstr;
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;

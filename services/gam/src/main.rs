@@ -8,6 +8,7 @@ use status::*;
 mod canvas;
 use canvas::*;
 
+use blitstr_ref as blitstr;
 use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;

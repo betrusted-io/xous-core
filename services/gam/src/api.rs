@@ -1,5 +1,6 @@
 use xous::{Message, ScalarMessage};
 use graphics_server::{Point, Rectangle, TextView, Gid};
+use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
 #[derive(Debug)]

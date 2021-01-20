@@ -1,5 +1,6 @@
 use crate::op::{HEIGHT, WIDTH};
 use crate::api::{Point, DrawStyle};
+use blitstr_ref as blitstr;
 use blitstr::{ClipRect};
 use core::cmp::{max, min};
 

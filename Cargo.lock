@@ -70,9 +70,11 @@ name = "blitstr"
 version = "0.3.0"
 
 [[package]]
-name = "blitstr"
-version = "0.3.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=ea27e611d5ee165d8be894f9ca1c1130156c1931#ea27e611d5ee165d8be894f9ca1c1130156c1931"
+name = "blitstr-ref"
+version = "0.1.0"
+dependencies = [
+ "blitstr",
+]
 
 [[package]]
 name = "bstr"
@@ -160,7 +162,7 @@ dependencies = [
 name = "com"
 version = "0.1.0"
 dependencies = [
- "com_rs",
+ "com_rs-ref",
  "heapless",
  "log",
  "log-server",
@@ -175,6 +177,13 @@ dependencies = [
 name = "com_rs"
 version = "0.1.0"
 source = "git+https://github.com/betrusted-io/com_rs.git?rev=a9e05f414accef08348b77be6fc0f668b319e6ff#a9e05f414accef08348b77be6fc0f668b319e6ff"
+
+[[package]]
+name = "com_rs-ref"
+version = "0.1.0"
+dependencies = [
+ "com_rs",
+]
 
 [[package]]
 name = "crc"
@@ -260,7 +269,7 @@ name = "gam"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "blitstr 0.3.0",
+ "blitstr-ref",
  "com",
  "graphics-server",
  "heapless",
@@ -317,7 +326,7 @@ dependencies = [
 name = "graphics-server"
 version = "0.1.0"
 dependencies = [
- "blitstr 0.3.0",
+ "blitstr-ref",
  "hash32",
  "hash32-derive",
  "keyboard",
@@ -897,7 +906,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "bitflags",
- "blitstr 0.3.0 (git+https://github.com/betrusted-io/blitstr.git?rev=ea27e611d5ee165d8be894f9ca1c1130156c1931)",
+ "blitstr-ref",
  "com",
  "graphics-server",
  "heapless",

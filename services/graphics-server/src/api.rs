@@ -23,6 +23,7 @@ pub use shapes::*;
 pub mod text;
 pub use text::*;
 
+use blitstr_ref as blitstr;
 use blitstr::{ClipRect, Cursor, GlyphStyle};
 
 use xous::{Message, ScalarMessage};

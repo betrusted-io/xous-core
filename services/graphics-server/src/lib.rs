@@ -3,6 +3,7 @@
 // pub mod size;
 pub mod api;
 pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, TextAlignment};
+use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
 use xous::ipc::*;

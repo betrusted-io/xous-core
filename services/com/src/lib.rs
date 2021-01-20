@@ -6,6 +6,7 @@ pub mod api;
 
 use api::BattStats;
 use xous::{send_message, Error, CID};
+use com_rs_ref as com_rs;
 use com_rs::*;
 
 pub fn power_off_soc(cid: CID) -> Result<(), xous::Error> {

@@ -17,9 +17,7 @@ trng = { path = "../trng" }
 heapless = "0.5"
 log = "0.4"
 com = { path = "../com"}
-
-blitstr = { path = "../../../blitstr" }
-# blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ea27e611d5ee165d8be894f9ca1c1130156c1931" }
+blitstr-ref = { path = "../../imports/blitstr-ref" }
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
