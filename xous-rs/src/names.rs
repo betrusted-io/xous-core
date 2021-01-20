@@ -1,11 +1,8 @@
 #![allow(dead_code)]
 
 /*
-This file contains a list of descriptions of servers that
-are used as keys by the xous-names server.
-
-It also contains global IDs. By convention, the top 8 bits of
-a message ID field are reserved for Xous.
+A list of descriptions of servers ("names") that are used as keys by the xous-names server
+for the core set of kernel services.
 */
 
 pub const SERVER_NAME_COM: &str      = "_COM manager_";

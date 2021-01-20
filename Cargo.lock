@@ -68,7 +68,6 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.3.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=47b6060a4f6d01e0789d37d6f6593898604c1257#47b6060a4f6d01e0789d37d6f6593898604c1257"
 
 [[package]]
 name = "blitstr-ref"
