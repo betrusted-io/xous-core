@@ -159,7 +159,7 @@ fn xmain() -> ! {
     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
     // make a thread to manage the status bar
-    xous::create_thread_simple(status_thread, chatlayout.status).expect("GAM: couldn't create status thread");
+    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");

@@ -7,7 +7,9 @@ use graphics_server::*;
 use core::fmt::Write;
 use core::convert::TryFrom;
 
-pub fn status_thread(status_gid: Gid) {
+pub fn status_thread(canvas_gid: [u32; 4]) {
+    let status_gid: Gid = Gid::new(canvas_gid);
+
     info!("GAM|status: registering GAM|status thread");
     let status_sid = xous_names::register_name(xous::names::SERVER_NAME_STATUS).expect("GAM|status: can't register server");
 
