@@ -152,7 +152,7 @@ fn shell_main() -> ! {
 
         // actual benchmark
         // get a scalar message
-        if false {
+        if true {
             // measured at 1349 iterations per second in this loop
             count = benchmark_target::test_scalar(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;

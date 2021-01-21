@@ -28,7 +28,8 @@ fn xmain() -> ! {
                 _ => error!("BENCHTARGET: opcode not yet implemented"),
             }
         } else if let xous::Message::MutableBorrow(m) = &envelope.body {
-            let lookup: &mut Lookup = unsafe { &mut *(m.buf.as_mut_ptr() as *mut Lookup) };
+            //let lookup: &mut Lookup = unsafe { &mut *(m.buf.as_mut_ptr() as *mut Lookup) };
+            let lookup: &mut TestStruct = unsafe { &mut *(m.buf.as_mut_ptr() as *mut TestStruct) };
             lookup.challenge[0] = lookup.challenge[0] + 1;
         } else {
             error!("BENCHTARGET: couldn't convert opcode");

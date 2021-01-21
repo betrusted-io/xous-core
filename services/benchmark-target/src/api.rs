@@ -1,11 +1,25 @@
 use xous::{Message, ScalarMessage};
 use xous_names::api::Lookup;
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct TestStruct {
+    pub challenge: [u32; 8],
+}
+impl TestStruct {
+    pub fn new() -> Self {
+        TestStruct {
+            challenge: [0; 8],
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Opcode {
     TestScalar(u32),
-    TestMemory(Lookup),
+    //TestMemory(Lookup),
+    TestMemory(TestStruct),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
