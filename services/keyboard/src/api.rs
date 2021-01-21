@@ -26,16 +26,16 @@ pub struct RowCol {
 #[derive(Debug)]
 #[repr(C)]
 pub struct KeyRawStates {
-    mid: usize,
+    mid: u32,
     pub keydowns: Vec<RowCol, U16>,
     pub keyups: Vec<RowCol, U16>,
 }
 impl KeyRawStates {
-    pub fn mid(&self) -> usize { self.mid }
+    pub fn mid(&self) -> usize { self.mid as usize }
 
     pub fn new() -> Self {
         KeyRawStates {
-            mid: xous::names::GID_KEYBOARD_RAW_KEYSTATE_EVENT,
+            mid: xous::names::GID_KEYBOARD_RAW_KEYSTATE_EVENT as u32,
             keydowns: Vec::new(),
             keyups: Vec::new(),
         }
