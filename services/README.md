@@ -34,49 +34,51 @@ The `gam` is a Graphical Abstraction Manager. It manages various `Canvas` object
 
 Conceptually, a complete Xous OS implementation would have HALs that claim the pages of every hardware device, and application servers that claim all the other remaining memory pages -- this includes unused pages and aliased regions -- except for the free memory reserved for applications themselves. Thus, Xous as a kernel does nothing to prevent anyone on its own right from mapping a page; it's up to the complete set of services frameworks to ensure that all the requisite pages have been mapped. (*TODO*: an audit tool to check the memory space and verify that 1. all CSRs and memory spaces explicitly declared in soc.svd are mapped, and 2. checks that otherwise remaining free space is mapped to a "gutter" that panics if accessed).
 
+We're trying to track progress on implementing the various servers using [github projects](https://github.com/betrusted-io/xous-core/projects/1).
+
 ## Well-Known Servers
 Here is the list of well-known services:
-- `ticktimer-server` -- beta -- allows processes to know elapsed time since start, and request sleeps. Also manages WDT.
-- `xous-names` -- incomplete alpha -- resolves names into `SID`s.
-- `log-server` -- beta -- implements info and error logging. Has a separate UART from the kernel UART.
+- `ticktimer-server` -- allows processes to know elapsed time since start, and request sleeps. Also manages WDT.
+- `xous-names` -- resolves names into `SID`s.
+- `log-server` -- implements info and error logging. Has a separate UART from the kernel UART.
 
 ## Hal Servers
 Here are a list of HALs, implemented and projected, and their functions:
 
-- `com` -- beta -- manages requests to and from the EC
-- `graphics-server` -- alpha -- manages the frame buffer and basic drawing primitives. Talks to the MEMLCD
-- `keyboard` -- alpha -- key matrix management; debounce; ScanCode conversion. Keyboard layouts (qwerty, dvorak, azerty, qwertz, braille) are interpreted in this server
-- `trng` -- alpha -- manages the TRNG hardware, provides TRNGs for other processes
-- `llio` -- planned -- manages I2C, RTC, GPIO, pin interrupts, soft reboot, and power pins. Also home for info, build IDs, etc.
-- `codec` -- planned -- basic buffering of frames into and out of the audio CODEC
-- `jtag` -- planned -- manages the JTAG interface (used for key fusing)
-- `keys` -- planned -- management of cryptographic key store
-- `engine25519` -- planned -- Engine25519 interface
-- `sha512` -- planned -- SHA512 interface
-- `spinor` -- planned -- manages the erasure and programming of the SPINOR
-- `ram` -- planned -- manages allocation of RAM for applications
-- `scheduler` -- planned -- manages thread scheduling and priorities
+- `com` -- manages requests to and from the EC
+- `graphics-server` -- manages the frame buffer and basic drawing primitives. Talks to the MEMLCD
+- `keyboard` -- key matrix management; debounce; ScanCode conversion. Keyboard layouts (qwerty, dvorak, azerty, qwertz, braille) are interpreted in this server
+- `trng` -- manages the TRNG hardware, provides TRNGs for other processes
+- `llio` -- manages I2C, RTC, GPIO, pin interrupts, soft reboot, and power pins. Also home for info, build IDs, etc.
+- `codec` -- basic buffering of frames into and out of the audio CODEC
+- `jtag` -- manages the JTAG interface (used for key fusing)
+- `keys` -- management of cryptographic key store
+- `engine25519` -- Engine25519 interface
+- `sha512` -- SHA512 interface
+- `spinor` -- manages the erasure and programming of the SPINOR
+- `ram` -- manages allocation of RAM for applications
+- `scheduler` -- manages thread scheduling and priorities
 
 ## Application Servers
 Here are a list of application servers, implemented and projected, and their functions:
 - `fcc-agent` -- use-once -- a special agent meant to run on a minimal Xous for FCC testing. Should never be compiled into production firmware.
 - `trng-tester` -- use-once -- a special server used to facilitate testing of the TRNG. Pipes TRNG output to memory regions that can be read out using `bt-rngd` and fed into Dieharder for analysis.
 - `gam` -- pre-alpha -- manages `Canvas` objects, and provides an abstract framework for applications. Also manages status bar, context menus and pop-up notifications.
-- `ime` -- planned -- liases with `keyboard` and `gam` to handle keyboard input
-- `pddb` -- planned -- plausibly deniable database. Used in lieu of a conventional filesystem for storing key/value pairs in a plausibly deniable fashion.
-- `update-ec` -- planned -- manages the updating of the EC
-- `update-soc` -- planned -- manages remote (non-USB) updates of the FPGA and kernel
-- `net` -- planned -- manages connections to the Internet
-- `wifi` -- planned -- manages wifi configuration
-- `power` -- planned -- intermediates requests to the backlight, battery status, charging, RTC, etc.
-- `accel` -- planned -- intermedates requests to the accelerometer
-- `audio` -- planned -- intermediates requests to the audio hardware. Does stream mixing, etc.
-- `usb` -- planned -- handles USB connections
-- `credentials` -- planned -- trusted PIN/password entry mechanism, manages currently activated credentials
+- `ime` -- liases with `keyboard` and `gam` to handle keyboard input
+- `pddb` -- plausibly deniable database. Used in lieu of a conventional filesystem for storing key/value pairs in a plausibly deniable fashion.
+- `update-ec` -- manages the updating of the EC
+- `update-soc` -- manages remote (non-USB) updates of the FPGA and kernel
+- `net` -- manages connections to the Internet
+- `wifi` -- manages wifi configuration
+- `power` -- intermediates requests to the backlight, battery status, charging, RTC, etc.
+- `accel` -- intermedates requests to the accelerometer
+- `audio` -- intermediates requests to the audio hardware. Does stream mixing, etc.
+- `usb` -- handles USB connections
+- `credentials` -- trusted PIN/password entry mechanism, manages currently activated credentials
 
 ## Applications
 Here are a list of user applications:
 - `shell` -- refactoring -- provides a "chat-like" interface for talking to Xous
-- `chat` -- planned -- text and audio secure chat app
-- `launcher` -- planned -- an application launcher
-- `password` -- planned -- a password vault
+- `chat` -- text and audio secure chat app
+- `launcher` -- an application launcher
+- `password` -- a password vault
