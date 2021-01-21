@@ -60,6 +60,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 
 [[package]]
+name = "benchmark"
+version = "0.1.0"
+dependencies = [
+ "benchmark-target",
+ "blitstr-ref",
+ "graphics-server",
+ "log",
+ "log-server",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
+name = "benchmark-target"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

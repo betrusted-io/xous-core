@@ -1,0 +1,24 @@
+[package]
+name = "benchmark"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Benchmarks for Xous"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+graphics-server = { path = "../graphics-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log-server = { path = "../log-server" }
+log = "0.4"
+blitstr-ref = { path = "../../imports/blitstr-ref" }
+benchmark-target = { path = "../benchmark-target" }
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+# default = ["debugprint"] # "debugprint"
+default = []

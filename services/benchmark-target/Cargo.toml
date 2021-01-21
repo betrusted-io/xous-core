@@ -1,0 +1,20 @@
+[package]
+name = "benchmark-target"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Benchmark target for Xous"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+xous-names = { path = "../xous-names" }
+log-server = { path = "../log-server" }
+log = "0.4"
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+# default = ["debugprint"] # "debugprint"
+default = []
