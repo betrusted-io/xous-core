@@ -92,17 +92,17 @@ impl Rectangle {
             style: style,
         }
     }
-    pub fn x0(&self) -> usize {
-        self.tl.x as usize
+    pub fn x0(&self) -> u32 {
+        self.tl.x as u32
     }
-    pub fn x1(&self) -> usize {
-        self.br.x as usize
+    pub fn x1(&self) -> u32 {
+        self.br.x as u32
     }
-    pub fn y0(&self) -> usize {
-        self.tl.y as usize
+    pub fn y0(&self) -> u32 {
+        self.tl.y as u32
     }
-    pub fn y1(&self) -> usize {
-        self.br.y as usize
+    pub fn y1(&self) -> u32 {
+        self.br.y as u32
     }
 
     /// Make a rectangle of the full screen size

@@ -64,7 +64,7 @@ pub struct TextView {
     pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
 
     // lower numbers are drawn last
-    pub draw_order: usize,
+    pub draw_order: u32,
 
     // offsets for text drawing -- exactly one of the following options should be specified
     pub bounds_hint: TextBounds,
@@ -72,7 +72,7 @@ pub struct TextView {
 
     pub style: GlyphStyle,
     text: [u8; TEXTVIEW_LEN],
-    length: usize,
+    length: u32,
     pub alignment: TextAlignment,
     pub cursor: Cursor,
 
@@ -84,12 +84,12 @@ pub struct TextView {
     pub y_margin: u16,
 
     // this field specifies the beginning and end of a "selected" region of text
-    pub selected: Option<[usize; 2]>,
+    pub selected: Option<[u32; 2]>,
 
     canvas: Gid, // GID of the canvas to draw on
 }
 impl TextView {
-    pub fn new(canvas: Gid, draw_order: usize, bounds_hint: TextBounds) -> Self {
+    pub fn new(canvas: Gid, draw_order: u32, bounds_hint: TextBounds) -> Self {
         TextView {
             operation: TextOp::Nop,
             untrusted: true,
@@ -131,7 +131,7 @@ impl TextView {
 
     pub fn to_str(&self) -> &str {
         core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.text.as_ptr(), self.length)
+            core::slice::from_raw_parts(self.text.as_ptr(), self.length as usize)
         })
         .unwrap()
     }
@@ -192,19 +192,19 @@ impl core::fmt::Write for TextView {
         let b = s.bytes();
 
         // Ensure the length is acceptable
-        if b.len() + self.length > self.text.len() {
+        if b.len() + self.length as usize > self.text.len() as usize {
             Err(core::fmt::Error)?;
         }
         // append the write to the array
         for c in s.bytes() {
-            if self.length < self.text.len() {
-                self.text[self.length] = c;
+            if self.length < self.text.len() as u32 {
+                self.text[self.length as usize] = c;
                 self.length += 1;
             }
         }
         // Attempt to convert the string to UTF-8 to validate it's correct UTF-8.
         core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.text.as_ptr(), self.length)
+            core::slice::from_raw_parts(self.text.as_ptr(), self.length as usize)
         })
         .map_err(|_| core::fmt::Error)?;
         Ok(())
