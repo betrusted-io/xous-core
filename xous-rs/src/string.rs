@@ -6,7 +6,7 @@ use crate::{
 pub struct String<'a> {
     raw_slice: &'a mut [u8],
     s: &'a str,
-    len: usize,
+    len: u32,
 }
 
 impl<'a> String<'a> {
@@ -26,7 +26,7 @@ impl<'a> String<'a> {
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        self.len as usize
     }
 
     pub fn is_empty(&self) -> bool {
@@ -43,7 +43,7 @@ impl<'a> String<'a> {
         Ok(String {
             raw_slice,
             s: core::str::from_utf8(unsafe {
-                core::slice::from_raw_parts(message.buf.as_ptr(), starting_length)
+                core::slice::from_raw_parts(message.buf.as_ptr(), starting_length as usize)
             })?,
             len: 0,
         })
@@ -62,7 +62,7 @@ impl<'a> String<'a> {
             id,
             buf: memory_range,
             offset: None,
-            valid: MemorySize::new(self.len).map(Some).unwrap_or(None),
+            valid: MemorySize::new(self.len as usize).map(Some).unwrap_or(None),
         };
         send_message(connection, Message::Borrow(msg))
     }
@@ -79,7 +79,7 @@ impl<'a> String<'a> {
             id,
             buf: memory_range,
             offset: None,
-            valid: MemorySize::new(self.len).map(Some).unwrap_or(None),
+            valid: MemorySize::new(self.len as usize).map(Some).unwrap_or(None),
         };
         send_message(connection, Message::Move(msg))
     }
@@ -90,7 +90,7 @@ impl<'a> String<'a> {
         self.s = unsafe {
             core::str::from_utf8_unchecked(core::slice::from_raw_parts(
                 self.raw_slice.as_ptr(),
-                self.len,
+                self.len as usize,
             ))
         };
     }
@@ -109,15 +109,15 @@ impl<'a> core::fmt::Display for String<'a> {
 impl<'a> core::fmt::Write for String<'a> {
     fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
         for c in s.bytes() {
-            if self.len < self.raw_slice.len() {
-                self.raw_slice[self.len] = c;
+            if (self.len as usize) < self.raw_slice.len() {
+                self.raw_slice[self.len as usize] = c;
                 self.len += 1;
             }
         }
         self.s = unsafe {
             core::str::from_utf8_unchecked(core::slice::from_raw_parts(
                 self.raw_slice.as_ptr(),
-                self.len,
+                self.len as usize,
             ))
         };
         Ok(())
