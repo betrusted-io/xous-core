@@ -14,12 +14,13 @@ The kernel starts up a core set of servers, which are broadly divided into three
 - "HAL" servers
 - "Application" servers
 
-Almost all servers in xous are accessed through a 128-bit, cryptographically random `SID`. These random IDs change with every boot. Thus, in order to connect to a server, one must first resolve its name into an `SID`. In order to facilitate this process, two "well known" servers are provided:
+Almost all servers in xous are accessed through a 128-bit, cryptographically random `SID`. These random IDs change with every boot. Thus, in order to connect to a server, one must first resolve its name into an `SID`. In order to facilitate this process, three "well known" servers are provided:
 
 - `xous-names`
 - `ticktimer-server`
+- `log-server`
 
-These two servers can be accessed by any process, regardless of their trust level, as their `SID` is actually a well-known number. The `ticktimer-server` is well-known so that servers can delay their boot (if necessary; so far it hasn't been). Please refer to the [README for xous-names](xous-names/README.md) for more details on how name resolution works.
+These three servers can be accessed by any process, regardless of their trust level, as their `SID` is actually a well-known number. The `ticktimer-server` is well-known so that servers can delay their boot (if necessary; so far it hasn't been). The `log-server` is well-known so that errors in connecting to the name server can be debugged.Please refer to the [README for xous-names](xous-names/README.md) for more details on how name resolution works.
 
 Initially, `xous-names` functions as a permissive oracle that allows kernel servers to freely look up `SID`s using the set of names defined in [names.rs](../xous-rs/src/names.rs). Once the kernel is initialized, a `lockdown` message is sent to `xous-names` which prevents any further lookups on servers that are meant to be private to the kernel. (*TODO*: a coherent, maintainable method for declaring private servers to `xous-names`)
 
@@ -37,6 +38,7 @@ Conceptually, a complete Xous OS implementation would have HALs that claim the p
 Here is the list of well-known services:
 - `ticktimer-server` -- beta -- allows processes to know elapsed time since start, and request sleeps. Also manages WDT.
 - `xous-names` -- incomplete alpha -- resolves names into `SID`s.
+- `log-server` -- beta -- implements info and error logging. Has a separate UART from the kernel UART.
 
 ## Hal Servers
 Here are a list of HALs, implemented and projected, and their functions:
@@ -44,7 +46,6 @@ Here are a list of HALs, implemented and projected, and their functions:
 - `com` -- beta -- manages requests to and from the EC
 - `graphics-server` -- alpha -- manages the frame buffer and basic drawing primitives. Talks to the MEMLCD
 - `keyboard` -- alpha -- key matrix management; debounce; ScanCode conversion. Keyboard layouts (qwerty, dvorak, azerty, qwertz, braille) are interpreted in this server
-- `log-server` -- beta -- implements info and error logging. Has a separate UART from the kernel UART.
 - `trng` -- alpha -- manages the TRNG hardware, provides TRNGs for other processes
 - `llio` -- planned -- manages I2C, RTC, GPIO, pin interrupts, soft reboot, and power pins. Also home for info, build IDs, etc.
 - `codec` -- planned -- basic buffering of frames into and out of the audio CODEC
