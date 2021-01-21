@@ -18,7 +18,7 @@ pub const AUTHENTICATE_TIMEOUT: usize = 10_000; // time in ms that a process has
 #[repr(C)]
 pub struct XousServerName {
     pub name: [u8; 64],
-    pub length: usize,
+    pub length: u32,
 }
 
 impl hash32::Hash for XousServerName {
@@ -38,7 +38,7 @@ impl XousServerName {
 
     pub fn to_str(&self) -> &str {
         core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.name.as_ptr(), self.length)
+            core::slice::from_raw_parts(self.name.as_ptr(), self.length as usize)
         })
         .unwrap()
     }
@@ -54,7 +54,7 @@ impl Default for XousServerName {
 }
 impl PartialEq for XousServerName {
     fn eq(&self, other: &Self) -> bool {
-        self.name[..self.length] == other.name[..other.length] && self.length == other.length
+        self.name[..self.length as usize] == other.name[..other.length as usize] && self.length == other.length
     }
 }
 
@@ -70,7 +70,7 @@ impl core::fmt::Write for XousServerName {
         if b.len() > self.name.len() {
             Err(core::fmt::Error)?;
         }
-        self.length = b.len();
+        self.length = b.len() as u32;
 
         // Copy the string into this variable
         for (dest, src) in self.name.iter_mut().zip(s.bytes()) {
@@ -79,7 +79,7 @@ impl core::fmt::Write for XousServerName {
 
         // Attempt to convert the string to UTF-8 to validate it's correct UTF-8
         core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.name.as_ptr(), self.length)
+            core::slice::from_raw_parts(self.name.as_ptr(), self.length as usize)
         })
         .map_err(|_| core::fmt::Error)?;
         Ok(())
@@ -107,7 +107,7 @@ impl AsRef<str> for XousServerName {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct Registration {
-    mid: usize,
+    mid: u32,
     pub sid: SID,
 
     // we use fixed-length, u8-only records to pass server names. This is different from
@@ -120,10 +120,10 @@ pub struct Registration {
 }
 
 impl Registration {
-    pub fn mid(&self) -> usize { self.mid }
+    pub fn mid(&self) -> usize { self.mid as usize }
 
     pub fn get_subtype(&self) -> u16 { (self.mid & 0xFFFF) as u16 }
-    pub fn set_subtype(&mut self, subtype: u16) { self.mid = (self.mid & 0xFFFF_0000) | (subtype as usize); }
+    pub fn set_subtype(&mut self, subtype: u16) { self.mid = (self.mid & 0xFFFF_0000) | (subtype as u32); }
 
     pub fn match_subtype(id: usize, subtype: u16) -> bool {
         ((id & 0xFFFF) as u16 == subtype) && ((id & 0xFFFF_0000) == (ID_REGISTER_NAME & 0xFFFF_0000))
@@ -131,7 +131,7 @@ impl Registration {
 
     pub fn new() -> Self {
         Registration {
-            mid: ID_REGISTER_NAME,
+            mid: ID_REGISTER_NAME as u32,
             sid: SID::from_u32(0,0,0,0),
             name: XousServerName::default(),
             success: false,
@@ -142,7 +142,7 @@ impl Registration {
 #[derive(Debug)]
 #[repr(C)]
 pub struct Lookup {
-    mid: usize,
+    mid: u32,
     pub cid: CID,
     pub name: XousServerName,
     pub success: bool,
@@ -152,11 +152,11 @@ pub struct Lookup {
 }
 
 impl Lookup {
-    pub fn mid(&self) -> usize { self.mid }
+    pub fn mid(&self) -> usize { self.mid as usize }
 
     pub fn new() -> Self {
         Lookup {
-            mid: ID_LOOKUP_NAME,
+            mid: ID_LOOKUP_NAME as u32,
             cid: 0,
             name: XousServerName::default(),
             success: false,
@@ -170,7 +170,7 @@ impl Lookup {
 #[derive(Debug)]
 #[repr(C)]
 pub struct Authenticate {
-    mid: usize,
+    mid: u32,
     pub cid: CID,
     pub name: XousServerName,
     pub success: bool,
@@ -178,11 +178,11 @@ pub struct Authenticate {
 }
 
 impl Authenticate {
-    pub fn mid(&self) -> usize { self.mid }
+    pub fn mid(&self) -> usize { self.mid as usize }
 
     pub fn new() -> Self {
         Authenticate {
-            mid: ID_AUTHENTICATE,
+            mid: ID_AUTHENTICATE as u32,
             cid: 0,
             name: XousServerName::default(),
             success: false,
