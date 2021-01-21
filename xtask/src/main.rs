@@ -186,7 +186,9 @@ fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
     let init = [
         //"shell",
-        "gam",
+        //"gam",
+        "benchmark",
+        "benchmark-target",
         "log-server",
         "graphics-server",
         "ticktimer-server",

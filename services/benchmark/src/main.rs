@@ -152,11 +152,13 @@ fn shell_main() -> ! {
 
         // actual benchmark
         // get a scalar message
-        if true {
-            // measured at 1349 iterations per second in this loop
+        if false {
+            // measured at 1349 iterations per second in this loop (hardware); 55/s (hosted)
             count = benchmark_target::test_scalar(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;
         } else {
+            // works on hosted mode, 35/s (hosted)
+            // does *not* work on hardware
             count = benchmark_target::test_memory(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;
         }
