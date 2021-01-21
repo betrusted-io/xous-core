@@ -105,7 +105,7 @@ fn xmain() -> ! {
                 Opcode::GetCursor => {
                     let pt: api::Point =
                         api::Point::new(current_cursor.pt.x as i16, current_cursor.pt.y as i16);
-                    xous::return_scalar2(msg.sender, pt.into(), current_cursor.line_height)
+                    xous::return_scalar2(msg.sender, pt.into(), current_cursor.line_height as usize)
                         .expect("GFX: could not return GetCursor request");
                 }
                 Opcode::SetStringClipping(r) => {

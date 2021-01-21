@@ -267,9 +267,9 @@ impl<'a> Into<Message> for Opcode<'a> {
             }
             Opcode::SetCursor(c) => Message::Scalar(ScalarMessage {
                 id: 12,
-                arg1: c.pt.x,
-                arg2: c.pt.y,
-                arg3: c.line_height,
+                arg1: c.pt.x as usize,
+                arg2: c.pt.y as usize,
+                arg3: c.line_height as usize,
                 arg4: 0,
             }),
             Opcode::GetCursor => Message::BlockingScalar(ScalarMessage {

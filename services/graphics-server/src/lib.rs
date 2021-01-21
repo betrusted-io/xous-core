@@ -48,7 +48,7 @@ pub fn get_cursor(cid: CID) -> Result<Cursor, xous::Error> {
     let response = send_message(cid, api::Opcode::GetCursor.into())?;
     if let xous::Result::Scalar2(pt_as_usize, h) = response {
         let p: Point = pt_as_usize.into();
-        Ok(Cursor::new(p.x as usize, p.y as usize, h as _))
+        Ok(Cursor::new(p.x as u32, p.y as u32, h as _))
     } else {
         panic!("unexpected return value: {:#?}", response);
     }
