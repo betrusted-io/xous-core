@@ -274,7 +274,7 @@ fn shell_main() -> ! {
             last_time as f32 / 1000f32
         )
         .expect("Can't write");
-        status_cursor.pt.x = 4; status_cursor.pt.y = small_font_h;
+        status_cursor.pt.x = 4; status_cursor.pt.y = small_font_h as u32;
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // a line under the status area
