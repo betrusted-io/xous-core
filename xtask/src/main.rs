@@ -36,12 +36,44 @@ fn main() {
 }
 
 fn try_main() -> Result<(), DynError> {
+    let hw_pkgs = [
+        "gam",
+        "graphics-server",
+        "ticktimer-server",
+        "log-server",
+        "com",
+        "xous-names",
+        "keyboard",
+        "trng",
+    ];
+    let fcc_pkgs = [
+        "shell",
+        "fcc-agent",
+        "graphics-server",
+        "ticktimer-server",
+        "log-server",
+        "com",
+        "xous-names",
+        "keyboard",
+        "trng",
+    ];
+    let benchmark_pkgs = [
+        "benchmark",
+        "benchmark-target",
+        "graphics-server",
+        "ticktimer-server",
+        "log-server",
+        "xous-names",
+        "trng",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false)?,
         Some("renode-image-debug") => renode_image(true)?,
         Some("run") => run(false)?,
-        Some("hw-image") => build_hw_image(false, env::args().nth(2))?,
+        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
+        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
+        Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
         Some("debug") => run(true)?,
         _ => print_help(),
     }
@@ -56,11 +88,13 @@ renode-image-debug      builds a test image for renode in debug mode
 hw-image [soc.svd]      builds an image for real hardware
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
+benchmark [soc.svd]     builds a benchmarking image for real hardware
+fcc-agent [soc.svd]     builds a version suitable for FCC testing
 "
     )
 }
 
-fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
+fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),
@@ -78,20 +112,7 @@ fn build_hw_image(debug: bool, svd: Option<String>) -> Result<(), DynError> {
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &[
-        //"shell",
-        //"gam",
-        "benchmark",
-        "benchmark-target",
-        "graphics-server",
-        "ticktimer-server",
-        "log-server",
-        "com",
-        "xous-names",
-        "keyboard",
-        "trng",
-    ] {
-        // "fcc-agent"
+    for pkg in packages {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     let loader = build("loader", debug, Some(TARGET), Some("loader".into()))?;
@@ -185,10 +206,10 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
     let init = [
-        //"shell",
+        "shell",
         //"gam",
-        "benchmark",
-        "benchmark-target",
+        //"benchmark",
+        //"benchmark-target",
         "log-server",
         "graphics-server",
         "ticktimer-server",

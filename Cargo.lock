@@ -282,6 +282,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
+ "xous-names",
 ]
 
 [[package]]
