@@ -2,7 +2,7 @@
 
 Core files for the Xous microkernel operating system.
 
-You might find this [collection of Xous documentation](https://github.com/betrusted-io/betrusted-wiki/wiki/Xous-Documentation) handy.
+You might find this [collection of Xous documentation](https://github.com/betrusted-io/betrusted-wiki/wiki) handy.
 
 This repository contains everything necessary to build the Xous kernel
 from source.  It consists of the following projects:
