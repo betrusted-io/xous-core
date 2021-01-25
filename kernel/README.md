@@ -47,4 +47,4 @@ By participating in this project you agree to abide its terms.
 
 Copyright © 2020
 
-Licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE)
+This project is licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE). For accurate information, please check individual files.
