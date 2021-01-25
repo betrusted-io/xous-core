@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 // Shamelessly taken from
 // https://stackoverflow.com/questions/36258417/using-a-macro-to-initialize-a-big-array-of-non-copy-elements
 // Allows us to fill an array with a predefined value.

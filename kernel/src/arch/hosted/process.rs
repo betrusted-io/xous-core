@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 pub const MAX_THREAD: TID = 31;
 use crate::services::ProcessInner;
 use core::cell::RefCell;

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 use super::process::Thread;
 #[allow(dead_code)]
 pub fn invoke(

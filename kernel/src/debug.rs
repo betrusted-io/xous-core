@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 #[cfg(baremetal)]
 use core::fmt::{Error, Write};
 #[cfg(baremetal)]

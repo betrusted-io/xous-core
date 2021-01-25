@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 use riscv::register::{satp, sie, sstatus};
 use xous_kernel::PID;
 
