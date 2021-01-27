@@ -109,7 +109,8 @@ impl Into<usize> for ClockMode {
 pub enum Opcode {
     /// not tested - reboot
     RebootRequest,
-    RebootConfirm,
+    RebootSocConfirm, // all peripherals + CPU
+    RebootCpuConfirm, // just the CPU, peripherals (in particular the USB debug bridge) keep state
 
     /// not tested - reboot address
     RebootVector(u32),
@@ -169,7 +170,8 @@ impl core::convert::TryFrom<& Message> for Opcode {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::RebootRequest),
-                1 => Ok(Opcode::RebootConfirm),
+                1 => Ok(Opcode::RebootSocConfirm),
+                21 => Ok(Opcode::RebootCpuConfirm),
                 2 => Ok(Opcode::RebootVector(m.arg1 as u32)),
                 3 => Ok(Opcode::CrgMode(m.arg1.into())),
                 4 => Ok(Opcode::GpioDataOut(m.arg1 as u32)),
@@ -217,6 +219,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 18 => Ok(Opcode::EcPowerOn),
                 19 => Ok(Opcode::SelfDestruct(m.arg1 as u32)),
                 20 => Ok(Opcode::Vibe(m.arg1.into())),
+                // note 21 is used for RebootCpuConfirm
                 _ => Err("LLIO api: unknown Scalar ID"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -278,8 +281,12 @@ impl Into<Message> for Opcode {
                 id: 0,
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
-            Opcode::RebootConfirm => Message::Scalar(ScalarMessage {
+            Opcode::RebootSocConfirm => Message::Scalar(ScalarMessage {
                 id: 1,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::RebootCpuConfirm => Message::Scalar(ScalarMessage {
+                id: 21,
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             Opcode::RebootVector(vector) => Message::Scalar(ScalarMessage {
@@ -404,10 +411,10 @@ impl Into<Message> for Opcode {
                 arg1: code as usize, arg2: 0, arg3: 0, arg4: 0,
             }),
             Opcode::Vibe(pattern) => Message::Scalar(ScalarMessage {
-                id: 17,
+                id: 20,
                 arg1: pattern as usize, arg2: 0, arg3: 0, arg4: 0,
             }),
-
+            // note 21 is used by RebootCpuConfirm
 
             // blocking scalars
             Opcode::InfoLitexId => Message::BlockingScalar(ScalarMessage {
