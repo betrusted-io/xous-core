@@ -45,6 +45,7 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
+        "llio",
     ];
     let fcc_pkgs = [
         "shell",
@@ -182,12 +183,15 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &[
-        "shell",
+        "benchmark",
+        "benchmark-target",
+        // "shell",
         "log-server",
         "graphics-server",
         "ticktimer-server",
         "com",
         "xous-names",
+        "trng",
     ] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }

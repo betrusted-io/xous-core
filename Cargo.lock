@@ -462,6 +462,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "llio"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "log",
+ "log-server",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "log"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
