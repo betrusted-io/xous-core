@@ -14,8 +14,10 @@ use xous::CID;
 mod implementation {
     use crate::api::*;
     use log::{error, info};
+    use utra::info::GIT_GITEXTRA_GIT_GITEXTRA;
     use utralib::generated::*;
     use xous::CID;
+    use ticktimer_server::*;
 
     use heapless::Vec;
     use heapless::consts::*;
@@ -31,6 +33,9 @@ mod implementation {
         i2c_csr: utralib::CSR<u32>,
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
+        seed_csr: utralib::CSR<u32>,
+        ticktimer_conn: xous::CID,
+        destruct_armed: bool,
     }
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
@@ -110,6 +115,16 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Power CSR range");
+            let seed_csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Seed CSR range");
+
+            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
             let mut xl = Llio {
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
@@ -120,6 +135,9 @@ mod implementation {
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
+                seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
+                ticktimer_conn,
+                destruct_armed: false,
             };
 
             xous::claim_interrupt(
@@ -185,6 +203,99 @@ mod implementation {
                 _ => info!("LLIO: invalid UART type specified for mux, doing nothing."),
             }
         }
+
+        pub fn get_info_dna(&self) -> (usize, usize) {
+            (self.info_csr.r(utra::info::DNA_ID0) as usize, self.info_csr.r(utra::info::DNA_ID1) as usize)
+        }
+        pub fn get_info_git(&self) -> (usize, usize) {
+            (
+                ((self.info_csr.rf(utra::info::GIT_MAJOR_GIT_MAJOR) as u32) << 24 |
+                (self.info_csr.rf(utra::info::GIT_MINOR_GIT_MINOR) as u32) << 16 |
+                (self.info_csr.rf(utra::info::GIT_REVISION_GIT_REVISION) as u32) << 8 |
+                (self.info_csr.rf(utra::info::GIT_GITEXTRA_GIT_GITEXTRA) as u32) & 0xFF << 0) as usize,
+
+                self.info_csr.rf(utra::info::GIT_GITREV_GIT_GITREV) as usize
+            )
+        }
+        pub fn get_info_platform(&self) -> (usize, usize) {
+            (self.info_csr.r(utra::info::PLATFORM_PLATFORM0) as usize, self.info_csr.r(utra::info::PLATFORM_PLATFORM1) as usize)
+        }
+        pub fn get_info_target(&self) -> (usize, usize) {
+            (self.info_csr.r(utra::info::PLATFORM_TARGET0) as usize, self.info_csr.r(utra::info::PLATFORM_TARGET1) as usize)
+        }
+        pub fn get_info_seed(&self) -> (usize, usize) {
+            (self.seed_csr.r(utra::seed::SEED0) as usize, self.info_csr.r(utra::seed::SEED1) as usize)
+        }
+
+        pub fn power_audio(&mut self, power_on: bool) {
+            if power_on {
+                self.power_csr.rmwf(utra::power::POWER_AUDIO, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_AUDIO, 0);
+            }
+        }
+        pub fn power_self(&mut self, power_on: bool) {
+            if power_on {
+                self.power_csr.rmwf(utra::power::POWER_SELF, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_SELF, 0);
+            }
+        }
+        pub fn power_boost_mode(&mut self, power_on: bool) {
+            if power_on {
+                self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 0);
+            }
+        }
+        pub fn ec_snoop_allow(&mut self, allow: bool) {
+            if allow {
+                self.power_csr.rmwf(utra::power::POWER_EC_SNOOP, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_EC_SNOOP, 0);
+            }
+        }
+        pub fn ec_reset(&mut self) {
+            self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
+            ticktimer_server::sleep_ms(self.ticktimer_conn, 100);
+            self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
+        }
+        pub fn ec_power_on(&mut self) {
+            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1);
+        }
+        pub fn self_destruct(&mut self, code: u32) {
+            if self.destruct_armed && code == 0x3141_5926 {
+                self.power_csr.rmwf(utra::power::POWER_SELFDESTRUCT, 1);
+            } else if !self.destruct_armed && code == 0x2718_2818 {
+                self.destruct_armed = true;
+            } else {
+                self.destruct_armed = false;
+                error!("LLIO: self destruct attempted, but incorrect code sequence presented.");
+            }
+        }
+        pub fn vibe(&mut self, pattern: VibePattern) {
+            match pattern {
+                VibePattern::Short => {
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
+                },
+                VibePattern::Long => {
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000);
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
+                },
+                VibePattern::Double => {
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
+                },
+            }
+        }
     }
 }
 
@@ -213,6 +324,19 @@ mod implementation {
         pub fn gpio_int_pending() -> u32 { 0x0 }
         pub fn gpio_int_ena(_d: u32) {}
         pub fn set_uart_mux(_mux: UartType) {}
+        pub fn get_info_dna() ->  (usize, usize) { (0, 0) }
+        pub fn get_info_git() ->  (usize, usize) { (0, 0) }
+        pub fn get_info_platform() ->  (usize, usize) { (0, 0) }
+        pub fn get_info_target() ->  (usize, usize) { (0, 0) }
+        pub fn get_info_seed() ->  (usize, usize) { (0, 0) }
+        pub fn power_audio(_power_on: bool) {}
+        pub fn power_self(_power_on: bool) {}
+        pub fn power_boost_mode(_power_on: bool) {}
+        pub fn ec_snoop_allow(_power_on: bool) {}
+        pub fn ec_reset() {}
+        pub fn ec_power_on() {}
+        pub fn self_destruct(_code: u32) {}
+        pub fn vibe(_pattern: VibePattern) {}
     }
 }
 
@@ -295,6 +419,50 @@ fn xmain() -> ! {
                 },
                 Opcode::UartMux(mux) => {
                     llio.set_uart_mux(mux);
+                },
+                Opcode::InfoDna => {
+                    let (val1, val2) = llio.get_info_dna();
+                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return DNA");
+                },
+                Opcode::InfoGit => {
+                    let (val1, val2) = llio.get_info_git();
+                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Git");
+                },
+                Opcode::InfoPlatform => {
+                    let (val1, val2) = llio.get_info_platform();
+                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Platform");
+                },
+                Opcode::InfoTarget => {
+                    let (val1, val2) = llio.get_info_target();
+                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Target");
+                },
+                Opcode::InfoSeed => {
+                    let (val1, val2) = llio.get_info_seed();
+                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Seed");
+                },
+                Opcode::PowerAudio(power_on) => {
+                    llio.power_audio(power_on);
+                },
+                Opcode::PowerSelf(power_on) => {
+                    llio.power_self(power_on);
+                },
+                Opcode::PowerBoostMode(power_on) => {
+                    llio.power_boost_mode(power_on);
+                },
+                Opcode::EcSnoopAllow(allow) => {
+                    llio.ec_snoop_allow(allow);
+                },
+                Opcode::EcReset => {
+                    llio.ec_reset();
+                },
+                Opcode::EcPowerOn => {
+                    llio.ec_power_on();
+                },
+                Opcode::SelfDestruct(code) => {
+                    llio.self_destruct(code);
+                },
+                Opcode::Vibe(pattern) => {
+                    llio.vibe(pattern);
                 },
             _ => error!("LLIO: no handler for opcode"),
             }

@@ -7,6 +7,7 @@ pub const SUBTYPE_REGISTER_RTC_LISTENER: u16 = 2;
 pub const SUBTYPE_REGISTER_USB_LISTENER: u16 = 3;
 pub const SUBTYPE_I2C_WRITE: u16 = 4;
 pub const SUBTYPE_I2C_READ: u16 = 5;
+pub const SUBTYPE_LITEX_ID: u16 = 6;
 
 #[derive(Debug)]
 pub enum UartType {
@@ -126,30 +127,18 @@ pub enum Opcode {
     GpioIntAsFalling(u32),
     GpioIntPending,
     GpioIntEna(u32),
-    GpioIntSubscribe(Registration),
+    GpioIntSubscribe(Registration), // TODO
 
     /// not tested - set UART mux
     UartMux(UartType),
 
     /// not tested - information about the SoC build and revision
-    InfoLitexId, // returns the ASCII string baked into the FPGA that describes the FPGA build
+    InfoLitexId(Registration), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
     InfoTarget,
     InfoSeed,
-
-    /// not tested - I2C functions
-    I2cWrite(I2cTransaction),
-    I2cRead(I2cTransaction),
-
-    /// not tested -- events
-    EventComSubscribe(Registration),
-    EventRtcSubscribe(Registration),
-    EventUsbAttachSubscribe(Registration),
-    EventComEnable(bool),
-    EventRtcEnable(bool),
-    EventUsbAttachEnable(bool),
 
     /// not tested -- power
     PowerAudio(bool),
@@ -162,6 +151,18 @@ pub enum Opcode {
 
     /// not tested -- vibe
     Vibe(VibePattern),
+
+    /// not tested - I2C functions
+    I2cWrite(I2cTransaction),
+    I2cRead(I2cTransaction),
+
+    /// not tested -- events
+    EventComSubscribe(Registration),
+    EventRtcSubscribe(Registration),
+    EventUsbAttachSubscribe(Registration),
+    EventComEnable(bool),
+    EventRtcEnable(bool),
+    EventUsbAttachEnable(bool),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -223,10 +224,8 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 _ => Err("LLIO api: unknown Scalar ID"),
             },
             Message::BlockingScalar(m) => match m.id {
-                0x100 => Ok(Opcode::InfoLitexId),
                 0x101 => Ok(Opcode::GpioDataIn),
                 0x102 => Ok(Opcode::GpioIntPending),
-                0x103 => Ok(Opcode::InfoLitexId),
                 0x104 => Ok(Opcode::InfoDna),
                 0x105 => Ok(Opcode::InfoGit),
                 0x106 => Ok(Opcode::InfoPlatform),
@@ -263,6 +262,10 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 if m.id as u16 == SUBTYPE_I2C_READ {
                     Ok(Opcode::I2cRead({
                         unsafe { *( (m.buf.as_mut_ptr()) as *mut I2cTransaction) }
+                    }))
+                } else if m.id as u16 == SUBTYPE_LITEX_ID {
+                    Ok(Opcode::InfoLitexId({
+                        unsafe { *( (m.buf.as_mut_ptr()) as *mut Registration) }
                     }))
                 } else {
                     Err("COM: unknown mutable borrow ID")
@@ -417,20 +420,12 @@ impl Into<Message> for Opcode {
             // note 21 is used by RebootCpuConfirm
 
             // blocking scalars
-            Opcode::InfoLitexId => Message::BlockingScalar(ScalarMessage {
-                id: 0x100,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-            }),
             Opcode::GpioDataIn => Message::BlockingScalar(ScalarMessage {
                 id: 0x101,
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             Opcode::GpioIntPending => Message::BlockingScalar(ScalarMessage {
                 id: 0x102,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-            }),
-            Opcode::InfoLitexId => Message::BlockingScalar(ScalarMessage {
-                id: 0x103,
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             Opcode::InfoDna => Message::BlockingScalar(ScalarMessage {
