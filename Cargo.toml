@@ -19,7 +19,7 @@ members = [
     "svd2utra",
     "xtask",
     "imports/blitstr-ref",
-    "imports/com_rs-ref"
+    "imports/com_rs-ref",
 ]
 default-members = [
     "services/shell",
