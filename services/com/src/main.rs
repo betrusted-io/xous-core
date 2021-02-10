@@ -245,12 +245,11 @@ fn xmain() -> ! {
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);
 
-    let agent_conn: usize;
-    if cfg!(feature = "fccagent") {
-        agent_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+    let agent_conn= if cfg!(feature = "fccagent") {
+        xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
     } else {
-        agent_conn = 0; // bogus value
-    }
+        0 // bogus value
+    };
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -351,7 +350,7 @@ fn xmain() -> ! {
                     }
                 }
                 Opcode::RegisterBattStatsListener(registration) => {
-                    let cid = xous_names::request_connection_blocking(registration.name.to_str()).expect("COM: can't connect to requested listener for reporting events");
+                    let cid = xous_names::request_connection_blocking(registration.to_str()).expect("COM: can't connect to requested listener for reporting events");
                     battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
                 }
                 _ => error!("unknown opcode"),
