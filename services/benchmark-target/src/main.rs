@@ -4,8 +4,6 @@
 mod api;
 use api::*;
 
-use xous_names::api::Lookup;
-
 use core::convert::TryFrom;
 
 use log::{error, info};
