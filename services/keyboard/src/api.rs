@@ -1,9 +1,9 @@
-use xous::{Message, ScalarMessage};
-use heapless::Vec;
 use heapless::consts::*;
+use heapless::Vec;
+use xous::{Message, ScalarMessage};
 
-pub const SUBTYPE_REGISTER_BASIC_LISTENER: u16 = 0;
-pub const SUBTYPE_REGISTER_RAW_LISTENER: u16 = 1;
+pub const REGISTER_BASIC_LISTENER: u32 = 0x1000_0000;
+pub const REGISTER_RAW_LISTENER: u32 = 0x1000_0001;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -31,7 +31,9 @@ pub struct KeyRawStates {
     pub keyups: Vec<RowCol, U16>,
 }
 impl KeyRawStates {
-    pub fn mid(&self) -> usize { self.mid as usize }
+    pub fn mid(&self) -> usize {
+        self.mid as usize
+    }
 
     pub fn new() -> Self {
         KeyRawStates {
@@ -121,10 +123,10 @@ pub enum Opcode {
     SelectKeyMap(KeyMap),
 
     /// request interpreted ScanCodes to be sent
-    RegisterListener(xous_names::api::Registration),
+    RegisterListener(xous_names::api::XousServerName),
 
     /// request raw keyup/keydown events to be sent
-    RegisterRawListener(xous_names::api::Registration),
+    RegisterRawListener(xous_names::api::XousServerName),
 
     /// set repeat delay, rate; both in ms
     SetRepeat(usize, usize),
@@ -139,37 +141,53 @@ pub enum Opcode {
     HostModeInjectKey(char),
 }
 
-impl core::convert::TryFrom<& Message> for Opcode {
+impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
+    fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::SelectKeyMap(KeyMap::from(m.arg1))),
                 1 => Ok(Opcode::SetRepeat(m.arg1, m.arg2)),
                 2 => Ok(Opcode::SetChordInterval(m.arg1)),
-                xous::names::GID_KEYBOARD_KEYSTATE_EVENT =>
-                     Ok(Opcode::KeyboardEvent([
-                        if let Some(a) = core::char::from_u32(m.arg1 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg2 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg3 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg4 as u32) { a } else { '\u{0000}' }
-                         ])),
+                xous::names::GID_KEYBOARD_KEYSTATE_EVENT => Ok(Opcode::KeyboardEvent([
+                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg2 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg3 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg4 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                ])),
                 3 => Ok(Opcode::HostModeInjectKey(
-                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {a} else { '\u{0000}'} )),
+                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                )),
                 _ => Err("KBD api: unknown Scalar ID"),
             },
-            Message::Borrow(m) => {
-                if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BASIC_LISTENER) {
-                    Ok(Opcode::RegisterListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_RAW_LISTENER) {
-                    Ok(Opcode::RegisterRawListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else {
-                    Err("KBD api: unknown Borrow ID")
-                }
+            Message::Borrow(m) => match m.id as u32 {
+                REGISTER_BASIC_LISTENER => Ok(Opcode::RegisterListener({
+                    unsafe { *((m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
+                })),
+                REGISTER_RAW_LISTENER => Ok(Opcode::RegisterRawListener({
+                    unsafe { *((m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
+                })),
+                _ => Err("KBD api: unknown Borrow ID"),
             },
             _ => Err("KBD api: unhandled message type"),
         }
@@ -190,12 +208,15 @@ impl Into<Message> for Opcode {
                 id: 1,
                 arg1: delay,
                 arg2: rate,
-                arg3: 0, arg4: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::SetChordInterval(period) => Message::Scalar(ScalarMessage {
                 id: 2,
                 arg1: period,
-                arg2: 0, arg3: 0, arg4: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::KeyboardEvent(keys) => Message::Scalar(ScalarMessage {
                 id: xous::names::GID_KEYBOARD_KEYSTATE_EVENT,
@@ -207,7 +228,9 @@ impl Into<Message> for Opcode {
             Opcode::HostModeInjectKey(key) => Message::Scalar(ScalarMessage {
                 id: 3,
                 arg1: key as u32 as usize,
-                arg2: 0, arg3: 0, arg4: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             _ => panic!("KBD api: Opcode type not handled by Into(), refer to helper method"),
         }
