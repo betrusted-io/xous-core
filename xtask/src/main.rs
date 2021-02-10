@@ -161,12 +161,15 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
     for pkg in &[
-        "shell",
-        "log-server",
+        "benchmark",
+        "benchmark-target",
         "graphics-server",
         "ticktimer-server",
+        "log-server",
         "com",
         "xous-names",
+        "keyboard",
+        "trng",
     ] {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
