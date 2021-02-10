@@ -153,7 +153,7 @@ pub enum Opcode {
     Vibe(VibePattern),
 
     /// not tested - I2C functions
-    I2cWrite(I2cTransaction),
+    I2cWrite(I2cTransaction), /// LEFT OFF HERE -- need rkyv sending of messages
     I2cRead(I2cTransaction),
 
     /// not tested -- events
