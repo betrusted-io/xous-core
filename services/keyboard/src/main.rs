@@ -819,11 +819,11 @@ fn xmain() -> ! {
                             kbd.set_map(map);
                         },
                         Opcode::RegisterListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.name.to_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            let cid = xous_names::request_connection_blocking(registration.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                             normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
                         },
                         Opcode::RegisterRawListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.name.to_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            let cid = xous_names::request_connection_blocking(registration.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                             raw_conns.push(cid).expect("KBD: probably ran out of slots for raw keyboard event reporting");
                         },
                         Opcode::SetRepeat(rate, delay) => {
@@ -876,7 +876,7 @@ fn xmain() -> ! {
                     }
                 }
                 let sendable_rs = Sendable::new(rs).expect("KBD: can't create sendable raw codes structure");
-                sendable_rs.send(*conn, KeyRawStates::new().mid())  // tortured syntax to stick with the abstraction that message ID comes from the struct
+                sendable_rs.send(*conn, KeyRawStates::new().mid() as u32)  // tortured syntax to stick with the abstraction that message ID comes from the struct
                 .expect("KBD: can't send raw code");
             }
         }

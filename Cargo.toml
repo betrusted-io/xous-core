@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "xous-rs",
     "tools",
@@ -20,7 +21,7 @@ members = [
     "svd2utra",
     "xtask",
     "imports/blitstr-ref",
-    "imports/com_rs-ref"
+    "imports/com_rs-ref",
 ]
 default-members = [
     "services/shell",
@@ -57,3 +58,4 @@ exclude = [
 codegen-units = 1 # 1 better optimizations
 debug = true # symbols are nice and they don't increase the size on Flash
 lto = "fat"
+

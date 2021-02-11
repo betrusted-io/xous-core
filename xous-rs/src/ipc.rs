@@ -121,10 +121,10 @@ impl<T: Send> Sendable<T> {
 
     /// Perform an immutable lend of this Carton to the specified server.
     /// This function will block until the server returns.
-    pub fn lend(&self, connection: crate::CID, id: usize) -> Result<crate::Result, crate::Error> {
+    pub fn lend(&self, connection: crate::CID, id: u32) -> Result<crate::Result, crate::Error> {
         let buf = crate::MemoryRange::new(self.contents as usize, self.total_size)?;
         let msg = crate::MemoryMessage {
-            id,
+            id: id as usize,
             buf,
             offset: None,
             valid: crate::MemorySize::new(core::mem::size_of::<T>()),
@@ -136,11 +136,11 @@ impl<T: Send> Sendable<T> {
     pub fn lend_mut(
         &mut self,
         connection: crate::CID,
-        id: usize,
+        id: u32,
     ) -> Result<crate::Result, crate::Error> {
         let buf = crate::MemoryRange::new(self.contents as usize, self.total_size)?;
         let msg = crate::MemoryMessage {
-            id,
+            id: id as usize,
             buf,
             offset: None,
             valid: crate::MemorySize::new(core::mem::size_of::<T>()),
@@ -155,11 +155,11 @@ impl<T: Send> Sendable<T> {
     pub fn send(
         mut self,
         connection: crate::CID,
-        id: usize,
+        id: u32,
     ) -> Result<crate::Result, crate::Error> {
         let buf = crate::MemoryRange::new(self.contents as usize, self.total_size)?;
         let msg = crate::MemoryMessage {
-            id,
+            id: id as usize,
             buf,
             offset: None,
             valid: crate::MemorySize::new(core::mem::size_of::<T>()),

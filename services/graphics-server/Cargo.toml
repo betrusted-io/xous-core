@@ -1,25 +1,25 @@
 [package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Manage the video output"
+edition = "2018"
 name = "graphics-server"
 version = "0.1.0"
-authors = ["Sean Cross <sean@xobs.io>"]
-edition = "2018"
-description = "Manage the video output"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
-log-server = { path = "../log-server" }
-xous-names = { path = "../xous-names" }
-log = "0.4"
-keyboard = { path = "../keyboard" }
+blitstr-ref = {path = "../../imports/blitstr-ref"}
 hash32 = "0.1.0"
 hash32-derive = "0.1.0"
-blitstr-ref = { path = "../../imports/blitstr-ref" }
+keyboard = {path = "../keyboard"}
+log = "0.4"
+log-server = {path = "../log-server"}
+xous = {path = "../../xous-rs"}
+xous-names = {path = "../xous-names"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-minifb = "0.17"
+minifb = {version = "0.19.2", git = "https://github.com/xobs/rust_minifb.git", rev = "bbbfc07c059919fae700fabe771346a001226dbc"}
 
 [features]
 debugprint = []

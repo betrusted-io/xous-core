@@ -1,4 +1,4 @@
-use xous::{Message, ScalarMessage};
+use xous::{Message, ScalarMessage, MemoryMessage};
 
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
@@ -7,7 +7,8 @@ use com_rs_ref as com_rs;
 use com_rs::*;
 
 // subtype constants for registering service listeners from the COM
-pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
+// pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
+pub const REGISTER_BATTSTATS_LISTENER: u32 = 0x0022_0000;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct BattStats {
@@ -105,7 +106,7 @@ pub enum Opcode<'a> {
     RxStatsAgent,
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener(xous_names::api::Registration),
+    RegisterBattStatsListener(xous_names::api::XousServerName),
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
@@ -154,9 +155,9 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                         )
                     };
                     Ok(Opcode::Wf200PdsLine(core::str::from_utf8(s).unwrap()))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BATTSTATS_LISTENER) {
+                } else if m.id as u32 == REGISTER_BATTSTATS_LISTENER {
                     Ok(Opcode::RegisterBattStatsListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
+                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
                     }))
                 } else {
                     Err("COM: unknown borrow ID")

@@ -4,12 +4,13 @@
 extern crate hash32_derive;
 
 mod api;
-use api::*;
+mod buffer;
 
 // use heapless::String;
-use heapless::FnvIndexMap;
 use heapless::consts::*;
+use heapless::FnvIndexMap;
 
+use core::convert::TryInto;
 use log::{error, info};
 
 const FAIL_TIMEOUT_MS: u64 = 100;
@@ -18,73 +19,96 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
 
-    let name_server =
-        xous::create_server_with_address(b"xous-name-server").expect("Couldn't create xousnames-server");
+    let name_server = xous::create_server_with_address(b"xous-name-server")
+        .expect("Couldn't create xousnames-server");
 
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
     // this limits the number of available servers to be requested to 128...!
-    let mut name_table = FnvIndexMap::<_,_,U128>::new();
+    let mut name_table = FnvIndexMap::<_, _, U128>::new();
 
     info!("NS: started");
+    use core::pin::Pin;
+    use rkyv::{archived_value_mut, Unarchive};
+
     loop {
         let envelope = xous::receive_message(name_server).unwrap();
         info!("NS: received message");
         if let xous::Message::MutableBorrow(m) = &envelope.body {
-            if m.id == ID_REGISTER_NAME {
-                let registration: &mut Registration = unsafe {
-                    &mut *(m.buf.as_mut_ptr() as *mut Registration)
-                };
-                info!("NS: registration request for '{}'", registration.name);
-                if !name_table.contains_key(&registration.name) {
-                    let new_sid = xous::create_server_id().expect("NS: create server failed, maybe OOM?");
-                    name_table.insert(registration.name, new_sid).expect("NS: register name failure, maybe out of HashMap capacity?");
-                    info!("NS: request successful, SID is {:?}", new_sid);
-                    registration.sid = new_sid; // query: do we even need to return this?
-                    registration.success = true;
-                } else {
-                    registration.success = false;
-                    // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
-                    let target_time: u64 = ((ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() / FAIL_TIMEOUT_MS) + 1) * FAIL_TIMEOUT_MS;
-                    info!("NS: request failed, waiting for deterministic timeout");
-                    while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() < target_time {
-                        xous::yield_slice();
-                    }
-                    info!("NS: deterministic timeout done");
-                }
-                // memory is automatically returend upon exit, no need for explicit return of memory
-            } else if m.id == ID_LOOKUP_NAME {
-                let lookup: &mut Lookup = unsafe {
-                    &mut *(m.buf.as_mut_ptr() as *mut Lookup)
-                };
-                info!("NS: Lookup request for '{}'", lookup.name);
-                if let Some(server_sid) = name_table.get(&lookup.name) {
-                    let sender_pid = envelope.sender.pid().expect("NS: can't extract sender PID on Lookup");
-                    match xous::connect_for_process(sender_pid, *server_sid).expect("NS: can't broker connection") {
-                        xous::Result::ConnectionID(connection_id) => {
-                            info!("NS: lookup success, returning connection {}", connection_id);
-                            lookup.cid = connection_id;
-                            lookup.success = true},
-                        _ => {
-                            info!("NS: Can't find request '{}' in table, dumping table:", lookup.name);
-                            for (key, val) in name_table.iter() {
-                                info!("NS: name: '{}', sid: '{:?}'", key, val);
-                            }
-                            lookup.success = false;
+            let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let value = unsafe {
+                archived_value_mut::<api::Request>(Pin::new(buf.as_mut()), m.id.try_into().unwrap())
+            };
+            let new_value = match &*value {
+                rkyv::Archived::<api::Request>::Register(registration_name) => {
+                    use rkyv::Unarchive;
+                    let name = registration_name.unarchive();
+                    info!("NS: registration request for '{}'", name);
+                    if !name_table.contains_key(&name) {
+                        let new_sid =
+                            xous::create_server_id().expect("NS: create server failed, maybe OOM?");
+                        name_table
+                            .insert(name, new_sid)
+                            .expect("NS: register name failure, maybe out of HashMap capacity?");
+                        info!("NS: request successful, SID is {:?}", new_sid);
+                        rkyv::Archived::<api::Request>::SID(new_sid.into())
+                    } else {
+                        // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
+                        let target_time: u64 = ((ticktimer_server::elapsed_ms(ticktimer_conn)
+                            .unwrap()
+                            / FAIL_TIMEOUT_MS)
+                            + 1)
+                            * FAIL_TIMEOUT_MS;
+                        info!("NS: request failed, waiting for deterministic timeout");
+                        while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() < target_time {
+                            xous::yield_slice();
                         }
+                        info!("NS: deterministic timeout done");
+                        rkyv::Archived::<api::Request>::Failure
                     }
-                } else {
-                    info!("NS: Can't find request '{}' in table, dumping table:", lookup.name);
-                    for (key, val) in name_table.iter() {
-                        info!("NS: name: '{}', sid: '{:?}'", key, val);
-                    }
-                    lookup.success = false;
-                    // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                 }
-            } else {
-                error!("NS: unknown message ID received");
-            }
+                rkyv::Archived::<api::Request>::Lookup(lookup_name) => {
+                    info!("NS: Lookup request for '{}'", lookup_name);
+                    let name = lookup_name.unarchive();
+                    if let Some(server_sid) = name_table.get(&name) {
+                        let sender_pid = envelope
+                            .sender
+                            .pid()
+                            .expect("NS: can't extract sender PID on Lookup");
+                        match xous::connect_for_process(sender_pid, *server_sid)
+                            .expect("NS: can't broker connection")
+                        {
+                            xous::Result::ConnectionID(connection_id) => {
+                                info!("NS: lookup success, returning connection {}", connection_id);
+                                rkyv::Archived::<api::Request>::CID(connection_id)
+                            }
+                            _ => {
+                                info!(
+                                    "NS: Can't find request '{}' in table, dumping table:",
+                                    lookup_name
+                                );
+                                for (key, val) in name_table.iter() {
+                                    info!("NS: name: '{}', sid: '{:?}'", key, val);
+                                }
+                                rkyv::Archived::<api::Request>::Failure
+                            }
+                        }
+                    } else {
+                        info!(
+                            "NS: Can't find request '{}' in table, dumping table:",
+                            lookup_name
+                        );
+                        for (key, val) in name_table.iter() {
+                            info!("NS: name: '{}', sid: '{:?}'", key, val);
+                        }
+                        // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
+                        rkyv::Archived::<api::Request>::Failure
+                    }
+                }
+                _ => panic!("Invalid response from the server -- corruption occurred"),
+            };
+            unsafe { *value.get_unchecked_mut() = new_value };
         } else {
             error!("NS: couldn't convert opcode");
         }

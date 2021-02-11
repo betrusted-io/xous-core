@@ -82,10 +82,28 @@ impl core::str::FromStr for SID {
     }
 }
 
-/// Connection ID
-pub type CID = usize;
+impl From<[u32; 4]> for SID {
+    fn from(src: [u32; 4]) -> Self {
+        Self::from_u32(src[0], src[1], src[2], src[3])
+    }
+}
 
-/// Context ID
+impl From<&[u32; 4]> for SID {
+    fn from(src: &[u32; 4]) -> Self {
+        Self::from_u32(src[0], src[1], src[2], src[3])
+    }
+}
+
+impl Into<[u32; 4]> for SID {
+    fn into(self) -> [u32; 4] {
+        [(self.0).0, (self.0).1, (self.0).2, (self.0).3]
+    }
+}
+
+/// Connection ID
+pub type CID = u32;
+
+/// Thread ID
 pub type TID = usize;
 
 /// Equivalent to a RISC-V Hart ID
@@ -536,7 +554,7 @@ impl Result {
                 let s = sid.to_u32();
                 [6, s.0 as _, s.1 as _, s.2 as _, s.3 as _, 0, 0, 0]
             }
-            Result::ConnectionID(cid) => [7, *cid, 0, 0, 0, 0, 0, 0],
+            Result::ConnectionID(cid) => [7, *cid as usize, 0, 0, 0, 0, 0, 0],
             Result::Message(me) => {
                 let me_enc = me.to_usize();
                 [
@@ -551,7 +569,7 @@ impl Result {
             Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
             Result::NewServerID(sid, cid) => {
                 let s = sid.to_u32();
-                [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid, 0, 0]
+                [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid as usize, 0, 0]
             }
             Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::None => [17, 0, 0, 0, 0, 0, 0, 0],

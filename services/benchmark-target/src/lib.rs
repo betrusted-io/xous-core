@@ -4,7 +4,6 @@ pub mod api;
 use api::*;
 
 use xous::{CID, send_message};
-use xous_names::api::Lookup;
 use xous::ipc::Sendable;
 
 pub fn test_scalar(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
@@ -17,7 +16,6 @@ pub fn test_scalar(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
 }
 
 pub fn test_memory(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
-    //let reg = Lookup::new();
     let reg = TestStruct::new();
     let mut sendable_reg = Sendable::new(reg).expect("can't create test structure");
     sendable_reg.challenge[0] = testvar;

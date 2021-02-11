@@ -189,6 +189,7 @@ fn renode_image(debug: bool) -> Result<(), DynError> {
         "log-server",
         "graphics-server",
         "ticktimer-server",
+        "log-server",
         "com",
         "xous-names",
         "trng",

@@ -1,5 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+use core::convert::TryInto;
+
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
 pub mod api;
@@ -63,7 +65,9 @@ pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {
 
 // event relay request API
 pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    xous_names::request_core(name, com_conn, api::SUBTYPE_REGISTER_BATTSTATS_LISTENER)
+    let s: xous_names::api::XousServerName = name.try_into()?;
+    let sendable = xous::ipc::Sendable::new(s)?;
+    sendable.lend(com_conn, api::REGISTER_BATTSTATS_LISTENER)
 }
 
 // note to future self: add other event listener registrations (such as network events) here

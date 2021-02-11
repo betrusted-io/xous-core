@@ -1,5 +1,4 @@
 use xous::{Message, ScalarMessage};
-use xous_names::api::Lookup;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -18,7 +17,6 @@ impl TestStruct {
 #[derive(Debug)]
 pub enum Opcode {
     TestScalar(u32),
-    //TestMemory(Lookup),
     TestMemory(TestStruct),
 }
 

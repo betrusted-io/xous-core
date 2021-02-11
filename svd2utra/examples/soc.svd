@@ -1320,10 +1320,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``3ea245d3``, so this value is 1050822099, which should be enough to check out
+``14057e44``, so this value is 335904324, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x3ea245d3</resetValue>
+                    <resetValue>0x14057e44</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1340,7 +1340,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x02</resetValue>
+                    <resetValue>0x06</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1354,7 +1354,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3030,7 +3030,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x59f86187</resetValue>
+                    <resetValue>0x4066250a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3045,7 +3045,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5df4998c</resetValue>
+                    <resetValue>0x7e58e3d5</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3064,9 +3064,9 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>ROMTEST</name>
+            <name>KEYROM</name>
             <baseAddress>0xF0019000</baseAddress>
-            <groupName>ROMTEST</groupName>
+            <groupName>KEYROM</groupName>
             <registers>
                 <register>
                     <name>ADDRESS</name>
@@ -4221,10 +4221,79 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>RO_HEALTH_MONOBIT</name>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>stat_error</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[When set, indicates a problem was found in the monobit test]]></description>
+                        </field>
+                        <field>
+                            <name>missed_sample</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[When set, indicates that we missed a sample because we were busy doing
+statistics collection]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_HEALTH_ONES</name>
+                    <addressOffset>0x004c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>ones</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Count of ones since the last update]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_HEALTH_SAMPLECOUNT</name>
+                    <addressOffset>0x0050</addressOffset>
+                    <resetValue>0x40000</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>samplecount</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Total number of bits sampled]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_HEALTH_SIGMA</name>
+                    <addressOffset>0x0054</addressOffset>
+                    <resetValue>0x200</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sigma</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Threshold for test failure, equal to sqrt(samplecount) for one sigma. This value
+is interpreted as a signed value.]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x48</size>
+                <size>0x58</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
