@@ -9,6 +9,7 @@ FPGA_IMAGE=../betrusted-soc/build/gateware/encrypted.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
 CSR_CSV=../betrusted-soc/build/csr.csv.1
 USE_IDENITY=0
+USE_NIGHTLY=
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -39,6 +40,10 @@ do
 	  CSR_CSV=../betrusted-soc/build/csr.csv
 	  shift
 	  ;;
+      -n|--nightly)
+	  USE_NIGHTLY=+nightly
+	  shift
+	  ;;
       -h|--help)
 		echo "$0 provisions betrusted. --kernel-skip skips the kernel, --fpga-skip skips the FPGA. --current-csr indicates to use the CSR for the new FPGA image to do the update (normally you want to use the one corresponding to the older, currently installed version)."
 		echo "Alternatively, using --copy-to <hostname> copies the files to a remote host and skips provisioning."
@@ -62,7 +67,7 @@ DESTDIR=code/precursors
 # full rebuild, and not just an incremental rebuild. :-/
 #touch services/log-server/src/main.rs # bump the build time in the log server
 
-cargo xtask hw-image ../betrusted-soc/build/software/soc.svd
+cargo $USE_NIGHTLY xtask hw-image ../betrusted-soc/build/software/soc.svd
 
 # only copy if changed, othrewise it seems to trigger extra build effort...
 rsync -a --no-times --checksum ../betrusted-soc/build/software/soc.svd svd2utra/examples/soc.svd
