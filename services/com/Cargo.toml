@@ -7,6 +7,7 @@ description = "COM interface to the EC"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
+rkyv = { version = "0.3.1", default_features = false }
 heapless = "0.5"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }

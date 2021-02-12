@@ -37,7 +37,8 @@ fn main() {
 
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
-        "gam",
+        //"gam",
+        "shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",
@@ -45,7 +46,7 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
-        "llio",
+        //"llio",
     ];
     let fcc_pkgs = [
         "shell",

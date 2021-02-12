@@ -10,7 +10,7 @@ use com_rs::*;
 // pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
 pub const REGISTER_BATTSTATS_LISTENER: u32 = 0x0022_0000;
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, rkyv::Archive)]
 pub struct BattStats {
     /// instantaneous voltage in mV
     pub voltage: u16,
@@ -43,8 +43,8 @@ impl Into<[usize; 2]> for BattStats {
     }
 }
 #[allow(dead_code)]
-#[derive(Debug)]
-pub enum Opcode<'a> {
+#[derive(Debug, rkyv::Archive)]
+pub enum Opcode {
     /// Battery stats
     BattStats,
 
@@ -85,7 +85,7 @@ pub enum Opcode<'a> {
     FlashErase,
 
     /// Program a page of FLASH
-    FlashProgram(&'a [u8]),
+    //FlashProgram(&'a [u8]),
 
     /// Update the SSID list
     SsidScan,
@@ -100,7 +100,7 @@ pub enum Opcode<'a> {
     Wf200Rev,
 
     /// Send a line of PDS data
-    Wf200PdsLine(&'a str),
+    //Wf200PdsLine(&'a str),
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,
@@ -109,9 +109,9 @@ pub enum Opcode<'a> {
     RegisterBattStatsListener(xous_names::api::XousServerName),
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+impl core::convert::TryFrom<& Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+    fn try_from(message: & Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => {
                 if m.id as u16 == ComState::CHG_BOOST_ON.verb {
@@ -146,6 +146,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Err("unrecognized opcode")
                 }
             },
+            /*
             Message::Borrow(m) => {
                 if m.id as u16 == ComState::WFX_PDS_LINE_SET.verb {
                     let s = unsafe {
@@ -162,13 +163,13 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 } else {
                     Err("COM: unknown borrow ID")
                 }
-            }
+            }*/
             _ => Err("unhandled message type"),
         }
     }
 }
 
-impl<'a> Into<Message> for Opcode<'a> {
+impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::BoostOn => Message::Scalar(ScalarMessage {

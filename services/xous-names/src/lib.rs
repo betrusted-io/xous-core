@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-mod buffer;
+use xous::buffer;
 
 use core::convert::TryInto;
 use core::fmt::Write;
@@ -15,7 +15,7 @@ pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
     let mut registration_name = api::XousServerName::default();
     write!(registration_name, "{}", name).unwrap();
     let request = api::Request::Register(registration_name);
-    let mut writer = rkyv::ArchiveBuffer::new(buffer::XousBuffer::new(4096));
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer
         .archive(&request)
         .expect("couldn't archive request");
@@ -49,7 +49,7 @@ pub fn request_connection(name: &str) -> Result<xous::CID, xous::Error> {
     // write!(lookup.name, "{}", name).unwrap();
     // let request = api::Request::Lookup(lookup);
 
-    let mut writer = rkyv::ArchiveBuffer::new(buffer::XousBuffer::new(4096));
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer
         .archive(&request)
         .expect("couldn't archive request");

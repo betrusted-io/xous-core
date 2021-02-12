@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use core::convert::TryInto;
+use xous::buffer;
+use rkyv::Write;
 
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
@@ -66,8 +68,13 @@ pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {
 // event relay request API
 pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::Result, xous::Error> {
     let s: xous_names::api::XousServerName = name.try_into()?;
-    let sendable = xous::ipc::Sendable::new(s)?;
-    sendable.lend(com_conn, api::REGISTER_BATTSTATS_LISTENER)
+    let request = api::Opcode::RegisterBattStatsListener(s);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&request).expect("couldn't archive battstat request");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer
+       .lend(com_conn, pos.try_into().unwrap())
 }
 
 // note to future self: add other event listener registrations (such as network events) here

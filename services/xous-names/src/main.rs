@@ -4,7 +4,7 @@
 extern crate hash32_derive;
 
 mod api;
-mod buffer;
+use xous::buffer;
 
 // use heapless::String;
 use heapless::consts::*;

@@ -262,6 +262,9 @@ fn xmain() -> ! {
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
         // info!("COM: Message: {:?}", envelope);
+
+        //////// try adding the Message type decoder here before the Opcode decoder in the if statement now for the Register batt stats call
+
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("COM: Opcode: {:?}", opcode);
             match opcode {
@@ -311,6 +314,7 @@ fn xmain() -> ! {
                     )
                     .expect("COM: couldn't return WF200 firmware rev");
                 }
+                /*
                 Opcode::Wf200PdsLine(l) => {
                     info!("COM: Wf200PdsLine got line {}", l);
                     let line = l.as_bytes();
@@ -332,7 +336,7 @@ fn xmain() -> ! {
                         com.txrx(word);
                         //info!("COM: 0x{:04x}", word);
                     }
-                }
+                }*/
                 Opcode::RxStatsAgent => {
                     if cfg!(feature = "fccagent") {
                         // note -- this code never worked, but wasn't needed. just hanging out as bread crumbs for future work in case this is needed.

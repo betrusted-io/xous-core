@@ -14,6 +14,7 @@ pub mod definitions;
 pub mod ipc;
 mod messages;
 pub mod string;
+pub mod buffer;
 pub mod syscall;
 
 pub mod names;
@@ -23,6 +24,7 @@ pub use definitions::*;
 pub use messages::*;
 pub use string::*;
 pub use syscall::*;
+pub use buffer::XousBuffer;
 
 #[cfg(not(target_os = "none"))]
 pub use arch::ProcessArgsAsThread;
