@@ -239,6 +239,9 @@ fn xmain() -> ! {
     use crate::implementation::XousCom;
     use heapless::Vec;
     use heapless::consts::*;
+    use core::pin::Pin;
+    use xous::buffer;
+    use rkyv::{archived_value_mut, Unarchive};
 
     log_server::init_wait().unwrap();
 
@@ -262,10 +265,19 @@ fn xmain() -> ! {
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
         // info!("COM: Message: {:?}", envelope);
-
-        //////// try adding the Message type decoder here before the Opcode decoder in the if statement now for the Register batt stats call
-
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+        if let xous::Message::Borrow(m) = &envelope.body {
+            let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let value = unsafe {
+                archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+            };
+            let new_value = match &*value {
+                rkyv::Archived::<api::Opcode>::RegisterBattStatsListener(registration_name) => {
+                    let cid = xous_names::request_connection_blocking(registration_name.as_str()).expect("COM: can't connect to requested listener for reporting events");
+                    battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
+                },
+                _ => panic!("Invalid memory message response -- corruption occurred"),
+            };
+        } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("COM: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::PowerOffSoc => {
@@ -352,11 +364,11 @@ fn xmain() -> ! {
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
                     }
-                }
+                }/*
                 Opcode::RegisterBattStatsListener(registration) => {
                     let cid = xous_names::request_connection_blocking(registration.to_str()).expect("COM: can't connect to requested listener for reporting events");
                     battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
-                }
+                }*/
                 _ => error!("unknown opcode"),
             }
         } else {
