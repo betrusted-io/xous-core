@@ -19,7 +19,7 @@ static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
 
 struct XousLoggerBacking {
     conn: xous::CID,
-    buffer: Option<String<'static>>,
+    buffer: Option<String<4000>>,
     initialized: bool,
 }
 
@@ -29,7 +29,7 @@ impl XousLoggerBacking {
             return Ok(());
         }
         self.conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?;
-        self.buffer = Some(String::new(4096));
+        self.buffer = Some(String::<4000>::new());
         self.initialized = true;
         Ok(())
     }

@@ -1,28 +1,26 @@
-use crate::{
-    map_memory, send_message, Error, MemoryFlags, MemoryMessage, MemoryRange, MemorySize, Message,
-    Result, CID,
-};
+use crate::{CID, Error, MemoryMessage, MemoryFlags, MemoryRange, MemorySize, Message, Result, map_memory, send_message, unmap_memory};
 
-pub struct String<'a> {
-    raw_slice: &'a mut [u8],
-    s: &'a str,
+use rkyv::Write;
+use rkyv::Unarchive;
+use rkyv::archived_value;
+use core::pin::Pin;
+
+//#[derive(rkyv::Archive)]
+pub struct String<const N: usize> {
+    bytes: [u8; N],
     len: u32,
 }
 
-impl<'a> String<'a> {
-    pub fn new(max: usize) -> String<'a> {
-        let mem = map_memory(None, None, max, MemoryFlags::R | MemoryFlags::W).unwrap();
-        let p = mem.as_mut_ptr();
-        for i in 0..max {
-            unsafe { p.add(i).write_volatile(0) };
-        }
+impl<const N: usize> String<N> {
+    pub fn new() -> String<N> {
         String {
-            raw_slice: unsafe { core::slice::from_raw_parts_mut(mem.as_mut_ptr(), max) },
-            s: unsafe {
-                core::str::from_utf8_unchecked(core::slice::from_raw_parts(mem.as_ptr(), 0))
-            },
+            bytes: [0; N],
             len: 0,
         }
+    }
+
+    pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(&self.bytes[0..self.len as usize])
     }
 
     pub fn len(&self) -> usize {
@@ -35,18 +33,26 @@ impl<'a> String<'a> {
 
     /// Convert a `MemoryMessage` into a `String`
     pub fn from_message(
-        message: &'a mut MemoryMessage,
-    ) -> core::result::Result<String<'a>, core::str::Utf8Error> {
+        message: & mut MemoryMessage,
+    ) -> core::result::Result<String<N>, core::str::Utf8Error> {
+        let mut buf = unsafe{ crate::XousBuffer::from_memory_message(message) };
+        let bytes = Pin::new(buf.as_ref());
+        let value = unsafe {
+            archived_value::<String<N>>(&bytes, message.id as usize)
+        };
+        let s = value.unarchive();
+        Ok(s)
+        /*
         let raw_slice =
             unsafe { core::slice::from_raw_parts_mut(message.buf.as_mut_ptr(), message.buf.len()) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
+        let mut bytes: [u8; N] = [0; N];
+        bytes.clone_from_slice(raw_slice);
         Ok(String {
-            raw_slice,
-            s: core::str::from_utf8(unsafe {
-                core::slice::from_raw_parts(message.buf.as_ptr(), starting_length as usize)
-            })?,
-            len: 0,
+            bytes: bytes,
+            len: starting_length as u32,
         })
+        */
     }
 
     /// Perform an immutable lend of this String to the specified server.
@@ -56,15 +62,35 @@ impl<'a> String<'a> {
         connection: CID,
         id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let memory_range =
-            MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
+
+        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
+        let pos = writer.archive(self).expect("xous::String -- couldn't archive self");
+        let mut xous_buffer = writer.into_inner();
+
+        xous_buffer.lend(connection, pos as u32)
+
+        //let pos = self.archive(&self).expect("xous::String -- couldn't archive self");
+        //let mut string_archive = self.into_inner();
+        //string_archive.lend(connection, pos.try_into().unwrap()) // .expect("xous::String lend message failure");
+
+        /*
+        let memory_range = map_memory(None, None, self.len(), MemoryFlags::R | MemoryFlags::W).unwrap();
+        //let memory_range =
+        //    MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
+        let p = memory_range.as_mut_ptr();
+        for i in 0..self.len() {
+            unsafe { p.add(i).write_volatile(self.bytes[i]) };
+        }
+
         let msg = MemoryMessage {
             id,
             buf: memory_range,
             offset: None,
             valid: MemorySize::new(self.len as usize).map(Some).unwrap_or(None),
         };
-        send_message(connection, Message::Borrow(msg))
+        send_message(connection, Message::Borrow(msg)).expect("xous::String can't send lend message");
+        unmap_memory(memory_range);
+        Ok(Result::Ok)*/
     }
 
     /// Move this string from the client into the server.
@@ -74,12 +100,12 @@ impl<'a> String<'a> {
         id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
         let memory_range =
-            MemoryRange::new(self.raw_slice.as_ptr() as _, self.raw_slice.len()).unwrap();
+            MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
         let msg = MemoryMessage {
             id,
             buf: memory_range,
             offset: None,
-            valid: MemorySize::new(self.len as usize).map(Some).unwrap_or(None),
+            valid: MemorySize::new(self.len()).map(Some).unwrap_or(None),
         };
         send_message(connection, Message::Move(msg))
     }
@@ -87,45 +113,89 @@ impl<'a> String<'a> {
     /// Clear the contents of this String and set the length to 0
     pub fn clear(&mut self) {
         self.len = 0;
-        self.s = unsafe {
-            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                self.raw_slice.as_ptr(),
-                self.len as usize,
-            ))
-        };
+        self.bytes = [0; N];
     }
 
     pub fn to_str(&self) -> &str {
-        self.s
+        unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
     }
 }
 
-impl<'a> core::fmt::Display for String<'a> {
+impl<const N: usize> core::fmt::Display for String<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.s)
+        write!(f, "{}", self.to_str())
     }
 }
 
-impl<'a> core::fmt::Write for String<'a> {
+impl<const N: usize> core::fmt::Write for String<N> {
     fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
         for c in s.bytes() {
-            if (self.len as usize) < self.raw_slice.len() {
-                self.raw_slice[self.len as usize] = c;
+            if self.len() < self.bytes.len() {
+                self.bytes[self.len()] = c;
                 self.len += 1;
             }
         }
-        self.s = unsafe {
-            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                self.raw_slice.as_ptr(),
-                self.len as usize,
-            ))
-        };
         Ok(())
     }
 }
 
-impl<'a> core::fmt::Debug for String<'a> {
+impl<const N: usize> core::fmt::Debug for String<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.s)
+        write!(f, "{}", self.to_str())
+    }
+}
+
+pub struct ArchivedString {
+    ptr: rkyv::RelPtr,
+    len: u32,
+}
+/*
+impl ArchivedString {
+    pub fn as_str(&self) -> &str {
+        unsafe {
+            let bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+            core::str::from_utf8_unchecked(&bytes)
+        }
+    }
+}*/
+pub struct StringResolver {
+    bytes_pos: usize,
+}
+impl<const N: usize> rkyv::Resolve<String<N>> for StringResolver {
+    type Archived = ArchivedString;
+
+    fn resolve(self, pos: usize, value: &String<N>) -> Self::Archived {
+        Self::Archived {
+            ptr: unsafe {
+                rkyv::RelPtr::new(
+                pos + rkyv::offset_of!(ArchivedString, ptr),
+                self.bytes_pos)
+            },
+            len: value.len() as u32,
+        }
+    }
+}
+
+impl<const N: usize> rkyv::Archive for String<N> {
+    type Archived = ArchivedString;
+    type Resolver = StringResolver;
+
+    fn archive<W: rkyv::Write + ?Sized>(&self, writer: &mut W) -> core::result::Result<Self::Resolver, W::Error> {
+        let bytes_pos = writer.pos();
+        writer.write(&self.bytes[0..self.len()])?;
+        Ok(Self::Resolver { bytes_pos })
+    }
+}
+impl<const N: usize> rkyv::Unarchive<String<N>> for ArchivedString {
+    fn unarchive(&self) -> String<N> {
+        let mut s: String<N> = String::<N>::new();
+        unsafe {
+            let p = self.ptr.as_ptr() as *const u8;
+            for(i, val) in s.bytes.iter_mut().enumerate() {
+                *val = p.add(i).read();
+            }
+        };
+        s.len = self.len;
+        s
     }
 }

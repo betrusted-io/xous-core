@@ -100,7 +100,7 @@ pub enum Opcode {
     Wf200Rev,
 
     /// Send a line of PDS data
-    //Wf200PdsLine(&'a str),
+    Wf200PdsLine(xous::String<512>),
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,

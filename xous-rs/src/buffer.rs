@@ -11,7 +11,7 @@ pub struct XousBuffer<'a> {
 impl<'a> XousBuffer<'a> {
     #[allow(dead_code)]
     pub fn new(len: usize) -> Self {
-        let remainder = (4096 - len & !4096) & !4095;
+        let remainder = (0x1000 - len & 0xFFF) & 0xFFF;
 
         let new_mem = map_memory(
             None,

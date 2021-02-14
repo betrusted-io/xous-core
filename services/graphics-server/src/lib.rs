@@ -57,7 +57,7 @@ pub fn get_cursor(cid: CID) -> Result<Cursor, xous::Error> {
 #[deprecated(
     note = "Please use draw_textview for atomic text updates"
 )]
-pub fn draw_string(cid: CID, s: &String) -> Result<(), xous::Error> {
+pub fn draw_string(cid: CID, s: &String<4000>) -> Result<(), xous::Error> {
     s.lend(cid, 1).map(|_| ())
 }
 

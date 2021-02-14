@@ -259,7 +259,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
             }
             xous::Message::Move(msg) => {
                 String::from_message(msg)
-                    .map(|log_entry| {
+                    .map(|log_entry: String<4096>| {
                         writeln!(
                             output,
                             "LOG: Moved log  message from {}: {}",
@@ -273,8 +273,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                     .ok();
             }
             xous::Message::Borrow(msg) => {
-                String::from_message(msg)
-                    .map(|log_entry| writeln!(output, "{}", log_entry).unwrap())
+                String::<4000>::from_message(msg)
+                    .map(|log_entry: String<4000>| writeln!(output, "{}", log_entry).unwrap())
                     .or_else(|e| {
                         writeln!(
                             output,
@@ -286,7 +286,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
             }
             xous::Message::MutableBorrow(msg) => {
                 String::from_message(msg)
-                    .map(|mut log_entry| {
+                    .map(|mut log_entry: String<4000>| {
                         writeln!(
                             output,
                             "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",

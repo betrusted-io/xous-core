@@ -190,8 +190,8 @@ fn shell_main() -> ! {
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
-    let mut string_buffer = String::new(4096);
-    let mut input_buf = String::new(4096);
+    let mut string_buffer = String::new();
+    let mut input_buf = String::new();
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
