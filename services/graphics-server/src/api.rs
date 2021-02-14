@@ -49,8 +49,8 @@ impl hash32::Hash for Gid {
     }
 }
 
-#[derive(Debug)]
-pub enum Opcode<'a> {
+#[derive(Debug, rkyv::Archive)]
+pub enum Opcode {
     /// Flush the buffer to the screen
     Flush,
 
@@ -79,13 +79,13 @@ pub enum Opcode<'a> {
     SetStringClipping(ClipRect),
 
     /// Overwrite the string inside the clipping region.
-    String(&'a str),
+    String(xous::String<4096>),
 
     /// Xor the string inside the clipping region.
-    StringXor(&'a str),
+    StringXor(xous::String<4096>),
 
     /// Simulate the string on the clipping region (for computing text widths)
-    SimulateString(&'a str),
+    SimulateString(xous::String<4096>),
 
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,
@@ -96,13 +96,13 @@ pub enum Opcode<'a> {
     /// gets info about the current glyph to assist with layout
     QueryGlyphProps(GlyphStyle),
 
-    /// draws a textview
-    TextView(&'a mut TextView),
+    // draws a textview
+    // TextView(&'a mut TextView),  // redo this as an rkyv object, which has no lifetime requirement
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+impl core::convert::TryFrom<& Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+    fn try_from(message: & Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 1 => Ok(Opcode::Flush),
@@ -143,37 +143,7 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                 14 => Ok(Opcode::QueryGlyphProps(GlyphStyle::from(m.arg1))),
                 _ => Err("unrecognized opcode"),
             },
-            Message::Borrow(m) => match m.id {
-                1 => {
-                    let s = unsafe {
-                        core::slice::from_raw_parts(
-                            m.buf.as_ptr(),
-                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
-                        )
-                    };
-                    Ok(Opcode::String(core::str::from_utf8(s).unwrap()))
-                },
-                2 => {
-                    let s = unsafe {
-                        core::slice::from_raw_parts(
-                            m.buf.as_ptr(),
-                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
-                        )
-                    };
-                    Ok(Opcode::StringXor(core::str::from_utf8(s).unwrap()))
-                },
-                3 => {
-                    let s = unsafe {
-                        core::slice::from_raw_parts(
-                            m.buf.as_ptr(),
-                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
-                        )
-                    };
-                    Ok(Opcode::SimulateString(core::str::from_utf8(s).unwrap()))
-                },
-                _ => Err("unrecognized opcode"),
-            },
-            Message::MutableBorrow(m) => match m.id {
+            /*Message::MutableBorrow(m) => match m.id {
                 0x100 => {
                     let tv: &mut TextView = unsafe {
                         &mut *(m.buf.as_mut_ptr() as *mut TextView)
@@ -181,13 +151,13 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Ok(Opcode::TextView(tv))
                 },
                 _ => Err("unrecognized opcode"),
-            }
+            }*/
             _ => Err("unhandled message type"),
         }
     }
 }
 
-impl<'a> Into<Message> for Opcode<'a> {
+impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::Flush => Message::Scalar(ScalarMessage {
@@ -253,18 +223,6 @@ impl<'a> Into<Message> for Opcode<'a> {
                 arg3: r.max.x as _,
                 arg4: r.max.y as _,
             }),
-            Opcode::String(string) => {
-                let region = xous::carton::Carton::from_bytes(string.as_bytes());
-                Message::Borrow(region.into_message(1))
-            }
-            Opcode::StringXor(string) => {
-                let region = xous::carton::Carton::from_bytes(string.as_bytes());
-                Message::Borrow(region.into_message(2))
-            }
-            Opcode::SimulateString(string) => {
-                let region = xous::carton::Carton::from_bytes(string.as_bytes());
-                Message::Borrow(region.into_message(3))
-            }
             Opcode::SetCursor(c) => Message::Scalar(ScalarMessage {
                 id: 12,
                 arg1: c.pt.x as usize,

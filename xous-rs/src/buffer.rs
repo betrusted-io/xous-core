@@ -11,7 +11,9 @@ pub struct XousBuffer<'a> {
 impl<'a> XousBuffer<'a> {
     #[allow(dead_code)]
     pub fn new(len: usize) -> Self {
-        let remainder = (0x1000 - len & 0xFFF) & 0xFFF;
+        let remainder =
+           if ((len & 0xFFF) == 0) && (len > 0) { 0 }
+           else { 0x1000 - (len & 0xFFF) };
 
         let new_mem = map_memory(
             None,
@@ -20,13 +22,13 @@ impl<'a> XousBuffer<'a> {
             len + remainder,
             MemoryFlags::R | MemoryFlags::W,
         )
-        .unwrap();
+        .expect("XousBuffer: error in new()/map_memory");
 
         let mut valid = new_mem;
-        valid.size = MemorySize::new(len).unwrap();
+        valid.size = MemorySize::new(len + remainder).unwrap();
         XousBuffer {
             range: new_mem,
-            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len) },
+            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder) },
             valid,
             should_drop: true,
         }

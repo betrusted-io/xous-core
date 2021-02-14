@@ -19,7 +19,7 @@ static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
 
 struct XousLoggerBacking {
     conn: xous::CID,
-    buffer: Option<String<4000>>,
+    buffer: Option<String<4000>>, // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
     initialized: bool,
 }
 

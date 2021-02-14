@@ -234,7 +234,9 @@ fn shell_main() -> ! {
         .expect("Can't write");
         status_cursor = Cursor::from_top_left_of(status_clipregion.into());
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
+        //info!("SHELL: debug0");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        info!("SHELL: debug1");
         status_cursor.pt.x = 95;
         string_buffer.clear();
         write!(
@@ -244,6 +246,7 @@ fn shell_main() -> ! {
         )
         .expect("Can't write");
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
+        info!("SHELL: debug2");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
         status_cursor.pt.x = 190;
         string_buffer.clear();

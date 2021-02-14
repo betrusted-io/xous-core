@@ -42,17 +42,6 @@ impl<const N: usize> String<N> {
         };
         let s = value.unarchive();
         Ok(s)
-        /*
-        let raw_slice =
-            unsafe { core::slice::from_raw_parts_mut(message.buf.as_mut_ptr(), message.buf.len()) };
-        let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
-        let mut bytes: [u8; N] = [0; N];
-        bytes.clone_from_slice(raw_slice);
-        Ok(String {
-            bytes: bytes,
-            len: starting_length as u32,
-        })
-        */
     }
 
     /// Perform an immutable lend of this String to the specified server.
@@ -63,34 +52,12 @@ impl<const N: usize> String<N> {
         id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
 
-        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
+        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new( N ));
         let pos = writer.archive(self).expect("xous::String -- couldn't archive self");
         let mut xous_buffer = writer.into_inner();
 
+        // note that "id" is actually used as the position into the rkyv buffer
         xous_buffer.lend(connection, pos as u32)
-
-        //let pos = self.archive(&self).expect("xous::String -- couldn't archive self");
-        //let mut string_archive = self.into_inner();
-        //string_archive.lend(connection, pos.try_into().unwrap()) // .expect("xous::String lend message failure");
-
-        /*
-        let memory_range = map_memory(None, None, self.len(), MemoryFlags::R | MemoryFlags::W).unwrap();
-        //let memory_range =
-        //    MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
-        let p = memory_range.as_mut_ptr();
-        for i in 0..self.len() {
-            unsafe { p.add(i).write_volatile(self.bytes[i]) };
-        }
-
-        let msg = MemoryMessage {
-            id,
-            buf: memory_range,
-            offset: None,
-            valid: MemorySize::new(self.len as usize).map(Some).unwrap_or(None),
-        };
-        send_message(connection, Message::Borrow(msg)).expect("xous::String can't send lend message");
-        unmap_memory(memory_range);
-        Ok(Result::Ok)*/
     }
 
     /// Move this string from the client into the server.
@@ -99,15 +66,11 @@ impl<const N: usize> String<N> {
         connection: CID,
         id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let memory_range =
-            MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
-        let msg = MemoryMessage {
-            id,
-            buf: memory_range,
-            offset: None,
-            valid: MemorySize::new(self.len()).map(Some).unwrap_or(None),
-        };
-        send_message(connection, Message::Move(msg))
+        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
+        let pos = writer.archive(&self).expect("xous::String -- couldn't archive self");
+        let mut xous_buffer = writer.into_inner();
+
+        xous_buffer.send(connection, pos as u32)
     }
 
     /// Clear the contents of this String and set the length to 0

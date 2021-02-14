@@ -259,7 +259,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
             }
             xous::Message::Move(msg) => {
                 String::from_message(msg)
-                    .map(|log_entry: String<4096>| {
+                    .map(|log_entry: String<4000>| {
                         writeln!(
                             output,
                             "LOG: Moved log  message from {}: {}",

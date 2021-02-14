@@ -15,6 +15,10 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
+use core::pin::Pin;
+use xous::buffer;
+use rkyv::{archived_value_mut, Unarchive};
+
 /// Compute the dvorak key mapping of row/col to key tuples
 fn map_dvorak(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
@@ -189,9 +193,9 @@ mod implementation {
         /// mapping for ScanCode translation
         map: KeyMap,
         /// delay in ms before a key is considered to be repeating
-        delay: usize,
+        delay: u32,
         /// rate in ms for repeating a key
-        rate: usize,
+        rate: u32,
         /// shift key state
         shift_down: bool,
         shift_up: bool,
@@ -205,7 +209,7 @@ mod implementation {
         /// timestamp timekeeper for chording / hold key
         chord_timestamp: u64,
         /// chording sample interval
-        chord_interval: usize,
+        chord_interval: u32,
         /// chord state array
         chord: [[bool; KBD_COLS]; KBD_ROWS],
         /// memoize when chord is all false
@@ -257,11 +261,11 @@ mod implementation {
             self.map = map;
         }
         pub fn get_map(&self) -> KeyMap {self.map}
-        pub fn set_repeat(&mut self, rate: usize, delay: usize) {
+        pub fn set_repeat(&mut self, rate: u32, delay: u32) {
             self.rate = rate;
             self.delay = delay;
         }
-        pub fn set_chord_interval(&mut self, delay: usize) {
+        pub fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
         }
 
@@ -777,12 +781,12 @@ mod implementation {
             Vec::new()
         }
 
-        pub fn set_repeat(&mut self, rate: usize, delay: usize) {
+        pub fn set_repeat(&mut self, rate: u32, delay: u32) {
             self.rate = rate;
             self.delay = delay;
         }
 
-        pub fn set_chord_interval(&mut self, delay: usize) {
+        pub fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
         }
     }
@@ -813,18 +817,26 @@ fn xmain() -> ! {
         match maybe_env {
             Some(envelope) => {
                 info!("KBD: Message: {:?}", envelope);
-                if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+                if let xous::Message::Borrow(m) = &envelope.body {
+                    let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+                    let value = unsafe {
+                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+                    };
+                    let new_value = match &*value {
+                        rkyv::Archived::<api::Opcode>::RegisterListener(registration) => {
+                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
+                        },
+                        rkyv::Archived::<api::Opcode>::RegisterRawListener(registration) => {
+                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            raw_conns.push(cid).expect("KBD: probably ran out of slots for raw keyboard event reporting");
+                        },
+                        _ => panic!("Invalid memory message response -- corruption occurred"),
+                    };
+                } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     match opcode {
                         Opcode::SelectKeyMap(map) => {
                             kbd.set_map(map);
-                        },
-                        Opcode::RegisterListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.to_str()).expect("KBD: can't connect to requested listener for reporting events");
-                            normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
-                        },
-                        Opcode::RegisterRawListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.to_str()).expect("KBD: can't connect to requested listener for reporting events");
-                            raw_conns.push(cid).expect("KBD: probably ran out of slots for raw keyboard event reporting");
                         },
                         Opcode::SetRepeat(rate, delay) => {
                             kbd.set_repeat(rate, delay);
@@ -839,7 +851,8 @@ fn xmain() -> ! {
                             info!("KBD: injecting emulation key press '{}'", key);
                             #[cfg(not(target_os = "none"))]
                             key_enqueue.enqueue(key).unwrap();
-                        }
+                        },
+                        _ => panic!("KBD: received unknown opcode")
                     }
                 } else {
                     error!("KBD: couldn't convert opcode");

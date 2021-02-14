@@ -56,33 +56,7 @@ impl KeyRawStates {
     }
 }
 
-/*
-#[derive(Debug)]
-#[repr(C)]
-pub struct KeyStates {
-    mid: usize,
-    pub keys: Vec<char, U16>,
-}
-impl KeyStates {
-    pub fn mid(&self) -> usize { self.mid }
-
-    pub fn new() -> Self {
-        KeyStates {
-            mid: ID_KEYSTATE,
-            keys: Vec::new(),
-        }
-    }
-
-    pub fn copy(&self) -> KeyStates {
-        let mut ks = KeyStates::new();
-        for sc in self.keys.iter() {
-            ks.keys.push(*sc).unwrap();
-        }
-        ks
-    }
-}*/
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 pub enum KeyMap {
     Qwerty,
     Azerty,
@@ -117,7 +91,7 @@ impl Into<usize> for KeyMap {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum Opcode {
     /// set which keyboard mapping is present
     SelectKeyMap(KeyMap),
@@ -129,10 +103,10 @@ pub enum Opcode {
     RegisterRawListener(xous_names::api::XousServerName),
 
     /// set repeat delay, rate; both in ms
-    SetRepeat(usize, usize),
+    SetRepeat(u32, u32),
 
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
-    SetChordInterval(usize),
+    SetChordInterval(u32),
 
     /// keyboard events (as sent to listeners)
     KeyboardEvent([char; 4]),
@@ -147,8 +121,8 @@ impl core::convert::TryFrom<&Message> for Opcode {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::SelectKeyMap(KeyMap::from(m.arg1))),
-                1 => Ok(Opcode::SetRepeat(m.arg1, m.arg2)),
-                2 => Ok(Opcode::SetChordInterval(m.arg1)),
+                1 => Ok(Opcode::SetRepeat(m.arg1 as u32, m.arg2 as u32)),
+                2 => Ok(Opcode::SetChordInterval(m.arg1 as u32)),
                 xous::names::GID_KEYBOARD_KEYSTATE_EVENT => Ok(Opcode::KeyboardEvent([
                     if let Some(a) = core::char::from_u32(m.arg1 as u32) {
                         a
@@ -180,15 +154,6 @@ impl core::convert::TryFrom<&Message> for Opcode {
                 )),
                 _ => Err("KBD api: unknown Scalar ID"),
             },
-            Message::Borrow(m) => match m.id as u32 {
-                REGISTER_BASIC_LISTENER => Ok(Opcode::RegisterListener({
-                    unsafe { *((m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
-                })),
-                REGISTER_RAW_LISTENER => Ok(Opcode::RegisterRawListener({
-                    unsafe { *((m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
-                })),
-                _ => Err("KBD api: unknown Borrow ID"),
-            },
             _ => Err("KBD api: unhandled message type"),
         }
     }
@@ -206,14 +171,14 @@ impl Into<Message> for Opcode {
             }),
             Opcode::SetRepeat(delay, rate) => Message::Scalar(ScalarMessage {
                 id: 1,
-                arg1: delay,
-                arg2: rate,
+                arg1: delay as usize,
+                arg2: rate as usize,
                 arg3: 0,
                 arg4: 0,
             }),
             Opcode::SetChordInterval(period) => Message::Scalar(ScalarMessage {
                 id: 2,
-                arg1: period,
+                arg1: period as usize,
                 arg2: 0,
                 arg3: 0,
                 arg4: 0,
@@ -236,28 +201,3 @@ impl Into<Message> for Opcode {
         }
     }
 }
-
-/*
-enum DecodedRegistration {
-    reg: &'static xous_names::api::Regustration,
-    envelope: MessageEnvelope,
-}
-
-enum DecodedOpcode {
-    Registration(DecodedRegistration),
-}
-
-impl DecodedOpcode {
-    pub fn decode(envelope: MessageEnvelope) -> Result<Self, &'static str> {
-        match message.body {
-        Message::MutableBorrow(m) => match m.id {
-            ID_REGISTER_NAME => Ok(DecodedOpcode::Registration{
-                envelope,
-                reg: &{*{m.buf.as_ptr() as *const xous_names::api::Registration)}},
-            }
-            })),
-            _ => Err("KBD api: unknown MutableBorrow ID"),
-        }
-    }
-}
- */

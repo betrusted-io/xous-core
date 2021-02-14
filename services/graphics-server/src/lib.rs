@@ -10,6 +10,7 @@ use xous::ipc::*;
 pub mod op;
 
 use xous::{send_message, CID};
+use core::fmt::Write;
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::Line(line).into()).map(|_| ())
@@ -57,8 +58,19 @@ pub fn get_cursor(cid: CID) -> Result<Cursor, xous::Error> {
 #[deprecated(
     note = "Please use draw_textview for atomic text updates"
 )]
-pub fn draw_string(cid: CID, s: &String<4000>) -> Result<(), xous::Error> {
-    s.lend(cid, 1).map(|_| ())
+pub fn draw_string(cid: CID, s: &String<4096>) -> Result<(), xous::Error> {
+    let mut clone_s: String<4096> = String::new();
+    write!(clone_s, "{}", s.as_str().unwrap());
+    let request = api::Opcode::String(clone_s);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    use rkyv::Write;
+    let pos = writer.archive(&request).expect("GFX: couldn't archive String request");
+    let xous_buffer = writer.into_inner();
+
+    log::info!("GFX: draw_string message being sent");
+    xous_buffer.lend(cid, pos as u32).expect("GFX: String request failure");
+    log::info!("GFX: draw_string completed");
+    Ok(())
 }
 
 #[deprecated(

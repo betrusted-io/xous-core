@@ -2,20 +2,28 @@
 
 use core::convert::TryInto;
 
-use api::{REGISTER_BASIC_LISTENER, REGISTER_RAW_LISTENER};
+use xous::buffer;
+use rkyv::Write;
 
 pub mod api;
 
-fn request(name: &str, kbd_conn: xous::CID, id: u32) -> Result<xous::Result, xous::Error> {
-    let s: xous_names::api::XousServerName = name.try_into()?;
-    let sendable = xous::ipc::Sendable::new(s)?;
-    sendable.lend(kbd_conn, id)
-}
-
 pub fn request_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    request(name, kbd_conn, api::REGISTER_BASIC_LISTENER)
+    let s: xous_names::api::XousServerName = name.try_into()?;
+    let request = api::Opcode::RegisterListener(s);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&request).expect("couldn't archive RegisterListener request");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(kbd_conn, pos.try_into().unwrap())
 }
 
 pub fn request_raw_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    request(name, kbd_conn, api::REGISTER_RAW_LISTENER)
+    let s: xous_names::api::XousServerName = name.try_into()?;
+    let request = api::Opcode::RegisterRawListener(s);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&request).expect("couldn't archive RegisterListener request");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(kbd_conn, pos.try_into().unwrap())
+
 }
