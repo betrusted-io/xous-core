@@ -60,6 +60,7 @@ impl<const N: usize> String<N> {
         xous_buffer.lend(connection, pos as u32)
     }
 
+/*
     /// Move this string from the client into the server.
     pub fn send(
         self,
@@ -72,7 +73,7 @@ impl<const N: usize> String<N> {
 
         xous_buffer.send(connection, pos as u32)
     }
-
+*/
     /// Clear the contents of this String and set the length to 0
     pub fn clear(&mut self) {
         self.len = 0;

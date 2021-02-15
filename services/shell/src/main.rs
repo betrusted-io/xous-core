@@ -175,6 +175,10 @@ fn shell_main() -> ! {
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
+    let start_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() - start_time < 1000 {
+        xous::yield_slice();
+    }
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
@@ -236,7 +240,7 @@ fn shell_main() -> ! {
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
         //info!("SHELL: debug0");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
-        info!("SHELL: debug1");
+        //info!("SHELL: debug1");
         status_cursor.pt.x = 95;
         string_buffer.clear();
         write!(
@@ -246,8 +250,9 @@ fn shell_main() -> ! {
         )
         .expect("Can't write");
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
-        info!("SHELL: debug2");
+        //info!("SHELL: debug2");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        //info!("SHELL: debug3");
         status_cursor.pt.x = 190;
         string_buffer.clear();
         write!(
@@ -373,19 +378,6 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
-        /* test code to exhaust memory allocation
-        let mut iter = 0;
-        info!("Test memory allocation");
-        loop {
-            let lookup = Lookup::new();
-            let mut sendable_lookup = Sendable::new(lookup)
-            .expect("can't create sendable lookup structure");
-            write!(sendable_lookup.name, "A test Name!").unwrap();
-            sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
-            info!("memtest: iter {}", iter);
-            iter += 1;
-        }
-        */
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {

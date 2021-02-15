@@ -67,9 +67,9 @@ pub fn draw_string(cid: CID, s: &String<4096>) -> Result<(), xous::Error> {
     let pos = writer.archive(&request).expect("GFX: couldn't archive String request");
     let xous_buffer = writer.into_inner();
 
-    log::info!("GFX: draw_string message being sent");
+    //log::info!("GFX: draw_string message being sent");
     xous_buffer.lend(cid, pos as u32).expect("GFX: String request failure");
-    log::info!("GFX: draw_string completed");
+    //log::info!("GFX: draw_string completed");
     Ok(())
 }
 
@@ -111,7 +111,9 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
 }
 
 pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
+    /*/
     let mut sendable_tv = Sendable::new(tv)
       .expect("can't create sendable TextView structure");
-    sendable_tv.lend_mut(cid, 0x100).map(|_| ())
+    sendable_tv.lend_mut(cid, 0x100).map(|_| ()) */
+    Ok(())
 }

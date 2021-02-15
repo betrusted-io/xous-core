@@ -55,7 +55,7 @@ impl<'a> XousBuffer<'a> {
             id: id as usize,
             buf: self.valid,
             offset: None,
-            valid: None,
+            valid: crate::MemorySize::new(self.slice.len()),
         };
         send_message(connection, Message::MutableBorrow(msg))
     }
@@ -70,7 +70,7 @@ impl<'a> XousBuffer<'a> {
             id: id as usize,
             buf: self.valid,
             offset: None,
-            valid: None,
+            valid: crate::MemorySize::new(self.slice.len()),
         };
         send_message(connection, Message::Borrow(msg))
     }
@@ -94,7 +94,6 @@ impl<'a> XousBuffer<'a> {
         Ok(result)
     }
 }
-
 impl<'a> core::convert::AsRef<[u8]> for XousBuffer<'a> {
     fn as_ref(&self) -> &[u8] {
         self.slice

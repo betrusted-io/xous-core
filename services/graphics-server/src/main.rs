@@ -47,7 +47,7 @@ fn xmain() -> ! {
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        info!("GFX: Message: {:?}", msg);
+        //info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
             let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
@@ -57,7 +57,7 @@ fn xmain() -> ! {
             let new_value = match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();
-                    info!("GFX: unarchived string: {:?}", s);
+                    //info!("GFX: unarchived string: {:?}", s);
                     blitstr::paint_str(
                         display.native_buffer(),
                         current_string_clip.into(),
@@ -67,7 +67,7 @@ fn xmain() -> ! {
                         false,
                         blitstr::xor_char
                     );
-                    info!("GFX: string painted");
+                    //info!("GFX: string painted");
                 },
                 rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();

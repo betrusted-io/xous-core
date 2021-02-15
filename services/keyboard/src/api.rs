@@ -1,6 +1,10 @@
+use core::ops::Deref;
+
 use heapless::consts::*;
 use heapless::Vec;
 use xous::{Message, ScalarMessage};
+use rkyv::{RelPtr, Archive, Archived, Resolve, Resolver, Write};
+use core::slice;
 
 pub const REGISTER_BASIC_LISTENER: u32 = 0x1000_0000;
 pub const REGISTER_RAW_LISTENER: u32 = 0x1000_0001;
@@ -22,9 +26,7 @@ pub struct RowCol {
     pub r: u8,
     pub c: u8,
 }
-
-#[derive(Debug)]
-#[repr(C)]
+#[repr(packed)]
 pub struct KeyRawStates {
     mid: u32,
     pub keydowns: Vec<RowCol, U16>,
@@ -46,13 +48,59 @@ impl KeyRawStates {
     #[allow(dead_code)]
     pub fn copy(&self) -> KeyRawStates {
         let mut krs = KeyRawStates::new();
-        for kd in self.keydowns.iter() {
-            krs.keydowns.push(*kd).unwrap();
-        }
-        for ku in self.keyups.iter() {
-            krs.keyups.push(*ku).unwrap();
+        unsafe { // because KeyRawStates is *packed*
+            for kd in self.keydowns.iter() {
+                krs.keydowns.push(*kd).unwrap();
+            }
+            for ku in self.keyups.iter() {
+                krs.keyups.push(*ku).unwrap();
+            }
         }
         krs
+    }
+}
+impl Clone for KeyRawStates {
+    fn clone(&self) -> KeyRawStates {
+        self.copy()
+    }
+}
+impl Deref for KeyRawStates {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(self as *const KeyRawStates as *const u8, core::mem::size_of::<KeyRawStates>())
+               as &[u8]
+        }
+    }
+}
+
+// warning: this rkyv code is totally untested
+pub struct ArchivedKeyRawStates {
+    ptr: RelPtr,
+    len: u32,
+}
+pub struct KeyRawStatesResolver {
+    bytes_pos: usize,
+}
+impl Resolve<KeyRawStates> for KeyRawStatesResolver {
+    type Archived = ArchivedKeyRawStates;
+    fn resolve(self, pos: usize, value: &KeyRawStates) -> Self::Archived {
+        Self::Archived {
+            ptr: unsafe {
+                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedKeyRawStates, ptr), self.bytes_pos)
+            },
+            len: value.deref().len() as u32,
+        }
+    }
+}
+impl Archive for KeyRawStates {
+    type Archived = ArchivedKeyRawStates;
+    type Resolver = KeyRawStatesResolver;
+
+    fn archive<W: Write + ?Sized>(&self, writer: &mut W) -> Result<Self::Resolver, W::Error> {
+        let bytes_pos = writer.pos();
+        writer.write( self.deref())?;
+        Ok(Self::Resolver { bytes_pos })
     }
 }
 

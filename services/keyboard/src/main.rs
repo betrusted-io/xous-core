@@ -3,7 +3,6 @@
 
 mod api;
 use api::*;
-use xous::ipc::Sendable;
 
 use heapless::Vec;
 use heapless::consts::*;
@@ -18,6 +17,7 @@ use log::{error, info};
 use core::pin::Pin;
 use xous::buffer;
 use rkyv::{archived_value_mut, Unarchive};
+use rkyv::Write;
 
 /// Compute the dvorak key mapping of row/col to key tuples
 fn map_dvorak(code: RowCol) -> ScanCode {
@@ -875,6 +875,8 @@ fn xmain() -> ! {
             }
         }
         */
+
+        // this code is totally untested
         if keyups.is_some() || keydowns.is_some() {
             // send the raw codes
             for conn in raw_conns.iter() {
@@ -889,9 +891,10 @@ fn xmain() -> ! {
                         rs.keydowns.push(k).unwrap();
                     }
                 }
-                let sendable_rs = Sendable::new(rs).expect("KBD: can't create sendable raw codes structure");
-                sendable_rs.send(*conn, KeyRawStates::new().mid() as u32)  // tortured syntax to stick with the abstraction that message ID comes from the struct
-                .expect("KBD: can't send raw code");
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&rs).expect("couldn't archive request");
+                let mut xous_buffer = writer.into_inner();
+                xous_buffer.send(*conn, pos as u32).expect("KBD: can't send raw code");
             }
         }
 
