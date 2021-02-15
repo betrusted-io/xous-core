@@ -18,6 +18,7 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    info!("NS: my PID is {}", xous::process::id());
 
     let name_server = xous::create_server_with_address(b"xous-name-server")
         .expect("Couldn't create xousnames-server");

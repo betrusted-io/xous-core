@@ -347,6 +347,7 @@ fn xmain() -> ! {
     use heapless::consts::*;
 
     log_server::init_wait().unwrap();
+    info!("LLIO: my PID is {}", xous::process::id());
 
     let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
     info!("LLIO: registered with NS -- {:?}", llio_sid);

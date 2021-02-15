@@ -155,8 +155,8 @@ fn event_thread(_arg: usize) {
 #[xous::xous_main]
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
+    info!("SHELL: my PID is {}", xous::process::id());
 
-    info!("SHELL: ticktimer");
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 

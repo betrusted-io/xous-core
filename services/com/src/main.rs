@@ -244,6 +244,7 @@ fn xmain() -> ! {
     use rkyv::{archived_value_mut, Unarchive};
 
     log_server::init_wait().unwrap();
+    info!("COM: my PID is {}", xous::process::id());
 
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);

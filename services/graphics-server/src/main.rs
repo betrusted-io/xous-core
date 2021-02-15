@@ -30,6 +30,7 @@ fn draw_boot_logo(display: &mut XousDisplay) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    info!("GFX: my PID is {}", xous::process::id());
 
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();

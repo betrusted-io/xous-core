@@ -329,6 +329,7 @@ fn some_main() -> ! {
 
     let mut output = implementation::init();
     let writer = output.get_writer();
+    println!("LOG: my PID is {}", xous::process::id());
     println!("LOG: Creating the reader thread");
     xous::create_thread_simple(reader_thread, writer).unwrap();
     println!("LOG: Running the output");

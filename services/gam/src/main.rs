@@ -137,6 +137,7 @@ fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    info!("GAM: my PID is {}", xous::process::id());
 
     let gam_sid = xous_names::register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
     info!("GAM: starting up...");

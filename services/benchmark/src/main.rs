@@ -90,6 +90,7 @@ fn stopwatch_thread(_arg: xous::SID) {
 #[xous::xous_main]
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
+    info!("BENCHMARK: my PID is {}", xous::process::id());
 
     info!("BENCHMARK: ticktimer");
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();

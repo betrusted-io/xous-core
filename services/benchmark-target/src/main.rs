@@ -11,6 +11,7 @@ use log::{error, info};
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    info!("BENCHTARGET: my PID is {}", xous::process::id());
 
     let bench_sid = xous_names::register_name(xous::names::SERVER_NAME_BENCHMARK).expect("BENCHTARGET: can't register server");
     info!("BENCHTARGET: registered with NS -- {:?}", bench_sid);

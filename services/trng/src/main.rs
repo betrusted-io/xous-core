@@ -151,6 +151,7 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
+    info!("TRNG: my PID is {}", xous::process::id());
 
     let trng_sid = xous_names::register_name(xous::names::SERVER_NAME_TRNG).expect("TRNG: can't register server");
     info!("TRNG: registered with NS -- {:?}", trng_sid);

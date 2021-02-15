@@ -797,6 +797,7 @@ fn xmain() -> ! {
     use crate::implementation::Keyboard;
 
     log_server::init_wait().unwrap();
+    info!("KBD: my PID is {}", xous::process::id());
 
     let kbd_sid = xous_names::register_name(xous::names::SERVER_NAME_KBD).expect("KBD: can't register server");
     info!("KBD: registered with NS -- {:?}", kbd_sid);
