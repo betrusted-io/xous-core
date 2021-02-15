@@ -16,6 +16,7 @@ mod messages;
 pub mod string;
 pub mod buffer;
 pub mod syscall;
+pub mod process;
 
 pub mod names;
 
@@ -160,7 +161,8 @@ macro_rules! maybe_main {
         }
 
         #[export_name = "_start"]
-        pub extern "C" fn _start() {
+        pub extern "C" fn _start(pid: u32) {
+            xous::process::set_id(pid);
             unsafe { xous_entry() };
         }
     };
