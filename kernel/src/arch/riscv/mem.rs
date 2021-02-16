@@ -478,59 +478,47 @@ pub fn lend_page_inner(
     let entry = pagetable_entry(src_addr as usize)?;
     let phys = (*entry >> 10) << 12;
 
-    let result = if mutable {
-        // If we try to share a page that's already mutable, that's a sharing
-        // violation.
-        if *entry & MMUFlags::S.bits() != 0 {
-            return Err(xous_kernel::Error::ShareViolation);
-        }
+    // If we try to share a page that's not ours, that's just wrong.
+    if *entry & MMUFlags::VALID.bits() == 0 {
+        return Err(xous_kernel::Error::ShareViolation);
+    }
 
-        // If the page should be writable in the other process, ensure it's
-        // unavailable here.  Set the "Shared" bit and clear the "VALID" bit.
-        // Keep all other bits the same.
-        *entry = (*entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
-        unsafe { flush_mmu() };
+    // If we try to share a page that's already shared, that's a sharing
+    // violation.
+    if *entry & MMUFlags::S.bits() != 0 {
+        return Err(xous_kernel::Error::ShareViolation);
+    }
 
-        dest_space.activate()?;
-        map_page_inner(
-            mm,
-            dest_pid,
-            phys,
-            dest_addr as usize,
-            MemoryFlags::R | MemoryFlags::W,
-            dest_pid.get() != 1,
-        )
-    } else {
-        // Page is immutably shared.  Mark the page as read-only in this
-        // process.
-        let previous_flag = if *entry & MMUFlags::W.bits() != 0 {
-            MMUFlags::P
-        } else {
-            MMUFlags::NONE
-        };
-        klog!("clearing `W` bit from mapping of page {:08x}", phys);
+    // Strip the `VALID` flag, and set the `SHARED` flag.
+    *entry = (*entry & !MMUFlags::VALID.bits())
+        | MMUFlags::S.bits();
 
-        // If the current entry is writable, clear that bit and set the "P" flag
-        *entry = (*entry & !(MMUFlags::W.bits())) | (previous_flag | MMUFlags::S).bits();
-        klog!(
-            "additionally, mapping {:08x} into PID {:08x} @ {:08x}",
-            phys, dest_pid, dest_addr as usize
-        );
-        unsafe { flush_mmu() };
-
-        dest_space.activate()?;
-        map_page_inner(
-            mm,
-            dest_pid,
-            phys,
-            dest_addr as usize,
-            MemoryFlags::R,
-            dest_pid.get() != 1,
-        )
-    };
+    // Ensure the change takes effect.
     unsafe { flush_mmu() };
 
+    // Mark the page as Writable in new process space if it's writable here.
+    let new_flags = if mutable && (*entry & MMUFlags::W.bits()) != 0 {
+        MemoryFlags::R |MemoryFlags::W
+    } else {
+        MemoryFlags::R
+    };
+
+    // Switch to the new address space and map the page
+    dest_space.activate()?;
+    let result = map_page_inner(
+        mm,
+        dest_pid,
+        phys,
+        dest_addr as usize,
+        new_flags,
+        dest_pid.get() != 1,
+    );
+    unsafe { flush_mmu() };
+
+    // Switch back to our proces space
     src_space.activate().unwrap();
+
+    // Return the new address.
     result.map(|_| phys)
 }
 
@@ -547,35 +535,31 @@ pub fn return_page_inner(
     let src_entry = pagetable_entry(src_addr as usize)?;
     let phys = (*src_entry >> 10) << 12;
 
+    // If the page is not valid in this program, we can't return it.
     if *src_entry & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::ShareViolation);
     }
 
+    // Mark the page as `Free`, which unmaps it.
     *src_entry = 0;
     unsafe { flush_mmu() };
 
+    // Switch to the destination address space
     dest_space.activate()?;
     let dest_entry =
         pagetable_entry(dest_addr as usize).expect("page wasn't lent in destination space");
+
+    // If the page wasn't marked as `Shared` in the destination address space,
+    // treat that as an error.
     if *dest_entry & MMUFlags::S.bits() == 0 {
         panic!("page wasn't shared in destination space");
     }
 
-    if *dest_entry & MMUFlags::VALID.bits() == 0 {
-        // This page was mutably borrowed.
-        *dest_entry = *dest_entry & !(MMUFlags::S).bits() | MMUFlags::VALID.bits();
-    } else {
-        // This page was immutably borrowed, and as such had its "W" flag
-        // clobbered.
-        let previous_flag = if *dest_entry & MMUFlags::P.bits() != 0 {
-            MMUFlags::W
-        } else {
-            MMUFlags::NONE
-        };
-        *dest_entry = *dest_entry & !(MMUFlags::S | MMUFlags::P).bits() | previous_flag.bits();
-    }
+    // Clear the `SHARED` and `PREVIOUSLY-WRITABLE` bits, and set the `VALID` bit.
+    *dest_entry = *dest_entry & !(MMUFlags::S | MMUFlags::P).bits() | MMUFlags::VALID.bits();
     unsafe { flush_mmu() };
 
+    // Swap back to our previous address space
     src_space.activate().unwrap();
     Ok(phys)
 }
