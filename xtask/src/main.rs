@@ -70,8 +70,8 @@ fn try_main() -> Result<(), DynError> {
     ];
     let task = env::args().nth(1);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false)?,
-        Some("renode-image-debug") => renode_image(true)?,
+        Some("renode-image") => renode_image(false, &hw_pkgs)?,
+        Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
@@ -178,23 +178,12 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
     Ok(())
 }
 
-fn renode_image(debug: bool) -> Result<(), DynError> {
+fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     let path = std::path::Path::new("emulation/renode.svd");
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    for pkg in &[
-        "benchmark",
-        "benchmark-target",
-        // "shell",
-        "log-server",
-        "graphics-server",
-        "ticktimer-server",
-        "log-server",
-        "com",
-        "xous-names",
-        "trng",
-    ] {
+    for pkg in packages {
         init.push(build(pkg, debug, Some(TARGET), None)?);
     }
     build("loader", debug, Some(TARGET), Some("loader".into()))?;
