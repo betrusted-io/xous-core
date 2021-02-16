@@ -1,5 +1,5 @@
 use crate::arch::current_pid;
-use crate::arch::mem::MemoryMapping;
+use crate::arch::mem::{MemoryMapping, MMUFlags};
 use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManager, PAGE_SIZE};
@@ -145,7 +145,7 @@ pub extern "C" fn trap_handler(
                 // If the flags are nonzero, but the "Valid" bit is not 1 and
                 // the page isn't shared, then this is a reserved page. Allocate
                 // a real page to back it and resume execution.
-                if flags & 1 == 0 && flags != 0 && flags & (1 << 8) == 0 {
+                if flags & MMUFlags::VALID.bits() == 0 && flags != 0 && flags & MMUFlags::S.bits() == 0 {
                     let new_page = MemoryManager::with_mut(|mm| {
                         mm.alloc_page(pid).expect("Couldn't allocate new page")
                     });
