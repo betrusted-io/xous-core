@@ -474,6 +474,7 @@ pub fn lend_page_inner(
     dest_addr: *mut u8,
     mutable: bool,
 ) -> Result<usize, xous_kernel::Error> {
+    klog!("***lend - src: {:08x} dest: {:08x}***", src_addr as u32, dest_addr as u32);
     let entry = pagetable_entry(src_addr as usize)?;
     let phys = (*entry >> 10) << 12;
 
@@ -542,6 +543,7 @@ pub fn return_page_inner(
     dest_space: &MemoryMapping,
     dest_addr: *mut u8,
 ) -> Result<usize, xous_kernel::Error> {
+    klog!("***return - src: {:08x} dest: {:08x}***", src_addr as u32, dest_addr as u32);
     let src_entry = pagetable_entry(src_addr as usize)?;
     let phys = (*src_entry >> 10) << 12;
 

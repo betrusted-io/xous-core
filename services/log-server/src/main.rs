@@ -258,7 +258,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                 .unwrap();
             }
             xous::Message::Move(msg) => {
-                String<4000>::from_message(msg)
+                String::<4000>::from_message(msg)
                     .map(|log_entry: String<4000>| {
                         writeln!(
                             output,
@@ -285,7 +285,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                     .ok();
             }
             xous::Message::MutableBorrow(msg) => {
-                String<4000>::from_message(msg)
+                String::<4000>::from_message(msg)
                     .map(|mut log_entry: String<4000>| {
                         writeln!(
                             output,
