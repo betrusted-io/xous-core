@@ -6,7 +6,6 @@ pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, T
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
-use xous::ipc::*;
 pub mod op;
 
 use xous::{send_message, CID};
@@ -60,7 +59,7 @@ pub fn get_cursor(cid: CID) -> Result<Cursor, xous::Error> {
 )]
 pub fn draw_string(cid: CID, s: &String<4096>) -> Result<(), xous::Error> {
     let mut clone_s: String<4096> = String::new();
-    write!(clone_s, "{}", s.as_str().unwrap());
+    write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
     let request = api::Opcode::String(clone_s);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     use rkyv::Write;
@@ -110,7 +109,7 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
     }
 }
 
-pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
+pub fn draw_textview(_cid: CID, _tv: &mut TextView) -> Result<(), xous::Error> {
     /*/
     let mut sendable_tv = Sendable::new(tv)
       .expect("can't create sendable TextView structure");
