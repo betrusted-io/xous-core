@@ -6,10 +6,6 @@ use xous::{Message, ScalarMessage};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-// subtype constants for registering service listeners from the COM
-// pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
-pub const REGISTER_BATTSTATS_LISTENER: u32 = 0x0022_0000;
-
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive)]
 pub struct BattStats {
     /// instantaneous voltage in mV
@@ -146,24 +142,6 @@ impl core::convert::TryFrom<& Message> for Opcode {
                     Err("unrecognized opcode")
                 }
             },
-            /*
-            Message::Borrow(m) => {
-                if m.id as u16 == ComState::WFX_PDS_LINE_SET.verb {
-                    let s = unsafe {
-                        core::slice::from_raw_parts(
-                            m.buf.as_ptr(),
-                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
-                        )
-                    };
-                    Ok(Opcode::Wf200PdsLine(core::str::from_utf8(s).unwrap()))
-                } else if m.id as u32 == REGISTER_BATTSTATS_LISTENER {
-                    Ok(Opcode::RegisterBattStatsListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::XousServerName) }
-                    }))
-                } else {
-                    Err("COM: unknown borrow ID")
-                }
-            }*/
             _ => Err("unhandled message type"),
         }
     }

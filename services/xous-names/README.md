@@ -32,41 +32,38 @@ is necessary for implementing deterministic timing delays in
 wait a fixed period of time on initialization while the initial set
 of name registrations occur.
 
-A new process that intends to receive messages initializes using the
-following procedure:
+A new process that intends to receive messages uses the `register_name` convenience
+function in the `xous-names/src/lib.rs` file, with the following procedure.
 
-1. It creates a `Registration` IPC structure by wrapping it in `xous::ipc::Sendable`,
-using the `new()` initializer.
+1. It calls `register_name` with a preferred ASCII name string,
+limited to 64 characters. The convenience function wraps this in an `rkyv`
+object and passes it as mutable-borrowed memory to the name server.
 
-2. It copies a preferred ASCII name string, limited to 64 characters,
-into the `Registration` record. It then uses the `.lend_mut()` method
-on the Sendable Registration to lend the structure to `xous-name-server`.
-The sending process will block until `xous-name-server` returns.
-
-3. `xous-name-server` returns the borrowed memory to the server, with the
-response field with a code that either affirms the name was
-registered, or the registration is denied (because the proposed name
-is already taken or otherwise invalid). In the case that the registration
+2. `xous-name-server` returns the borrowed memory to the server, where the
+buffer has been replaced with a response field. In the case that the registration
 is affirmed, the SID field in `Registration` contains the assigned SID
-of calling process.
+of calling process. In the case that the name is determined to be invalid
+(perhaps because it is already reserved or registered), it will return
+an error code.
 
-4. If the registration is denied, the server can attempt to
+3. If the registration is denied, the server can attempt to
 re-register its SID with a different ASCII name string by repeating
 steps 2-3.
 
 
-A process that would like to send a server a message does so using the following procedure:
+A process that would like to send a server a message must first request the
+name server to broker a connection to the target process. It does this by
+typically calling the `request_conneciton_blocking` convenience function
+with the registered name of the server.
 
-1. It creates a `Lookup` IPC structure by wrapping it in a `xous::ipc::Sendable`,
-using the `new()` initializer.
+1. `request_connection_blocking` is called with the maximum 64-character
+ASCII name string.
 
-2. It populates the Lookup structure with the name of the server it is looking up.
-
-3. It uses `.lend_mut()` method to send `xous-name-server` a “Mutable Borrow”
-`MemoryMessage`.
+2. The convencience function creates a `Lookup` message which is lent to
+the name server.
 
 4. `xous-name-server` can respond with one of three results:
-  A. affirm the connection, where one of the slots contains the connection ID;
+  A. affirm the connection by returning a connection ID
   B. a flat denial of the connection; or
   C. a slot containing a request to authenticate.
 
@@ -80,8 +77,8 @@ the common case, and many servers follow this path, such as those
 asking for access to the `ticktimer` or other public services.
 
 B. flat denial: `xous-name-server` simply returns a message saying the
-request was denied by setting `success` to `false`. This is also the case
-when the request is malformed or incorrect. No information shall be leaked about the
+request was denied. This is also the case when the request is malformed or incorrect.
+No information shall be leaked about the
 nature of the denial. Denials are also delayed to the nearest 0.1 second interval since boot
 to eliminate side channels and to rate limit fuzzing requests. Some
 services (such as the key server) are restricted to only a set of

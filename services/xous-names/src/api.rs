@@ -38,56 +38,6 @@ pub(crate) enum Request {
     CID(CID),
 }
 
-// impl Request {
-//     pub fn set_response(&mut self, val: bool) {
-//         *self = Request::Result(val);
-//     }
-// }
-
-// #[derive(rkyv::Archive)]
-// pub(crate) struct Response {
-//     pub success: bool,
-// }
-// impl Response {
-//     pub fn fail() -> Response {
-//         Response { success: false }
-//     }
-// }
-
-// #[derive(Debug, Copy, Clone, Default, rkyv::Archive)]
-// pub(crate) struct Registration {
-//     pub sid: [u32; 4],
-
-//     // we use fixed-length, u8-only records to pass server names. This is different from
-//     // your typical Rust String object; but, a key restriction on IPC calls is that the size
-//     // of structures must be (1) statically known and (2) contain no references. Therefore
-//     // the name is a pre-allocated, 64-length u8 array, and the *entire* array is the name,
-//     // including characters after the first "null"
-//     pub name: XousServerName,
-//     pub success: bool,
-// }
-
-// impl Registration {
-//     // pub fn mid(&self) -> usize { self.mid as usize }
-
-//     // pub fn get_subtype(&self) -> u16 { (self.mid & 0xFFFF) as u16 }
-//     // pub fn set_subtype(&mut self, subtype: u16) { self.mid = (self.mid & 0xFFFF_0000) | (subtype as u32); }
-
-//     pub fn match_subtype(id: u32, subtype: u16) -> bool {
-//         ((id & 0xFFFF) as u16 == subtype)
-//             && ((id & 0xFFFF_0000) == (ID_REGISTER_NAME & 0xFFFF_0000))
-//     }
-
-//     // pub fn new() -> Self {
-//     //     Registration {
-//     //         mid: ID_REGISTER_NAME as u32,
-//     //         sid: Default::default(),
-//     //         name: XousServerName::default(),
-//     //         success: false,
-//     //     }
-//     // }
-// }
-
 #[derive(Debug, Default, rkyv::Archive)]
 pub(crate) struct Lookup {
     pub name: XousServerName,

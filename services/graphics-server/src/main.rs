@@ -49,12 +49,12 @@ fn xmain() -> ! {
         let msg = xous::receive_message(sid).unwrap();
         //info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
-            let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
                 archived_value::<api::Opcode>(&bytes, m.id.try_into().unwrap())
             };
-            let new_value = match &*value {
+            match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();
                     //info!("GFX: unarchived string: {:?}", s);

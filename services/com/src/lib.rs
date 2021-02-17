@@ -53,8 +53,16 @@ pub fn get_ec_git_rev(cid: CID) -> Result<(u32, bool), Error> {
 }
 
 pub fn send_pds_line(cid: CID, s: &xous::String<512>) -> Result<(), Error> {
-    s.lend(cid /*, ComState::WFX_PDS_LINE_SET.verb as _ */).map( |_| ())
-    // send_message(cid, api::Opcode::Wf200PdsLine(line).into()).map(|_| ())
+    use core::fmt::Write;
+    let mut clone_s: xous::String<512> = xous::String::new();
+    write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
+    let request = api::Opcode::Wf200PdsLine(clone_s);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(512));
+    let pos = writer.archive(&request).expect("COM: couldn't archive PDS line request");
+    let xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(cid, pos as u32).expect("COM: PDS line request failure");
+    Ok(())
 }
 
 pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {

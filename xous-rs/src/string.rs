@@ -19,6 +19,10 @@ impl<const N: usize> String<N> {
         }
     }
 
+    pub fn as_bytes(&self) -> [u8; N] {
+        self.bytes
+    }
+
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
         core::str::from_utf8(&self.bytes[0..self.len as usize])
     }
@@ -46,6 +50,11 @@ impl<const N: usize> String<N> {
 
     /// Perform an immutable lend of this String to the specified server.
     /// This function will block until the server returns.
+    /// Note that this convenience should only be used if the server only ever
+    /// expects to deal with one type of String, ever. Otherwise, this should be
+    /// implemented in the API and wrapped in an Enum to help decorate the functional
+    /// target of the string. An example of a server that uses this convencience function
+    /// is the logger.
     pub fn lend(
         &self,
         connection: CID,
@@ -60,20 +69,19 @@ impl<const N: usize> String<N> {
         xous_buffer.lend(connection, pos as u32)
     }
 
-/*
     /// Move this string from the client into the server.
     pub fn send(
         self,
         connection: CID,
-        id: crate::MessageId,
+        // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
         let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
         let pos = writer.archive(&self).expect("xous::String -- couldn't archive self");
-        let mut xous_buffer = writer.into_inner();
+        let xous_buffer = writer.into_inner();
 
         xous_buffer.send(connection, pos as u32)
     }
-*/
+
     /// Clear the contents of this String and set the length to 0
     pub fn clear(&mut self) {
         self.len = 0;

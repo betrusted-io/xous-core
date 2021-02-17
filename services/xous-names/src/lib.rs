@@ -30,6 +30,8 @@ pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
         let sid = sid.into();
         xous::create_server_with_sid(sid).expect("can't auto-register server");
         Ok(sid)
+    } else if let rkyv::Archived::<api::Request>::Failure = archived {
+        return Err(xous::Error::InternalError);
     } else {
         panic!("Invalid response from the server -- corruption occurred");
     }

@@ -16,8 +16,7 @@ use log::{error, info};
 
 use core::pin::Pin;
 use xous::buffer;
-use rkyv::{archived_value, Unarchive};
-use rkyv::Write;
+use rkyv::{archived_value, Write};
 
 /// Compute the dvorak key mapping of row/col to key tuples
 fn map_dvorak(code: RowCol) -> ScanCode {
@@ -819,12 +818,12 @@ fn xmain() -> ! {
             Some(envelope) => {
                 info!("KBD: Message: {:?}", envelope);
                 if let xous::Message::Borrow(m) = &envelope.body {
-                    let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+                    let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
                     let bytes = Pin::new(buf.as_ref());
                     let value = unsafe {
                         archived_value::<api::Opcode>(&bytes, m.id as usize)
                     };
-                    let new_value = match &*value {
+                    match &*value {
                         rkyv::Archived::<api::Opcode>::RegisterListener(registration) => {
                             let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
                             normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
@@ -884,17 +883,21 @@ fn xmain() -> ! {
                 let mut rs: KeyRawStates = KeyRawStates::new();
                 if let Some(ku) = &keyups {
                     for &k in ku.iter() {
-                        rs.keyups.push(k).unwrap();
+                        unsafe { // because rs is "repr packed"
+                            rs.keyups.push(k).unwrap();
+                        }
                     }
                 }
                 if let Some(kd) = &keydowns {
                     for &k in kd.iter() {
-                        rs.keydowns.push(k).unwrap();
+                        unsafe {
+                            rs.keydowns.push(k).unwrap();
+                        }
                     }
                 }
                 let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                 let pos = writer.archive(&rs).expect("couldn't archive request");
-                let mut xous_buffer = writer.into_inner();
+                let xous_buffer = writer.into_inner();
                 xous_buffer.send(*conn, pos as u32).expect("KBD: can't send raw code");
             }
         }

@@ -3,11 +3,9 @@ use core::ops::Deref;
 use heapless::consts::*;
 use heapless::Vec;
 use xous::{Message, ScalarMessage};
-use rkyv::{RelPtr, Archive, Archived, Resolve, Resolver, Write};
+use rkyv::{RelPtr, Archive, Resolve, Write};
 use core::slice;
-
-pub const REGISTER_BASIC_LISTENER: u32 = 0x1000_0000;
-pub const REGISTER_RAW_LISTENER: u32 = 0x1000_0001;
+use core::ops::DerefMut;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -28,18 +26,12 @@ pub struct RowCol {
 }
 #[repr(packed)]
 pub struct KeyRawStates {
-    mid: u32,
     pub keydowns: Vec<RowCol, U16>,
     pub keyups: Vec<RowCol, U16>,
 }
 impl KeyRawStates {
-    pub fn mid(&self) -> usize {
-        self.mid as usize
-    }
-
     pub fn new() -> Self {
         KeyRawStates {
-            mid: xous::names::GID_KEYBOARD_RAW_KEYSTATE_EVENT as u32,
             keydowns: Vec::new(),
             keyups: Vec::new(),
         }
@@ -73,11 +65,33 @@ impl Deref for KeyRawStates {
         }
     }
 }
+impl DerefMut for KeyRawStates {
+    fn deref_mut(&mut self) -> &mut[u8] {
+        unsafe {
+            slice::from_raw_parts_mut(self as *mut KeyRawStates as *mut u8, core::mem::size_of::<KeyRawStates>())
+                as &mut [u8]
+        }
+    }
+}
 
 // warning: this rkyv code is totally untested
 pub struct ArchivedKeyRawStates {
     ptr: RelPtr,
     len: u32,
+}
+#[allow(dead_code)]
+impl ArchivedKeyRawStates {
+    fn as_keyrawstates(&self) -> KeyRawStates {
+        let mut returned_krs: KeyRawStates = KeyRawStates::new();
+        let bytes: &[u8];
+        unsafe {
+            bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+        }
+        for (dest, src) in returned_krs.deref_mut().iter_mut().zip(bytes.iter()) {
+            *dest = *src;
+        }
+        returned_krs
+    }
 }
 pub struct KeyRawStatesResolver {
     bytes_pos: usize,
