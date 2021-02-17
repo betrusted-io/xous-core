@@ -94,6 +94,7 @@ impl<'a> XousBuffer<'a> {
         Ok(result)
     }
 }
+
 impl<'a> core::convert::AsRef<[u8]> for XousBuffer<'a> {
     fn as_ref(&self) -> &[u8] {
         self.slice
@@ -117,5 +118,13 @@ impl<'a> core::ops::Deref for XousBuffer<'a> {
 impl<'a> core::ops::DerefMut for XousBuffer<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut *self.slice
+    }
+}
+
+impl<'a> Drop for XousBuffer<'a> {
+    fn drop(&mut self) {
+        if self.should_drop {
+            crate::unmap_memory(self.range).unwrap();
+        }
     }
 }
