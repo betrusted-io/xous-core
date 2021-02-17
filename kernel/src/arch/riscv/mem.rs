@@ -597,5 +597,12 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
 
 /// Determine whether a virtual address has been mapped
 pub fn address_available(virt: usize) -> bool {
-    virt_to_phys(virt).is_err()
+    if let Err(e) = virt_to_phys(virt) {
+        // If the value is a `BadAddress`, then that means that address is not valid
+        // and is therefore available
+        e == xous_kernel::Error::BadAddress
+    } else {
+        // If the address is not an error, then it is not available and shouldn't be used.
+        false
+    }
 }
