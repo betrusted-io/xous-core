@@ -584,7 +584,7 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     }
 
     // If the page is "Valid" but shared, issue a sharing violation
-    if l0_pt.entries[vpn0] & MMUFlags::S.bits() == 0 {
+    if l0_pt.entries[vpn0] & MMUFlags::S.bits() == 1 {
         return Err(xous_kernel::Error::ShareViolation);
     }
 
