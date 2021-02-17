@@ -41,7 +41,7 @@ impl XousLoggerBacking {
         if let Some(ref mut buf) = self.buffer {
             buf.clear();
             write!(buf, "{} - {}", record.level(), record.args()).unwrap();
-            buf.lend(self.conn, 1).unwrap();
+            buf.lend(self.conn).unwrap();
         }
     }
 }

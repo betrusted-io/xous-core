@@ -53,7 +53,7 @@ pub fn get_ec_git_rev(cid: CID) -> Result<(u32, bool), Error> {
 }
 
 pub fn send_pds_line(cid: CID, s: &xous::String<512>) -> Result<(), Error> {
-    s.lend(cid, ComState::WFX_PDS_LINE_SET.verb as _).map( |_| ())
+    s.lend(cid /*, ComState::WFX_PDS_LINE_SET.verb as _ */).map( |_| ())
     // send_message(cid, api::Opcode::Wf200PdsLine(line).into()).map(|_| ())
 }
 

@@ -49,12 +49,12 @@ impl<const N: usize> String<N> {
     pub fn lend(
         &self,
         connection: CID,
-        id: crate::MessageId,
+        // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
 
         let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new( N ));
         let pos = writer.archive(self).expect("xous::String -- couldn't archive self");
-        let mut xous_buffer = writer.into_inner();
+        let xous_buffer = writer.into_inner();
 
         // note that "id" is actually used as the position into the rkyv buffer
         xous_buffer.lend(connection, pos as u32)
