@@ -105,7 +105,7 @@ impl core::convert::TryFrom<&str> for XousServerName {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut s = XousServerName::default();
         use core::fmt::Write;
-        write!(s, "{}", value);
+        write!(s, "{}", value).map_err(|_| xous::Error::AccessDenied)?;
         Ok(s)
     }
 }
