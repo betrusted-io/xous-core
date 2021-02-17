@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process as ArchProcess;

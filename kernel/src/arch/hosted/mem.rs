@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+// SPDX-License-Identifier: Apache-2.0
+
 pub const PAGE_SIZE: usize = 4096;
 use crate::mem::MemoryManager;
 use xous_kernel::{Error, MemoryFlags, PID};

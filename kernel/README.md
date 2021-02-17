@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
+SPDX-License-Identifier: Apache-2.0
+-->
+
+
 # Xous Kernel
 
 This contains the core kernel for Xous.  It requires a stage 1 loader in
@@ -41,4 +47,4 @@ By participating in this project you agree to abide its terms.
 
 Copyright © 2020
 
-Licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE)
+This project is licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE). For accurate information, please check individual files.
