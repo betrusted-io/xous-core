@@ -16,7 +16,7 @@ use log::{error, info};
 
 use core::pin::Pin;
 use xous::buffer;
-use rkyv::{archived_value_mut, Unarchive};
+use rkyv::{archived_value, Unarchive};
 use rkyv::Write;
 
 /// Compute the dvorak key mapping of row/col to key tuples
@@ -820,8 +820,9 @@ fn xmain() -> ! {
                 info!("KBD: Message: {:?}", envelope);
                 if let xous::Message::Borrow(m) = &envelope.body {
                     let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+                    let bytes = Pin::new(buf.as_ref());
                     let value = unsafe {
-                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+                        archived_value::<api::Opcode>(&bytes, m.id as usize)
                     };
                     let new_value = match &*value {
                         rkyv::Archived::<api::Opcode>::RegisterListener(registration) => {
