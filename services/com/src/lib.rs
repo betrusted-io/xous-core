@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use core::convert::TryInto;
-use xous::buffer;
 use rkyv::Write;
 
 /// This is the API that other servers use to call the COM. Read this code as if you
@@ -10,8 +9,6 @@ pub mod api;
 
 use api::BattStats;
 use xous::{send_message, Error, CID};
-use com_rs_ref as com_rs;
-use com_rs::*;
 
 pub fn power_off_soc(cid: CID) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::PowerOffSoc.into()).map(|_| ())
@@ -71,7 +68,7 @@ pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::
     let request = api::Opcode::RegisterBattStatsListener(s);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&request).expect("couldn't archive battstat request");
-    let mut xous_buffer = writer.into_inner();
+    let xous_buffer = writer.into_inner();
 
     xous_buffer
        .lend(com_conn, pos.try_into().unwrap())
