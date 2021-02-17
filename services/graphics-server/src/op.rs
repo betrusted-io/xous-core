@@ -1,5 +1,5 @@
 use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView};
-use log::{error, info};
+use log::info;
 use blitstr_ref as blitstr;
 
 /// LCD Frame buffer bounds
