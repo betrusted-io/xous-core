@@ -583,8 +583,13 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
         return Err(xous_kernel::Error::BadAddress);
     }
 
+    // If the page is "Valid" but shared, issue a sharing violation
+    if l0_pt.entries[vpn0] & MMUFlags::S.bits() == 0 {
+        return Err(xous_kernel::Error::ShareViolation);
+    }
+
     // Ensure the entry hasn't already been mapped.
-    if l0_pt.entries[vpn0] & 1 == 0 {
+    if l0_pt.entries[vpn0] & MMUFlags::VALID.bits() == 0 {
         return Err(xous_kernel::Error::BadAddress);
     }
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
