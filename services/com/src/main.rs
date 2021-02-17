@@ -241,7 +241,7 @@ fn xmain() -> ! {
     use heapless::consts::*;
     use core::pin::Pin;
     use xous::buffer;
-    use rkyv::{archived_value_mut, Unarchive};
+    use rkyv::archived_value_mut;
 
     log_server::init_wait().unwrap();
     info!("COM: my PID is {}", xous::process::id());
