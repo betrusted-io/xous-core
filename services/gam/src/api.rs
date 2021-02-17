@@ -3,13 +3,16 @@ use graphics_server::{Point, Rectangle, TextView, Gid};
 use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum Opcode {
     // clears a canvas with a given GID
     ClearCanvas(Gid),
 
     // renders a TextView
     RenderTextView(TextView),
+
+    // result codes from operations on TextViews
+    TextViewResult(TextViewResult),
 
     // returns a GID to the "content" Canvas; requires an authentication token
     RequestContentCanvas(Gid),

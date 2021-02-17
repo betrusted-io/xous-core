@@ -4,7 +4,6 @@ pub mod api;
 use api::*;
 
 use xous::{CID, send_message};
-use xous::ipc::Sendable;
 
 pub fn test_scalar(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
     let response = send_message(cid, api::Opcode::TestScalar(testvar).into())?;
@@ -16,9 +15,22 @@ pub fn test_scalar(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
 }
 
 pub fn test_memory(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
-    let reg = TestStruct::new();
-    let mut sendable_reg = Sendable::new(reg).expect("can't create test structure");
-    sendable_reg.challenge[0] = testvar;
-    sendable_reg.lend_mut(cid, 0).expect("test failure");
-    Ok(sendable_reg.challenge[0])
+    use rkyv::Write;
+    let mut reg = TestStruct::new();
+    reg.challenge[0] = testvar;
+
+    let reg_opcode = api::Opcode::TestMemory(reg);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&reg_opcode).expect("couldn't archive test structure");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer.lend_mut(cid, pos as u32).expect("test failure");
+
+    let archived = unsafe {rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos) };
+    match archived {
+        rkyv::Archived::<api::Opcode>::TestMemory(result) => {
+            Ok(result.challenge[0])
+        },
+        _ => panic!("mutable lend did not return a recognizable value")
+    }
 }

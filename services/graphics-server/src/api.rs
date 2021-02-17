@@ -31,7 +31,7 @@ use hash32::{Hash, Hasher};
 
 //////////////// OS APIs
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive)]
 pub struct Gid {
     /// a 128-bit random identifier for graphical objects
     gid: [u32; 4],

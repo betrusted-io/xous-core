@@ -5,7 +5,7 @@ use rkyv::Unarchive;
 use rkyv::archived_value;
 use core::pin::Pin;
 
-//#[derive(rkyv::Archive)]
+#[derive(Copy, Clone)]
 pub struct String<const N: usize> {
     bytes: [u8; N],
     len: u32,
@@ -121,15 +121,6 @@ pub struct ArchivedString {
     ptr: rkyv::RelPtr,
     len: u32,
 }
-/*
-impl ArchivedString {
-    pub fn as_str(&self) -> &str {
-        unsafe {
-            let bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
-            core::str::from_utf8_unchecked(&bytes)
-        }
-    }
-}*/
 pub struct StringResolver {
     bytes_pos: usize,
 }

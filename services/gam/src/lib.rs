@@ -10,27 +10,34 @@ use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Rectangle, Point, Gid, TextBounds};
 use log::{error, info};
 
+use rkyv::Write;
 
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
 /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
 /// the actual screen update is allowed
 pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    let mut tv_backup = TextView::new(Gid::new([0,0,0,0]), 0,
-        TextBounds::BoundingBox(Rectangle::new(Point::new(0, 0), Point::new(0, 0))));
-    tv_backup.populate_from(&tv);
-    info!("tv_backup: {:?}", tv_backup);
+    // for testing only
+    tv.set_op(TextOp::Render);
+    tv.cursor.pt.x = 37;
+    tv.cursor.pt.y = 5;
 
-    let mut sendable_tv = Sendable::new(tv).expect("can't create sendable textview");
-    sendable_tv.populate_from(&tv_backup);
-    info!("sendable_tv: {:?}", sendable_tv);
+    info!("tv before lend: {:?}", tv);
+    let mut rkyv_tv = api::Opcode::RenderTextView(tv);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
+    let mut xous_buffer = writer.into_inner();
 
-    sendable_tv.set_op(TextOp::Render);
-    sendable_tv.cursor.pt.x = 37;
-    sendable_tv.cursor.pt.y = 5;
+    xous_buffer.lend_mut(gam_cid, pos as u32).expect("RenderTextView operation failure");
 
-    info!("sendable_tv before lend: {:?}", sendable_tv);
-    sendable_tv.lend_mut(gam_cid, sendable_tv.get_op().into()).expect("draw_textview operation failure");
+    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
+    match returned {
+        rkyv::Archived::<api::Opcode>::TextViewResult(result) => {
+            tv.set_bounds_computed(result.bounds_computed);
+            tv.cursor = result.cursor;
+        },
+        _ => panic!("post_textview got a return value from the server that isn't expected or handled")
+    }
 
-    sendable_tv.set_op(TextOp::Nop);
+    tv.set_op(TextOp::Nop);
     Ok(())
 }

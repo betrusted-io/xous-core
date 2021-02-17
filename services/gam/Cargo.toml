@@ -8,6 +8,7 @@ description = "Graphical Abstraction Manager for Xous"
 [dependencies]
 bitflags = "1.2.1"
 xous = { path = "../../xous-rs" }
+rkyv = { version = "0.3.1", default_features = false }
 graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }

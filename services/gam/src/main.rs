@@ -189,19 +189,31 @@ fn xmain() -> ! {
                         _ => todo!("GAM: opcode not yet implemented"),
                     }
                 } else if let xous::Message::MutableBorrow(m) = &envelope.body {
-                    match TextOp::from(m.id) {
-                        TextOp::Nop => (),
-                        TextOp::Render => {
-                            let mut tv: &mut TextView = unsafe {
-                                &mut *(m.buf.as_mut_ptr() as *mut TextView)
-                            };
-                            info!("GAM: render request for {:?}", tv);
-                            tv_draw(gfx_conn, trng_conn, &mut canvases, &mut tv).expect("GAM: can't render TextView");
-                        },
-                        TextOp::ComputeBounds => {
+                    let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+                    let value = unsafe {
+                        archived_value_mut::<api::Request>(Pin::new(buf.as_mut()), m.id.try_into().unwrap())
+                    };
+                    let new_value = match &*value {
+                        rkyv::Archived::<api::Opcode>::RenderTextView(tv) => {
+                            match tv.operation {
+                                TextOp::Nop => (),
+                                TextOp::Render => {
+                                    info!("GAM: render request for {:?}", tv);
+                                    tv_draw(gfx_conn, trng_conn, &mut canvases, &mut tv).expect("GAM: can't render TextView");
+                                },
+                                TextOp::ComputeBounds => {
 
-                        },
-                    }
+                                },
+                            };
+                            let tv_ret = TextViewResult {
+                                bounds_computed: tv.get_boundscomputed(),
+                                cursor: tv.cursor,
+                            };
+                            rkyv::Archived::<api::Opcode>::TextViewResult(tv_ret)
+                        }
+                        _ => panic!("GAM: invalid mutable borrow message"),
+                    };
+                    unsafe { *value.get_unchecked_mut() = new_value };
                 }
             }
             _ => xous::yield_slice(),

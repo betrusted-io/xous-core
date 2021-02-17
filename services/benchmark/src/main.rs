@@ -106,7 +106,7 @@ fn shell_main() -> ! {
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
-    let mut string_buffer = String::new(4096);
+    let mut string_buffer = String::<4096>::new();
 
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
@@ -154,12 +154,12 @@ fn shell_main() -> ! {
         // actual benchmark
         // get a scalar message
         if false {
-            // measured at 1349 iterations per second in this loop (hardware); 55/s (hosted)
+            // measured at 1479.2 iterations per second in this loop (hardware); 55/s (hosted)
             count = benchmark_target::test_scalar(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;
         } else {
             // works on hosted mode, 35/s (hosted)
-            // does *not* work on hardware
+            // measured at 762.6 iterations per second (hardware)
             count = benchmark_target::test_memory(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;
         }

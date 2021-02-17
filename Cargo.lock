@@ -70,6 +70,7 @@ dependencies = [
  "graphics-server",
  "log",
  "log-server",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -82,6 +83,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "log-server",
+ "rkyv",
  "utralib",
  "xous",
  "xous-names",
@@ -390,6 +392,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
+ "rkyv",
  "ticktimer-server",
  "trng",
  "utralib",

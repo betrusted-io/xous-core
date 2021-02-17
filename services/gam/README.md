@@ -80,7 +80,7 @@ be able to have exquisite control over the "look and feel" of their applications
 calls can "simulate" certain properties (such as figuring out the dynamic
 width or height of a text box based on the size of the string within) to assist
 with laying out `TextViews`. Once the layout is finalized, the `TextView` objects
-are then immutably lent to the GAM using a `xous::ipc::Sendable.lend()` wrapper;
+are then immutably lent to the GAM using an `rkyv` lend wrapper;
 the calling thread then blocks until the GAM completes the rendering operation.
 
 One can think of a `TextView` as a text bubble, that can have rounded or square

@@ -4,14 +4,14 @@ use blitstr::{GlyphStyle, Cursor};
 
 use log::info;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 pub enum TextAlignment {
     Left,
     Center,
     Right,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 pub enum TextBounds {
     // fixed width and height in a rectangle
     BoundingBox(Rectangle),
@@ -23,7 +23,7 @@ pub enum TextBounds {
     GrowableFromBl(Point, u16),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 // operations that may be requested of a TextView when sent to GAM
 pub enum TextOp {
     Nop,
@@ -52,8 +52,13 @@ impl From<usize> for TextOp {
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
 const TEXTVIEW_LEN: usize = 3072;
 
-#[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, rkyv::Archive)]
+pub struct TextViewResult {
+    pub bounds_computed: Option<Rectangle>,
+    pub cursor: Cursor,
+}
+
+#[derive(Copy, Clone, rkyv::Archive)]
 pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
@@ -71,7 +76,7 @@ pub struct TextView {
     bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
 
     pub style: GlyphStyle,
-    text: [u8; TEXTVIEW_LEN],
+    text: xous::String::<3072>,
     length: u32,
     pub alignment: TextAlignment,
     pub cursor: Cursor,
@@ -99,7 +104,7 @@ impl TextView {
             bounds_hint,
             bounds_computed: None,
             style: GlyphStyle::Regular,
-            text: [0; TEXTVIEW_LEN],
+            text: xous::String::<3072>::new(),
             length: 0,
             alignment: TextAlignment::Left,
             cursor: Cursor::new(0,0,0),
@@ -128,15 +133,15 @@ impl TextView {
         }
         Ok(())
     }
-
-    pub fn to_str(&self) -> &str {
-        core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.text.as_ptr(), self.length as usize)
-        })
-        .unwrap()
+    pub(crate) fn set_computed_bounds(&mut self, r: Option<Rectangle>) {
+        self.bounds_computed = r;
     }
 
-    pub fn clear_str(&mut self) { self.text = [0; TEXTVIEW_LEN] }
+    pub fn to_str(&self) -> &str {
+        self.text.as_str().unwrap()
+    }
+
+    pub fn clear_str(&mut self) { self.text.clear() }
 
     pub fn populate_from(&mut self, t: &TextView) {
         self.operation = t.operation;
@@ -187,26 +192,6 @@ impl core::fmt::Display for TextView {
 // allow `write!()` macro on a` &TextView`
 impl core::fmt::Write for TextView {
     fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
-        self.bounds_computed = None;
-
-        let b = s.bytes();
-
-        // Ensure the length is acceptable
-        if b.len() + self.length as usize > self.text.len() as usize {
-            Err(core::fmt::Error)?;
-        }
-        // append the write to the array
-        for c in s.bytes() {
-            if self.length < self.text.len() as u32 {
-                self.text[self.length as usize] = c;
-                self.length += 1;
-            }
-        }
-        // Attempt to convert the string to UTF-8 to validate it's correct UTF-8.
-        core::str::from_utf8(unsafe {
-            core::slice::from_raw_parts(self.text.as_ptr(), self.length as usize)
-        })
-        .map_err(|_| core::fmt::Error)?;
-        Ok(())
+        write!(self.text, "{}", s)
     }
 }
