@@ -258,8 +258,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                 .unwrap();
             }
             xous::Message::Move(msg) => {
-                String::from_message(msg)
-                    .map(|log_entry| {
+                String::<4000>::from_message(msg)
+                    .map(|log_entry: String<4000>| {
                         writeln!(
                             output,
                             "LOG: Moved log  message from {}: {}",
@@ -273,8 +273,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                     .ok();
             }
             xous::Message::Borrow(msg) => {
-                String::from_message(msg)
-                    .map(|log_entry| writeln!(output, "{}", log_entry).unwrap())
+                String::<4000>::from_message(msg)
+                    .map(|log_entry: String<4000>| writeln!(output, "{}", log_entry).unwrap())
                     .or_else(|e| {
                         writeln!(
                             output,
@@ -285,8 +285,8 @@ fn reader_thread(mut output: implementation::OutputWriter) {
                     .ok();
             }
             xous::Message::MutableBorrow(msg) => {
-                String::from_message(msg)
-                    .map(|mut log_entry| {
+                String::<4000>::from_message(msg)
+                    .map(|mut log_entry: String<4000>| {
                         writeln!(
                             output,
                             "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",
@@ -312,8 +312,24 @@ fn reader_thread(mut output: implementation::OutputWriter) {
 
 #[xous::xous_main]
 fn some_main() -> ! {
+    #[cfg(baremetal)]
+    {
+        // use this to select which UART to monitor in the main loop
+        use utralib::generated::*;
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
+    }
+
     let mut output = implementation::init();
     let writer = output.get_writer();
+    println!("LOG: my PID is {}", xous::process::id());
     println!("LOG: Creating the reader thread");
     xous::create_thread_simple(reader_thread, writer).unwrap();
     println!("LOG: Running the output");

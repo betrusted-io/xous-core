@@ -448,6 +448,7 @@ pub union sl_wfx_indication_data_u {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    print!("FCCAGENT: my PID is {}", xous::process::id());
 
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();

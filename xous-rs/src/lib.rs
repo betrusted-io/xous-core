@@ -11,10 +11,11 @@ pub mod arch;
 
 pub mod carton;
 pub mod definitions;
-pub mod ipc;
 mod messages;
 pub mod string;
+pub mod buffer;
 pub mod syscall;
+pub mod process;
 
 pub mod names;
 
@@ -23,6 +24,7 @@ pub use definitions::*;
 pub use messages::*;
 pub use string::*;
 pub use syscall::*;
+pub use buffer::XousBuffer;
 
 #[cfg(not(target_os = "none"))]
 pub use arch::ProcessArgsAsThread;
@@ -158,7 +160,8 @@ macro_rules! maybe_main {
         }
 
         #[export_name = "_start"]
-        pub extern "C" fn _start() {
+        pub extern "C" fn _start(pid: u32) {
+            xous::process::set_id(pid);
             unsafe { xous_entry() };
         }
     };

@@ -317,7 +317,7 @@ impl SystemServices {
                 process.state = ProcessState::Setup(ThreadInit::new(
                     unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
                     MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap(),
-                    None,
+                    MemoryAddress::new(pid),
                     [0u8; 12],
                 ));
             }
@@ -1500,7 +1500,7 @@ impl SystemServices {
 
         ArchProcess::with_inner(|process_inner| {
             assert_eq!(crate::arch::process::current_pid(), process_inner.pid);
-            if cid >= process_inner.connection_map.len() {
+            if (cid as usize) >= process_inner.connection_map.len() {
                 // println!("KERNEL({}): CID {} > connection map len", crate::arch::process::current_pid(), cid);
                 return None;
             }
@@ -1508,7 +1508,7 @@ impl SystemServices {
             //     println!("KERNEL({}): CID {} doesn't exist in the connection map", crate::arch::process::current_pid(), cid + 2);
             //     println!("KERNEL({}): Process inner is: {:?}", crate::arch::process::current_pid(), process_inner);
             // }
-            let mut server_idx = process_inner.connection_map[cid]?.get() as usize;
+            let mut server_idx = process_inner.connection_map[cid as usize]?.get() as usize;
             if server_idx == 1 {
                 // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid + 2);
                 return None;

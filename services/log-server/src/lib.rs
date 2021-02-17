@@ -19,7 +19,7 @@ static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
 
 struct XousLoggerBacking {
     conn: xous::CID,
-    buffer: Option<String<'static>>,
+    buffer: Option<String<4000>>, // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
     initialized: bool,
 }
 
@@ -29,7 +29,7 @@ impl XousLoggerBacking {
             return Ok(());
         }
         self.conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?;
-        self.buffer = Some(String::new(4096));
+        self.buffer = Some(String::<4000>::new());
         self.initialized = true;
         Ok(())
     }
@@ -41,7 +41,7 @@ impl XousLoggerBacking {
         if let Some(ref mut buf) = self.buffer {
             buf.clear();
             write!(buf, "{} - {}", record.level(), record.args()).unwrap();
-            buf.lend(self.conn, 1).unwrap();
+            buf.lend(self.conn).unwrap();
         }
     }
 }

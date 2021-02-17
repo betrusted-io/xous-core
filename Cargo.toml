@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "xous-rs",
     "tools",
@@ -8,13 +9,19 @@ members = [
     "services/log-server",
     "services/ticktimer-server",
     "services/com",
+    "services/llio",
     "services/trng-tester",
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
     "services/trng",
+    "services/gam",
+    "services/benchmark",
+    "services/benchmark-target",
     "svd2utra",
     "xtask",
+    "imports/blitstr-ref",
+    "imports/com_rs-ref",
 ]
 default-members = [
     "services/shell",
@@ -26,7 +33,13 @@ default-members = [
     "services/xous-names",
     "services/keyboard",
     "services/com",
-    "services/trng"
+    "services/llio",
+    "services/trng",
+    "services/gam",
+    "imports/blitstr-ref",
+    "imports/com_rs-ref",
+    "services/benchmark",
+    "services/benchmark-target",
 ]
 
 # These packages have custom RUSTFLAGS, so if they
@@ -45,3 +58,4 @@ exclude = [
 codegen-units = 1 # 1 better optimizations
 debug = true # symbols are nice and they don't increase the size on Flash
 lto = "fat"
+

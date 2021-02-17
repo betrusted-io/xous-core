@@ -8,6 +8,7 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
+use com_rs_ref as com_rs;
 use com_rs::*;
 
 use xous::CID;
@@ -28,6 +29,7 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
+    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
@@ -174,6 +176,7 @@ mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
     use crate::WorkRequest;
+    use com_rs_ref as com_rs;
     use com_rs::*;
     use log::{error, info};
 
@@ -236,18 +239,21 @@ fn xmain() -> ! {
     use crate::implementation::XousCom;
     use heapless::Vec;
     use heapless::consts::*;
+    use core::pin::Pin;
+    use xous::buffer;
+    use rkyv::archived_value_mut;
 
     log_server::init_wait().unwrap();
+    info!("COM: my PID is {}", xous::process::id());
 
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);
 
-    let agent_conn: usize;
-    if cfg!(feature = "fccagent") {
-        agent_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+    let agent_conn= if cfg!(feature = "fccagent") {
+        xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
     } else {
-        agent_conn = 0; // bogus value
-    }
+        0 // bogus value
+    };
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -260,12 +266,49 @@ fn xmain() -> ! {
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
         // info!("COM: Message: {:?}", envelope);
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+        if let xous::Message::Borrow(m) = &envelope.body {
+            let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let value = unsafe {
+                archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<api::Opcode>::RegisterBattStatsListener(registration_name) => {
+                    let cid = xous_names::request_connection_blocking(registration_name.as_str()).expect("COM: can't connect to requested listener for reporting events");
+                    battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
+                },
+                rkyv::Archived::<api::Opcode>::Wf200PdsLine(rkyv_l) => {
+                    use rkyv::Unarchive;
+                    let l: xous::String<512> = rkyv_l.unarchive();
+                    info!("COM: Wf200PdsLine got line {}", l);
+                    let line = l.as_bytes();
+                    let length = line.len() as u16;
+                    //info!("COM: 0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
+                    com.txrx(ComState::WFX_PDS_LINE_SET.verb);
+                    //info!("COM: 0x{:04x}", length);
+                    com.txrx(length);
+                    //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
+                    for i in 0..128 {
+                        let word: u16;
+                        if (i * 2 + 1) == length as usize { // odd last element
+                            word = line[i * 2] as u16;
+                        } else if i * 2 < length as usize {
+                            word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
+                        } else {
+                            word = 0;
+                        }
+                        com.txrx(word);
+                        //info!("COM: 0x{:04x}", word);
+                    }
+                }
+                _ => panic!("Invalid memory message response -- corruption occurred"),
+            };
+        } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("COM: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::PowerOffSoc => {
                     info!("COM: power off called");
                     com.txrx(ComState::POWER_OFF.verb);
+                    com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used
                 }
                 Opcode::BattStats => {
                     info!("COM: batt stats request received");
@@ -308,28 +351,6 @@ fn xmain() -> ! {
                     )
                     .expect("COM: couldn't return WF200 firmware rev");
                 }
-                Opcode::Wf200PdsLine(l) => {
-                    info!("COM: Wf200PdsLine got line {}", l);
-                    let line = l.as_bytes();
-                    let length = line.len() as u16;
-                    //info!("COM: 0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
-                    com.txrx(ComState::WFX_PDS_LINE_SET.verb);
-                    //info!("COM: 0x{:04x}", length);
-                    com.txrx(length);
-                    //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
-                    for i in 0..128 {
-                        let word: u16;
-                        if (i * 2 + 1) == length as usize { // odd last element
-                            word = line[i * 2] as u16;
-                        } else if i * 2 < length as usize {
-                            word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
-                        } else {
-                            word = 0;
-                        }
-                        com.txrx(word);
-                        //info!("COM: 0x{:04x}", word);
-                    }
-                }
                 Opcode::RxStatsAgent => {
                     if cfg!(feature = "fccagent") {
                         // note -- this code never worked, but wasn't needed. just hanging out as bread crumbs for future work in case this is needed.
@@ -345,10 +366,6 @@ fn xmain() -> ! {
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
                     }
-                }
-                Opcode::RegisterBattStatsListener(registration) => {
-                    let cid = xous_names::request_connection_blocking(registration.name.to_str()).expect("COM: can't connect to requested listener for reporting events");
-                    battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
                 }
                 _ => error!("unknown opcode"),
             }

@@ -3,11 +3,16 @@
 
 use log::{error, info};
 
-mod backend;
-use backend::XousDisplay;
-
 mod api;
 use api::Opcode;
+
+use xous::buffer;
+use core::pin::Pin;
+use rkyv::{archived_value, Unarchive};
+use core::convert::TryInto;
+
+mod backend;
+use backend::XousDisplay;
 
 mod op;
 
@@ -16,7 +21,7 @@ use core::convert::TryFrom;
 mod logo;
 
 use api::{DrawStyle, PixelColor, Rectangle};
-use blitstr;
+use blitstr_ref as blitstr;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(logo::LOGO_MAP);
@@ -25,6 +30,7 @@ fn draw_boot_logo(display: &mut XousDisplay) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    info!("GFX: my PID is {}", xous::process::id());
 
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();
@@ -41,8 +47,55 @@ fn xmain() -> ! {
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        // info!("GFX: Message: {:?}", msg);
-        if let Ok(opcode) = Opcode::try_from(&msg.body) {
+        //info!("GFX: Message: {:?}", msg);
+        if let xous::Message::Borrow(m) = &msg.body {
+            let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<api::Opcode>(&bytes, m.id.try_into().unwrap())
+            };
+            match &*value {
+                rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
+                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    //info!("GFX: unarchived string: {:?}", s);
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s.as_str().unwrap(),
+                        false,
+                        blitstr::xor_char
+                    );
+                    //info!("GFX: string painted");
+                },
+                rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
+                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s.as_str().unwrap(),
+                        true,
+                        blitstr::xor_char
+                    );
+                },
+                rkyv::Archived::<api::Opcode>::SimulateString(rkyv_s) => {
+                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        current_string_clip.into(),
+                        &mut current_cursor,
+                        current_glyph.into(),
+                        s.as_str().unwrap(),
+                        false,
+                        blitstr::simulate_char
+                    );
+                },
+                _ => panic!("GFX: invalid response from server -- corruption occurred in MemoryMessage")
+            };
+        } else if let Ok(opcode) = Opcode::try_from(&msg.body) {
             // info!("GFX: Opcode: {:?}", opcode);
             match opcode {
                 Opcode::Flush => {
@@ -63,26 +116,6 @@ fn xmain() -> ! {
                 Opcode::Circle(c) => {
                     op::circle(display.native_buffer(), c);
                 }
-                Opcode::String(s) => {
-                    blitstr::paint_str(
-                        display.native_buffer(),
-                        current_string_clip.into(),
-                        &mut current_cursor,
-                        current_glyph.into(),
-                        s,
-                        false,
-                    );
-                }
-                Opcode::StringXor(s) => {
-                    blitstr::paint_str(
-                        display.native_buffer(),
-                        current_string_clip.into(),
-                        &mut current_cursor,
-                        current_glyph.into(),
-                        s,
-                        true,
-                    );
-                }
                 Opcode::SetGlyphStyle(glyph) => {
                     current_glyph = glyph;
                 }
@@ -92,7 +125,7 @@ fn xmain() -> ! {
                 Opcode::GetCursor => {
                     let pt: api::Point =
                         api::Point::new(current_cursor.pt.x as i16, current_cursor.pt.y as i16);
-                    xous::return_scalar2(msg.sender, pt.into(), current_cursor.line_height)
+                    xous::return_scalar2(msg.sender, pt.into(), current_cursor.line_height as usize)
                         .expect("GFX: could not return GetCursor request");
                 }
                 Opcode::SetStringClipping(r) => {
@@ -110,9 +143,23 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: could not return QueryGlyph request");
                 }
+                Opcode::QueryGlyphProps(glyph) => {
+                    xous::return_scalar2(
+                        msg.sender,
+                        glyph.into(),
+                        blitstr::glyph_to_height_hint(glyph),
+                    )
+                    .expect("GFX: could not return QueryGlyphProps request");
+                }
+                /*
+                Opcode::TextView(tv) => {
+                    info!("GFX: got draw of '{:?}'", tv);
+                    op::textview(display.native_buffer(), tv);
+                }*/
+                _ => panic!("GFX: received opcode scalar that is not handled")
             }
         } else {
-            error!("Couldn't convert opcode");
+            error!("GFX: Couldn't convert opcode");
         }
         display.update();
     }

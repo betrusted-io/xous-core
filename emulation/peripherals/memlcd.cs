@@ -56,7 +56,7 @@ namespace Antmicro.Renode.Peripherals.Video
                 // 1) The `updateDirty` bit is set and the current line is dirty, or
                 // 2) The `updateAll` bit is set.
                 bool shouldRedrawLine = updateAll;
-                foreach (int i in Enumerable.Range(42, 22)) {
+                foreach (int i in Enumerable.Range(41, 22)) {
                     if (shouldRedrawLine) {
                         break;
                     }

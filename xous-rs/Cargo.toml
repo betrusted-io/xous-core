@@ -10,6 +10,7 @@ description = "System call interface for Xous"
 bitflags = "1"
 xous-macros = { path = "../macros", version = "0.1.0" }
 log = { version = "0.4", optional = true }
+rkyv = { version = "0.3.1", default_features = false }
 
 [features]
 # If this is set, then the "Drop" feature of MemoryMessage structs

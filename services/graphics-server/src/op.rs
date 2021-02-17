@@ -1,4 +1,6 @@
-use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle};
+use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView};
+use log::info;
+use blitstr_ref as blitstr;
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -229,4 +231,23 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle) {
     for pixel in r {
         put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
+}
+
+
+pub fn textview(fb: &mut LcdFB, tv: &mut TextView) {
+    tv.compute_bounds().expect("GFX: couldn't compute bounds of textview");
+
+    let mut c = tv.cursor.clone();
+    // at this point, bounds_computed *must* be Some()
+    info!("GFX: painting tv with cursor {:?}, clip {:?}, text {}, style {:?}", c, tv.get_bounds_computed().unwrap(), tv, tv.style);
+    blitstr::paint_str(
+        fb,
+        tv.get_bounds_computed().unwrap().into(),
+        &mut c,
+        tv.style,
+        tv.to_str(),
+        false,
+        blitstr::xor_char
+    );
+    tv.cursor = c;
 }

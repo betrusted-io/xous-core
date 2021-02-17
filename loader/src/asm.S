@@ -30,8 +30,9 @@ start_kernel:
     csrw        mideleg, t0
     csrw        medeleg, t0
 
-    // Return to Supervisor mode (and enable interrupts)
-    li		    t0, (1 << 11) | (1 << 5)
+    // Return to Supervisor mode (1 << 11) when we call `reti`.
+    // Disable interrupts (0 << 5)
+    li		    t0, (1 << 11) | (0 << 5)
     // If arg6 is "true", also set mstatus.SUM to allow the kernel
     // to access userspace memory.
     andi        a6, a6, 1

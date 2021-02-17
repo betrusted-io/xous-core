@@ -1,0 +1,24 @@
+[package]
+name = "llio"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Low level IO"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+heapless = "0.5"
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[target.'cfg(any(windows,unix))'.dependencies]
+
+[features]
+debugprint = []
+default = [] # "debugprint"
+#default = ["debugprint"] # , "fccagent"

@@ -1,9 +1,11 @@
-use xous::{Message, ScalarMessage};
-use heapless::Vec;
-use heapless::consts::*;
+use core::ops::Deref;
 
-pub const SUBTYPE_REGISTER_BASIC_LISTENER: u16 = 0;
-pub const SUBTYPE_REGISTER_RAW_LISTENER: u16 = 1;
+use heapless::consts::*;
+use heapless::Vec;
+use xous::{Message, ScalarMessage};
+use rkyv::{RelPtr, Archive, Resolve, Write};
+use core::slice;
+use core::ops::DerefMut;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ScanCode {
@@ -19,23 +21,17 @@ pub struct ScanCode {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct RowCol {
-    pub r: u8,
-    pub c: u8,
+    pub r: u32,
+    pub c: u32,
 }
-
-#[derive(Debug)]
-#[repr(C)]
+#[repr(packed)]
 pub struct KeyRawStates {
-    mid: usize,
     pub keydowns: Vec<RowCol, U16>,
     pub keyups: Vec<RowCol, U16>,
 }
 impl KeyRawStates {
-    pub fn mid(&self) -> usize { self.mid }
-
     pub fn new() -> Self {
         KeyRawStates {
-            mid: xous::names::GID_KEYBOARD_RAW_KEYSTATE_EVENT,
             keydowns: Vec::new(),
             keyups: Vec::new(),
         }
@@ -44,43 +40,85 @@ impl KeyRawStates {
     #[allow(dead_code)]
     pub fn copy(&self) -> KeyRawStates {
         let mut krs = KeyRawStates::new();
-        for kd in self.keydowns.iter() {
-            krs.keydowns.push(*kd).unwrap();
-        }
-        for ku in self.keyups.iter() {
-            krs.keyups.push(*ku).unwrap();
+        unsafe { // because KeyRawStates is *packed*
+            for kd in self.keydowns.iter() {
+                krs.keydowns.push(*kd).unwrap();
+            }
+            for ku in self.keyups.iter() {
+                krs.keyups.push(*ku).unwrap();
+            }
         }
         krs
     }
 }
-
-/*
-#[derive(Debug)]
-#[repr(C)]
-pub struct KeyStates {
-    mid: usize,
-    pub keys: Vec<char, U16>,
+impl Clone for KeyRawStates {
+    fn clone(&self) -> KeyRawStates {
+        self.copy()
+    }
 }
-impl KeyStates {
-    pub fn mid(&self) -> usize { self.mid }
-
-    pub fn new() -> Self {
-        KeyStates {
-            mid: ID_KEYSTATE,
-            keys: Vec::new(),
+impl Deref for KeyRawStates {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(self as *const KeyRawStates as *const u8, core::mem::size_of::<KeyRawStates>())
+               as &[u8]
         }
     }
-
-    pub fn copy(&self) -> KeyStates {
-        let mut ks = KeyStates::new();
-        for sc in self.keys.iter() {
-            ks.keys.push(*sc).unwrap();
+}
+impl DerefMut for KeyRawStates {
+    fn deref_mut(&mut self) -> &mut[u8] {
+        unsafe {
+            slice::from_raw_parts_mut(self as *mut KeyRawStates as *mut u8, core::mem::size_of::<KeyRawStates>())
+                as &mut [u8]
         }
-        ks
     }
-}*/
+}
 
-#[derive(Debug, Copy, Clone)]
+// warning: this rkyv code is totally untested
+pub struct ArchivedKeyRawStates {
+    ptr: RelPtr,
+    len: u32,
+}
+#[allow(dead_code)]
+impl ArchivedKeyRawStates {
+    fn as_keyrawstates(&self) -> KeyRawStates {
+        let mut returned_krs: KeyRawStates = KeyRawStates::new();
+        let bytes: &[u8];
+        unsafe {
+            bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+        }
+        for (dest, src) in returned_krs.deref_mut().iter_mut().zip(bytes.iter()) {
+            *dest = *src;
+        }
+        returned_krs
+    }
+}
+pub struct KeyRawStatesResolver {
+    bytes_pos: usize,
+}
+impl Resolve<KeyRawStates> for KeyRawStatesResolver {
+    type Archived = ArchivedKeyRawStates;
+    fn resolve(self, pos: usize, value: &KeyRawStates) -> Self::Archived {
+        Self::Archived {
+            ptr: unsafe {
+                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedKeyRawStates, ptr), self.bytes_pos)
+            },
+            len: value.deref().len() as u32,
+        }
+    }
+}
+impl Archive for KeyRawStates {
+    type Archived = ArchivedKeyRawStates;
+    type Resolver = KeyRawStatesResolver;
+
+    fn archive<W: Write + ?Sized>(&self, writer: &mut W) -> Result<Self::Resolver, W::Error> {
+        let bytes_pos = writer.pos();
+        writer.write( self.deref())?;
+        Ok(Self::Resolver { bytes_pos })
+    }
+}
+
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 pub enum KeyMap {
     Qwerty,
     Azerty,
@@ -115,22 +153,22 @@ impl Into<usize> for KeyMap {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum Opcode {
     /// set which keyboard mapping is present
     SelectKeyMap(KeyMap),
 
     /// request interpreted ScanCodes to be sent
-    RegisterListener(xous_names::api::Registration),
+    RegisterListener(xous_names::api::XousServerName),
 
     /// request raw keyup/keydown events to be sent
-    RegisterRawListener(xous_names::api::Registration),
+    RegisterRawListener(xous_names::api::XousServerName),
 
     /// set repeat delay, rate; both in ms
-    SetRepeat(usize, usize),
+    SetRepeat(u32, u32),
 
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
-    SetChordInterval(usize),
+    SetChordInterval(u32),
 
     /// keyboard events (as sent to listeners)
     KeyboardEvent([char; 4]),
@@ -139,37 +177,44 @@ pub enum Opcode {
     HostModeInjectKey(char),
 }
 
-impl core::convert::TryFrom<& Message> for Opcode {
+impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
+    fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::SelectKeyMap(KeyMap::from(m.arg1))),
-                1 => Ok(Opcode::SetRepeat(m.arg1, m.arg2)),
-                2 => Ok(Opcode::SetChordInterval(m.arg1)),
-                xous::names::GID_KEYBOARD_KEYSTATE_EVENT =>
-                     Ok(Opcode::KeyboardEvent([
-                        if let Some(a) = core::char::from_u32(m.arg1 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg2 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg3 as u32) { a } else { '\u{0000}' },
-                        if let Some(a) = core::char::from_u32(m.arg4 as u32) { a } else { '\u{0000}' }
-                         ])),
+                1 => Ok(Opcode::SetRepeat(m.arg1 as u32, m.arg2 as u32)),
+                2 => Ok(Opcode::SetChordInterval(m.arg1 as u32)),
+                xous::names::GID_KEYBOARD_KEYSTATE_EVENT => Ok(Opcode::KeyboardEvent([
+                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg2 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg3 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(m.arg4 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                ])),
                 3 => Ok(Opcode::HostModeInjectKey(
-                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {a} else { '\u{0000}'} )),
+                    if let Some(a) = core::char::from_u32(m.arg1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                )),
                 _ => Err("KBD api: unknown Scalar ID"),
-            },
-            Message::Borrow(m) => {
-                if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BASIC_LISTENER) {
-                    Ok(Opcode::RegisterListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_RAW_LISTENER) {
-                    Ok(Opcode::RegisterRawListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else {
-                    Err("KBD api: unknown Borrow ID")
-                }
             },
             _ => Err("KBD api: unhandled message type"),
         }
@@ -188,14 +233,17 @@ impl Into<Message> for Opcode {
             }),
             Opcode::SetRepeat(delay, rate) => Message::Scalar(ScalarMessage {
                 id: 1,
-                arg1: delay,
-                arg2: rate,
-                arg3: 0, arg4: 0,
+                arg1: delay as usize,
+                arg2: rate as usize,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::SetChordInterval(period) => Message::Scalar(ScalarMessage {
                 id: 2,
-                arg1: period,
-                arg2: 0, arg3: 0, arg4: 0,
+                arg1: period as usize,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             Opcode::KeyboardEvent(keys) => Message::Scalar(ScalarMessage {
                 id: xous::names::GID_KEYBOARD_KEYSTATE_EVENT,
@@ -207,34 +255,11 @@ impl Into<Message> for Opcode {
             Opcode::HostModeInjectKey(key) => Message::Scalar(ScalarMessage {
                 id: 3,
                 arg1: key as u32 as usize,
-                arg2: 0, arg3: 0, arg4: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             _ => panic!("KBD api: Opcode type not handled by Into(), refer to helper method"),
         }
     }
 }
-
-/*
-enum DecodedRegistration {
-    reg: &'static xous_names::api::Regustration,
-    envelope: MessageEnvelope,
-}
-
-enum DecodedOpcode {
-    Registration(DecodedRegistration),
-}
-
-impl DecodedOpcode {
-    pub fn decode(envelope: MessageEnvelope) -> Result<Self, &'static str> {
-        match message.body {
-        Message::MutableBorrow(m) => match m.id {
-            ID_REGISTER_NAME => Ok(DecodedOpcode::Registration{
-                envelope,
-                reg: &{*{m.buf.as_ptr() as *const xous_names::api::Registration)}},
-            }
-            })),
-            _ => Err("KBD api: unknown MutableBorrow ID"),
-        }
-    }
-}
- */

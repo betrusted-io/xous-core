@@ -1,6 +1,7 @@
 #![cfg_attr(baremetal, no_main)]
 #![cfg_attr(baremetal, no_std)]
 
+use blitstr_ref as blitstr;
 use blitstr::{Cursor, GlyphStyle};
 use com::*;
 use core::fmt::Write;
@@ -154,8 +155,8 @@ fn event_thread(_arg: usize) {
 #[xous::xous_main]
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
+    info!("SHELL: my PID is {}", xous::process::id());
 
-    info!("SHELL: ticktimer");
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
@@ -174,6 +175,10 @@ fn shell_main() -> ! {
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
+    let start_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() - start_time < 1000 {
+        xous::yield_slice();
+    }
 
     let screensize = graphics_server::screen_size(graphics_conn).expect("Couldn't get screen size");
 
@@ -186,26 +191,11 @@ fn shell_main() -> ! {
     );
     bouncyball.update(trng_conn);
 
-    #[cfg(baremetal)]
-    {
-        // use this to select which UART to monitor in the main loop
-        use utralib::generated::*;
-        let gpio_base = xous::syscall::map_memory(
-            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-            None,
-            4096,
-            xous::MemoryFlags::R | xous::MemoryFlags::W,
-        )
-        .expect("couldn't map GPIO CSR range");
-        let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
-    }
-
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     let style_light = DrawStyle::new(PixelColor::Light, PixelColor::Light, 1);
 
-    let mut string_buffer = String::new(4096);
-    let mut input_buf = String::new(4096);
+    let mut string_buffer = String::new();
+    let mut input_buf = String::new();
     graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Small)
         .expect("unable to set glyph");
     let (_, font_h) = graphics_server::query_glyph(graphics_conn).expect("unable to query glyph");
@@ -248,7 +238,9 @@ fn shell_main() -> ! {
         .expect("Can't write");
         status_cursor = Cursor::from_top_left_of(status_clipregion.into());
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
+        //info!("SHELL: debug0");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        //info!("SHELL: debug1");
         status_cursor.pt.x = 95;
         string_buffer.clear();
         write!(
@@ -258,7 +250,9 @@ fn shell_main() -> ! {
         )
         .expect("Can't write");
         graphics_server::set_cursor(graphics_conn, status_cursor).expect("can't set cursor");
+        //info!("SHELL: debug2");
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
+        //info!("SHELL: debug3");
         status_cursor.pt.x = 190;
         string_buffer.clear();
         write!(
@@ -288,7 +282,7 @@ fn shell_main() -> ! {
             last_time as f32 / 1000f32
         )
         .expect("Can't write");
-        status_cursor.pt.x = 4; status_cursor.pt.y = small_font_h;
+        status_cursor.pt.x = 4; status_cursor.pt.y = small_font_h as u32;
         graphics_server::draw_string(graphics_conn, &string_buffer).expect("unable to draw string");
 
         // a line under the status area
@@ -307,6 +301,22 @@ fn shell_main() -> ! {
         //////////////// work area
         if INCOMING_FRESH.load(Ordering::Relaxed) {
             INCOMING_FRESH.store(false, Ordering::Relaxed);
+            if INCOMING_CHAR.load(Ordering::Relaxed) == 0x14 {
+                power_off_soc(com_conn).expect("SHELL: can't power down");
+                #[cfg(baremetal)]
+                {
+                    use utralib::generated::*;
+                    let power_base = xous::syscall::map_memory(
+                        xous::MemoryAddress::new(utra::power::HW_POWER_BASE),
+                        None,
+                        4096,
+                        xous::MemoryFlags::R | xous::MemoryFlags::W,
+                    )
+                    .expect("couldn't map POWER CSR range");
+                    let mut power = CSR::new(power_base.as_mut_ptr() as *mut u32);
+                    power.wo(utra::power::POWER, 0);
+                }
+            }
             write!(&mut input_buf, "{}", core::char::from_u32(INCOMING_CHAR.load(Ordering::Relaxed)).unwrap()).expect("unable to copy to Xous string");
 
             graphics_server::set_glyph_style(graphics_conn, GlyphStyle::Regular)
@@ -368,19 +378,6 @@ fn shell_main() -> ! {
         )
         .expect("unable to draw to screen");
 
-        /* test code to exhaust memory allocation
-        let mut iter = 0;
-        info!("Test memory allocation");
-        loop {
-            let lookup = Lookup::new();
-            let mut sendable_lookup = Sendable::new(lookup)
-            .expect("can't create sendable lookup structure");
-            write!(sendable_lookup.name, "A test Name!").unwrap();
-            sendable_lookup.lend_mut(ns_conn, sendable_lookup.mid()).expect("nameserver lookup failure!");
-            info!("memtest: iter {}", iter);
-            iter += 1;
-        }
-        */
         // Periodic tasks
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {

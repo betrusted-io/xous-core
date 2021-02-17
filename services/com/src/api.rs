@@ -3,12 +3,10 @@ use xous::{Message, ScalarMessage};
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
+use com_rs_ref as com_rs;
 use com_rs::*;
 
-// subtype constants for registering service listeners from the COM
-pub const SUBTYPE_REGISTER_BATTSTATS_LISTENER: u16 = 0;
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy, Clone, rkyv::Archive)]
 pub struct BattStats {
     /// instantaneous voltage in mV
     pub voltage: u16,
@@ -41,8 +39,8 @@ impl Into<[usize; 2]> for BattStats {
     }
 }
 #[allow(dead_code)]
-#[derive(Debug)]
-pub enum Opcode<'a> {
+#[derive(Debug, rkyv::Archive)]
+pub enum Opcode {
     /// Battery stats
     BattStats,
 
@@ -83,7 +81,7 @@ pub enum Opcode<'a> {
     FlashErase,
 
     /// Program a page of FLASH
-    FlashProgram(&'a [u8]),
+    //FlashProgram(&'a [u8]),
 
     /// Update the SSID list
     SsidScan,
@@ -98,18 +96,18 @@ pub enum Opcode<'a> {
     Wf200Rev,
 
     /// Send a line of PDS data
-    Wf200PdsLine(&'a str),
+    Wf200PdsLine(xous::String<512>),
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener(xous_names::api::Registration),
+    RegisterBattStatsListener(xous_names::api::XousServerName),
 }
 
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+impl core::convert::TryFrom<& Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+    fn try_from(message: & Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => {
                 if m.id as u16 == ComState::CHG_BOOST_ON.verb {
@@ -144,29 +142,12 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Err("unrecognized opcode")
                 }
             },
-            Message::Borrow(m) => {
-                if m.id as u16 == ComState::WFX_PDS_LINE_SET.verb {
-                    let s = unsafe {
-                        core::slice::from_raw_parts(
-                            m.buf.as_ptr(),
-                            m.valid.map(|x| x.get()).unwrap_or_else(|| m.buf.len()),
-                        )
-                    };
-                    Ok(Opcode::Wf200PdsLine(core::str::from_utf8(s).unwrap()))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_BATTSTATS_LISTENER) {
-                    Ok(Opcode::RegisterBattStatsListener({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else {
-                    Err("COM: unknown borrow ID")
-                }
-            }
             _ => Err("unhandled message type"),
         }
     }
 }
 
-impl<'a> Into<Message> for Opcode<'a> {
+impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::BoostOn => Message::Scalar(ScalarMessage {

@@ -1,19 +1,21 @@
 #![allow(dead_code)]
 
 /*
-This file contains a list of descriptions of servers that
-are used as keys by the xous-names server.
-
-It also contains global IDs. By convention, the top 8 bits of
-a message ID field are reserved for Xous.
+A list of descriptions of servers ("names") that are used as keys by the xous-names server
+for the core set of kernel services.
 */
 
 pub const SERVER_NAME_COM: &str      = "_COM manager_";
+pub const SERVER_NAME_LLIO: &str      = "_Low Level I/O manager_";
 pub const SERVER_NAME_SHELL: &str    = "_Shell_";
 pub const SERVER_NAME_GFX: &str      = "_Graphics_";
-pub const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
 pub const SERVER_NAME_KBD: &str      = "_Matrix keyboard driver_";
 pub const SERVER_NAME_TRNG: &str     = "_TRNG manager_";
+pub const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
+pub const SERVER_NAME_STATUS: &str   = "_Status bar manager_";
+
+pub const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
+pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";
 
 /*
 

@@ -1,0 +1,22 @@
+[package]
+name = "com_rs-ref"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "com_rs import package"
+
+[dependencies]
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "a9e05f414accef08348b77be6fc0f668b319e6ff" }
+#com_rs = { path = "../../../betrusted-ec/sw/com_rs" }
+
+
+# targeting hardware
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+
+
+# targeting hosted mode
+[target.'cfg(any(windows,unix))'.dependencies]
+
+
+[features]
+default = []

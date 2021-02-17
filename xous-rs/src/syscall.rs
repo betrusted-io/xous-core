@@ -3,6 +3,8 @@ use crate::{
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
     Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID,
 };
+use core::convert::TryInto;
+
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
@@ -565,7 +567,7 @@ impl SysCall {
             SysCall::SendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
                     SysCallNumber::SendMessage as usize,
-                    *a1,
+                    *a1 as usize,
                     a2.message_type(),
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
@@ -575,7 +577,7 @@ impl SysCall {
                 ],
                 Message::Scalar(sc) | Message::BlockingScalar(sc) => [
                     SysCallNumber::SendMessage as usize,
-                    *a1,
+                    *a1 as usize,
                     a2.message_type(),
                     sc.id as usize,
                     sc.arg1,
@@ -627,7 +629,7 @@ impl SysCall {
             SysCall::TrySendMessage(a1, ref a2) => match a2 {
                 Message::MutableBorrow(mm) | Message::Borrow(mm) | Message::Move(mm) => [
                     SysCallNumber::TrySendMessage as usize,
-                    *a1,
+                    *a1 as usize,
                     a2.message_type(),
                     mm.id as usize,
                     mm.buf.as_ptr() as usize,
@@ -637,7 +639,7 @@ impl SysCall {
                 ],
                 Message::Scalar(sc) | Message::BlockingScalar(sc) => [
                     SysCallNumber::TrySendMessage as usize,
-                    *a1,
+                    *a1 as usize,
                     a2.message_type(),
                     sc.id as usize,
                     sc.arg1,
@@ -742,7 +744,7 @@ impl SysCall {
             }
             SysCallNumber::SendMessage => match a2 {
                 1 => SysCall::SendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::MutableBorrow(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -751,7 +753,7 @@ impl SysCall {
                     }),
                 ),
                 2 => SysCall::SendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::Borrow(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -760,7 +762,7 @@ impl SysCall {
                     }),
                 ),
                 3 => SysCall::SendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::Move(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -769,7 +771,7 @@ impl SysCall {
                     }),
                 ),
                 4 => SysCall::SendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::Scalar(ScalarMessage {
                         id: a3,
                         arg1: a4,
@@ -779,7 +781,7 @@ impl SysCall {
                     }),
                 ),
                 5 => SysCall::SendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::BlockingScalar(ScalarMessage {
                         id: a3,
                         arg1: a4,
@@ -806,7 +808,7 @@ impl SysCall {
             }
             SysCallNumber::TrySendMessage => match a2 {
                 1 => SysCall::TrySendMessage(
-                    a1,
+                    a1 as u32,
                     Message::MutableBorrow(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -815,7 +817,7 @@ impl SysCall {
                     }),
                 ),
                 2 => SysCall::TrySendMessage(
-                    a1,
+                    a1 as u32,
                     Message::Borrow(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -824,7 +826,7 @@ impl SysCall {
                     }),
                 ),
                 3 => SysCall::TrySendMessage(
-                    a1,
+                    a1 as u32,
                     Message::Move(MemoryMessage {
                         id: a3,
                         buf: MemoryRange::new(a4, a5)?,
@@ -833,7 +835,7 @@ impl SysCall {
                     }),
                 ),
                 4 => SysCall::TrySendMessage(
-                    a1,
+                    a1 as u32,
                     Message::Scalar(ScalarMessage {
                         id: a3,
                         arg1: a4,
@@ -843,7 +845,7 @@ impl SysCall {
                     }),
                 ),
                 5 => SysCall::TrySendMessage(
-                    a1,
+                    a1.try_into().unwrap(),
                     Message::BlockingScalar(ScalarMessage {
                         id: a3,
                         arg1: a4,
@@ -1138,6 +1140,8 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 /// exclusively by the name server.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
 /// to a namserver by the caller in their memory space.
+///
+/// The implementation is just a call to the kernel-exclusive TRNG to fetch random numbers.
 ///
 /// # Errors
 ///

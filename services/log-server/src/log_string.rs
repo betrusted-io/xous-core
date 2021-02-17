@@ -4,14 +4,14 @@ use core::slice;
 pub struct LogString<'a> {
     raw_slice: &'a mut [u8],
     pub s: &'a str,
-    pub len: usize,
+    pub len: u32,
     msg_len: &'a mut Option<xous::MemorySize>,
 }
 
 impl<'a> LogString<'a> {
     pub fn from_message(message: &'a mut xous::MemoryMessage) -> LogString<'a> {
         // println!("LOG: Message address is at {:08x} (whole message: {:?})", message.buf.addr.get(), message);
-        let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len()) };
+        let raw_slice = unsafe { slice::from_raw_parts_mut(message.buf.as_ptr() as *mut u8, message.buf.len() as usize) };
         let starting_length = message.valid.map(|x| x.get()).unwrap_or(0);
 
         // print!("LOG: String @ {:08x}:", message.buf.as_ptr() as usize);
@@ -27,7 +27,7 @@ impl<'a> LogString<'a> {
                     starting_length,
                 ))
             },
-            len: starting_length,
+            len: starting_length as u32,
             raw_slice,
             msg_len: &mut message.valid,
         }
@@ -43,15 +43,15 @@ impl<'a> fmt::Display for LogString<'a> {
 impl<'a> fmt::Write for LogString<'a> {
     fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
         for c in s.bytes() {
-            if self.len < self.raw_slice.len() {
-                self.raw_slice[self.len] = c;
+            if self.len as usize < self.raw_slice.len() {
+                self.raw_slice[self.len as usize] = c;
                 self.len += 1;
             }
         }
         self.s = unsafe {
-            core::str::from_utf8_unchecked(slice::from_raw_parts(self.raw_slice.as_ptr(), self.len))
+            core::str::from_utf8_unchecked(slice::from_raw_parts(self.raw_slice.as_ptr(), self.len as usize))
         };
-        *self.msg_len = Some(xous::MemorySize::new(self.len).unwrap());
+        *self.msg_len = Some(xous::MemorySize::new(self.len as usize).unwrap());
         Ok(())
     }
 }
