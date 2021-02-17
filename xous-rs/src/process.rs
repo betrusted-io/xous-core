@@ -1,5 +1,3 @@
-use core::sync::atomic::AtomicU32;
-
 #[cfg(not(target_os = "none"))]
 pub fn id() -> u32 {
     std::process::id()

@@ -1,4 +1,4 @@
-use crate::{CID, Error, MemoryMessage, MemoryFlags, MemoryRange, MemorySize, Message, Result, map_memory, send_message, unmap_memory};
+use crate::{CID, Error, MemoryMessage, Result};
 
 use rkyv::Write;
 use rkyv::Unarchive;
@@ -35,7 +35,7 @@ impl<const N: usize> String<N> {
     pub fn from_message(
         message: & mut MemoryMessage,
     ) -> core::result::Result<String<N>, core::str::Utf8Error> {
-        let mut buf = unsafe{ crate::XousBuffer::from_memory_message(message) };
+        let buf = unsafe{ crate::XousBuffer::from_memory_message(message) };
         let bytes = Pin::new(buf.as_ref());
         let value = unsafe {
             archived_value::<String<N>>(&bytes, message.id as usize)
