@@ -749,9 +749,9 @@ mod implementation {
 
     pub struct Keyboard {
         map: KeyMap,
-        rate: usize,
-        delay: usize,
-        chord_interval: usize,
+        rate: u32,
+        delay: u32,
+        chord_interval: u32,
     }
 
     impl Keyboard {
