@@ -352,7 +352,7 @@ fn listen_thread(
     enum ClientMessage {
         NewConnection(TcpStream),
         Exit,
-    };
+    }
     let (sender, receiver) = unbounded();
     let tcp_sender = sender.clone();
     let exit_sender = sender;

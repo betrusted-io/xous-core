@@ -170,7 +170,7 @@ fn connect_for_process() {
             } else {
                 panic!("Unexpected return value");
             };
-            xous_kernel::return_scalar(envelope.sender, new_cid).expect("couldn't return scalar");
+            xous_kernel::return_scalar(envelope.sender, new_cid as usize).expect("couldn't return scalar");
         }),
     )
     .expect("couldn't spawn client process");
@@ -247,7 +247,7 @@ fn connect_for_process() {
 
             // Send a message to the server we were just connected to.
             xous_kernel::try_send_message(
-                other_conn,
+                other_conn as u32,
                 xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                     id: 15,
                     arg1: 21,
