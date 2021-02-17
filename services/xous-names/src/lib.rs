@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use xous::buffer;
 
 use core::convert::TryInto;
 use core::fmt::Write;
