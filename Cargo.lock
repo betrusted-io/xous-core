@@ -121,7 +121,6 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.3.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=6c56865b89f782df7b3383d3480a83873dbc0189#6c56865b89f782df7b3383d3480a83873dbc0189"
 dependencies = [
  "rkyv",
 ]

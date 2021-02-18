@@ -37,8 +37,8 @@ fn main() {
 
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
-        //"gam",
-        "shell",
+        "gam",
+        //"shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",

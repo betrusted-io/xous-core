@@ -4,14 +4,14 @@ use blitstr::{GlyphStyle, Cursor};
 
 use log::info;
 
-#[derive(Debug, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub enum TextAlignment {
     Left,
     Center,
     Right,
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub enum TextBounds {
     // fixed width and height in a rectangle
     BoundingBox(Rectangle),
@@ -23,7 +23,7 @@ pub enum TextBounds {
     GrowableFromBl(Point, u16),
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 // operations that may be requested of a TextView when sent to GAM
 pub enum TextOp {
     Nop,
@@ -52,13 +52,13 @@ impl From<usize> for TextOp {
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
 const TEXTVIEW_LEN: usize = 3072;
 
-#[derive(Copy, Clone, rkyv::Archive)]
+#[derive(Copy, Clone, rkyv::Archive, Debug, rkyv::Unarchive)]
 pub struct TextViewResult {
     pub bounds_computed: Option<Rectangle>,
     pub cursor: Cursor,
 }
 
-#[derive(Copy, Clone, rkyv::Archive)]
+#[derive(Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
@@ -133,7 +133,7 @@ impl TextView {
         }
         Ok(())
     }
-    pub(crate) fn set_computed_bounds(&mut self, r: Option<Rectangle>) {
+    pub fn set_computed_bounds(&mut self, r: Option<Rectangle>) {
         self.bounds_computed = r;
     }
 

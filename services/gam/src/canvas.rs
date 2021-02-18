@@ -4,7 +4,6 @@ use heapless::FnvIndexMap;
 use heapless::Vec;
 use heapless::consts::*;
 use graphics_server::*;
-use xous::ipc::Sendable;
 use log::{error, info};
 
 use crate::api::*;

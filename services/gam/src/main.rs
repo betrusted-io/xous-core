@@ -11,7 +11,6 @@ use canvas::*;
 use blitstr_ref as blitstr;
 use blitstr::{Cursor, GlyphStyle};
 use com::*;
-use core::fmt::Write;
 use graphics_server::*;
 
 use log::{error, info};
@@ -22,6 +21,9 @@ use core::convert::TryFrom;
 use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
 use heapless::consts::*;
+
+use rkyv::{Unarchive, archived_value_mut};
+use core::pin::Pin;
 
 // GIDs of canvases that are used the "Chat" layout.
 struct ChatLayout {
@@ -189,13 +191,14 @@ fn xmain() -> ! {
                         _ => todo!("GAM: opcode not yet implemented"),
                     }
                 } else if let xous::Message::MutableBorrow(m) = &envelope.body {
-                    let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+                    let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
                     let value = unsafe {
-                        archived_value_mut::<api::Request>(Pin::new(buf.as_mut()), m.id.try_into().unwrap())
+                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
                     };
-                    let new_value = match &*value {
-                        rkyv::Archived::<api::Opcode>::RenderTextView(tv) => {
-                            match tv.operation {
+                    match &*value {
+                        rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
+                            let mut tv = rtv.unarchive();
+                            match tv.get_op() {
                                 TextOp::Nop => (),
                                 TextOp::Render => {
                                     info!("GAM: render request for {:?}", tv);
@@ -205,15 +208,18 @@ fn xmain() -> ! {
 
                                 },
                             };
-                            let tv_ret = TextViewResult {
-                                bounds_computed: tv.get_boundscomputed(),
+                            let tv_ret = graphics_server::api::text::TextViewResult {
+                                bounds_computed: tv.get_bounds_computed(),
                                 cursor: tv.cursor,
                             };
-                            rkyv::Archived::<api::Opcode>::TextViewResult(tv_ret)
+                            use rkyv::Write;
+                            let retop = Opcode::TextViewResult(tv_ret);
+                            let mut writer = rkyv::ArchiveBuffer::new(buf);
+                            let pos = writer.archive(&retop).expect("GAM: couldn't archive TextViewResult");
+                            unsafe{ rkyv::archived_value::<api::Opcode>(writer.into_inner().as_ref(), pos)};
                         }
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
-                    unsafe { *value.get_unchecked_mut() = new_value };
                 }
             }
             _ => xous::yield_slice(),
