@@ -57,7 +57,7 @@ pub fn send_pds_line(cid: CID, s: &xous::String<512>) -> Result<(), Error> {
     let mut clone_s: xous::String<512> = xous::String::new();
     write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
     let request = api::Opcode::Wf200PdsLine(clone_s);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(512));
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&request).expect("COM: couldn't archive PDS line request");
     let xous_buffer = writer.into_inner();
 

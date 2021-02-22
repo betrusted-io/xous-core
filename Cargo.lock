@@ -121,6 +121,7 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.3.0"
+source = "git+https://github.com/betrusted-io/blitstr.git?rev=cde0deb6784c3f5c7b9da838ea9aa14ed373bcb3#cde0deb6784c3f5c7b9da838ea9aa14ed373bcb3"
 dependencies = [
  "rkyv",
 ]
@@ -250,7 +251,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=a9e05f414accef08348b77be6fc0f668b319e6ff#a9e05f414accef08348b77be6fc0f668b319e6ff"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=885330c0a58fc5c3c9388628435dab24a0b61ab5#885330c0a58fc5c3c9388628435dab24a0b61ab5"
 
 [[package]]
 name = "com_rs-ref"
