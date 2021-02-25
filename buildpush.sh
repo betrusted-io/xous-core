@@ -67,7 +67,7 @@ DESTDIR=code/precursors
 # full rebuild, and not just an incremental rebuild. :-/
 #touch services/log-server/src/main.rs # bump the build time in the log server
 
-cargo $USE_NIGHTLY xtask fcc-agent ../betrusted-soc/build/software/soc.svd
+cargo $USE_NIGHTLY xtask hw-image ../betrusted-soc/build/software/soc.svd
 
 # only copy if changed, othrewise it seems to trigger extra build effort...
 rsync -a --no-times --checksum ../betrusted-soc/build/software/soc.svd svd2utra/examples/soc.svd

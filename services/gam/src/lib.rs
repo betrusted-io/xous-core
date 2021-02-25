@@ -19,7 +19,7 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     tv.cursor.pt.x = 37;
     tv.cursor.pt.y = 5;
 
-    info!("tv before lend: {:?}", tv);
+    // info!("tv before lend: {:?}", tv);
     let mut rkyv_tv = api::Opcode::RenderTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
@@ -27,12 +27,15 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
 
     xous_buffer.lend_mut(gam_cid, pos as u32).expect("RenderTextView operation failure");
 
+    // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::TextViewResult(result) = returned {
-            let tvr: TextViewResult = result.unarchive();
-            tv.set_computed_bounds(tvr.bounds_computed);
+    if let rkyv::Archived::<api::Opcode>::RenderTextView(result) = returned {
+            let tvr: TextView = result.unarchive();
+            tv.set_computed_bounds(tvr.get_bounds_computed());
             tv.cursor = tvr.cursor;
     } else {
+        let tvr = returned.unarchive();
+        info!("got {:?}", tvr);
         panic!("post_textview got a return value from the server that isn't expected or handled");
     }
 

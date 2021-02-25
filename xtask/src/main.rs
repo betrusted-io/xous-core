@@ -201,8 +201,8 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
 fn run(debug: bool) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
     let init = [
-        "shell",
-        //"gam",
+        //"shell",
+        "gam",
         //"benchmark",
         //"benchmark-target",
         "log-server",

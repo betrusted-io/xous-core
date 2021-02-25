@@ -266,7 +266,7 @@ fn xmain() -> ! {
     info!("COM: starting main loop");
     loop {
         let envelope = xous::receive_message(com_sid).unwrap();
-        info!("COM: Message: {:?}", envelope);
+        // info!("COM: Message: {:?}", envelope);
         if let xous::Message::Borrow(m) = &envelope.body {
             let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let value = unsafe {

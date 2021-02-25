@@ -37,17 +37,22 @@ refer to a `Canvas` at render time; this allows for easy implementation
 of panning and scrolling.
 
 A `Canvas` has a `trust_level` associated with it. Higher numbers are more
-trusted; 255 is the highest level of trust. More trusted `Canvas` objects always
-render on top of lower trusted object; furthermore, when a higher trusted
-`Canvas` object overlaps a lower trusted object, the lower trusted object is
-defaced using hatched lines with a random angle and spacing, and further updates
-are disallowed. Thus, a `Canvas` should *not* be thought of like a "window", as
-windows in typical UIs are allowed to freely overlap and clipping is handled
+trusted; 255 is the highest level of trust. Rules for drawing are as follows:
+
+1. More trusted `Canvas` objects always render on top of lower trusted object
+2. When a higher trusted `Canvas` object overlaps a lower trusted object,
+   the lower trusted object is:
+   - defaced using hatched lines with a random angle and spacing
+   - further updates to the lower trusted object are disallowed.
+
+Thus, a `Canvas` should *not* be thought of like a "window", as windows in
+typical UIs are allowed to freely overlap and clipping is handled
 by simply drawing over lower layers of content.
 
-In the case that both trusted and untrusted data should be rendered on the same
-screen, `Canvas` makes it strongly preferred to render them next to each other, rather
-than one on top of each other. This policy is partially to help users be very
+`Canvas` makes it strongly preferred to render trusted and untrusted data
+side-by-side, rather than one on top of each other.
+
+This policy is partially to help users be very
 clear as to e.g. where a password box is vs. an image that looks a lot like
 a password box; but the policy is also informed by the limitations of the underlying
 hardware. In particular, the underlying memory LCD strongly

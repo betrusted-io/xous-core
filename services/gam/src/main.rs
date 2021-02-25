@@ -44,19 +44,19 @@ struct ModalCanvases {
 fn add_modal_layout(trng_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<ModalCanvases, xous::Error> {
     let password_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
-        0, trng_conn, None
+        255, trng_conn, None
     ).expect("GAM: couldn't create password canvas");
     canvases.insert(password_canvas.gid(), password_canvas).expect("GAM: can't store password canvas");
 
     let menu_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
-        0, trng_conn, None
+        255, trng_conn, None
     ).expect("GAM: couldn't create menu canvas");
     canvases.insert(menu_canvas.gid(), menu_canvas).expect("GAM: can't store menu canvas");
 
     let alert_canvas = Canvas::new(
         Rectangle::new_coords(-1, -1, -1, -1),
-        0, trng_conn, None
+        255, trng_conn, None
     ).expect("GAM: couldn't create alert canvas");
     canvases.insert(alert_canvas.gid(), alert_canvas).expect("GAM: can't store alert canvas");
 
@@ -76,26 +76,26 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
     // allocate canvases in structures, and record their GID for future reference
     let status_canvas = Canvas::new(
         Rectangle::new_coords(0, 0, screensize.x, small_height),
-        0, trng_conn, None
+        255, trng_conn, None
     ).expect("GAM: couldn't create status canvas");
     canvases.insert(status_canvas.gid(), status_canvas).expect("GAM: can't store status canvus");
 
     let predictive_canvas = Canvas::new(
         Rectangle::new_coords(0, screensize.y - regular_height, screensize.x, screensize.y),
-        1,
+        254,
         trng_conn, None
     ).expect("GAM: couldn't create predictive text canvas");
     canvases.insert(predictive_canvas.gid(), predictive_canvas).expect("GAM: couldn't store predictive canvas");
 
     let input_canvas = Canvas::new(
         Rectangle::new_v_stack(predictive_canvas.clip_rect(), -regular_height),
-        1, trng_conn, None
+        254, trng_conn, None
     ).expect("GAM: couldn't create input text canvas");
     canvases.insert(input_canvas.gid(), input_canvas).expect("GAM: couldn't store input canvas");
 
     let content_canvas = Canvas::new(
         Rectangle::new_v_span(status_canvas.clip_rect(), input_canvas.clip_rect()),
-        2, trng_conn, None
+        128, trng_conn, None
     ).expect("GAM: couldn't create content canvas");
     canvases.insert(content_canvas.gid(), content_canvas).expect("GAM: can't store content canvas");
 
@@ -114,6 +114,12 @@ fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap
        3. draw surrounding rectangle, if requested
        4. draw text
      */
+
+    /*
+    info!("GAM: tv_draw canvas list");
+    for (&k, &v) in canvases.iter() {
+       info!("gid: {:?}, canvas: {:?}", k, v);
+    }*/
 
     if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
         // first, figure out if we should even be drawing to this canvas.
@@ -163,6 +169,7 @@ fn xmain() -> ! {
     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
     // make a thread to manage the status bar
+    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
@@ -195,6 +202,9 @@ fn xmain() -> ! {
                     let value = unsafe {
                         archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
                     };
+                    use rkyv::Write;
+                    //let mut writer: rkyv::ArchiveBuffer<xous::XousBuffer> = rkyv::ArchiveBuffer::new(buf);
+                    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
                             let mut tv = rtv.unarchive();
@@ -208,20 +218,12 @@ fn xmain() -> ! {
 
                                 },
                             };
-                            let tv_ret = graphics_server::api::text::TextViewResult {
-                                bounds_computed: tv.get_bounds_computed(),
-                                cursor: tv.cursor,
-                            };
-                            use rkyv::Write;
-                            let retop = Opcode::TextViewResult(tv_ret);
-                            let mut writer = rkyv::ArchiveBuffer::new(buf);
-                            let pos = writer.archive(&retop).expect("GAM: couldn't archive TextViewResult");
-                            unsafe{ rkyv::archived_value::<api::Opcode>(writer.into_inner().as_ref(), pos)};
                         }
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
                 }
             }
+            // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
             _ => xous::yield_slice(),
         }
 
