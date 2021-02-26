@@ -34,6 +34,8 @@ const STACK_PAGE_COUNT: usize = 5;
 
 mod debug;
 
+mod fonts;
+
 // Install a panic handler when not running tests.
 #[cfg(not(test))]
 mod panic_handler {
@@ -365,6 +367,7 @@ extern "C" {
         entrypoint: usize,
         stack: usize,
         debug: bool,
+        keep: u32,
     ) -> !;
 }
 
@@ -1036,6 +1039,18 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     phase_1(&mut cfg);
     phase_2(&mut cfg);
 
+    println!("Font maps located as follows:");
+    println!("  Hanzi @ {:08x}", fonts::hanzi::DATA_HANZI.as_ptr() as u32);
+    println!("  Emoji @ {:08x}", fonts::emoji::DATA_EMOJI.as_ptr() as u32);
+    println!("  Regular @ {:08x}", fonts::regular::DATA_REGULAR.as_ptr() as u32);
+    println!("  Small @ {:08x}", fonts::small::DATA_SMALL.as_ptr() as u32);
+    println!("  Bold @ {:08x}", fonts::bold::DATA_BOLD.as_ptr() as u32);
+    let keep_fonts = fonts::hanzi::DATA_HANZI.as_ptr() as u32 +
+        fonts::emoji::DATA_EMOJI.as_ptr() as u32 +
+        fonts::regular::DATA_REGULAR.as_ptr() as u32 +
+        fonts::small::DATA_SMALL.as_ptr() as u32 +
+        fonts::bold::DATA_BOLD.as_ptr() as u32;
+
     // The MMU should be set up now, and memory pages assigned to their
     // respective processes.
     let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
@@ -1057,6 +1072,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             cfg.processes[0].entrypoint,
             cfg.processes[0].sp,
             cfg.debug,
+            keep_fonts,
         );
     }
 }

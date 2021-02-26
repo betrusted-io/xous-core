@@ -37,8 +37,8 @@ fn main() {
 
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
-        "gam",
-        //"shell",
+        //"gam",
+        "shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",
@@ -150,6 +150,7 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
     let mut xous_img = std::fs::File::create(&xous_img_path).expect("couldn't create xous.img");
     let mut loader_bin_file = std::fs::File::open(loader_bin).expect("couldn't open loader.bin");
     let mut buf = vec![];
+    /*
     loader_bin_file
         .read_to_end(&mut buf)
         .expect("couldn't read loader.bin");
@@ -158,7 +159,7 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
         .expect("couldn't write loader.bin to xous.img");
     let leftover_bytes = 65536 - buf.len();
     let mut buf = vec![];
-    buf.resize_with(leftover_bytes, Default::default);
+    buf.resize_with(leftover_bytes, Default::default); */
     xous_img
         .write_all(&buf)
         .expect("couldn't pad xous.img with zeroes");
