@@ -4,7 +4,7 @@ use blitstr_ref as blitstr;
 use blitstr::{ClipRect};
 use core::cmp::{max, min};
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Rectangle {
     /// Top left point of the rect
     pub tl: Point,
@@ -133,7 +133,7 @@ impl Into<ClipRect> for Rectangle {
 
 //////////////////////////// LINE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Line {
     pub start: Point,
     pub end: Point,
@@ -162,7 +162,7 @@ impl Line {
 
 //////////////////////////// CIRCLE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Circle {
     pub center: Point,
     pub radius: i16,

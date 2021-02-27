@@ -148,21 +148,6 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
     let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
     xous_img_path.push("xous.img");
     let mut xous_img = std::fs::File::create(&xous_img_path).expect("couldn't create xous.img");
-    let mut loader_bin_file = std::fs::File::open(loader_bin).expect("couldn't open loader.bin");
-    let mut buf = vec![];
-    loader_bin_file
-        .read_to_end(&mut buf)
-        .expect("couldn't read loader.bin");
-    xous_img
-        .write_all(&buf)
-        .expect("couldn't write loader.bin to xous.img");
-    let leftover_bytes = 65536 - buf.len();
-    let mut buf = vec![];
-    buf.resize_with(leftover_bytes, Default::default);
-    xous_img
-        .write_all(&buf)
-        .expect("couldn't pad xous.img with zeroes");
-
     let mut bundle_file = std::fs::File::open(output_bundle).expect("couldn't open output bundle");
     let mut buf = vec![];
     bundle_file

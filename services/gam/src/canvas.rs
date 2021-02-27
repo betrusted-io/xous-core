@@ -4,7 +4,6 @@ use heapless::FnvIndexMap;
 use heapless::Vec;
 use heapless::consts::*;
 use graphics_server::*;
-use xous::ipc::Sendable;
 use log::{error, info};
 
 use crate::api::*;
@@ -141,11 +140,14 @@ impl Eq for Canvas {}
 
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(mut canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, U32> {
+pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, U32> {
+    let debug = false;
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.
+    if debug { info!("CANVAS: recompute canvas"); }
     let mut sorted_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
-    for (_, &c) in canvases.iter() {
+    for (&k, &c) in canvases.iter() {
+        if debug { info!("   CANVAS: sorting gid {:?}, canvas {:?}", k, c);}
         sorted_clipregions.push(c).unwrap(); // always succeeds because incoming type is the same size
     }
 
@@ -153,29 +155,42 @@ pub fn recompute_canvases(mut canvases: FnvIndexMap<Gid, Canvas, U32>, screen: R
     let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
-    if let Some(c) = sorted_clipregions.pop() {
-        let mut canvas = c.clone();
+    info!("CANVAS: now determining which regions are drawable");
+    loop {
+        if let Some(c) = sorted_clipregions.pop() {
+            if debug { info!("   CANVAS: considering {:?}", c);}
+            let mut canvas = c.clone();
 
-        let mut drawable: bool = true;
-        let clip_region = canvas.clip_rect();
-        if trust_level < canvas.trust_level() {
-            trust_level = canvas.trust_level();
-        }
-        // note that this .iter() is *not* sorted by trust level, but all elements will be of greater than or equal to the current trust level
-        for &region in higher_clipregions.iter() {
-            // regions of the same trust level can draw over each other. Draw order is arbitrary.
-            if region.clip_rect().intersects(clip_region) && (region.trust_level() < trust_level) ||
-               !region.clip_rect().intersects(screen) {
-                drawable = false;
+            let mut drawable: bool = true;
+            let clip_region = canvas.clip_rect();
+            if trust_level < canvas.trust_level() {
+                trust_level = canvas.trust_level();
             }
+            if !clip_region.intersects(screen) {
+                drawable = false;
+                if debug { info!("   CANVAS: not drawable, does not intersect");}
+            } else { // short circuit this computation if it's not drawable because it's off screen
+                // note that this .iter() is *not* sorted by trust level, but all elements will be of greater than or equal to the current trust level
+                for &region in higher_clipregions.iter() {
+                    // regions of the same trust level can draw over each other. Draw order is arbitrary.
+                    if region.clip_rect().intersects(clip_region) && (region.trust_level() < trust_level) {
+                        drawable = false;
+                        if debug { info!("   CANVAS: not drawable, lower trust intersecting with higher trust region");}
+                    }
+                }
+            }
+            canvas.set_drawable(drawable);
+            higher_clipregions.push(canvas).unwrap();
+        } else {
+            break;
         }
-        canvas.set_drawable(drawable);
-        higher_clipregions.push(canvas).unwrap();
     }
 
     // create a new index map out of the recomputed higher_clipregions
     let mut map: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
+    if debug { info!("CANVAS: reconstituting index map");}
     for &c in higher_clipregions.iter() {
+        if debug { info!("   CANVAS: inserting gid {:?}, canvas {:?}", c.gid(), c);}
         map.insert(c.gid(), c).unwrap();
     }
 

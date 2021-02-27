@@ -1,18 +1,16 @@
 use xous::{Message, ScalarMessage};
-use graphics_server::{Point, Rectangle, TextView, Gid};
+use graphics_server::api::{Point, Rectangle, TextView, TextViewResult, Gid};
 use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
-#[derive(Debug, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+// #[archive(derive(Copy, Clone))]
 pub enum Opcode {
     // clears a canvas with a given GID
     ClearCanvas(Gid),
 
     // renders a TextView
     RenderTextView(TextView),
-
-    // result codes from operations on TextViews
-    TextViewResult(TextViewResult),
 
     // returns a GID to the "content" Canvas; requires an authentication token
     RequestContentCanvas(Gid),
@@ -21,7 +19,7 @@ pub enum Opcode {
     HideCanvas(Gid),
 
     // requests the GID to the "input" Canvas; call only works once (for the IME server), then maps out
-    RequestInputCanvas(),
+    RequestInputCanvas,
 
     // indicates if the current UI layout requires an input field
     HasInput(bool),

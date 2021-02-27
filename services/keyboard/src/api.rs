@@ -21,8 +21,8 @@ pub struct ScanCode {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct RowCol {
-    pub r: u32,
-    pub c: u32,
+    pub r: u8,
+    pub c: u8,
 }
 #[repr(packed)]
 pub struct KeyRawStates {

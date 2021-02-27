@@ -56,6 +56,13 @@ impl XousDisplay {
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
         display.sync_clear();
 
+        /*
+        use log::{error, info};
+        info!("GFX: fb 0x{:08x} bytes at 0x{:08x}", usize::from(fb.size), usize::from(fb.addr));
+        info!("GFX: hwfb 0x{:08x} bytes at 0x{:08x}", usize::from(hwfb.size), usize::from(hwfb.addr));
+        info!("GFX: csr 0x{:08x} bytes at 0x{:08x}", usize::from(control.size), usize::from(control.addr));
+        */
+
         display
     }
 

@@ -4,9 +4,11 @@ set -e  # exit on any error
 
 UPDATE_FPGA=1
 UPDATE_KERNEL=1
+UPDATE_LOADER=1
 USE_USB=1
 FPGA_IMAGE=../betrusted-soc/build/gateware/encrypted.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
+LOADER_IMAGE=target/riscv32imac-unknown-none-elf/release/loader.bin
 CSR_CSV=../betrusted-soc/build/csr.csv.1
 USE_IDENITY=0
 USE_NIGHTLY=
@@ -14,7 +16,7 @@ USE_NIGHTLY=
 POSITIONAL=()
 while [[ $# -gt 0 ]]
 do
-  key="$1"    
+  key="$1"
   case $key in
       -k|--kernel-skip)
 	  UPDATE_KERNEL=0
@@ -24,6 +26,10 @@ do
 	  UPDATE_FPGA=0
 	  shift
 	  ;;
+      -l|--loader-skip)
+    UPDATE_LOADER=0
+    shift
+    ;;
       -c|--copy-to)
 	  DEST_HOST=$2
 	  USE_USB=0
@@ -89,24 +95,30 @@ then
       echo "*** Manual power cycle required to reload SoC FPGA configuration ***"
       echo " -> Either issue a power cycle command, or insert paper clip in the hole on the right hand side!"
     fi
+    if [ $UPDATE_LOADER -eq 1 ]
+    then
+      echo "Burning loader"
+      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $LOADER_IMAGE --load-address 0x500000 --load-flash
+    fi
     if [ $UPDATE_KERNEL -eq 1 ]
     then
-      echo "Burning firmware"
-      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x500000 --load-flash
+      echo "Burning kernel"
+      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x980000 --load-flash
     fi
 else
-    
+
   md5sum $FPGA_IMAGE
   md5sum $KERNEL_IMAGE
+  md5sum $LOADER_IMAGE
   md5sum $CSR_CSV
-  
+
   if [ $USE_IDENTITY -eq 1 ]
   then
     # there is a private key
-      scp -i $IDENTITY $KERNEL_IMAGE $FPGA_IMAGE $DEST_HOST:$DESTDIR/
+      scp -i $IDENTITY $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
       scp -i $IDENTITY $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   else
-      scp $KERNEL_IMAGE $FPGA_IMAGE $CSR_CSV $DEST_HOST:$DESTDIR/
+      scp $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
       scp $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   fi
 fi

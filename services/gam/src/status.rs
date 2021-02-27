@@ -27,8 +27,10 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, blitstr::GlyphStyle::Small).expect("GAM|status: couldn't get glyph height") as i16;
 
     info!("GAM|status: building textview objects");
+    // build uptime text view: left half of status bar
     let mut uptime_tv = TextView::new(status_gid, 0,
-         TextBounds::BoundingBox(Rectangle::new(Point::new(0,0), Point::new(screensize.x / 2, small_height))));
+         TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
+                 Point::new(screensize.x / 2, small_height))));
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
@@ -37,8 +39,10 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     info!("GAM|status: screensize as reported: {:?}", screensize);
     info!("GAM|status: uptime initialized to '{:?}'", uptime_tv);
 
+    // build battstats text view: right half of status bar
     let mut battstats_tv = TextView::new(status_gid, 0,
-        TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0), Point::new(screensize.x, small_height))));
+        TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0),
+               Point::new(screensize.x, small_height))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
     battstats_tv.x_margin = 0; battstats_tv.y_margin = 0;
@@ -58,6 +62,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
                         com::api::Opcode::BattStatsEvent(s) => {
                             stats = s.clone();
                             battstats_tv.clear_str();
+                            // toggle between two views of the data; duration of toggle is set by the modulus and thresholds below
                             if stats_phase > 4 {
                                 write!(&mut battstats_tv, "{}mV {}mA", stats.voltage, stats.current).expect("GAM|status: can't write string");
                             } else {
