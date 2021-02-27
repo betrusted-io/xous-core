@@ -35,7 +35,7 @@ fn map_fonts() {
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000;
-    info!("GFX: requesing map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
+    info!("GFX: requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
         None,
@@ -44,7 +44,7 @@ fn map_fonts() {
     ).expect("GFX: couldn't map fonts");
     info!("GFX: font base at 0x{:08x}, len of 0x{:08x}", usize::from(fontregion.addr), usize::from(fontregion.size));
 
-    info!("GFX: mapping regular to 0x{:08x}", usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET as usize);
+    info!("GFX: mapping regular font to 0x{:08x}", usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET as usize);
     blitstr::map_font(blitstr::GlyphData::Emoji((usize::from(fontregion.addr) + fontmap::EMOJI_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Hanzi((usize::from(fontregion.addr) + fontmap::HANZI_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Regular((usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET) as usize));
@@ -79,7 +79,7 @@ fn xmain() -> ! {
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        info!("GFX: Message: {:?}", msg);
+        //info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
             let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
@@ -89,7 +89,7 @@ fn xmain() -> ! {
             match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();
-                    info!("GFX: unarchived string: {:?}", s);
+                    //info!("GFX: unarchived string: {:?}", s);
                     blitstr::paint_str(
                         display.native_buffer(),
                         current_string_clip.into(),
@@ -99,7 +99,7 @@ fn xmain() -> ! {
                         false,
                         blitstr::xor_char
                     );
-                    info!("GFX: string painted");
+                    //info!("GFX: string painted");
                 },
                 rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();

@@ -6,8 +6,8 @@ edition = "2018"
 description = "blitstr import package"
 
 [dependencies]
-# blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "ad9572f58a5d1bc3094a99d52ab3ef10ad82a070" }
-blitstr = { path = "../../../blitstr" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "c225b2cfd9837662cdb50d0e1796ef1ec053079d" }
+#blitstr = { path = "../../../blitstr" }
 
 
 # targeting hardware
