@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 #[link_section=".fontdata"]
 #[no_mangle]
+#[used]
 /// Packed glyph pattern data.
 /// Record format:
 ///  [offset+0]: ((w as u8) << 16) | ((h as u8) << 8) | (yOffset as u8)

@@ -31,20 +31,20 @@ fn draw_boot_logo(display: &mut XousDisplay) {
 
 #[cfg(target_os = "none")]
 fn map_fonts() {
-    info!("GFX: mapping fonts");
+    //info!("GFX: mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
     let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000;
-    info!("GFX: requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
+    //info!("GFX: requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
         None,
         fontlen as usize,
         xous::MemoryFlags::R,
     ).expect("GFX: couldn't map fonts");
-    info!("GFX: font base at 0x{:08x}, len of 0x{:08x}", usize::from(fontregion.addr), usize::from(fontregion.size));
+    info!("GFX: font base at virtual 0x{:08x}, len of 0x{:08x}", usize::from(fontregion.addr), usize::from(fontregion.size));
 
-    info!("GFX: mapping regular font to 0x{:08x}", usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET as usize);
+    //info!("GFX: mapping regular font to 0x{:08x}", usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET as usize);
     blitstr::map_font(blitstr::GlyphData::Emoji((usize::from(fontregion.addr) + fontmap::EMOJI_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Hanzi((usize::from(fontregion.addr) + fontmap::HANZI_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Regular((usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET) as usize));

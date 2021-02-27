@@ -7,6 +7,23 @@ import sys
 import re
 from collections import OrderedDict
 
+"""
+This script should be run whenever the fonts are updated inside the blitstr dependency. The
+thought is that this is a rare event, and therefore it's better to run this on the rare occassions
+that this happens and vendor in the font files as references to their location in the FLASH
+memory map.
+
+The main motivation for this is to disintegrate the font maps from the kernel image itself,
+as it is a large ball of static data that rarely changes, and it slows down updates and
+development. Maybe once the kernel supports servers that are bootable from disk images, we
+can do away with this methodology. But for now, this helps keep the kernel trim, and speeds
+up the development process.
+
+This script is designed to be run "in-place" where it is found in the xous-core tree. It
+hard-codes the location of the graphics-server crate to encode the locations of the fonts.
+It also, by default, assumes that the `blitstr` crate is cloned into a directory at the
+same level as xous-core, but this can be changed with the `-d` command line argument.
+"""
 def main():
     parser = argparse.ArgumentParser(description="Build the Betrusted SoC")
     parser.add_argument(
@@ -28,6 +45,7 @@ def main():
                     outfile.write("#[allow(dead_code)]\n")
                     outfile.write("#[link_section=\".fontdata\"]\n")
                     outfile.write("#[no_mangle]\n")
+                    outfile.write("#[used]\n")
                     copy = False
                     for line in infile:
                         if line.strip() == "/// Packed glyph pattern data.":
