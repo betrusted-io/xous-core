@@ -160,6 +160,19 @@ fn xmain() -> ! {
                                 None => info!("GAM: attempt to clear bogus canvas, ignored."),
                             }
                         },
+                        Opcode::GetCanvasBounds(gid) => {
+                            match canvases.get(&gid) {
+                                Some(c) => {
+                                    let mut rect = c.clip_rect();
+                                    rect.translate(rect.tl); // normalize to 0,0 coordinates
+                                    xous::return_scalar2(envelope.sender,
+                                        rect.tl.into(),
+                                        rect.br.into(),
+                                    ).expect("GAM: couldn't return canvas bounds");
+                                },
+                                None => info!("GAM: attempt to get bounds on bogus canvas, ignored."),
+                            }
+                        }
                         _ => todo!("GAM: opcode not yet implemented"),
                     }
                 } else if let xous::Message::MutableBorrow(m) = &envelope.body {

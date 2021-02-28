@@ -22,15 +22,13 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
     info!("GAM|status: getting screen size");
-    let screensize = graphics_server::screen_size(gfx_conn).expect("GAM|status: Couldn't get screen size");
-    info!("GAM|status: getting height hints");
-    let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, blitstr::GlyphStyle::Small).expect("GAM|status: couldn't get glyph height") as i16;
+    let screensize = gam::get_canvas_bounds(gam_conn, status_gid).expect("GAM|status: Couldn't get canvas size");
 
     info!("GAM|status: building textview objects");
     // build uptime text view: left half of status bar
     let mut uptime_tv = TextView::new(status_gid, 0,
          TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
-                 Point::new(screensize.x / 2, small_height))));
+                 Point::new(screensize.x / 2, screensize.y - 1))));
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
@@ -42,7 +40,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     // build battstats text view: right half of status bar
     let mut battstats_tv = TextView::new(status_gid, 0,
         TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0),
-               Point::new(screensize.x, small_height))));
+               Point::new(screensize.x, screensize.y - 1))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);

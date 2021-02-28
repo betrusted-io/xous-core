@@ -17,10 +17,10 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     tv.set_op(TextOp::Render);
     let mut rkyv_tv = api::Opcode::RenderTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
+    let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive textview");
     let mut xous_buffer = writer.into_inner();
 
-    xous_buffer.lend_mut(gam_cid, pos as u32).expect("RenderTextView operation failure");
+    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: RenderTextView operation failure");
 
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
@@ -31,9 +31,20 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     } else {
         let tvr = returned.unarchive();
         info!("got {:?}", tvr);
-        panic!("post_textview got a return value from the server that isn't expected or handled");
+        panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled");
     }
 
     tv.set_op(TextOp::Nop);
     Ok(())
+}
+
+pub fn get_canvas_bounds(gam_cid: xous::CID, gid: Gid) -> Result<Point, xous::Error> {
+    let response = xous::send_message(gam_cid, api::Opcode::GetCanvasBounds(gid).into())?;
+    if let xous::Result::Scalar2(tl, br) = response {
+        // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
+        assert!(tl == 0, "GAM_API: api call returned non-zero top left for canvas bounds");
+        Ok(br.into())
+    } else {
+        panic!("GAM_API: can't get canvas bounds")
+    }
 }
