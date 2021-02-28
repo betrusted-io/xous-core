@@ -49,7 +49,7 @@ impl hash32::Hash for Gid {
     }
 }
 
-#[derive(Debug, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub enum Opcode {
     /// Flush the buffer to the screen
     Flush,
@@ -97,7 +97,7 @@ pub enum Opcode {
     QueryGlyphProps(GlyphStyle),
 
     // draws a textview
-    // TextView(&'a mut TextView),  // redo this as an rkyv object, which has no lifetime requirement
+    DrawTextView(TextView),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {

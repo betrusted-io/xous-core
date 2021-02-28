@@ -34,7 +34,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
-    uptime_tv.x_margin = 0; uptime_tv.y_margin = 0;
+    uptime_tv.margin = Point::new(0, 0);
     write!(uptime_tv, "Booting up...").expect("GAM|status: couldn't init uptime text");
     info!("GAM|status: screensize as reported: {:?}", screensize);
     info!("GAM|status: uptime initialized to '{:?}'", uptime_tv);
@@ -45,8 +45,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
                Point::new(screensize.x, small_height))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
-    battstats_tv.x_margin = 0; battstats_tv.y_margin = 0;
-    battstats_tv.alignment = TextAlignment::Right;
+    battstats_tv.margin = Point::new(0, 0);
 
     let mut stats: BattStats = BattStats::default();
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
@@ -82,7 +81,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
 
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
-                info!("GAM|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
+                //info!("GAM|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
                 // info!("GAM|status: periodic tasks: updating uptime, requesting battstats");
                 last_time = elapsed_time;
                 com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");

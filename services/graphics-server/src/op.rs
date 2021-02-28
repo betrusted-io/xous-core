@@ -1,4 +1,4 @@
-use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView};
+use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView, RoundedRectangle};
 use log::info;
 use blitstr_ref as blitstr;
 
@@ -25,7 +25,7 @@ fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
         clip_y = LCD_PX_PER_LINE - 1;
     }
 
-    if color == PixelColor::Dark {
+    if color == PixelColor::Light {
         fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] |= 1 << (clip_x % 32)
     } else {
         fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] &= !(1 << (clip_x % 32))
@@ -233,21 +233,271 @@ pub fn rectangle(fb: &mut LcdFB, rect: Rectangle) {
     }
 }
 
+/////////////////////////////////////////////////// rounded rectangle
 
-pub fn textview(fb: &mut LcdFB, tv: &mut TextView) {
-    tv.compute_bounds().expect("GFX: couldn't compute bounds of textview");
+#[derive(Debug, Clone, Copy)]
+pub enum Quadrant {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
 
-    let mut c = tv.cursor.clone();
-    // at this point, bounds_computed *must* be Some()
-    info!("GFX: painting tv with cursor {:?}, clip {:?}, text {}, style {:?}", c, tv.get_bounds_computed().unwrap(), tv, tv.style);
-    blitstr::paint_str(
-        fb,
-        tv.get_bounds_computed().unwrap().into(),
-        &mut c,
-        tv.style,
-        tv.to_str(),
-        false,
-        blitstr::xor_char
+#[derive(Debug, Copy, Clone)]
+pub struct QuadrantIterator {
+    center: Point,
+    radius: u16,
+    style: DrawStyle,
+    p: Point,
+    quad: Quadrant,
+}
+
+impl Iterator for QuadrantIterator {
+    type Item = Pixel;
+
+    // https://stackoverflow.com/questions/1201200/fast-algorithm-for-drawing-filled-circles
+    fn next(&mut self) -> Option<Self::Item> {
+        // If border or stroke colour is `None`, treat entire object as transparent and exit early
+        if self.style.stroke_color.is_none() && self.style.fill_color.is_none() {
+            return None;
+        }
+
+        let inner_radius = self.radius as i16 - self.style.stroke_width + 1;
+        let outer_radius = self.radius as i16;
+
+        let inner_radius_sq = inner_radius * inner_radius;
+        let outer_radius_sq = outer_radius * outer_radius;
+
+        loop {
+            let t = self.p;
+            let len = t.x * t.x + t.y * t.y;
+
+            let is_border = len > (inner_radius_sq - inner_radius) && len < (outer_radius_sq + inner_radius);
+
+            let is_fill = len <= outer_radius_sq + 1;
+
+            let item = if is_border && self.style.stroke_color.is_some() {
+                Some(Pixel(
+                    self.center + t,
+                    self.style.stroke_color.expect("Border color not defined"),
+                ))
+            } else if is_fill && self.style.fill_color.is_some() {
+                Some(Pixel(
+                    self.center + t,
+                    self.style.fill_color.expect("Fill color not defined"),
+                ))
+            } else {
+                None
+            };
+
+            self.p.x += 1;
+
+            match self.quad {
+                Quadrant::TopLeft => {
+                    if self.p.x > 0 as i16 {
+                        self.p.x = -(self.radius as i16);
+                        self.p.y += 1;
+                    }
+                    if self.p.y > 0 as i16 {
+                        break item;
+                    }
+                    if item.is_some() {
+                        break item;
+                    }
+                },
+                Quadrant::TopRight => {
+                    if self.p.x > self.radius as i16 {
+                        self.p.x = 0;
+                        self.p.y += 1;
+                    }
+                    if self.p.y > 0 as i16 {
+                        break item;
+                    }
+                    if item.is_some() {
+                        break item;
+                    }
+                },
+                Quadrant::BottomLeft => {
+                    if self.p.x > 0 as i16 {
+                        self.p.x = -(self.radius as i16);
+                        self.p.y += 1;
+                    }
+                    if self.p.y > self.radius as i16 {
+                        break item;
+                    }
+                    if item.is_some() {
+                        break item;
+                    }
+                },
+                Quadrant::BottomRight => {
+                    if self.p.x > self.radius as i16 {
+                        self.p.x = 0;
+                        self.p.y += 1;
+                    }
+                    if self.p.y > self.radius as i16 {
+                        break item;
+                    }
+                    if item.is_some() {
+                        break item;
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant) {
+    let starting_pixel = match quad {
+        Quadrant::TopLeft => {
+            Point::new( -(circle.radius as i16), -(circle.radius as i16))
+        },
+        Quadrant::TopRight => {
+            Point::new( 0, -(circle.radius as i16))
+        },
+        Quadrant::BottomLeft => {
+            Point::new( -(circle.radius as i16), 0)
+        },
+        Quadrant::BottomRight => {
+            Point::new( 0, 0 )
+        }
+    };
+    let q = QuadrantIterator {
+        center: circle.center,
+        radius: circle.radius as _,
+        style: circle.style,
+        p: starting_pixel,
+        quad: quad,
+    };
+
+    for pixel in q {
+        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+    }
+}
+
+
+/// Pixel iterator for each pixel in the rect border
+/// lifted from embedded-graphics crate
+#[derive(Debug, Clone, Copy)]
+pub struct RoundedRectangleIterator {
+    top_left: Point,
+    bottom_right: Point,
+    style: DrawStyle,
+    radius: i16,
+    p: Point,
+    // the four quadrants for drawing the rounded corners
+    tlq: Rectangle,
+    trq: Rectangle,
+    blq: Rectangle,
+    brq: Rectangle,
+}
+
+impl Iterator for RoundedRectangleIterator {
+    type Item = Pixel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Don't render anything if the rectangle has no border or fill color.
+        if self.style.stroke_color.is_none() && self.style.fill_color.is_none() {
+            return None;
+        }
+        loop {
+            let mut out = None;
+
+            // Finished, i.e. we're below the rect
+            if self.p.y > self.bottom_right.y {
+                break None;
+            }
+
+            // suppress the output pixel if we happen to be in the corner quadrant area
+            if self.tlq.intersects_point(self.p) || self.trq.intersects_point(self.p) ||
+               self.blq.intersects_point(self.p) || self.brq.intersects_point(self.p) {
+                out = None
+            } else {
+                let border_width = self.style.stroke_width;
+                let tl = self.top_left;
+                let br = self.bottom_right;
+
+                // Border
+                if (
+                        // Top border
+                        (self.p.y >= tl.y && self.p.y < tl.y + border_width)
+                        // Bottom border
+                        || (self.p.y <= br.y && self.p.y > br.y - border_width)
+                        // Left border
+                        || (self.p.x >= tl.x && self.p.x < tl.x + border_width)
+                        // Right border
+                        || (self.p.x <= br.x && self.p.x > br.x - border_width)
+                   ) && self.style.stroke_color.is_some()
+                {
+                    out = Some(Pixel(
+                        self.p,
+                        self.style.stroke_color.expect("Expected stroke"),
+                    ));
+                }
+                // Fill
+                else if let Some(fill) = self.style.fill_color {
+                    out = Some(Pixel(self.p, fill));
+                }
+            }
+
+            self.p.x += 1;
+
+            // Reached end of row? Jump down one line
+            if self.p.x > self.bottom_right.x {
+                self.p.x = self.top_left.x;
+                self.p.y += 1;
+            }
+
+
+            if out.is_some() {
+                break out;
+            }
+        }
+    }
+}
+
+pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle) {
+    /// left off: compute the four quadrants
+    // call the rr iterator on the rectangle
+    // then call it on one each of the four circle quadrants
+
+    let rri = RoundedRectangleIterator {
+        top_left: rr.border.tl,
+        bottom_right: rr.border.br,
+        style: rr.border.style,
+        radius: rr.radius,
+        p: rr.border.tl,
+        tlq: Rectangle::new(
+            rr.border.tl,
+            Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius)),
+        trq: Rectangle::new(
+            Point::new(rr.border.br.x - rr.radius, rr.border.tl.y),
+            Point::new(rr.border.br.x, rr.border.tl.y + rr.radius)),
+        blq: Rectangle::new(
+            Point::new(rr.border.tl.x, rr.border.br.y - rr.radius),
+            Point::new(rr.border.tl.x + rr.radius, rr.border.br.y)),
+        brq: Rectangle::new(
+            Point::new(rr.border.br.x - rr.radius, rr.border.br.y - rr.radius),
+            rr.border.br),
+    };
+    // draw the body
+    for pixel in rri {
+        put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
+    }
+    // now draw the corners
+    quadrant(fb,
+        Circle::new_with_style(rri.tlq.br, rr.radius, rr.border.style),
+        Quadrant::TopLeft
     );
-    tv.cursor = c;
+    quadrant(fb,
+        Circle::new_with_style(Point::new(rri.trq.tl.x, rri.trq.br.y), rr.radius, rr.border.style),
+        Quadrant::TopRight
+    );
+    quadrant(fb,
+        Circle::new_with_style(Point::new(rri.blq.br.x, rri.blq.tl.y), rr.radius, rr.border.style),
+        Quadrant::BottomLeft
+    );
+    quadrant(fb,
+        Circle::new_with_style(rri.brq.tl, rr.radius, rr.border.style),
+        Quadrant::BottomRight
+    );
 }

@@ -8,7 +8,7 @@ use api::Opcode;
 
 use xous::buffer;
 use core::pin::Pin;
-use rkyv::{archived_value, Unarchive};
+use rkyv::{archived_value, Unarchive, archived_value_mut};
 use core::convert::TryInto;
 
 mod backend;
@@ -20,7 +20,7 @@ use core::convert::TryFrom;
 
 mod logo;
 
-use api::{DrawStyle, PixelColor, Rectangle};
+use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle};
 use blitstr_ref as blitstr;
 
 mod fontmap;
@@ -76,6 +76,23 @@ fn xmain() -> ! {
     let sid = xous_names::register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
     info!("GFX: Server listening on address {:?}", sid);
 
+    if false {
+        // leave this test case around
+        // for some reason, the top right quadrant draws an extra pixel inside the fill area
+        // when a fill color of "Light" is specified. However, if `None` fill is specified, it
+        // works correctly. This is really puzzling, because the test for filled drawing happens
+        // after the test for border drawing.
+        use api::Point;
+        let mut r = Rectangle::new(Point::new(20, 200), Point::new(151, 301));
+        r.style = DrawStyle {
+            fill_color: Some(PixelColor::Light),
+            stroke_color: Some(PixelColor::Dark),
+            stroke_width: 1,
+        };
+        let rr = RoundedRectangle::new(r, 16);
+        op::rounded_rectangle(display.native_buffer(), rr);
+    }
+
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -113,20 +130,108 @@ fn xmain() -> ! {
                         blitstr::xor_char
                     );
                 },
-                rkyv::Archived::<api::Opcode>::SimulateString(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
-                    blitstr::paint_str(
-                        display.native_buffer(),
-                        current_string_clip.into(),
-                        &mut current_cursor,
-                        current_glyph.into(),
-                        s.as_str().unwrap(),
-                        false,
-                        blitstr::simulate_char
-                    );
-                },
                 _ => panic!("GFX: invalid response from server -- corruption occurred in MemoryMessage")
             };
+        } else if let xous::Message::MutableBorrow(m) = &msg.body {
+            let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let value = unsafe {
+                archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+            };
+            use rkyv::Write;
+            let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+            let debugtv: bool = true;
+            match &*value {
+                rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
+                    let mut tv = rtv.unarchive();
+
+                    let paintfn = if tv.dry_run {
+                        if debugtv { info!("GFX(TV): doing dry run"); }
+                        blitstr::simulate_char
+                    } else {
+                        if debugtv { info!("GFX(TV): drawing"); }
+                        blitstr::xor_char
+                    };
+
+                    /*
+                    1. figure out text bounds
+                    2. clear background, if requested
+                    3. draw surrounding rectangle, if requested
+                    4. draw text
+                    */
+                    // first compute the bounding box, if it isn't computed
+                    if tv.bounds_computed.is_none() {
+                        match tv.bounds_hint {
+                            TextBounds::BoundingBox(r) => {
+                                tv.bounds_computed = Some(r);
+                            },
+                            TextBounds::GrowableFromBr(br, width) => {
+                                unimplemented!()
+                            },
+                            TextBounds::GrowableFromTl(tl, width) => {
+                                unimplemented!()
+                            },
+                            TextBounds::GrowableFromBl(bl, width) => {
+                                unimplemented!()
+                            }
+                        }
+                    }
+                    if debugtv { info!("GFX(TV): computed bounds {:?}", tv.bounds_computed); }
+
+                    // clear the bounding box if requested
+                    let mut clear_rect = tv.bounds_computed.unwrap();
+                    clear_rect.translate(tv.clip_rect.unwrap().tl);
+                    let bordercolor = if tv.draw_border {
+                        Some(PixelColor::Dark)
+                    } else {
+                        None
+                    };
+                    let borderwidth: i16 = if tv.draw_border {
+                        1
+                    } else {
+                        0
+                    };
+                    let fillcolor = if tv.clear_area {
+                        Some(PixelColor::Light)
+                    } else {
+                        None
+                    };
+
+                    clear_rect.style = DrawStyle {
+                        fill_color: fillcolor,
+                        stroke_color: bordercolor,
+                        stroke_width: borderwidth,
+                    };
+                    if tv.rounded_border.is_some() {
+                        op::rounded_rectangle(display.native_buffer(),
+                           RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _));
+                    } else {
+                        if debugtv { info!("GFX(TV): clearing rectangle {:?}", clear_rect); }
+                        op::rectangle(display.native_buffer(), clear_rect);
+                    }
+
+
+                    // this is the actual draw operation
+                    clear_rect.translate(tv.margin);
+
+                    /////// TODO: I think we need to clip the clear_rect.tl.x/y to within the screen area for this to be valid?
+                    let mut ref_cursor = blitstr::Cursor{
+                        pt: blitstr::Pt{x: clear_rect.tl.x as u32, y: clear_rect.tl.y as u32},
+                        line_height: 0,
+                    };
+                    if debugtv { info!("GFX(TV): paint_str with {:?} | {:?} | {:?} | {:?}", clear_rect, ref_cursor, tv.style, tv.text); }
+                    blitstr::paint_str(
+                        display.native_buffer(),
+                        clear_rect.into(),
+                        &mut ref_cursor,
+                        tv.style.into(),
+                        tv.text.as_str().unwrap(),
+                        false,
+                        paintfn
+                    );
+                    tv.cursor = ref_cursor;
+                },
+                _ => panic!("GFX: invalid mutable borrow message"),
+            }
         } else if let Ok(opcode) = Opcode::try_from(&msg.body) {
             // info!("GFX: Opcode: {:?}", opcode);
             match opcode {

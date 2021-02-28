@@ -107,41 +107,6 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
     })
 }
 
-fn tv_draw(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>, tv: &mut TextView) -> Result<(), xous::Error> {
-    /*
-       1. figure out text bounds
-       2. clear background, if requested
-       3. draw surrounding rectangle, if requested
-       4. draw text
-     */
-
-    /*
-    info!("GAM: tv_draw canvas list");
-    for (&k, &v) in canvases.iter() {
-       info!("gid: {:?}, canvas: {:?}", k, v);
-    }*/
-
-    if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
-        // first, figure out if we should even be drawing to this canvas.
-        if canvas.is_drawable() {
-            // figure out text bounds: figure out how wide our text is, to start with.
-            graphics_server::set_string_clipping(gfx_conn, canvas.clip_rect().into()).expect("GAM: can't set clipping");
-
-        } else {
-            info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
-            return Ok(())
-        }
-
-
-    } else {
-        info!("GAM: bogus GID in TextView, not doing anything in response to draw request.");
-        return Ok(()) // silently fail if a bogus Gid is given???
-    }
-
-    Ok(())
-
-}
-
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -203,16 +168,35 @@ fn xmain() -> ! {
                         archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
                     };
                     use rkyv::Write;
-                    //let mut writer: rkyv::ArchiveBuffer<xous::XousBuffer> = rkyv::ArchiveBuffer::new(buf);
                     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
                             let mut tv = rtv.unarchive();
                             match tv.get_op() {
                                 TextOp::Nop => (),
-                                TextOp::Render => {
+                                TextOp::Render | TextOp::ComputeBounds => {
                                     info!("GAM: render request for {:?}", tv);
-                                    tv_draw(gfx_conn, trng_conn, &mut canvases, &mut tv).expect("GAM: can't render TextView");
+                                    if tv.get_op() == TextOp::ComputeBounds {
+                                        tv.dry_run = true;
+                                    } else {
+                                        tv.dry_run = false;
+                                    }
+
+                                    if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
+                                        // first, figure out if we should even be drawing to this canvas.
+                                        if canvas.is_drawable() {
+                                            // set the clip rectangle according to the canvas' location
+                                            tv.clip_rect = Some(canvas.clip_rect().into());
+
+                                            // issue the draw command
+                                            graphics_server::draw_textview(gfx_conn, &mut tv).expect("GAM: text view draw could not complete.");
+                                        } else {
+                                            info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
+                                        }
+                                    } else {
+                                        info!("GAM: bogus GID in TextView, not doing anything in response to draw request.");
+                                        // silently fail if a bogus Gid is given???
+                                    }
                                 },
                                 TextOp::ComputeBounds => {
 

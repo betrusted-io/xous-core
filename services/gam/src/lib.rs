@@ -14,12 +14,7 @@ use log::{error, info};
 /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
 /// the actual screen update is allowed
 pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    // for testing only
     tv.set_op(TextOp::Render);
-    tv.cursor.pt.x = 37;
-    tv.cursor.pt.y = 5;
-
-    // info!("tv before lend: {:?}", tv);
     let mut rkyv_tv = api::Opcode::RenderTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
@@ -31,7 +26,7 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::RenderTextView(result) = returned {
             let tvr: TextView = result.unarchive();
-            tv.set_computed_bounds(tvr.get_bounds_computed());
+            tv.bounds_computed = tvr.bounds_computed;
             tv.cursor = tvr.cursor;
     } else {
         let tvr = returned.unarchive();

@@ -4,13 +4,7 @@ use blitstr::{GlyphStyle, Cursor};
 
 use log::info;
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
-pub enum TextAlignment {
-    Left,
-    Center,
-    Right,
-}
-
+/// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub enum TextBounds {
     // fixed width and height in a rectangle
@@ -23,12 +17,12 @@ pub enum TextBounds {
     GrowableFromBl(Point, u16),
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive, PartialEq)]
 // operations that may be requested of a TextView when sent to GAM
 pub enum TextOp {
     Nop,
     Render,
-    ComputeBounds,
+    ComputeBounds, // maybe we don't need this
 }
 impl Into<usize> for TextOp {
     fn into(self) -> usize {
@@ -72,26 +66,27 @@ pub struct TextView {
     pub draw_order: u32,
 
     // offsets for text drawing -- exactly one of the following options should be specified
+    // note that the TextBounds coordinate system is local to the canvas, not the screen
     pub bounds_hint: TextBounds,
-    bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+    pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
+    pub overflow: Option<bool>,  // indicates if the text has overflowed the canvas, set by the drawing routine
+    pub dry_run: bool, // set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
-    text: xous::String::<3072>,
-    length: u32,
-    pub alignment: TextAlignment,
+    pub text: xous::String::<3072>,
     pub cursor: Cursor,
 
     pub draw_border: bool,
-    pub clear_area: bool,
+    pub clear_area: bool, // you almost always want this to be true
     pub border_width: u16,
-    pub rounded_border: bool,
-    pub x_margin: u16,
-    pub y_margin: u16,
+    pub rounded_border: Option<u16>, // radius of the rounded border, if applicable
+    pub margin: Point,
 
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
 
     canvas: Gid, // GID of the canvas to draw on
+    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
 }
 impl TextView {
     pub fn new(canvas: Gid, draw_order: u32, bounds_hint: TextBounds) -> Self {
@@ -101,41 +96,26 @@ impl TextView {
             token: None,
             invert: false,
             draw_order,
+            clip_rect: None,
             bounds_hint,
             bounds_computed: None,
             style: GlyphStyle::Regular,
             text: xous::String::<3072>::new(),
-            length: 0,
-            alignment: TextAlignment::Left,
             cursor: Cursor::new(0,0,0),
             draw_border: true,
             border_width: 1,
-            rounded_border: false,
-            x_margin: 4,
-            y_margin: 4,
+            rounded_border: None,
+            margin: Point { x: 4, y: 4 },
             selected: None,
             canvas,
             clear_area: true,
+            overflow: None,
+            dry_run: false,
         }
     }
     pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
     pub fn get_op(&self) -> TextOp { self.operation }
     pub fn get_canvas_gid(&self) -> Gid { self.canvas }
-    pub fn get_bounds_computed(&self) -> Option<Rectangle> { self.bounds_computed }
-    pub fn compute_bounds(&mut self) -> Result<(), xous::Error> {
-        match self.bounds_hint {
-            TextBounds::BoundingBox(r) => {
-                info!("GFX/text - r {:?}", r);
-                self.bounds_computed = Some(r);
-                info!("GFX/text - bounds_computed {:?}", self.bounds_computed);
-            },
-            _=> todo!("other dynamic bounds computations not yet implemented"),
-        }
-        Ok(())
-    }
-    pub fn set_computed_bounds(&mut self, r: Option<Rectangle>) {
-        self.bounds_computed = r;
-    }
 
     pub fn to_str(&self) -> &str {
         self.text.as_str().unwrap()
@@ -153,17 +133,17 @@ impl TextView {
         self.bounds_computed = t.bounds_computed;
         self.style = t.style;
         self.text = t.text;
-        self.length = t.length;
-        self.alignment = t.alignment;
         self.cursor = t.cursor;
         self.draw_border = t.draw_border;
         self.clear_area = t.clear_area;
         self.border_width = t.border_width;
         self.rounded_border = t.rounded_border;
-        self.x_margin = t.x_margin;
-        self.y_margin = t.y_margin;
+        self.margin = t.margin;
         self.selected = t.selected;
         self.canvas = t.canvas;
+        self.overflow = t.overflow;
+        self.clip_rect = t.clip_rect;
+        self.dry_run = t.dry_run;
     }
 }
 
