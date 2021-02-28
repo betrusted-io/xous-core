@@ -7,7 +7,7 @@ use rkyv::Write;
 use rkyv::Unarchive;
 use graphics_server::api::{TextOp, TextView, TextViewResult};
 
-use graphics_server::api::{Rectangle, Point, Gid, TextBounds};
+use graphics_server::api::{Rectangle, Point, Gid, TextBounds, Line};
 use log::{error, info};
 
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
@@ -35,6 +35,21 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     }
 
     tv.set_op(TextOp::Nop);
+    Ok(())
+}
+
+pub fn draw_line(gam_cid: xous::CID, gid: Gid, line: Line) -> Result<(), xous::Error> {
+    let mut rkyv_tv = api::Opcode::RenderObject(
+        GamObject {
+            canvas: gid,
+            obj: GamObjectType::Line(line),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
+
     Ok(())
 }
 

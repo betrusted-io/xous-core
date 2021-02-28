@@ -143,7 +143,7 @@ fn xmain() -> ! {
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
         match maybe_env {
             Some(envelope) => {
-                info!("GAM: Message: {:?}", envelope);
+                // info!("GAM: Message: {:?}", envelope);
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     match opcode {
                         Opcode::ClearCanvas(gid) => {
@@ -218,6 +218,45 @@ fn xmain() -> ! {
                         }
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
+                } else if let xous::Message::Borrow(m) = &envelope.body {
+                    let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+                    let value = unsafe {
+                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+                    };
+                    use rkyv::Write;
+                    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                    match &*value {
+                        rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
+                            let obj: GamObject = rtv.unarchive();
+                            if let Some(canvas) = canvases.get_mut(&obj.canvas) {
+                                // first, figure out if we should even be drawing to this canvas.
+                                if canvas.is_drawable() {
+                                    match obj.obj {
+                                        GamObjectType::Line(line) => {
+                                            info!("GAM: drawing line {:?}", line);
+                                            graphics_server::draw_line(gfx_conn, line);
+                                        },
+                                        GamObjectType::Circ(circ) => {
+                                            graphics_server::draw_circle(gfx_conn, circ);
+                                        },
+                                        GamObjectType::Rect(rect) => {
+                                            graphics_server::draw_rectangle(gfx_conn, rect);
+                                        },
+                                        GamObjectType::RoundRect(rr) => {
+                                            graphics_server::draw_rounded_rectangle(gfx_conn, rr);
+                                        }
+                                    }
+                                } else {
+                                    info!("GAM: attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                                }
+                            } else {
+                                info!("GAM: bogus GID in Object, not doing anything in response to draw request.");
+                            }
+                        },
+                        _ => panic!("GAM: invalid borrow message"),
+                    };
+                } else {
+                    panic!("GAM: unhandled message {:?}", envelope);
                 }
             }
             // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)

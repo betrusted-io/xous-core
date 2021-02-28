@@ -1,7 +1,21 @@
 use xous::{Message, ScalarMessage};
-use graphics_server::api::{Point, Rectangle, TextView, TextViewResult, Gid, Line};
+use graphics_server::api::{Point, Rectangle, TextView, TextViewResult, Gid, Line, RoundedRectangle, Circle};
 use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub enum GamObjectType {
+    Line(Line),
+    Circ(Circle),
+    Rect(Rectangle),
+    RoundRect(RoundedRectangle),
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub struct GamObject {
+    pub canvas: Gid,
+    pub obj: GamObjectType,
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 // #[archive(derive(Copy, Clone))]
@@ -27,8 +41,8 @@ pub enum Opcode {
     // return the dimensions of a canvas
     GetCanvasBounds(Gid),
 
-    // draws a line on a canvas
-    DrawLine(Gid, Line),
+    // draws an object
+    RenderObject(GamObject),
 }
 
 impl core::convert::TryFrom<&Message> for Opcode {

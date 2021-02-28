@@ -2,7 +2,7 @@
 
 // pub mod size;
 pub mod api;
-pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp};
+pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
@@ -12,7 +12,9 @@ use xous::{send_message, CID};
 use core::fmt::Write;
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Line(line).into()).map(|_| ())
+    let m: xous::Message = api::Opcode::Line(line).into();
+    log::info!("GFX|LIB: api encoded line as {:?}", m);
+    send_message(cid, m).map(|_| ())
 }
 
 pub fn draw_circle(cid: CID, circ: Circle) -> Result<(), xous::Error> {
@@ -21,6 +23,10 @@ pub fn draw_circle(cid: CID, circ: Circle) -> Result<(), xous::Error> {
 
 pub fn draw_rectangle(cid: CID, rect: Rectangle) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::Rectangle(rect).into()).map(|_| ())
+}
+
+pub fn draw_rounded_rectangle(cid: CID, rr: RoundedRectangle) -> Result<(), xous::Error> {
+    send_message(cid, api::Opcode::RoundedRectangle(rr).into()).map(|_| ())
 }
 
 pub fn flush(cid: CID) -> Result<(), xous::Error> {

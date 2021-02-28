@@ -63,6 +63,9 @@ pub enum Opcode {
     /// Draw a rectangle or square at the specified coordinates
     Rectangle(Rectangle),
 
+    /// Draw a rounded rectangle
+    RoundedRectangle(RoundedRectangle),
+
     /// Draw a circle with a specified radius
     Circle(Circle),
 
@@ -133,6 +136,12 @@ impl core::convert::TryFrom<& Message> for Opcode {
                     m.arg1 as _,
                     m.arg2 as _,
                     m.arg3 as _,
+                ))),
+                15 => Ok(Opcode::RoundedRectangle(RoundedRectangle::new(Rectangle::new_with_style(
+                    Point::from(m.arg1),
+                    Point::from(m.arg2),
+                    DrawStyle::from(m.arg3)),
+                    m.arg4 as _
                 ))),
                 _ => Err("unrecognized opcode"),
             },
@@ -243,6 +252,13 @@ impl Into<Message> for Opcode {
                 arg2: 0,
                 arg3: 0,
                 arg4: 0,
+            }),
+            Opcode::RoundedRectangle(rr) => Message::Scalar(ScalarMessage {
+                id: 15,
+                arg1: rr.border.tl.into(),
+                arg2: rr.border.br.into(),
+                arg3: rr.border.style.into(),
+                arg4: rr.radius as _,
             }),
             _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
         }

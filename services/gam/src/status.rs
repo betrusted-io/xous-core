@@ -49,7 +49,14 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut stats_phase: usize = 0;
     info!("GAM|status: starting main loop");
-    loop {
+
+    let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
+    gam::draw_line(gam_conn, status_gid, Line::new_with_style(
+        Point::new(0, screensize.y),
+        Point::new(screensize.x, screensize.y),
+        style_dark
+    )).expect("GAM|status: Can't draw border line");
+loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
             Some(envelope) => {

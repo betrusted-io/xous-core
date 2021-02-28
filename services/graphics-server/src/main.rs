@@ -96,7 +96,7 @@ fn xmain() -> ! {
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        //info!("GFX: Message: {:?}", msg);
+        info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
             let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
@@ -245,10 +245,14 @@ fn xmain() -> ! {
                     op::rectangle(display.native_buffer(), r)
                 }
                 Opcode::Line(l) => {
+                    info!("GFX: line: {:?}", l);
                     op::line(display.native_buffer(), l);
                 }
                 Opcode::Rectangle(r) => {
                     op::rectangle(display.native_buffer(), r);
+                }
+                Opcode::RoundedRectangle(rr) => {
+                    op::rounded_rectangle(display.native_buffer(), rr);
                 }
                 Opcode::Circle(c) => {
                     op::circle(display.native_buffer(), c);
