@@ -13,6 +13,92 @@
 
     <peripherals>
         <peripheral>
+            <name>CPU</name>
+            <baseAddress>0xF0000000</baseAddress>
+            <groupName>CPU</groupName>
+            <registers>
+                <register>
+                    <name>TIMER_LATCH</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>timer_latch</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TIMER_TIME1</name>
+                    <description><![CDATA[Bits 32-63 of `CPU_TIMER_TIME`.]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>timer_time</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TIMER_TIME0</name>
+                    <description><![CDATA[Bits 0-31 of `CPU_TIMER_TIME`.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>timer_time</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TIMER_TIME_CMP1</name>
+                    <description><![CDATA[Bits 32-63 of `CPU_TIMER_TIME_CMP`.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x7fffffff</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>timer_time_cmp</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TIMER_TIME_CMP0</name>
+                    <description><![CDATA[Bits 0-31 of `CPU_TIMER_TIME_CMP`.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x7fffffff</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>timer_time_cmp</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x14</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
             <name>IDENTIFIER_MEM</name>
             <baseAddress>0xF0001000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
@@ -683,32 +769,6 @@ register to disable individual events.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>UART_PHY</name>
-            <baseAddress>0xF0006000</baseAddress>
-            <groupName>UART_PHY</groupName>
-            <registers>
-                <register>
-                    <name>TUNING_WORD</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4b7f5a</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tuning_word</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x4</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
             <name>UART</name>
             <baseAddress>0xF0007000</baseAddress>
             <groupName>UART</groupName>
@@ -867,32 +927,6 @@ register to disable individual events.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>CONSOLE_PHY</name>
-            <baseAddress>0xF0008000</baseAddress>
-            <groupName>CONSOLE_PHY</groupName>
-            <registers>
-                <register>
-                    <name>TUNING_WORD</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4b7f5a</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tuning_word</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x4</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
             <name>CONSOLE</name>
             <baseAddress>0xF0009000</baseAddress>
             <groupName>CONSOLE</groupName>
@@ -1049,32 +1083,6 @@ register to disable individual events.]]></description>
                 <name>console</name>
                 <value>3</value>
             </interrupt>
-        </peripheral>
-        <peripheral>
-            <name>APP_UART_PHY</name>
-            <baseAddress>0xF000A000</baseAddress>
-            <groupName>APP_UART_PHY</groupName>
-            <registers>
-                <register>
-                    <name>TUNING_WORD</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4b7f5a</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tuning_word</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x4</size>
-                <usage>registers</usage>
-            </addressBlock>
         </peripheral>
         <peripheral>
             <name>APP_UART</name>
@@ -1320,10 +1328,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``e0fc761f``, so this value is 3774641695, which should be enough to check out
+``d77dca2f``, so this value is 3615345199, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xe0fc761f</resetValue>
+                    <resetValue>0xd77dca2f</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1340,7 +1348,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x0a</resetValue>
+                    <resetValue>0x0d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3030,7 +3038,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x156ab1cc</resetValue>
+                    <resetValue>0x48f7dee1</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3045,7 +3053,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x1918cfd8</resetValue>
+                    <resetValue>0xc2db130</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -5182,5 +5190,34 @@ entered. Defaults to a range of 1.67-5.00 seconds]]></description>
                 <size>0x00040000</size>
             </memoryRegion>
         </memoryRegions>
+        <constants>
+            <constant name="CONFIG_CLOCK_FREQUENCY" value="100000000" />
+            <constant name="CONFIG_CPU_HAS_INTERRUPT" value="None" />
+            <constant name="CONFIG_CPU_RESET_ADDR" value="0" />
+            <constant name="CONFIG_CPU_TYPE_VEXRISCV" value="None" />
+            <constant name="CONFIG_CPU_VARIANT_STANDARD" value="None" />
+            <constant name="CONFIG_CPU_HUMAN_NAME" value="VexRiscv" />
+            <constant name="CONFIG_CPU_NOP" value="nop" />
+            <constant name="CONFIG_CSR_DATA_WIDTH" value="32" />
+            <constant name="CONFIG_CSR_ALIGNMENT" value="32" />
+            <constant name="CONFIG_BUS_STANDARD" value="WISHBONE" />
+            <constant name="CONFIG_BUS_DATA_WIDTH" value="32" />
+            <constant name="CONFIG_BUS_ADDRESS_WIDTH" value="32" />
+            <constant name="APP_UART_INTERRUPT" value="4" />
+            <constant name="AUDIO_INTERRUPT" value="10" />
+            <constant name="BTEVENTS_INTERRUPT" value="7" />
+            <constant name="COM_INTERRUPT" value="5" />
+            <constant name="CONSOLE_INTERRUPT" value="3" />
+            <constant name="ENGINE_INTERRUPT" value="14" />
+            <constant name="GPIO_INTERRUPT" value="1" />
+            <constant name="I2C_INTERRUPT" value="6" />
+            <constant name="KEYBOARD_INTERRUPT" value="9" />
+            <constant name="SHA512_INTERRUPT" value="13" />
+            <constant name="TICKTIMER_INTERRUPT" value="8" />
+            <constant name="TIMER0_INTERRUPT" value="0" />
+            <constant name="TRNG_KERNEL_INTERRUPT" value="11" />
+            <constant name="TRNG_SERVER_INTERRUPT" value="12" />
+            <constant name="UART_INTERRUPT" value="2" />
+        </constants>
     </vendorExtensions>
 </device>
