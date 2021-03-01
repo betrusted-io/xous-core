@@ -308,6 +308,7 @@ fn xmain() -> ! {
     os_timer::init();
 
     log_server::init_wait().unwrap();
+    info!("TICKTIMER: my PID is {}", xous::process::id());
 
     // "Sleep" commands get put in here and are ordered as necessary
     let mut sleep_heap: BinaryHeap<SleepResponse, U32, Min> = BinaryHeap::new();
