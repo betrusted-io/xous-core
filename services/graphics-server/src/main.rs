@@ -6,7 +6,6 @@ use log::{error, info};
 mod api;
 use api::Opcode;
 
-use xous::buffer;
 use core::pin::Pin;
 use rkyv::{archived_value, Unarchive, archived_value_mut};
 use core::convert::TryInto;
@@ -98,10 +97,10 @@ fn xmain() -> ! {
         let msg = xous::receive_message(sid).unwrap();
         info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
-            let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
-                archived_value::<api::Opcode>(&bytes, m.id.try_into().unwrap())
+                archived_value::<api::Opcode>(&bytes, m.id as usize)
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
@@ -137,8 +136,8 @@ fn xmain() -> ! {
             let value = unsafe {
                 archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
             };
-            use rkyv::Write;
-            let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+            //use rkyv::Write;
+            //let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
             let debugtv: bool = true;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {

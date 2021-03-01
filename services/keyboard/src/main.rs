@@ -812,7 +812,7 @@ fn xmain() -> ! {
     let mut injected_keys: Queue<char, U64, _> = Queue::u8();
     #[cfg(not(target_os = "none"))]
     let (mut key_enqueue, mut key_dequeue) = injected_keys.split();
-    /*
+
     loop {
         let maybe_env = xous::try_receive_message(kbd_sid).unwrap();
         match maybe_env {
@@ -942,7 +942,7 @@ fn xmain() -> ! {
                 xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
             }
         }
-    }*/
+    }
     // this shuts up the keyboard thread from polluting the kernel logs when panics happen elsewhere
-    loop {xous::receive_message(kbd_sid).unwrap(); xous::yield_slice();}
+    //loop {xous::receive_message(kbd_sid).unwrap(); xous::yield_slice();}
 }

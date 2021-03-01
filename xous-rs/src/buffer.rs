@@ -35,7 +35,7 @@ impl<'a> XousBuffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub unsafe fn from_memory_message(mem: &MemoryMessage) -> Self {
+    pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
         XousBuffer {
             range: mem.buf,
             slice: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),

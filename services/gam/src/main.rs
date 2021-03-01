@@ -22,7 +22,7 @@ use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
 use heapless::consts::*;
 
-use rkyv::{Unarchive, archived_value_mut};
+use rkyv::{Unarchive, archived_value, archived_value_mut};
 use core::pin::Pin;
 
 // GIDs of canvases that are used the "Chat" layout.
@@ -222,12 +222,11 @@ fn xmain() -> ! {
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
                 } else if let xous::Message::Borrow(m) = &envelope.body {
-                    let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+                    let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+                    let bytes = Pin::new(buf.as_ref());
                     let value = unsafe {
-                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+                        archived_value::<api::Opcode>(&bytes, m.id as usize)
                     };
-                    use rkyv::Write;
-                    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
                             let obj: GamObject = rtv.unarchive();
@@ -262,9 +261,9 @@ fn xmain() -> ! {
                 } else {
                     panic!("GAM: unhandled message {:?}", envelope);
                 }
-            }
-            // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
+            },
             _ => xous::yield_slice(),
+            // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
         }
 
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {

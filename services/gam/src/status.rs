@@ -17,12 +17,12 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
 
     let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("GAM|status: can't connect to COM");
-    com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
     let gfx_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM|status: can't connect to COM");
     let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
     info!("GAM|status: getting screen size");
     let screensize = gam::get_canvas_bounds(gam_conn, status_gid).expect("GAM|status: Couldn't get canvas size");
+    //let screensize: Point = Point::new(0, 336);
 
     info!("GAM|status: building textview objects");
     // build uptime text view: left half of status bar
@@ -56,6 +56,8 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
         Point::new(screensize.x, screensize.y),
         style_dark
     )).expect("GAM|status: Can't draw border line");
+
+    com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
     loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
