@@ -124,7 +124,7 @@ impl<'a> core::ops::DerefMut for XousBuffer<'a> {
 impl<'a> Drop for XousBuffer<'a> {
     fn drop(&mut self) {
         if self.should_drop {
-            crate::unmap_memory(self.range).unwrap();
+            crate::unmap_memory(self.range).expect("XousBuffer: failed to drop memory.");
         }
     }
 }
