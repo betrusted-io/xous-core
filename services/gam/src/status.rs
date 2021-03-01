@@ -56,7 +56,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
         Point::new(screensize.x, screensize.y),
         style_dark
     )).expect("GAM|status: Can't draw border line");
-loop {
+    loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
             Some(envelope) => {

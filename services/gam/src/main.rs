@@ -141,10 +141,12 @@ fn xmain() -> ! {
     info!("GAM: entering main loop");
     loop {
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
+        info!("GAM: Maybe Message: {:?}", maybe_env);
         match maybe_env {
             Some(envelope) => {
-                // info!("GAM: Message: {:?}", envelope);
+                info!("GAM: Message: {:?}", envelope);
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+                    info!("GAM: Opcode: {:?}", opcode);
                     match opcode {
                         Opcode::ClearCanvas(gid) => {
                             match canvases.get(&gid) {
@@ -185,6 +187,7 @@ fn xmain() -> ! {
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
                             let mut tv = rtv.unarchive();
+                            info!("GAM: rendertextview {:?}", tv);
                             match tv.get_op() {
                                 TextOp::Nop => (),
                                 TextOp::Render | TextOp::ComputeBounds => {
@@ -215,7 +218,7 @@ fn xmain() -> ! {
 
                                 },
                             };
-                        }
+                        },
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
                 } else if let xous::Message::Borrow(m) = &envelope.body {
@@ -228,6 +231,7 @@ fn xmain() -> ! {
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
                             let obj: GamObject = rtv.unarchive();
+                            info!("GAM: renderobject {:?}", obj);
                             if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                                 // first, figure out if we should even be drawing to this canvas.
                                 if canvas.is_drawable() {
