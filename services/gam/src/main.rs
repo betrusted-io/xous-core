@@ -109,7 +109,7 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = true;  // debug level 1 - most general level
+    let debug1 = false;  // debug level 1 - most general level
     log_server::init_wait().unwrap();
     info!("GAM: my PID is {}", xous::process::id());
 
