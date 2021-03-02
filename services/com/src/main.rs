@@ -249,11 +249,12 @@ fn xmain() -> ! {
     let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);
 
+    /*  // get rid of this feature for now, it doesn't work, we don't use it, and it potentially causes troubles
     let agent_conn= if cfg!(feature = "fccagent") {
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
     } else {
         0 // bogus value
-    };
+    }; */
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -281,7 +282,7 @@ fn xmain() -> ! {
                     let l: xous::String<512> = rkyv_l.unarchive();
                     info!("COM: Wf200PdsLine got line {}", l);
                     let line = l.as_bytes();
-                    let length = line.len() as u16;
+                    let length = (l.len() + 0) as u16;
                     //info!("COM: 0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
                     com.txrx(ComState::WFX_PDS_LINE_SET.verb);
                     //info!("COM: 0x{:04x}", length);
@@ -351,6 +352,7 @@ fn xmain() -> ! {
                     )
                     .expect("COM: couldn't return WF200 firmware rev");
                 }
+                /* // excised because it doesn't work
                 Opcode::RxStatsAgent => {
                     if cfg!(feature = "fccagent") {
                         // note -- this code never worked, but wasn't needed. just hanging out as bread crumbs for future work in case this is needed.
@@ -366,7 +368,7 @@ fn xmain() -> ! {
                         let m = xous::Message::Borrow(data.into_message(2));
                         xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
                     }
-                }
+                }*/
                 _ => error!("unknown opcode"),
             }
         } else {

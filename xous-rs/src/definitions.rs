@@ -37,7 +37,7 @@ impl core::default::Default for MessageSender {
 
 impl core::fmt::Display for MessageSender {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "data: {}", self.data)
+        write!(f, "MessageSender.data: 0x{:08x}", self.data)
     }
 }
 

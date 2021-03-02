@@ -142,7 +142,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
         (7, 9) => ScanCode{key: Some(0xd_u8.into()), shift: Some(0xd_u8.into()), hold: Some(0xd_u8.into()), alt: Some(0xd_u8.into())}, // carriage return
 
         (8, 5) => ScanCode{key: Some(0xf_u8.into()), shift: Some(0xf_u8.into()), hold: Some(0xf_u8.into()), alt: Some(0xf_u8.into())}, // shift in (blue shift)
-        (8, 6) => ScanCode{key: Some(','), shift: Some(0xe_u8.into()), hold: Some(0xe_u8.into()), alt: None},  // 0xe is shift out (sym)
+        (8, 6) => ScanCode{key: Some(','), shift: Some(0xe_u8.into()), hold: Some('富'), alt: None},  // 0xe is shift out (sym) '富' -> just for testing hanzi plane
         (8, 7) => ScanCode{key: Some(' '), shift: Some(' '), hold: None /* hold of none -> repeat */, alt: None},
         (8, 8) => ScanCode{key: Some('.'), shift: Some('😃'), hold: Some('😃'), alt: None},
         (8, 9) => ScanCode{key: Some(0xf_u8.into()), shift: Some(0xf_u8.into()), hold: Some(0xf_u8.into()), alt: Some(0xf_u8.into())}, // shift in (blue shift)
@@ -812,6 +812,7 @@ fn xmain() -> ! {
     let mut injected_keys: Queue<char, U64, _> = Queue::u8();
     #[cfg(not(target_os = "none"))]
     let (mut key_enqueue, mut key_dequeue) = injected_keys.split();
+
     loop {
         let maybe_env = xous::try_receive_message(kbd_sid).unwrap();
         match maybe_env {
@@ -942,4 +943,6 @@ fn xmain() -> ! {
             }
         }
     }
+    // this shuts up the keyboard thread from polluting the kernel logs when panics happen elsewhere
+    //loop {xous::receive_message(kbd_sid).unwrap(); xous::yield_slice();}
 }

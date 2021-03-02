@@ -17,6 +17,7 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    let debug1 = false;
     log_server::init_wait().unwrap();
     info!("NS: my PID is {}", xous::process::id());
 
@@ -35,7 +36,7 @@ fn xmain() -> ! {
 
     loop {
         let envelope = xous::receive_message(name_server).unwrap();
-        info!("NS: received message");
+        if debug1{info!("NS: received message");}
         if let xous::Message::MutableBorrow(m) = &envelope.body {
             let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
             let value = unsafe {
@@ -45,14 +46,14 @@ fn xmain() -> ! {
                 rkyv::Archived::<api::Request>::Register(registration_name) => {
                     use rkyv::Unarchive;
                     let name = registration_name.unarchive();
-                    info!("NS: registration request for '{}'", name);
+                    if debug1{info!("NS: registration request for '{}'", name);}
                     if !name_table.contains_key(&name) {
                         let new_sid =
                             xous::create_server_id().expect("NS: create server failed, maybe OOM?");
                         name_table
                             .insert(name, new_sid)
                             .expect("NS: register name failure, maybe out of HashMap capacity?");
-                        info!("NS: request successful, SID is {:?}", new_sid);
+                        if debug1{info!("NS: request successful, SID is {:?}", new_sid);}
                         rkyv::Archived::<api::Request>::SID(new_sid.into())
                     } else {
                         // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
@@ -70,7 +71,7 @@ fn xmain() -> ! {
                     }
                 }
                 rkyv::Archived::<api::Request>::Lookup(lookup_name) => {
-                    info!("NS: Lookup request for '{}'", lookup_name);
+                    if debug1{info!("NS: Lookup request for '{}'", lookup_name);}
                     let name = lookup_name.unarchive();
                     if let Some(server_sid) = name_table.get(&name) {
                         let sender_pid = envelope
@@ -81,7 +82,7 @@ fn xmain() -> ! {
                             .expect("NS: can't broker connection")
                         {
                             xous::Result::ConnectionID(connection_id) => {
-                                info!("NS: lookup success, returning connection {}", connection_id);
+                                if debug1{info!("NS: lookup success, returning connection {}", connection_id);}
                                 rkyv::Archived::<api::Request>::CID(connection_id)
                             }
                             _ => {

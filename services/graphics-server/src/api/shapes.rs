@@ -2,9 +2,9 @@ use crate::op::{HEIGHT, WIDTH};
 use crate::api::{Point, DrawStyle};
 use blitstr_ref as blitstr;
 use blitstr::{ClipRect};
-use core::cmp::{max, min};
+use core::{cmp::{max, min}, ops::Add};
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Rectangle {
     /// Top left point of the rect
     pub tl: Point,
@@ -71,6 +71,10 @@ impl Rectangle {
         ((other.br.x >= self.tl.x) && (other.br.x <= self.br.x)) &&
         ((other.br.y >= self.tl.y) && (other.br.y <= self.br.y))
     }
+    pub fn intersects_point(&self, point: Point) -> bool {
+        ((point.x >= self.tl.x) && (point.x <= self.br.x)) &&
+        ((point.y >= self.tl.y) && (point.y <= self.br.y))
+    }
     pub fn new_coords_with_style(
         x0: i16,
         y0: i16,
@@ -104,6 +108,12 @@ impl Rectangle {
     pub fn y1(&self) -> u32 {
         self.br.y as u32
     }
+    pub fn translate(&mut self, offset: Point) {
+        self.tl.x += offset.x;
+        self.br.x += offset.x;
+        self.tl.y += offset.y;
+        self.br.y += offset.y;
+    }
 
     /// Make a rectangle of the full screen size
     pub fn full_screen() -> Rectangle {
@@ -133,7 +143,7 @@ impl Into<ClipRect> for Rectangle {
 
 //////////////////////////// LINE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Line {
     pub start: Point,
     pub end: Point,
@@ -162,7 +172,7 @@ impl Line {
 
 //////////////////////////// CIRCLE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Circle {
     pub center: Point,
     pub radius: i16,
@@ -184,6 +194,29 @@ impl Circle {
             center: c,
             radius: r,
             style,
+        }
+    }
+}
+
+//////////////////////// Rounded Rectangle
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
+pub struct RoundedRectangle {
+    pub border: Rectangle, // drawstyle is inherited from the Rectangle
+    pub radius: i16,
+}
+impl RoundedRectangle {
+    pub fn new(rr: Rectangle, r: i16) -> RoundedRectangle {
+        let mut r_adj = r;
+        // disallow radii that are greater than 2x the width of the rectangle
+        if r > (rr.br.x - rr.tl.x) {
+            r_adj = 0;
+        }
+        if r > (rr.br.y - rr.tl.y) {
+            r_adj = 0;
+        }
+        RoundedRectangle {
+            border: rr,
+            radius: r_adj,
         }
     }
 }

@@ -2,7 +2,7 @@
 
 // pub mod size;
 pub mod api;
-pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, TextAlignment};
+pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
@@ -12,7 +12,9 @@ use xous::{send_message, CID};
 use core::fmt::Write;
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Line(line).into()).map(|_| ())
+    let m: xous::Message = api::Opcode::Line(line).into();
+    //log::info!("GFX|LIB: api encoded line as {:?}", m);
+    send_message(cid, m).map(|_| ())
 }
 
 pub fn draw_circle(cid: CID, circ: Circle) -> Result<(), xous::Error> {
@@ -21,6 +23,10 @@ pub fn draw_circle(cid: CID, circ: Circle) -> Result<(), xous::Error> {
 
 pub fn draw_rectangle(cid: CID, rect: Rectangle) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::Rectangle(rect).into()).map(|_| ())
+}
+
+pub fn draw_rounded_rectangle(cid: CID, rr: RoundedRectangle) -> Result<(), xous::Error> {
+    send_message(cid, api::Opcode::RoundedRectangle(rr).into()).map(|_| ())
 }
 
 pub fn flush(cid: CID) -> Result<(), xous::Error> {
@@ -109,10 +115,28 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
     }
 }
 
-pub fn draw_textview(_cid: CID, _tv: &mut TextView) -> Result<(), xous::Error> {
-    /*/
-    let mut sendable_tv = Sendable::new(tv)
-      .expect("can't create sendable TextView structure");
-    sendable_tv.lend_mut(cid, 0x100).map(|_| ()) */
+pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
+    use log::info;
+    use rkyv::Write;
+    use rkyv::Unarchive;
+
+    let mut rkyv_tv = api::Opcode::DrawTextView(*tv);
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
+    let mut xous_buffer = writer.into_inner();
+
+    xous_buffer.lend_mut(cid, pos as u32).expect("draw_textview operation failure");
+
+    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
+    if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
+            let tvr: TextView = result.unarchive();
+            tv.bounds_computed = tvr.bounds_computed;
+            tv.cursor = tvr.cursor;
+    } else {
+        let tvr = returned.unarchive();
+        info!("draw_textview saw a return of {:?}", tvr);
+        panic!("draw_textview got a return value from the server that isn't expected or handled");
+    }
+
     Ok(())
 }

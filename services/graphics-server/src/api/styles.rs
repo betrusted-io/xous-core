@@ -1,19 +1,9 @@
 use crate::api::Point;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Unarchive)]
 pub enum PixelColor {
     Dark,
     Light,
-}
-
-impl From<usize> for PixelColor {
-    fn from(pc: usize) -> Self {
-        if pc != 0 {
-            PixelColor::Dark
-        } else {
-            PixelColor::Light
-        }
-    }
 }
 
 impl From<bool> for PixelColor {
@@ -22,16 +12,6 @@ impl From<bool> for PixelColor {
             PixelColor::Dark
         } else {
             PixelColor::Light
-        }
-    }
-}
-
-impl Into<usize> for PixelColor {
-    fn into(self) -> usize {
-        if self == PixelColor::Dark {
-            1
-        } else {
-            0
         }
     }
 }
@@ -46,8 +26,28 @@ impl Into<bool> for PixelColor {
     }
 }
 
+impl From<usize> for PixelColor {
+    fn from(pc: usize) -> Self {
+        if pc == 0 {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        }
+    }
+}
+
+impl Into<usize> for PixelColor {
+    fn into(self) -> usize {
+        if self == PixelColor::Light {
+            0
+        } else {
+            1
+        }
+    }
+}
+
 /// Style properties for an object
-#[derive(Debug, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub struct DrawStyle {
     /// Fill colour of the object
     pub fill_color: Option<PixelColor>,
@@ -93,11 +93,11 @@ impl From<usize> for DrawStyle {
         //  31 ...  16  15 ... 4     3..2    1..0
         //    width       rsvd      stroke   fill
         // where the MSB of stroke/fill encodes Some/None
-        let fc: PixelColor = (s & 0b0001).into();
-        let sc: PixelColor = (s & 0b0100).into();
+        let fc: PixelColor = (s & 0b00_01).into();
+        let sc: PixelColor = (s & 0b01_00).into();
         DrawStyle {
-            fill_color: if s & 0b0010 != 0 { Some(fc) } else { None },
-            stroke_color: if s & 0b1000 != 0 { Some(sc) } else { None },
+            fill_color:   if s & 0b00_10 != 0 { Some(fc) } else { None },
+            stroke_color: if s & 0b10_00 != 0 { Some(sc) } else { None },
             stroke_width: (s >> 16) as i16,
         }
     }
@@ -107,13 +107,22 @@ impl Into<usize> for DrawStyle {
     fn into(self) -> usize {
         let sc: usize;
         if self.stroke_color.is_some() {
-            sc = 0b10 | self.stroke_color.unwrap() as usize;
+            if self.stroke_color.unwrap() == PixelColor::Dark {
+                sc = 0b11;
+            } else {
+                sc = 0b10;
+            }
         } else {
             sc = 0;
         }
         let fc: usize;
         if self.fill_color.is_some() {
-            fc = 0b10 | self.fill_color.unwrap() as usize;
+            if self.fill_color.unwrap() == PixelColor::Dark {
+                fc = 0b11;
+            } else {
+                fc = 0b10;
+            }
+            // fc = 0b10 | self.fill_color.unwrap() as usize; // this isn't working for some reason
         } else {
             fc = 0;
         }

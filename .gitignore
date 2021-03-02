@@ -3,5 +3,7 @@
 /loader/target
 **/*.rs.bk
 
+*.map
+
 # Emacs
 *~

@@ -49,9 +49,16 @@ pub struct MemoryRegion {
 }
 
 #[derive(Default, Debug)]
+pub struct Constant {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Default, Debug)]
 pub struct Description {
     pub peripherals: Vec<Peripheral>,
     pub memory_regions: Vec<MemoryRegion>,
+    pub constants: Vec<Constant>,
 }
 
 impl core::fmt::Display for ParseError {
@@ -393,6 +400,56 @@ fn parse_memory_regions<T: BufRead>(
     Ok(())
 }
 
+fn generate_constants<T: BufRead>(
+    reader: &mut Reader<T>,
+    description: &mut Description,
+) -> Result<(), ParseError> {
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event(&mut buf) {
+            Ok(Event::Empty(ref e)) => match e.name() {
+                b"constant" => {
+                    let mut constant_descriptor = Constant::default();
+                    for maybe_att in e.attributes() {
+                        match maybe_att {
+                            Ok(att) => {
+                                let att_name = String::from_utf8(att.key.to_vec()).expect("constant: error parsing attribute name");
+                                let att_value = String::from_utf8(att.value.to_vec()).expect("constant: error parsing attribute value");
+                                match att_name {
+                                    _ if att_name == "name" => constant_descriptor.name = att_value,
+                                    _ if att_name == "value" => constant_descriptor.value = att_value,
+                                    _ => panic!("unexpected attribute name")
+                                }
+                            },
+                            _ => panic!("unexpected value in constant: {:?}", maybe_att),
+                        }
+                    }
+                    description
+                    .constants
+                    .push(constant_descriptor)
+                },
+                _ => panic!("unexpected tag in <constants>: {:?}", e),
+            },
+            // note to future self: if Litex goe away from attributes to nested elements, you would want
+            // Ok(Event::Start(ref e) => match e.name() ... to descend into the next tag level, and then
+            // use the tag_name match and extract_contents methods from other functions to generate
+            // the structure.
+            // note that the two formats could be mutually exclusively compatible within the same code base:
+            // if there are no attributes, the attribute iterator would do nothing; and if there are no
+            // child elements, the recursive descent would also do nothing.
+            Ok(Event::End(ref e)) => match e.name() {
+                b"constants" => {
+                    break
+                }
+                e => panic!("unhandled value: {:?}", e),
+            },
+            Ok(Event::Text(_)) => (),
+            e => panic!("unhandled value: {:?}", e)
+        }
+    }
+    Ok(())
+}
+
 fn parse_vendor_extensions<T: BufRead>(
     reader: &mut Reader<T>,
     description: &mut Description,
@@ -402,6 +459,7 @@ fn parse_vendor_extensions<T: BufRead>(
         match reader.read_event(&mut buf) {
             Ok(Event::Start(ref e)) => match e.name() {
                 b"memoryRegions" => parse_memory_regions(reader, description)?,
+                b"constants" => generate_constants(reader, description)?,
                 _ => panic!("unexpected tag in <vendorExtensions>: {:?}", e),
             },
             Ok(Event::End(ref e)) => match e.name() {
@@ -581,6 +639,31 @@ fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std:
     Ok(())
 }
 
+fn print_constants<U: Write>(constants: &[Constant], out: &mut U) -> std::io::Result<()> {
+    writeln!(out, "\n// Litex auto-generated constants")?;
+    for constant in constants {
+        let maybe_intval = constant.value.parse::<u32>();
+        match maybe_intval {
+            Ok(intval) => {
+                writeln!(
+                    out,
+                    "pub const LITEX_{}: usize = {};",
+                    constant.name, intval
+                )?;
+            },
+            Err(_) => {
+                writeln!(
+                    out,
+                    "pub const LITEX_{}: &str = \"{}\";",
+                    constant.name, constant.value
+                )?;
+            }
+        }
+    }
+    writeln!(out)?;
+    Ok(())
+}
+
 fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::io::Result<()> {
     writeln!(out, "// Physical base addresses of registers")?;
     for peripheral in peripherals {
@@ -740,6 +823,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     print_header(dest).or(Err(ParseError::WriteError))?;
     print_memory_regions(&description.memory_regions, dest).or(Err(ParseError::WriteError))?;
     print_peripherals(&description.peripherals, dest).or(Err(ParseError::WriteError))?;
+    print_constants(&description.constants, dest).or(Err(ParseError::WriteError))?;
     print_tests(&description.peripherals, dest).or(Err(ParseError::WriteError))?;
 
     Ok(())

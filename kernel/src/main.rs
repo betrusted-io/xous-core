@@ -167,6 +167,14 @@ pub extern "C" fn kmain() {
             None => {
                 #[cfg(feature = "debug-print")]
                 println!("NO RUNNABLE TASKS FOUND, entering idle state");
+
+                #[cfg(feature = "debug-print")]
+                SystemServices::with(|system_services| {
+                    for test_idx in 0..system_services.processes.len() {
+                        println!("{:?}", system_services.processes[test_idx]);
+                    }
+                });
+
                 // Special case for testing: idle can return `false` to indicate exit
                 if !arch::idle() {
                     return;

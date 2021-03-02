@@ -10,7 +10,18 @@ use crate::services::SystemServices;
 use core::mem;
 use xous_kernel::*;
 
-/// This is the context that called SwitchTo
+/* Quoth Xobs:
+ The idea behind SWITCHTO_CALLER was that you'd have a process act as a scheduler,
+ where it would know all of its children processes. It would call SwitchTo(pid, tid)
+ on its children, which would call Yield or WaitEvent as necessary that would then
+ cause execution to return to the parent process.
+
+ If the timer hit, it would call ReturnToParent() which would also return to the caller.
+
+ Currently (as of Mar 2021) this functionality isn't being used, it's just returning
+ back to the kernel, e.g. (PID,TID) = (1,1)
+*/
+/// This is the PID/TID of the last person that called SwitchTo
 static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 
 #[derive(PartialEq)]
@@ -39,6 +50,7 @@ fn do_yield(_pid: PID, tid: TID) -> SysCallResult {
             .take()
             .expect("yielded when no parent context was present")
     };
+    //println!("\n\r ***YIELD CALLED***");
     SystemServices::with_mut(|ss| {
         // TODO: Advance thread
         ss.activate_process_thread(tid, parent_pid, parent_ctx, true)

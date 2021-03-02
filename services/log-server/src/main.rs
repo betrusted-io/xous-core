@@ -182,9 +182,10 @@ fn handle_scalar(
     output: &mut implementation::OutputWriter,
     sender: xous::MessageSender,
     msg: &xous::ScalarMessage,
+    sender_pid: xous::PID,
 ) {
     match msg.id {
-        1000 => writeln!(output, "PANIC in process {}", sender).unwrap(),
+        1000 => writeln!(output, "PANIC from PID {} | {}", sender_pid, sender).unwrap(),
         1100 => (),
         1101..=1132 => {
             let mut output_bfr = [0u8; core::mem::size_of::<usize>() * 4];
@@ -248,7 +249,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
         let sender = envelope.sender;
         // writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
         match &mut envelope.body {
-            xous::Message::Scalar(msg) => handle_scalar(&mut output, sender, msg),
+            xous::Message::Scalar(msg) => handle_scalar(&mut output, sender, msg, envelope.sender.pid().unwrap()),
             xous::Message::BlockingScalar(msg) => {
                 writeln!(
                     output,

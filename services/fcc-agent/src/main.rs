@@ -105,18 +105,19 @@ UART received <{i:{a:6,b:1,f:F4240,c:{a:0,b:0,c:0,d:44},d:{a:FFB,b:0,c:0,d:0,e:6
 use xous::{Message, ScalarMessage};
 
 #[derive(Debug)]
-pub enum Opcode<'a> {
+pub enum Opcode {
     Char(u8),
-    RxStats(&'a [u8]),
+    // RxStats(&'a [u8]),
 }
-impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
+impl core::convert::TryFrom<& Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: &'a Message) -> Result<Self, Self::Error> {
+    fn try_from(message: & Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 1 => Ok(Opcode::Char(m.arg1 as u8)),
                 _ => Err("unrecognized opcode"),
             },
+            /*
             Message::Borrow(m) => match m.id {
                 2 => {
                     let stats = unsafe {
@@ -128,25 +129,25 @@ impl<'a> core::convert::TryFrom<&'a Message> for Opcode<'a> {
                     Ok(Opcode::RxStats(stats))
                 }
                 _ => {print!("unhandled opcode"); Err("unrecognized opcode")},
-            }
+            }*/
             _ => {print!("unhandled message type"); Err("unhandled message type")},
         }
     }
 }
-impl<'a> Into<Message> for Opcode<'a> {
+impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::Char(c) => Message::Scalar(ScalarMessage {
                 id: 1, arg1: c as usize, arg2: 0, arg3: 0, arg4: 0}),
-            Opcode::RxStats(stats) => {
+            /* Opcode::RxStats(stats) => {
                 let data = xous::carton::Carton::from_bytes(stats);
                 Message::Borrow(data.into_message(2))
-            }
+            } */
         }
     }
 }
 
-use log::error;
+use log::{error, info};
 use core::fmt::{Error, Write};
 
 use utralib::generated::*;
@@ -375,11 +376,23 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
                 println!("rx stats request disabled!!");
                 //get_rx_stats_agent(com_cid).unwrap();
             } else if tokens[1].trim() == "commit_pds" {
+                let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+                let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+
+                let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
                 for pds in pds_list.iter() {
-                    let mut sendable_string = xous::String::new(4096);
+                    let mut sendable_string = xous::String::<512>::new();
                     write!(&mut sendable_string, "{}", pds);
                     println!("{}", sendable_string);
                     send_pds_line(com_cid, &sendable_string);
+                    loop {
+                        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+                            if elapsed_time - last_time > 250 {
+                                last_time = elapsed_time;
+                                break;
+                            }
+                        }
+                    }
                 }
                 pds_list.clear();
             } else if tokens[1].trim() == "ec_version" {
@@ -447,14 +460,28 @@ pub union sl_wfx_indication_data_u {
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    log_server::init_wait().unwrap();
-    print!("FCCAGENT: my PID is {}", xous::process::id());
+    /*
+    // use this to select which UART to monitor in the main loop
+    use utralib::generated::*;
+    let gpio_base = xous::syscall::map_memory(
+        xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+        None,
+        4096,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    )
+    .expect("couldn't map GPIO CSR range");
+    let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+    gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 2); // 0 = kernel, 1 = log, 2 = app_uart
+    */
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    log_server::init_wait().unwrap();
+    info!("FCCAGENT: my PID is {}", xous::process::id());
 
     let agent_server_sid = xous_names::register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
     let agent_server_client = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
     let mut uart = Uart::new(agent_server_client);
 
@@ -477,6 +504,7 @@ fn xmain() -> ! {
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut pds_list: Vec<String<U512>, U16> = Vec::new();
     let mut repeat = false;
+    let mut phase = 0;
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
         match envelope {
@@ -489,12 +517,13 @@ fn xmain() -> ! {
                                 cmd_string.push(c as char).unwrap();
                             } else {
                                 println!("");
-                                do_agent(&mut cmd_string, com_conn, &mut pds_list, &info_csr).unwrap();
+                                do_agent(&mut cmd_string, com_conn, &mut pds_list, &info_csr,/* &mut gpio */).unwrap();
                                 repeat = was_continuous(&mut cmd_string);
                                 // print!("agent@precursor:~$ ");
                                 cmd_string.clear();
                             }
                         },
+                        /*
                         Opcode::RxStats(stats) => {
                             println!("got rxstats message");
                             let mut stats_u: sl_wfx_indication_data_u = sl_wfx_indication_data_u {raw_data: [0; 376]};
@@ -506,7 +535,7 @@ fn xmain() -> ! {
                             println!("PER on total number of frames: {}", unsafe{stats_u.rx_stats.per_total});
                             println!("Throughput on correct frames received: {}", unsafe{stats_u.rx_stats.throughput});
                             // TODO: fill in more stats output
-                        },
+                        },*/
                         _ => println!("Unknown opcode received.")
                     }
                 }
@@ -520,17 +549,57 @@ fn xmain() -> ! {
 
                 if repeat {
                     for pds in pds_list.iter() {
-                        let mut sendable_string = xous::String::new(4096);
+                        let mut sendable_string = xous::String::<512>::new();
                         write!(&mut sendable_string, "{}", pds);
                         println!("{}", sendable_string);
                         send_pds_line(com_conn, &sendable_string);
                     }
                 }
-                /*
-                let mut string_buffer = xous::String::new(4096);
+
+                /* // for testing the PDS API
+                let mut string_buffer = xous::String::<512>::new();
                 write!(&mut string_buffer, "\"{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}\"").expect("Can't write");
+                //write!(&mut string_buffer,     "{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}").expect("Can't write");
                 println!("sending line: {}", string_buffer);
-                send_pds_line(com_conn, &string_buffer);*/
+                send_pds_line(com_conn, &string_buffer); */
+
+                //// full simulation of commands
+                /*
+                if phase == 0 {
+                    info!("FCCAGENT: sending PDS start commands");
+                    let mut pds1: String<U512> = String::from("");
+                    write!(&mut pds1, "{{j:{{a:0}}}}");
+                    pds_list.push(pds1);
+                    let mut pds2: String<U512> = String::from("");
+                    write!(&mut pds2, "{{h:{{e:0,a:50,b:0,c:[{{a:[1,E],b:[0,0,0,0,0,0]}}],d:0}},i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
+                    pds_list.push(pds2);
+                    let mut pds3: String<U512> = String::from("");
+                    write!(&mut pds3, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
+                    pds_list.push(pds3);
+
+                    let mut cmd: String<U2048> = String::from("");
+                    write!(&mut cmd, "wfx_test_agent commit_pds");
+                    do_agent(&mut cmd, com_conn, &mut pds_list, &info_csr).unwrap();
+                    phase = 1;
+                } else if phase == 1 {
+                    info!("FCCAGENT: waiting...");
+                    phase = 2;
+                } else if phase == 2 {
+                    info!("FCCAGENT: sending PDS stop commands");
+                    let mut pds_stop: String<U512> = String::from("");
+                    write!(&mut pds_stop, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:64,f:1}},e:{{}}}}}}");
+                    pds_list.push(pds_stop);
+
+                    let mut cmd: String<U2048> = String::from("");
+                    write!(&mut cmd, "wfx_test_agent commit_pds");
+                    do_agent(&mut cmd, com_conn, &mut pds_list, &info_csr).unwrap();
+                    phase = 3;
+                } else {
+                    info!("FCCAGENT: waiting again...");
+                    phase = 0;
+                }
+                */
+
             }
         } else {
             error!("error requesting ticktimer!")

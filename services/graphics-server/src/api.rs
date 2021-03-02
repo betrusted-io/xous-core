@@ -31,7 +31,7 @@ use hash32::{Hash, Hasher};
 
 //////////////// OS APIs
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Unarchive)]
 pub struct Gid {
     /// a 128-bit random identifier for graphical objects
     gid: [u32; 4],
@@ -49,7 +49,7 @@ impl hash32::Hash for Gid {
     }
 }
 
-#[derive(Debug, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub enum Opcode {
     /// Flush the buffer to the screen
     Flush,
@@ -62,6 +62,9 @@ pub enum Opcode {
 
     /// Draw a rectangle or square at the specified coordinates
     Rectangle(Rectangle),
+
+    /// Draw a rounded rectangle
+    RoundedRectangle(RoundedRectangle),
 
     /// Draw a circle with a specified radius
     Circle(Circle),
@@ -97,7 +100,7 @@ pub enum Opcode {
     QueryGlyphProps(GlyphStyle),
 
     // draws a textview
-    // TextView(&'a mut TextView),  // redo this as an rkyv object, which has no lifetime requirement
+    DrawTextView(TextView),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -133,6 +136,12 @@ impl core::convert::TryFrom<& Message> for Opcode {
                     m.arg1 as _,
                     m.arg2 as _,
                     m.arg3 as _,
+                ))),
+                15 => Ok(Opcode::RoundedRectangle(RoundedRectangle::new(Rectangle::new_with_style(
+                    Point::from(m.arg1),
+                    Point::from(m.arg2),
+                    DrawStyle::from(m.arg3)),
+                    m.arg4 as _
                 ))),
                 _ => Err("unrecognized opcode"),
             },
@@ -243,6 +252,13 @@ impl Into<Message> for Opcode {
                 arg2: 0,
                 arg3: 0,
                 arg4: 0,
+            }),
+            Opcode::RoundedRectangle(rr) => Message::Scalar(ScalarMessage {
+                id: 15,
+                arg1: rr.border.tl.into(),
+                arg2: rr.border.br.into(),
+                arg3: rr.border.style.into(),
+                arg4: rr.radius as _,
             }),
             _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
         }
