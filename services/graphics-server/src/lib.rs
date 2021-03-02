@@ -13,7 +13,7 @@ use core::fmt::Write;
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
     let m: xous::Message = api::Opcode::Line(line).into();
-    log::info!("GFX|LIB: api encoded line as {:?}", m);
+    //log::info!("GFX|LIB: api encoded line as {:?}", m);
     send_message(cid, m).map(|_| ())
 }
 

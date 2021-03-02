@@ -788,10 +788,14 @@ impl SystemServices {
         can_resume: bool,
     ) -> Result<TID, xous_kernel::Error> {
         let previous_pid = self.current_pid();
-        // println!(
-        //     "KERNEL({},{}): Activating process {} thread {}",
-        //     previous_pid, previous_tid, new_pid, new_tid
-        // );
+
+        let debug = false;
+        if debug {
+            println!(
+                "\n\r   KERNEL({},{}): Activating process {} thread {}",
+                previous_pid, previous_tid, new_pid, new_tid
+            );
+        }
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -820,18 +824,19 @@ impl SystemServices {
                         //     "PID {}: Looking for a valid context in the mask {:08b}, curent context {} ({:08b})",
                         //     new_pid, x, new.current_context, new.current_context
                         // );
-                        new_tid = 0; //new.current_thread as usize;
+                        //new_tid = 0;
+                        new_tid = new.current_thread as usize;
                         while x & (1 << new_tid) == 0 {
                             new_tid += 1;
                             if new_tid > arch::process::MAX_THREAD {
-                                //     new_tid = 0;
-                                // }
-                                // // If we've looped around, return an error.
-                                // if new_tid == new.current_thread as usize {
+                                new_tid = 0;
+                            } else if new_tid == new.current_thread as usize {
+                                // If we've looped around, return an error.
                                 println!("Looked through all contexts and couldn't find one that was ready");
                                 return Err(xous_kernel::Error::ProcessNotFound);
                             }
                         }
+                        new.current_thread = new_tid as _;
                     // println!(" -- picked thread {}", new_tid);
                     } else if x & (1 << new_tid) == 0 {
                         println!(
@@ -880,13 +885,14 @@ impl SystemServices {
             let previous = self
                 .get_process_mut(previous_pid)
                 .expect("couldn't get previous pid");
+            let _oldstate = previous.state;  // for tracking state in the debug print after the following closure
             previous.state = match previous.state {
                 // If the previous process had exactly one thread that can be
                 // run, then the Running thread list will be 0.  In that case,
                 // we will either need to Sleep this process, or mark it as
                 // being Ready to run.
                 ProcessState::Running(x) if x == 0 => {
-                    if can_resume {
+                    if can_resume /*|| advance_thread*/ {
                         ProcessState::Ready(1 << previous_tid)
                     } else {
                         ProcessState::Sleeping
@@ -896,17 +902,18 @@ impl SystemServices {
                 // Convert the previous process into "Ready", and include the
                 // current context number only if `can_resume` is `true`.
                 ProcessState::Running(x) => {
-                    // if can_resume {
-                    //     ProcessState::Ready(x | (1 << previous_tid))
-                    // } else {
-                    ProcessState::Ready(x)
-                    // }
+                    if can_resume {
+                        ProcessState::Ready(x | (1 << previous_tid))
+                    } else {
+                        ProcessState::Ready(x)
+                    }
                 }
                 other => panic!(
                     "previous process PID {} was in an invalid state (not Running): {:?}",
                     previous_pid, other
                 ),
             };
+            if debug {println!("   KERNEL|STATE: state change from {:?} -> {:?}", _oldstate, previous.state);}
         // if advance_thread {
         //     previous.current_thread += 1;
         //     if previous.current_thread as TID > arch::process::MAX_CONTEXT {
@@ -924,6 +931,10 @@ impl SystemServices {
             //     }
             //     return Ok(new_tid);
             // }
+
+            // we can get here if we're activating a new thread in the same process
+            //return Ok(new_tid);
+
             let new = self.get_process_mut(new_pid)?; /*
                                                       new.state = match new.state {
                                                           ProcessState::Running(x) if (x & 1 << new_tid) == 0 => {

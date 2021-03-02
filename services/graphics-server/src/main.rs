@@ -95,7 +95,7 @@ fn xmain() -> ! {
     display.redraw();
     loop {
         let msg = xous::receive_message(sid).unwrap();
-        info!("GFX: Message: {:?}", msg);
+        //info!("GFX: Message: {:?}", msg);
         if let xous::Message::Borrow(m) = &msg.body {
             let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
@@ -138,7 +138,7 @@ fn xmain() -> ! {
             };
             //use rkyv::Write;
             //let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-            let debugtv: bool = true;
+            let debugtv: bool = false;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
                     let mut tv = rtv.unarchive();
@@ -244,7 +244,6 @@ fn xmain() -> ! {
                     op::rectangle(display.native_buffer(), r)
                 }
                 Opcode::Line(l) => {
-                    info!("GFX: line: {:?}", l);
                     op::line(display.native_buffer(), l);
                 }
                 Opcode::Rectangle(r) => {

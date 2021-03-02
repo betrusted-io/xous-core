@@ -109,6 +109,7 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    let debug1 = true;  // debug level 1 - most general level
     log_server::init_wait().unwrap();
     info!("GAM: my PID is {}", xous::process::id());
 
@@ -140,13 +141,14 @@ fn xmain() -> ! {
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
+        // /*
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
-        info!("GAM: Maybe Message: {:?}", maybe_env);
         match maybe_env {
-            Some(envelope) => {
-                info!("GAM: Message: {:?}", envelope);
+            Some(envelope) => { // */
+                let envelope = xous::receive_message(gam_sid).unwrap();
+                if debug1 {info!("GAM: Message: {:?}", envelope); }
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-                    info!("GAM: Opcode: {:?}", opcode);
+                    if debug1 {info!("GAM: Opcode: {:?}", opcode);}
                     match opcode {
                         Opcode::ClearCanvas(gid) => {
                             match canvases.get(&gid) {
@@ -182,16 +184,14 @@ fn xmain() -> ! {
                     let value = unsafe {
                         archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
                     };
-                    use rkyv::Write;
-                    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
                             let mut tv = rtv.unarchive();
-                            info!("GAM: rendertextview {:?}", tv);
+                            if debug1{info!("GAM: rendertextview {:?}", tv);}
                             match tv.get_op() {
                                 TextOp::Nop => (),
                                 TextOp::Render | TextOp::ComputeBounds => {
-                                    info!("GAM: render request for {:?}", tv);
+                                    if debug1{info!("GAM: render request for {:?}", tv);}
                                     if tv.get_op() == TextOp::ComputeBounds {
                                         tv.dry_run = true;
                                     } else {
@@ -204,8 +204,16 @@ fn xmain() -> ! {
                                             // set the clip rectangle according to the canvas' location
                                             tv.clip_rect = Some(canvas.clip_rect().into());
 
+                                            // you have to clone the tv object, because if you don't the same block of
+                                            // memory gets passed on to the graphics_server(). Which is efficient, but,
+                                            // the call will automatically Drop() the memory, which causes a panic when
+                                            // this routine returns.
+                                            let mut tv_clone = tv.clone();
                                             // issue the draw command
-                                            graphics_server::draw_textview(gfx_conn, &mut tv).expect("GAM: text view draw could not complete.");
+                                            graphics_server::draw_textview(gfx_conn, &mut tv_clone).expect("GAM: text view draw could not complete.");
+                                            // copy back the fields that we want to be mutable
+                                            tv.cursor = tv_clone.cursor;
+                                            tv.bounds_computed = tv_clone.bounds_computed;
                                         } else {
                                             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
                                         }
@@ -230,13 +238,12 @@ fn xmain() -> ! {
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
                             let obj: GamObject = rtv.unarchive();
-                            info!("GAM: renderobject {:?}", obj);
+                            if debug1{info!("GAM: renderobject {:?}", obj);}
                             if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                                 // first, figure out if we should even be drawing to this canvas.
                                 if canvas.is_drawable() {
                                     match obj.obj {
                                         GamObjectType::Line(line) => {
-                                            info!("GAM: drawing line {:?}", line);
                                             graphics_server::draw_line(gfx_conn, line);
                                         },
                                         GamObjectType::Circ(circ) => {
@@ -255,21 +262,24 @@ fn xmain() -> ! {
                             } else {
                                 info!("GAM: bogus GID in Object, not doing anything in response to draw request.");
                             }
+                            if debug1{info!("GAM: leaving RenderObject");}
                         },
                         _ => panic!("GAM: invalid borrow message"),
                     };
                 } else {
                     panic!("GAM: unhandled message {:?}", envelope);
                 }
+                // /*
             },
             _ => xous::yield_slice(),
             // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
-        }
-
+        } // */
+        //graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
+        ///*
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 33 {  // rate limit updates to 30fps
                 graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
             }
-        }
+        }//*/
     }
 }

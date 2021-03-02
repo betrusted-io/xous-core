@@ -10,6 +10,7 @@ use core::convert::TryFrom;
 use blitstr_ref as blitstr;
 
 pub fn status_thread(canvas_gid: [u32; 4]) {
+    let debug1 = false;
     let status_gid: Gid = Gid::new(canvas_gid);
 
     info!("GAM|status: registering GAM|status thread");
@@ -57,12 +58,22 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
         style_dark
     )).expect("GAM|status: Can't draw border line");
 
-    com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
     loop {
+        /*
+        if debug1{info!("GAM|status: periodic tasks: updating uptime, requesting battstats");}
+        let elapsed_time = ticktimer_server::elapsed_ms(ticktimer_conn).expect("GAM|status: error requesting uptime");
+        com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+        uptime_tv.clear_str();
+        write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
+           (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, (elapsed_time / 1000) % 60).expect("GAM|status: can't write string");
+        if debug1{info!("GAM|status: requesting draw of '{}'", uptime_tv);}
+        gam::post_textview(gam_conn, &mut uptime_tv).expect("GAM|status: can't draw uptime");*/
+
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
             Some(envelope) => {
-                info!("GAM|status: Message: {:?}", envelope);
+                let envelope = xous::receive_message(status_sid).unwrap();
+                if debug1{info!("GAM|status: Message: {:?}", envelope);}
                 if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
                     match opcode {
                         com::api::Opcode::BattStatsEvent(s) => {
@@ -86,16 +97,18 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
             _ => xous::yield_slice(),
         }
 
+        //ticktimer_server::sleep_ms(ticktimer_conn, 1000).expect("couldn't sleep");
+
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 500 {
                 //info!("GAM|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
-                // info!("GAM|status: periodic tasks: updating uptime, requesting battstats");
+                if debug1{info!("GAM|status: periodic tasks: updating uptime, requesting battstats");}
                 last_time = elapsed_time;
                 com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
                 uptime_tv.clear_str();
                 write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
                    (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, (elapsed_time / 1000) % 60).expect("GAM|status: can't write string");
-                info!("GAM|status: requesting draw of '{}'", uptime_tv);
+                if debug1{info!("GAM|status: requesting draw of '{}'", uptime_tv);}
                 gam::post_textview(gam_conn, &mut uptime_tv).expect("GAM|status: can't draw uptime");
             }
         } else {
