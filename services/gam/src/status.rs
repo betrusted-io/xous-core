@@ -59,6 +59,9 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     )).expect("GAM|status: Can't draw border line");
 
     com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
+    // prime the loop
+    com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+    last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("GAM|status: starting main loop");
     loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
