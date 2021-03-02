@@ -789,7 +789,7 @@ impl SystemServices {
     ) -> Result<TID, xous_kernel::Error> {
         let previous_pid = self.current_pid();
 
-        let debug = true;
+        let debug = false;
         if debug {
             println!(
                 "\n\r   KERNEL({},{}): Activating process {} thread {}",
@@ -825,12 +825,12 @@ impl SystemServices {
                              new_pid, x,
                         );
                         //new_tid = 0;
-                        new_tid = new.current_thread as usize;
+                        new_tid = (new.current_thread + 1) as usize;
                         while x & (1 << new_tid) == 0 {
                             new_tid += 1;
                             if new_tid > arch::process::MAX_THREAD {
                                 new_tid = 0;
-                            } else if new_tid == new.current_thread as usize {
+                            } else if new_tid == (new.current_thread + 1) as usize {
                                 // If we've looped around, return an error.
                                 println!("Looked through all contexts and couldn't find one that was ready");
                                 return Err(xous_kernel::Error::ProcessNotFound);
