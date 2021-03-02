@@ -789,7 +789,7 @@ impl SystemServices {
     ) -> Result<TID, xous_kernel::Error> {
         let previous_pid = self.current_pid();
 
-        let debug = false;
+        let debug = true;
         if debug {
             println!(
                 "\n\r   KERNEL({},{}): Activating process {} thread {}",
@@ -820,10 +820,10 @@ impl SystemServices {
                         new.state
                     );
                     if new_tid == 0 {
-                        // print!(
-                        //     "PID {}: Looking for a valid context in the mask {:08b}, curent context {} ({:08b})",
-                        //     new_pid, x, new.current_context, new.current_context
-                        // );
+                        print!(
+                             "PID {}: Looking for a valid context in the mask {:08b}",
+                             new_pid, x,
+                        );
                         //new_tid = 0;
                         new_tid = new.current_thread as usize;
                         while x & (1 << new_tid) == 0 {
@@ -837,7 +837,7 @@ impl SystemServices {
                             }
                         }
                         new.current_thread = new_tid as _;
-                    // println!(" -- picked thread {}", new_tid);
+                        println!(" -- picked thread {}", new_tid);
                     } else if x & (1 << new_tid) == 0 {
                         println!(
                             "thread is {:?}, which is not valid for new thread {}",

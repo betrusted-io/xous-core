@@ -49,7 +49,6 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     let mut stats: BattStats = BattStats::default();
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut stats_phase: usize = 0;
-    info!("GAM|status: starting main loop");
 
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     gam::draw_line(gam_conn, status_gid, Line::new_with_style(
@@ -58,6 +57,8 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
         style_dark
     )).expect("GAM|status: Can't draw border line");
 
+    com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
+    info!("GAM|status: starting main loop");
     loop {
         /*
         if debug1{info!("GAM|status: periodic tasks: updating uptime, requesting battstats");}
@@ -72,7 +73,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();
         match maybe_env {
             Some(envelope) => {
-                let envelope = xous::receive_message(status_sid).unwrap();
+                //let envelope = xous::receive_message(status_sid).unwrap();
                 if debug1{info!("GAM|status: Message: {:?}", envelope);}
                 if let Ok(opcode) = com::api::Opcode::try_from(&envelope.body) {
                     match opcode {

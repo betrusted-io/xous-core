@@ -145,7 +145,7 @@ fn xmain() -> ! {
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
         match maybe_env {
             Some(envelope) => { // */
-                let envelope = xous::receive_message(gam_sid).unwrap();
+                // let envelope = xous::receive_message(gam_sid).unwrap();
                 if debug1 {info!("GAM: Message: {:?}", envelope); }
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     if debug1 {info!("GAM: Opcode: {:?}", opcode);}

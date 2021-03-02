@@ -325,7 +325,7 @@ fn some_main() -> ! {
         )
         .expect("couldn't map GPIO CSR range");
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
-        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
+        gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // 0 = kernel, 1 = log, 2 = app_uart
     }
 
     let mut output = implementation::init();
