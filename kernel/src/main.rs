@@ -76,8 +76,8 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
                 )
                 .expect("unable to map serial port")
         });
+        debug::Uart{}.init();
         println!("KMAIN: Supervisor mode started...");
-        debug::Uart{}.enable_rx();
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
         xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
             .expect("Couldn't claim debug interrupt");
