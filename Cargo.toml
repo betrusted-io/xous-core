@@ -14,6 +14,7 @@ members = [
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
+    "services/kernel-test",
     "services/trng",
     "services/gam",
     "services/benchmark",
