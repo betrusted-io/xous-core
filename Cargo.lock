@@ -532,6 +532,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "heapless",
+ "keyboard",
  "log",
  "log-server",
  "rkyv",

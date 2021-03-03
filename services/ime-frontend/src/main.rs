@@ -11,6 +11,10 @@ use log::{error, info};
 use graphics_server::Gid;
 use heapless::Vec;
 use heapless::consts::U32;
+use core::pin::Pin;
+
+use rkyv::Unarchive;
+use rkyv::archived_value;
 
 /*
 what else do we need:
@@ -20,12 +24,13 @@ what else do we need:
 fn draw_canvas(gam_conn: xous::CID, canvas: Gid, pred_conn: xous::CID, newkeys: [char; 4]) {
 
     // this is just reference to remind me how to decode the key array
+    /*
     for &k in newkeys.iter() {
         if k != '\u{0000}' {
             key_queue.push(k).unwrap();
             if debug1{info!("IMEF: got key '{}'", k);}
         }
-    }
+    }*/
 }
 
 
@@ -56,6 +61,7 @@ fn xmain() -> ! {
             match opcode {
                 Opcode::SetCanvas(g) => {
                     canvas = g;
+                    break;
                 },
                 _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
             }
@@ -68,6 +74,7 @@ fn xmain() -> ! {
     info!("IMEF: entering main loop");
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
+        if debug1{info!("IMEF: got message {:?}", envelope);}
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             match opcode {
                 Opcode::SetCanvas(g) => {
@@ -77,7 +84,7 @@ fn xmain() -> ! {
                 },
                 _ => info!("IMEF: unhandled opcode {:?}", opcode)
             }
-        } else if let xous::Message::Borrow(m) = &msg.body {
+        } else if let xous::Message::Borrow(m) = &envelope.body {
             let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
@@ -86,7 +93,10 @@ fn xmain() -> ! {
             match &*value {
                 rkyv::Archived::<api::Opcode>::SetPrediction(rkyv_s) => {
                     let s: xous::String<4096> = rkyv_s.unarchive();
-                    prediction_conn = xous_names::request_connection(s.as_str());
+                    match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
+                        Ok(pc) => prediction_conn = pc,
+                        _ => error!("IMEF: can't find predictive engine {}, retaining existign one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
+                    }
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
             };

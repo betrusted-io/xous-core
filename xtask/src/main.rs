@@ -39,8 +39,8 @@ fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
         "gam",
         //"shell",
-        //"ime-frontend",
-        //"ime-plugin-shell",
+        "ime-frontend",
+        "ime-plugin-shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",
@@ -192,8 +192,8 @@ fn run(debug: bool) -> Result<(), DynError> {
     let init = [
         //"shell",
         "gam",
-        //"ime-frontend",
-        //"ime-plugin-shell",
+        "ime-frontend",
+        "ime-plugin-shell",
         //"benchmark",
         //"benchmark-target",
         "log-server",

@@ -1,44 +1,43 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use xous::{CID, send_message, String};
+use xous::{CID, String};
 
-pub fn set_input(cid: CID, s: String) -> Result<(), xous::Error> {
+pub fn set_input(cid: CID, s: String<4096>) -> Result<(), xous::Error> {
     use rkyv::Write;
 
-    let mut rkyv_input = api::Opcode::Input(*s);
+    let rkyv_input = api::Opcode::Input(s);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv_s).expect("IMES|API: couldn't archive input string");
-    let mut xous_buffer = writer.into_inner();
+    let pos = writer.archive(&rkyv_input).expect("IMES|API: couldn't archive input string");
+    let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("IMES|API: set_input operation failure");
 
     Ok(())
 }
 
-pub fn feedback_picked(cid: CID, s: String) -> Result<(), xous::Error> {
+pub fn feedback_picked(cid: CID, s: String<4096>) -> Result<(), xous::Error> {
     use rkyv::Write;
 
-    let mut rkyv_input = api::Opcode::Picked(*s);
+    let rkyv_picked = api::Opcode::Picked(s);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv_s).expect("IMES|API: couldn't archive picked string");
-    let mut xous_buffer = writer.into_inner();
+    let pos = writer.archive(&rkyv_picked).expect("IMES|API: couldn't archive picked string");
+    let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("IMES|API: feedback_picked operation failure");
 
     Ok(())
 }
 
-pub fn get_prediction(cid: CID, index: u32) -> Result<xous::String, xous::Error> {
+pub fn get_prediction(cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error> {
     use rkyv::Write;
     use rkyv::Unarchive;
 
-    let mut mutstr = xous::String::new();
-    let mut prediction = api::Prediction {
+    let prediction = api::Prediction {
         index,
-        string: mutstr
+        string: xous::String::<4096>::new(),
     };
-    let mut pred_op = api::Opcode::Prediction(*prediction);
+    let pred_op = api::Opcode::Prediction(prediction);
 
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&pred_op).expect("IMES|API: couldn't archive prediction request");
@@ -50,11 +49,11 @@ pub fn get_prediction(cid: CID, index: u32) -> Result<xous::String, xous::Error>
     if let rkyv::Archived::<api::Opcode>::Prediction(result) = returned {
         let pred_r: api::Prediction = result.unarchive();
 
-        let retstring: xous::String = pred_r.string.clone();
+        let retstring: xous::String<4096> = pred_r.string.clone();
         Ok(retstring)
     } else {
         let r = returned.unarchive();
-        info!("get_prediciton saw an unhandled return of {:?}", r);
+        log::info!("get_prediciton saw an unhandled return of {:?}", r);
         Err(xous::Error::InvalidString)
     }
 }
