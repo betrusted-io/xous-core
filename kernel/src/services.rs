@@ -36,7 +36,7 @@ pub struct SystemServices {
     _syscall_depth: usize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum ProcessState {
     /// This is an unallocated, free process
     Free,
@@ -60,6 +60,20 @@ pub enum ProcessState {
     /// This process is waiting for an event, such as as message or an
     /// interrupt.  There are no contexts that can be run.
     Sleeping,
+}
+
+impl core::fmt::Debug for ProcessState {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
+        use ProcessState::*;
+        match *self {
+            Free => write!(fmt, "Free"),
+            Allocated => write!(fmt, "Allocated"),
+            Setup(ti) => write!(fmt, "Setup({:?})", ti),
+            Ready(rt) => write!(fmt, "Ready({:b})", rt),
+            Running(rt) => write!(fmt, "Running({:b})", rt),
+            Sleeping => write!(fmt, "Sleeping"),
+        }
+    }
 }
 
 impl Default for ProcessState {
