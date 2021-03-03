@@ -942,50 +942,53 @@ impl SystemServices {
         //     previous_pid, previous.state, can_resume
         // );
         } else {
-            // if self.current_thread(previous_pid) == new_tid {
-            //     if !can_resume {
-            //         panic!("tried to switch to our own context without resume");
-            //     }
-            //     return Ok(new_tid);
-            // }
+            let new = self.get_process_mut(new_pid)?;
 
-            // we can get here if we're activating a new thread in the same process
-            //return Ok(new_tid);
+            // If we wanted to switch to a "new" thread, and it's the same
+            // as the one we just switched from, do nothing.
+            if new.current_thread == new_tid {
+                if !can_resume {
+                    panic!("tried to switch to our own context without resume");
+                }
+                return Ok(new_tid);
+            }
 
-            let new = self.get_process_mut(new_pid)?; /*
-                                                      new.state = match new.state {
-                                                          ProcessState::Running(x) if (x & 1 << new_tid) == 0 => {
-                                                              return Err(xous_kernel::Error::ProcessNotFound)
-                                                          }
-                                                          // ProcessState::Running(x) => {
-                                                          //     if can_resume {
-                                                          //         ProcessState::Running((x | (1 << previous_tid)) & !(1 << new_tid))
-                                                          //     } else {
-                                                          //         ProcessState::Running(x | (1 << previous_tid))
-                                                          //     }
-                                                          // }
-                                                          other => */
-            panic!(
-                "PID {} invalid process state (not Running): {:?}",
-                previous_pid, new.state
-            ) /*,
-              }*/
-            ;
-            // if advance_thread {
-            //     new.current_thread += 1;
-            //     if new.current_thread as TID > arch::process::MAX_CONTEXT {
-            //         new.current_thread = 0;
-            //     }
-            // }
+            // Transition to the new state.
+            new.state = if let ProcessState::Running(x) = new.state {
+                let previous_tid = new.current_thread;
+                // If no new thread is specified, take the previous
+                // thread.  If that is not runnable, do a round-robin
+                // search for the next available thread.
+                if new_tid == 0 {
+                    new_tid = (new.current_thread + 1) as usize;
+                    while x & (1 << new_tid) == 0 {
+                        new_tid += 1;
+                        if new_tid > arch::process::MAX_THREAD {
+                            new_tid = 0;
+                        } else if new_tid == (new.current_thread + 1) as usize {
+                            // If we've looped around, return an error.
+                            return Err(xous_kernel::Error::ProcessNotFound);
+                        }
+                    }
+                    new.current_thread = new_tid as _;
+                } else if x & (1 << new_tid) == 0 {
+                    return Err(xous_kernel::Error::ProcessNotFound);
+                }
+                // Mark the previous TID as being runnable, and remove the new TID
+                // from the list of threads that can be run.
+                ProcessState::Running(x & !(1 << new_tid) | if can_resume { 1 << previous_tid } else { 0 })
+            } else {
+                panic!(
+                    "PID {} invalid process state (not Running): {:?}",
+                    previous_pid, new.state
+                )
+            };
         }
-        // self.pid = new_pid;
 
         let mut process = crate::arch::process::Process::current();
 
-        // Restore the previous context, if one exists.
+        // Restore the previous thread, if one exists.
         process.set_thread(new_tid)?;
-        // self.processes[new_pid.get() as usize - 1].current_thread = new_tid as u8;
-        // let _ctx = process.current_context();
 
         Ok(new_tid)
     }
