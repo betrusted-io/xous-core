@@ -1,7 +1,5 @@
 use xous::{Message, ScalarMessage};
-use graphics_server::api::{Point, Rectangle, TextView, TextViewResult, Gid, Line, RoundedRectangle, Circle};
-use blitstr_ref as blitstr;
-use blitstr::{GlyphStyle, Cursor};
+use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle};
 
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 pub enum GamObjectType {

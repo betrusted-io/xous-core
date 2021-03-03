@@ -14,10 +14,13 @@ members = [
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
+    "services/kernel-test",
     "services/trng",
     "services/gam",
     "services/benchmark",
     "services/benchmark-target",
+    "services/ime-frontend",
+    "services/ime-plugin-shell",
     "svd2utra",
     "xtask",
     "imports/blitstr-ref",
@@ -40,6 +43,8 @@ default-members = [
     "imports/com_rs-ref",
     "services/benchmark",
     "services/benchmark-target",
+    "services/ime-frontend",
+    "services/ime-plugin-shell",
 ]
 
 # These packages have custom RUSTFLAGS, so if they

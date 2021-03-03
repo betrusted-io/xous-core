@@ -6,6 +6,9 @@ use core::fmt::{Error, Write};
 #[cfg(baremetal)]
 use utralib::generated::*;
 
+#[allow(dead_code)]  // this is unused in hosted mode, kill the warning
+static mut INITIALIZED: bool = false;
+
 #[macro_use]
 #[cfg(all(
     not(test),
@@ -67,12 +70,17 @@ pub struct Uart {
 #[cfg(baremetal)]
 impl Uart {
     #[allow(dead_code)]
-    pub fn enable_rx(self) {
+    pub fn init(self) {
+        unsafe { INITIALIZED = true };
         let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
     pub fn putc(&self, c: u8) {
+        if unsafe { INITIALIZED != true } {
+            return;
+        }
+
         let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
         // Wait until TXFULL is `0`
         while uart_csr.r(utra::uart::TXFULL) != 0 {

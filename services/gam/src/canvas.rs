@@ -1,12 +1,9 @@
 use core::cmp::Ordering;
 use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
-use heapless::Vec;
 use heapless::consts::*;
 use graphics_server::*;
 use log::{error, info};
-
-use crate::api::*;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CanvasState {
@@ -41,6 +38,8 @@ pub struct Canvas {
     // enables scroll/pan of objects within a region
     pan_offset: Point,
 }
+
+#[allow(dead_code)]
 impl Canvas {
     pub fn new(clip_rect: Rectangle, trust_level: u8,
         trng_conn: xous::CID, pan_offset: Option<Point>) -> Result<Canvas, xous::Error> {

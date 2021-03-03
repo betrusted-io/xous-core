@@ -1,5 +1,3 @@
-use crate::api::*;
-
 use log::{error, info};
 use com::api::BattStats;
 use graphics_server::*;
@@ -18,7 +16,6 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
 
     let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("GAM|status: can't connect to COM");
-    let gfx_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM|status: can't connect to COM");
     let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
     if debug1{info!("GAM|status: getting screen size");}
@@ -46,7 +43,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
 
-    let mut stats: BattStats = BattStats::default();
+    let mut stats: BattStats;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     let mut stats_phase: usize = 0;
     let mut last_seconds: usize = ((last_time / 1000) % 60) as usize;
@@ -59,6 +56,9 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     )).expect("GAM|status: Can't draw border line");
 
     com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
+    // prime the loop
+    com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+    last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("GAM|status: starting main loop");
     loop {
         let maybe_env = xous::try_receive_message(status_sid).unwrap();

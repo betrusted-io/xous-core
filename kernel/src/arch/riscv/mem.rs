@@ -593,6 +593,12 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
 
     // Ensure the entry hasn't already been mapped.
     if l0_pt.entries[vpn0] & MMUFlags::VALID.bits() == 0 {
+        // The memory has been reserved, but isn't pointing anywhere yet.
+        if l0_pt.entries[vpn0] != 0 {
+            return Err(xous_kernel::Error::MemoryInUse);
+        }
+
+        // The address hasn't been allocated
         return Err(xous_kernel::Error::BadAddress);
     }
     Ok((l0_pt.entries[vpn0] >> 10) << 12)

@@ -110,8 +110,7 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use crate::api::*;
-    use log::{error, info};
+    use log::info;
 
     pub struct Trng {
         seed: u32,
@@ -131,6 +130,7 @@ mod implementation {
             lfsr
         }
 
+        #[allow(dead_code)]
         pub fn wait_full(&self) { }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {

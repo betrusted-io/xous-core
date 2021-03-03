@@ -19,6 +19,7 @@ use xous::buffer;
 use rkyv::{archived_value, Write};
 
 /// Compute the dvorak key mapping of row/col to key tuples
+#[allow(dead_code)]
 fn map_dvorak(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 
@@ -93,6 +94,7 @@ fn map_dvorak(code: RowCol) -> ScanCode {
 
 
 /// Compute the dvorak key mapping of row/col to key tuples
+#[allow(dead_code)]
 fn map_qwerty(code: RowCol) -> ScanCode {
     let rc = (code.r, code.c);
 
@@ -743,9 +745,10 @@ mod implementation {
     use heapless::Vec;
     use heapless::consts::*;
     use crate::api::*;
-    use crate::{map_dvorak, map_qwerty};
-    use log::{error, info};
+    //use crate::{map_dvorak, map_qwerty};
+    //use log::{error, info};
 
+    #[allow(dead_code)]
     pub struct Keyboard {
         map: KeyMap,
         rate: u32,

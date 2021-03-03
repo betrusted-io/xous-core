@@ -2,7 +2,7 @@ use crate::op::{HEIGHT, WIDTH};
 use crate::api::{Point, DrawStyle};
 use blitstr_ref as blitstr;
 use blitstr::{ClipRect};
-use core::{cmp::{max, min}, ops::Add};
+use core::{cmp::{max, min}};
 
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
 pub struct Rectangle {

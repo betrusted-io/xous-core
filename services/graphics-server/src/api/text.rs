@@ -2,8 +2,6 @@ use crate::api::{Point, Rectangle, Gid};
 use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
-use log::info;
-
 /// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub enum TextBounds {
@@ -45,12 +43,6 @@ impl From<usize> for TextOp {
 
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
 const TEXTVIEW_LEN: usize = 3072;
-
-#[derive(Copy, Clone, rkyv::Archive, Debug, rkyv::Unarchive)]
-pub struct TextViewResult {
-    pub bounds_computed: Option<Rectangle>,
-    pub cursor: Cursor,
-}
 
 #[derive(Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub struct TextView {

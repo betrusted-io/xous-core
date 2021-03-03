@@ -491,6 +491,17 @@ impl From<usize> for MemoryType {
     }
 }
 
+impl core::fmt::Display for MemoryType {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            MemoryType::Default => write!(fmt, "Default"),
+            MemoryType::Heap => write!(fmt, "Heap"),
+            MemoryType::Stack => write!(fmt, "Stack"),
+            MemoryType::Messages => write!(fmt, "Messages"),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum Result {

@@ -39,12 +39,14 @@ fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
         "gam",
         //"shell",
+        //"ime-frontend",
+        //"ime-plugin-shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",
         "com",
         "xous-names",
-        //"keyboard",
+        "keyboard",
         "trng",
         //"llio",
     ];
@@ -71,6 +73,7 @@ fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
+        Some("renode-test") => renode_image(false, &["kernel-test"])?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
@@ -85,7 +88,8 @@ fn try_main() -> Result<(), DynError> {
 fn print_help() {
     eprintln!(
         "Tasks:
-renode-image            builds a test image for renode
+renode-image            builds a functional image for renode
+renode-test             builds a test image for renode
 renode-image-debug      builds a test image for renode in debug mode
 hw-image [soc.svd]      builds an image for real hardware
 run                     runs a release build using a hosted environment
@@ -188,6 +192,8 @@ fn run(debug: bool) -> Result<(), DynError> {
     let init = [
         //"shell",
         "gam",
+        //"ime-frontend",
+        //"ime-plugin-shell",
         //"benchmark",
         //"benchmark-target",
         "log-server",
