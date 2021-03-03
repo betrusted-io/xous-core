@@ -1,0 +1,11 @@
+[package]
+name = "ime-plugin-api"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "IME Plugin Common APIs"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+rkyv = { version = "0.3.1", default_features = false }
+

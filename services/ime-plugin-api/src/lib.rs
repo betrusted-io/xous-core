@@ -1,15 +1,19 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous::{Message, ScalarMessage};
+use xous::{Message, ScalarMessage, String, CID};
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub struct Prediction {
     pub index: u32,
     pub string: xous::String<4096>,
 }
 
-////////////////////////////////////////////////
-/////////////// TODO: refactor this into a multi-crate API, so that we an inheret this API across multiple implementations
-////////////////////////////////////////////////
+pub trait PredictionApi {
+    fn get_prediction_triggers(self, cid: CID) -> Result<PredictionTriggers, xous::Error>;
+    fn unpick(self, cid: CID) -> Result<(), xous::Error>;
+    fn set_input(self, cid: CID, s: String<4096>) -> Result<(), xous::Error>;
+    fn feedback_picked(self, cid: CID, s: String<4096>) -> Result<(), xous::Error>;
+    fn get_prediction(self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error>;
+}
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PredictionTriggers {
@@ -90,6 +94,80 @@ impl Into<Message> for Opcode {
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             _ => panic!("IME_SH api: Opcode type not handled by Into(), refer to helper method"),
+        }
+    }
+}
+
+// most implementation should not modify this, but it's made a trait in case for some weird reason it needs changes...
+#[derive(Debug, Default, Copy, Clone)]
+pub struct StandardPredictionPlugin {}
+
+impl PredictionApi for StandardPredictionPlugin {
+    fn get_prediction_triggers(self, cid: CID) -> Result<PredictionTriggers, xous::Error> {
+        let response = xous::send_message(cid, Opcode::GetPredictionTriggers.into())?;
+        if let xous::Result::Scalar1(code) = response {
+            Ok(code.into())
+        } else {
+            panic!("get_prediciton_triggers failed")
+        }
+    }
+
+    fn unpick(self, cid: CID) -> Result<(), xous::Error> {
+        xous::send_message(cid, Opcode::Unpick.into())?;
+        Ok(())
+    }
+
+    fn set_input(self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+        use rkyv::Write;
+
+        let rkyv_input = Opcode::Input(s);
+        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+        let pos = writer.archive(&rkyv_input).expect("IMES|API: couldn't archive input string");
+        let xous_buffer = writer.into_inner();
+
+        xous_buffer.lend(cid, pos as u32).expect("IMES|API: set_input operation failure");
+
+        Ok(())
+    }
+
+    fn feedback_picked(self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+        use rkyv::Write;
+
+        let rkyv_picked = Opcode::Picked(s);
+        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+        let pos = writer.archive(&rkyv_picked).expect("IMES|API: couldn't archive picked string");
+        let xous_buffer = writer.into_inner();
+
+        xous_buffer.lend(cid, pos as u32).expect("IMES|API: feedback_picked operation failure");
+
+        Ok(())
+    }
+
+    fn get_prediction(self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error> {
+        use rkyv::Write;
+        use rkyv::Unarchive;
+
+        let prediction = Prediction {
+            index,
+            string: xous::String::<4096>::new(),
+        };
+        let pred_op = Opcode::Prediction(prediction);
+
+        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+        let pos = writer.archive(&pred_op).expect("IMES|API: couldn't archive prediction request");
+        let mut xous_buffer = writer.into_inner();
+
+        xous_buffer.lend_mut(cid, pos as u32).expect("IMES|API: prediction fetch operation failure");
+
+        let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
+        if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
+            let pred_r: Prediction = result.unarchive();
+
+            let retstring: xous::String<4096> = pred_r.string.clone();
+            Ok(retstring)
+        } else {
+            let r = returned.unarchive();
+            Err(xous::Error::InvalidString)
         }
     }
 }

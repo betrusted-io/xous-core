@@ -12,7 +12,7 @@ use graphics_server::Gid;
 use heapless::Vec;
 use heapless::consts::U32;
 use core::pin::Pin;
-use ime_plugin_api::PredictionTriggers;
+use ime_plugin_api::{PredictionTriggers, PredictionApi};
 
 use rkyv::Unarchive;
 use rkyv::archived_value;
@@ -38,7 +38,9 @@ struct InputTracker {
 }
 
 impl InputTracker {
-    pub fn new(gam_conn: xous::CID, pred_conn: xous::CID)-> InputTracker {
+    pub fn new(gam_conn: xous::CID, pred_conn: xous::CID, predictor: impl PredictionApi)-> InputTracker {
+        // a little dangerous: bypassing any explicit API call implementation for this one
+        /*
         let response = xous::send_message(pred_conn, ime_plugin_api::Opcode::GetPredictionTriggers.into())
             .expect("IMEF: InputTracker failed to get predictions from default plugin");
         if let xous::Result::Scalar1(code) = response {
@@ -54,6 +56,19 @@ impl InputTracker {
             }
         } else {
             panic!("IMEF: InputTracker::new() failed to get prediction triggers")
+        }*/
+
+        let pred_triggers = predictor.get_prediction_triggers(pred_conn)
+            .expect("IMEF: InputTracker failed to get predictions from default plugin");
+        InputTracker {
+            gam_conn,
+            input_canvas: None,
+            pred_conn,
+            pred_canvas: None,
+            pred_triggers,
+            line: xous::String::<4096>::new(),
+            charwidths: [0; 4096],
+            insertion: 0,
         }
     }
 
@@ -87,10 +102,12 @@ fn xmain() -> ! {
     let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
     keyboard::request_events(xous::names::SERVER_NAME_IME_FRONT, kbd_conn).expect("IMEF: couldn't request events from keyboard");
 
+    let default_predictor = ime_plugin_api::StandardPredictionPlugin {};
     let mut tracker = InputTracker::new(
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
         // set a "default" prediction that is a shell-like history buffer of things previously typed
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IMEF: can't connect to shell prediction engine"),
+        default_predictor
     );
 
     // The first message should be my Gid from the GAM.
