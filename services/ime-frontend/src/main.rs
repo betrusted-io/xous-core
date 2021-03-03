@@ -12,27 +12,68 @@ use graphics_server::Gid;
 use heapless::Vec;
 use heapless::consts::U32;
 use core::pin::Pin;
+use ime_plugin_api::PredictionTriggers;
 
 use rkyv::Unarchive;
 use rkyv::archived_value;
 
-/*
-what else do we need:
-  - current string that is being built up
-  - cursor position in string, so we can do insertion/deletion
- */
-fn draw_canvas(gam_conn: xous::CID, canvas: Gid, pred_conn: xous::CID, newkeys: [char; 4]) {
+struct InputTracker {
+    /// connection for handling graphical update requests
+    pub gam_conn: xous::CID,
+    /// input area canvas, as given by the GAM
+    pub input_canvas: Option<Gid>,
+    /// a connection to our current prediction engine
+    pub pred_conn: xous::CID,
+    /// prediction display area, as given by the GAM
+    pub pred_canvas: Option<Gid>,
+    /// triggers for predictions
+    pub pred_triggers: PredictionTriggers,
 
-    // this is just reference to remind me how to decode the key array
-    /*
-    for &k in newkeys.iter() {
-        if k != '\u{0000}' {
-            key_queue.push(k).unwrap();
-            if debug1{info!("IMEF: got key '{}'", k);}
-        }
-    }*/
+    /// track the progress of our input line
+    line: xous::String::<4096>,
+    /// we need to track character widths so we can draw a cursor
+    charwidths: [u8; 4096],
+    /// what position the insertion cursor is at in the string. 0 is inserting elements into the front of the string
+    insertion: u8,
 }
 
+impl InputTracker {
+    pub fn new(gam_conn: xous::CID, pred_conn: xous::CID)-> InputTracker {
+        let response = xous::send_message(pred_conn, ime_plugin_api::Opcode::GetPredictionTriggers.into())
+            .expect("IMEF: InputTracker failed to get predictions from default plugin");
+        if let xous::Result::Scalar1(code) = response {
+            InputTracker {
+                gam_conn,
+                input_canvas: None,
+                pred_conn,
+                pred_canvas: None,
+                pred_triggers: code.into(),
+                line: xous::String::<4096>::new(),
+                charwidths: [0; 4096],
+                insertion: 0,
+            }
+        } else {
+            panic!("IMEF: InputTracker::new() failed to get prediction triggers")
+        }
+    }
+
+    pub fn update(&mut self, newkeys: [char; 4]) {
+
+        /*
+        what else do we need:
+        - current string that is being built up
+        - cursor position in string, so we can do insertion/deletion
+        */
+        // this is just reference to remind me how to decode the key array
+        /*
+        for &k in newkeys.iter() {
+            if k != '\u{0000}' {
+                key_queue.push(k).unwrap();
+                if debug1{info!("IMEF: got key '{}'", k);}
+            }
+        }*/
+    }
+}
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -46,27 +87,33 @@ fn xmain() -> ! {
     let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
     keyboard::request_events(xous::names::SERVER_NAME_IME_FRONT, kbd_conn).expect("IMEF: couldn't request events from keyboard");
 
-    let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM");
-
-    // set a "default" prediction that is a shell-like history buffer of things previously typed
-    let mut prediction_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_PLUGIN_SHELL)
-    .expect("IMEF: can't connect to shell prediction engine");
+    let mut tracker = InputTracker::new(
+        xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
+        // set a "default" prediction that is a shell-like history buffer of things previously typed
+        xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IMEF: can't connect to shell prediction engine"),
+    );
 
     // The first message should be my Gid from the GAM.
-    let mut canvas: Gid = Gid::new([0,0,0,0]);
-    info!("IMEF: waiting for my canvas Gid");
+    info!("IMEF: waiting for my canvas Gids");
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             match opcode {
-                Opcode::SetCanvas(g) => {
-                    canvas = g;
-                    break;
+                Opcode::SetInputCanvas(g) => {
+                    if debug1{info!("IMEF: got input canvas {:?}", g);}
+                    tracker.input_canvas = Some(g);
+                },
+                Opcode::SetPredictionCanvas(g) => {
+                    if debug1{info!("IMEF: got prediction canvas {:?}", g);}
+                    tracker.pred_canvas = Some(g);
                 },
                 _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
             }
         } else {
             info!("IMEF: expected canvas Gid, but got other message first {:?}", envelope);
+        }
+        if tracker.input_canvas.is_some() && tracker.pred_canvas.is_some() {
+            break;
         }
     }
 
@@ -77,10 +124,15 @@ fn xmain() -> ! {
         if debug1{info!("IMEF: got message {:?}", envelope);}
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             match opcode {
-                Opcode::SetCanvas(g) => {
+                Opcode::SetInputCanvas(g) => {
                     // there are valid reasons for this to happen, but it should be rare.
-                    info!("IMEF: warning: canvas Gid has been reset");
-                    canvas = g;
+                    info!("IMEF: warning: input canvas Gid has been reset");
+                    tracker.input_canvas = Some(g);
+                },
+                Opcode::SetPredictionCanvas(g) => {
+                    // there are valid reasons for this to happen, but it should be rare.
+                    info!("IMEF: warning: prediction canvas Gid has been reset");
+                    tracker.pred_canvas = Some(g);
                 },
                 _ => info!("IMEF: unhandled opcode {:?}", opcode)
             }
@@ -91,11 +143,11 @@ fn xmain() -> ! {
                 archived_value::<api::Opcode>(&bytes, m.id as usize)
             };
             match &*value {
-                rkyv::Archived::<api::Opcode>::SetPrediction(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                rkyv::Archived::<api::Opcode>::SetPredictionServer(rkyv_s) => {
+                    let s: xous::String<256> = rkyv_s.unarchive();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
-                        Ok(pc) => prediction_conn = pc,
-                        _ => error!("IMEF: can't find predictive engine {}, retaining existign one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
+                        Ok(pc) => tracker.pred_conn = pc,
+                        _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
@@ -103,7 +155,7 @@ fn xmain() -> ! {
         } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
-                    draw_canvas(gam_conn, canvas, prediction_conn, keys);
+                    tracker.update(keys);
                 },
                 _ => error!("IMEF: received KBD event opcode that wasn't expected"),
             }

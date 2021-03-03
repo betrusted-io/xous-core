@@ -25,6 +25,7 @@ members = [
     "xtask",
     "imports/blitstr-ref",
     "imports/com_rs-ref",
+    "services/ime-plugin-api",
 ]
 default-members = [
     "services/shell",
@@ -41,6 +42,7 @@ default-members = [
     "services/gam",
     "imports/blitstr-ref",
     "imports/com_rs-ref",
+    "services/ime-plugin-api",
     "services/benchmark",
     "services/benchmark-target",
     "services/ime-frontend",

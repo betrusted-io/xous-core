@@ -15,6 +15,7 @@ graphics-server = {path = "../graphics-server"}
 log = "0.4"
 rkyv = { version = "0.3.1", default_features = false }
 keyboard = {path="../keyboard"}
+ime-plugin-api = {path="../ime-plugin-api"}
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

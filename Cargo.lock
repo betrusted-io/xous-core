@@ -532,6 +532,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "heapless",
+ "ime-plugin-api",
  "keyboard",
  "log",
  "log-server",
@@ -543,10 +544,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ime-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "rkyv",
+ "xous",
+]
+
+[[package]]
 name = "ime-plugin-shell"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "ime-plugin-api",
  "log",
  "log-server",
  "rkyv",

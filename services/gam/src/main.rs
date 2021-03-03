@@ -138,7 +138,8 @@ fn xmain() -> ! {
     // connect to the IME front end, and set its canvas
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
-    ime_frontend::set_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF canvas");
+    ime_frontend::set_input_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
+    ime_frontend::set_prediction_canvas(imef_conn, chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
 
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
