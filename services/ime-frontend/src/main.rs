@@ -12,9 +12,20 @@ use graphics_server::Gid;
 use heapless::Vec;
 use heapless::consts::U32;
 
+/*
+what else do we need:
+  - current string that is being built up
+  - cursor position in string, so we can do insertion/deletion
+ */
+fn draw_canvas(gam_conn: xous::CID, canvas: Gid, pred_conn: xous::CID, newkeys: [char; 4]) {
 
-fn draw_canvas(gam_conn: xous::CID, canvas: Gid, pred_conn: xous::CID) {
-    
+    // this is just reference to remind me how to decode the key array
+    for &k in newkeys.iter() {
+        if k != '\u{0000}' {
+            key_queue.push(k).unwrap();
+            if debug1{info!("IMEF: got key '{}'", k);}
+        }
+    }
 }
 
 
@@ -81,16 +92,8 @@ fn xmain() -> ! {
             };
         } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
             match opcode {
-
-                //// TODO: replace the code below with something that calls the draw api
-
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
-                    for &k in keys.iter() {
-                        if k != '\u{0000}' {
-                            key_queue.push(k).unwrap();
-                            if debug1{info!("IMEF: got key '{}'", k);}
-                        }
-                    }
+                    draw_canvas(gam_conn, canvas, prediction_conn, keys);
                 },
                 _ => error!("IMEF: received KBD event opcode that wasn't expected"),
             }
