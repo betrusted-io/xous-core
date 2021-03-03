@@ -178,9 +178,8 @@ mod implementation {
     use crate::WorkRequest;
     use com_rs_ref as com_rs;
     use com_rs::*;
-    use log::{error, info};
+    use log::error;
 
-    #[macro_use]
     use heapless::Vec;
     use heapless::consts::*;
 
@@ -201,7 +200,7 @@ mod implementation {
             0xDEAD as u16
         }
 
-        pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
+        pub fn wait_txrx(&mut self, _tx: u16, _timeout: Option<u32>) -> u16 {
             0xDEAD as u16
         }
 

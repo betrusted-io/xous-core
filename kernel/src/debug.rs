@@ -6,6 +6,7 @@ use core::fmt::{Error, Write};
 #[cfg(baremetal)]
 use utralib::generated::*;
 
+#[allow(dead_code)]  // this is unused in hosted mode, kill the warning
 static mut INITIALIZED: bool = false;
 
 #[macro_use]

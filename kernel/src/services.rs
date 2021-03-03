@@ -816,7 +816,7 @@ impl SystemServices {
                 "\n\r   KERNEL({},{}): Activating process {} thread {}",
                 previous_pid, previous_tid, new_pid, new_tid
             );
-            ArchProcess::with_current(|current| current.print_thread());
+            //ArchProcess::with_current(|current| current.print_thread());
         }
 
         // Save state if the PID has changed.  This will activate the new memory
