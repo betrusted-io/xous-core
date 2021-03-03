@@ -138,6 +138,11 @@ fn xmain() -> ! {
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
+    // connect to the IME front end, and set its canvas
+    info!("GAM: acquiring connection to IMEF...");
+    let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
+    ime_frontend::set_canvas(imef_conn, chatlayout.input.gid()).expect("GAM: couldn't set IMEF canvas");
+
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {

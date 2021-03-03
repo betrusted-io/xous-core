@@ -129,14 +129,13 @@ pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
-            let tvr: TextView = result.unarchive();
-            tv.bounds_computed = tvr.bounds_computed;
-            tv.cursor = tvr.cursor;
+        let tvr: TextView = result.unarchive();
+        tv.bounds_computed = tvr.bounds_computed;
+        tv.cursor = tvr.cursor;
+        Ok(())
     } else {
         let tvr = returned.unarchive();
-        info!("draw_textview saw a return of {:?}", tvr);
-        panic!("draw_textview got a return value from the server that isn't expected or handled");
+        info!("draw_textview saw an unhandled return type of {:?}", tvr);
+        Err(xous::Error::InternalError)
     }
-
-    Ok(())
 }
