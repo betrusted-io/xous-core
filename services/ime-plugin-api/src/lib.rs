@@ -7,14 +7,6 @@ pub struct Prediction {
     pub string: xous::String<4096>,
 }
 
-pub trait PredictionApi {
-    fn get_prediction_triggers(self, cid: CID) -> Result<PredictionTriggers, xous::Error>;
-    fn unpick(self, cid: CID) -> Result<(), xous::Error>;
-    fn set_input(self, cid: CID, s: String<4096>) -> Result<(), xous::Error>;
-    fn feedback_picked(self, cid: CID, s: String<4096>) -> Result<(), xous::Error>;
-    fn get_prediction(self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error>;
-}
-
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PredictionTriggers {
     /// trigger predictions on newline
@@ -98,12 +90,16 @@ impl Into<Message> for Opcode {
     }
 }
 
-// most implementation should not modify this, but it's made a trait in case for some weird reason it needs changes...
+// provide a convenience version of the API for generic/standard calls
 #[derive(Debug, Default, Copy, Clone)]
 pub struct StandardPredictionPlugin {}
+impl PredictionApi for StandardPredictionPlugin {}
 
-impl PredictionApi for StandardPredictionPlugin {
-    fn get_prediction_triggers(self, cid: CID) -> Result<PredictionTriggers, xous::Error> {
+// it's pretty dangerous to not use the default version of the API, because this is an IPC barrier
+// and Rust can't check arguments and correctness between separate programs.
+// In other words, you should really think twice before overriding these.
+pub trait PredictionApi {
+    fn get_prediction_triggers(&self, cid: CID) -> Result<PredictionTriggers, xous::Error> {
         let response = xous::send_message(cid, Opcode::GetPredictionTriggers.into())?;
         if let xous::Result::Scalar1(code) = response {
             Ok(code.into())
@@ -112,12 +108,12 @@ impl PredictionApi for StandardPredictionPlugin {
         }
     }
 
-    fn unpick(self, cid: CID) -> Result<(), xous::Error> {
+    fn unpick(&self, cid: CID) -> Result<(), xous::Error> {
         xous::send_message(cid, Opcode::Unpick.into())?;
         Ok(())
     }
 
-    fn set_input(self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+    fn set_input(&self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
         use rkyv::Write;
 
         let rkyv_input = Opcode::Input(s);
@@ -130,7 +126,7 @@ impl PredictionApi for StandardPredictionPlugin {
         Ok(())
     }
 
-    fn feedback_picked(self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+    fn feedback_picked(&self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
         use rkyv::Write;
 
         let rkyv_picked = Opcode::Picked(s);
@@ -143,7 +139,7 @@ impl PredictionApi for StandardPredictionPlugin {
         Ok(())
     }
 
-    fn get_prediction(self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error> {
+    fn get_prediction(&self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error> {
         use rkyv::Write;
         use rkyv::Unarchive;
 
