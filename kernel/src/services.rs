@@ -555,7 +555,6 @@ impl SystemServices {
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
     pub fn ready_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
-        // assert!(tid == INITIAL_TID);
         let process = self.get_process_mut(pid)?;
         process.state = match process.state {
             ProcessState::Free => {
@@ -698,10 +697,13 @@ impl SystemServices {
                 ProcessState::Running(new_mask)
             }
         };
+
         // println!(
-        //     "switch_to_thread({}:{:?}): New state is {:?}",
+        //     "switch_to_thread({}:{:?}): New state is {:?} Thread is ",
         //     pid, tid, process.state
         // );
+        // ArchProcess::with_current(|current| current.print_thread());
+
         Ok(())
     }
 
@@ -719,6 +721,8 @@ impl SystemServices {
         //     "switch_from_thread({}:{}): Old state was {:?}",
         //     pid, tid, process.state
         // );
+        // ArchProcess::with_current(|current| current.print_thread());
+
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << tid) != 0 => panic!(
                 "PID {} thread {} was already queued for running when `switch_from_thread()` was called",
@@ -812,6 +816,7 @@ impl SystemServices {
                 "\n\r   KERNEL({},{}): Activating process {} thread {}",
                 previous_pid, previous_tid, new_pid, new_tid
             );
+            ArchProcess::with_current(|current| current.print_thread());
         }
 
         // Save state if the PID has changed.  This will activate the new memory
@@ -837,11 +842,6 @@ impl SystemServices {
                         new.state
                     );
                     if new_tid == 0 {
-                        print!(
-                             "PID {}: Looking for a valid context in the mask {:08b}",
-                             new_pid, x,
-                        );
-                        //new_tid = 0;
                         new_tid = (new.current_thread + 1) as usize;
                         while x & (1 << new_tid) == 0 {
                             new_tid += 1;
@@ -849,22 +849,22 @@ impl SystemServices {
                                 new_tid = 0;
                             } else if new_tid == (new.current_thread + 1) as usize {
                                 // If we've looped around, return an error.
-                                println!("Looked through all contexts and couldn't find one that was ready");
+                                // println!("Looked through all contexts and couldn't find one that was ready");
                                 return Err(xous_kernel::Error::ProcessNotFound);
                             }
                         }
                         new.current_thread = new_tid as _;
-                        println!(" -- picked thread {}", new_tid);
+                        // println!(" -- picked thread {}", new_tid);
                     } else if x & (1 << new_tid) == 0 {
-                        println!(
-                            "thread is {:?}, which is not valid for new thread {}",
-                            new.state, new_tid
-                        );
+                        // println!(
+                        //     "thread is {:?}, which is not valid for new thread {}",
+                        //     new.state, new_tid
+                        // );
                         return Err(xous_kernel::Error::ProcessNotFound);
                     }
                 }
                 ProcessState::Sleeping => {
-                    println!("PID {} was sleeping", new_pid);
+                    // println!("PID {} was sleeping", new_pid);
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
             }
