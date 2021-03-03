@@ -1,0 +1,16 @@
+[package]
+name = "kernel-test"
+version = "0.1.0"
+authors = ["Sean Cross <sean@xobs.io>"]
+edition = "2018"
+description = "Program to test various aspects of the kernel"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+logging = []  # adding this allocates the UART for logging of Xous
+default = ["logging"]

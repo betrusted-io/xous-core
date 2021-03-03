@@ -578,8 +578,6 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
 }
 
 pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
-    // let pid = arch::current_pid();
-
     match call {
         SysCall::MapMemory(phys, virt, size, req_flags) => {
             MemoryManager::with_mut(|mm| {

@@ -290,7 +290,6 @@ impl MemoryManager {
 
             // Look for a sequence of `size` pages that are free.
             for potential_start in (initial..end - size).step_by(PAGE_SIZE) {
-                // println!("    Checking {:08x}...", potential_start);
                 let mut all_free = true;
                 for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
                     if !crate::arch::mem::address_available(check_page) {
@@ -313,7 +312,6 @@ impl MemoryManager {
             }
 
             for potential_start in (start..initial).step_by(PAGE_SIZE) {
-                // println!("    Checking {:08x}...", potential_start);
                 let mut all_free = true;
                 for check_page in (potential_start..potential_start + size).step_by(PAGE_SIZE) {
                     if !crate::arch::mem::address_available(check_page) {
@@ -334,7 +332,6 @@ impl MemoryManager {
                     return Ok(potential_start as *mut u8);
                 }
             }
-            // println!("Couldn't find virtual address");
             Err(xous_kernel::Error::BadAddress)
         })
     }
