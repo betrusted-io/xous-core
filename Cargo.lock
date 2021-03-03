@@ -534,6 +534,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -547,6 +548,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -558,6 +560,14 @@ name = "itoa"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
+
+[[package]]
+name = "kernel-test"
+version = "0.1.0"
+dependencies = [
+ "utralib",
+ "xous",
+]
 
 [[package]]
 name = "keyboard"

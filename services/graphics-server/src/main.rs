@@ -8,7 +8,6 @@ use api::Opcode;
 
 use core::pin::Pin;
 use rkyv::{archived_value, Unarchive, archived_value_mut};
-use core::convert::TryInto;
 
 mod backend;
 use backend::XousDisplay;
@@ -163,13 +162,13 @@ fn xmain() -> ! {
                             TextBounds::BoundingBox(r) => {
                                 tv.bounds_computed = Some(r);
                             },
-                            TextBounds::GrowableFromBr(br, width) => {
+                            TextBounds::GrowableFromBr(_br, _width) => {
                                 unimplemented!()
                             },
-                            TextBounds::GrowableFromTl(tl, width) => {
+                            TextBounds::GrowableFromTl(_tl, _width) => {
                                 unimplemented!()
                             },
-                            TextBounds::GrowableFromBl(bl, width) => {
+                            TextBounds::GrowableFromBl(_bl, _width) => {
                                 unimplemented!()
                             }
                         }

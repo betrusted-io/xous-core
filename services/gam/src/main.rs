@@ -9,16 +9,13 @@ mod canvas;
 use canvas::*;
 
 use blitstr_ref as blitstr;
-use blitstr::{Cursor, GlyphStyle};
-use com::*;
+use blitstr::GlyphStyle;
 use graphics_server::*;
 
-use log::{error, info};
-use xous::String;
+use log::info;
 
 use core::convert::TryFrom;
 
-use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
 use heapless::consts::*;
 
@@ -139,17 +136,17 @@ fn xmain() -> ! {
     xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
     // connect to the IME front end, and set its canvas
+    /*
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
-    ime_frontend::set_canvas(imef_conn, chatlayout.input.gid()).expect("GAM: couldn't set IMEF canvas");
-
+    ime_frontend::set_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF canvas");
+    */
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
-        // /*
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
         match maybe_env {
-            Some(envelope) => { // */
+            Some(envelope) => {
                 // let envelope = xous::receive_message(gam_sid).unwrap();
                 if debug1 {info!("GAM: Message: {:?}", envelope); }
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
@@ -227,9 +224,6 @@ fn xmain() -> ! {
                                         // silently fail if a bogus Gid is given???
                                     }
                                 },
-                                TextOp::ComputeBounds => {
-
-                                },
                             };
                         },
                         _ => panic!("GAM: invalid mutable borrow message"),
@@ -249,16 +243,16 @@ fn xmain() -> ! {
                                 if canvas.is_drawable() {
                                     match obj.obj {
                                         GamObjectType::Line(line) => {
-                                            graphics_server::draw_line(gfx_conn, line);
+                                            graphics_server::draw_line(gfx_conn, line).expect("GAM: couldn't draw line");
                                         },
                                         GamObjectType::Circ(circ) => {
-                                            graphics_server::draw_circle(gfx_conn, circ);
+                                            graphics_server::draw_circle(gfx_conn, circ).expect("GAM: couldn't draw circle");
                                         },
                                         GamObjectType::Rect(rect) => {
-                                            graphics_server::draw_rectangle(gfx_conn, rect);
+                                            graphics_server::draw_rectangle(gfx_conn, rect).expect("GAM: couldn't draw rectangle");
                                         },
                                         GamObjectType::RoundRect(rr) => {
-                                            graphics_server::draw_rounded_rectangle(gfx_conn, rr);
+                                            graphics_server::draw_rounded_rectangle(gfx_conn, rr).expect("GAM: couldn't draw rounded rectangle");
                                         }
                                     }
                                 } else {
@@ -278,13 +272,13 @@ fn xmain() -> ! {
             },
             _ => xous::yield_slice(),
             // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
-        } // */
-        //graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
-        ///*
+        }
+
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 33 {  // rate limit updates to 30fps
+                last_time = elapsed_time;
                 graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
             }
-        }//*/
+        }
     }
 }

@@ -5,17 +5,17 @@ use api::*;
 
 use rkyv::Write;
 use rkyv::Unarchive;
-use graphics_server::api::{TextOp, TextView, TextViewResult};
+use graphics_server::api::{TextOp, TextView};
 
-use graphics_server::api::{Rectangle, Point, Gid, TextBounds, Line};
-use log::{error, info};
+use graphics_server::api::{Point, Gid, Line};
+use log::info;
 
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
 /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
 /// the actual screen update is allowed
 pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
     tv.set_op(TextOp::Render);
-    let mut rkyv_tv = api::Opcode::RenderTextView(*tv);
+    let rkyv_tv = api::Opcode::RenderTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive textview");
     let mut xous_buffer = writer.into_inner();
@@ -39,14 +39,14 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
 }
 
 pub fn draw_line(gam_cid: xous::CID, gid: Gid, line: Line) -> Result<(), xous::Error> {
-    let mut rkyv_tv = api::Opcode::RenderObject(
+    let rkyv_tv = api::Opcode::RenderObject(
         GamObject {
             canvas: gid,
             obj: GamObjectType::Line(line),
     });
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
-    let mut xous_buffer = writer.into_inner();
+    let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
 

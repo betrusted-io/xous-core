@@ -1,6 +1,4 @@
-use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, TextView, RoundedRectangle};
-use log::info;
-use blitstr_ref as blitstr;
+use crate::api::{Circle, DrawStyle, Line, Pixel, PixelColor, Point, Rectangle, RoundedRectangle};
 
 /// LCD Frame buffer bounds
 pub const LCD_WORDS_PER_LINE: usize = 11;
@@ -456,7 +454,7 @@ impl Iterator for RoundedRectangleIterator {
 }
 
 pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle) {
-    /// left off: compute the four quadrants
+    // compute the four quadrants
     // call the rr iterator on the rectangle
     // then call it on one each of the four circle quadrants
 

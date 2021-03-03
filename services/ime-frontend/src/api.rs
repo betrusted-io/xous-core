@@ -9,7 +9,7 @@ pub enum Opcode {
     SetCanvas(Gid),
 
     /// set prediction. Must be a String of the name of a server that is loaded in the system.
-    SetPrediction(xous::String),
+    SetPrediction(xous::String<256>),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -17,7 +17,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
     fn try_from(message: & Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
-                0 => Ok(Opcode::GetTrng(m.arg1)),
+                0 => Ok(Opcode::SetCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
                 _ => Err("IMEF api: unknown Scalar ID"),
             },
             _ => Err("IMEF api: unhandled message type"),

@@ -120,7 +120,7 @@ pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
     use rkyv::Write;
     use rkyv::Unarchive;
 
-    let mut rkyv_tv = api::Opcode::DrawTextView(*tv);
+    let rkyv_tv = api::Opcode::DrawTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
     let mut xous_buffer = writer.into_inner();
