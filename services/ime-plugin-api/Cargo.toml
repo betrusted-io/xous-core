@@ -8,4 +8,5 @@ description = "IME Plugin Common APIs"
 [dependencies]
 xous = { path = "../../xous-rs" }
 rkyv = { version = "0.3.1", default_features = false }
+log = "0.4"
 

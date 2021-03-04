@@ -90,80 +90,105 @@ impl Into<Message> for Opcode {
     }
 }
 
+pub trait PredictionApi {
+    fn get_prediction_triggers(&self) -> Result<PredictionTriggers, xous::Error>;
+    fn unpick(&self) -> Result<(), xous::Error>;
+    fn set_input(&self, s: String<4096>) -> Result<(), xous::Error>;
+    fn feedback_picked(&self, s: String<4096>) -> Result<(), xous::Error>;
+    fn get_prediction(&self, index: u32) -> Result<xous::String<4096>, xous::Error>;
+}
+
 // provide a convenience version of the API for generic/standard calls
 #[derive(Debug, Default, Copy, Clone)]
-pub struct StandardPredictionPlugin {}
-impl PredictionApi for StandardPredictionPlugin {}
+pub struct PredictionPlugin {
+    pub connection: Option<CID>,
+}
 
-// it's pretty dangerous to not use the default version of the API, because this is an IPC barrier
-// and Rust can't check arguments and correctness between separate programs.
-// In other words, you should really think twice before overriding these.
-pub trait PredictionApi {
-    fn get_prediction_triggers(&self, cid: CID) -> Result<PredictionTriggers, xous::Error> {
-        let response = xous::send_message(cid, Opcode::GetPredictionTriggers.into())?;
-        if let xous::Result::Scalar1(code) = response {
-            Ok(code.into())
-        } else {
-            panic!("get_prediciton_triggers failed")
+impl PredictionApi for PredictionPlugin {
+    fn get_prediction_triggers(&self) -> Result<PredictionTriggers, xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                let response = xous::send_message(cid, Opcode::GetPredictionTriggers.into())?;
+                if let xous::Result::Scalar1(code) = response {
+                    Ok(code.into())
+                } else {
+                    Err(xous::Error::InternalError)
+                }
+            },
+            _ => Err(xous::Error::UseBeforeInit),
         }
     }
 
-    fn unpick(&self, cid: CID) -> Result<(), xous::Error> {
-        xous::send_message(cid, Opcode::Unpick.into())?;
-        Ok(())
+    fn unpick(&self) -> Result<(), xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                xous::send_message(cid, Opcode::Unpick.into())?;
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit)
+        }
     }
 
-    fn set_input(&self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+    fn set_input(&self, s: String<4096>) -> Result<(), xous::Error> {
         use rkyv::Write;
+        match self.connection {
+            Some(cid) => {
+                let rkyv_input = Opcode::Input(s);
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&rkyv_input).expect("IME|API: couldn't archive input string");
+                let xous_buffer = writer.into_inner();
 
-        let rkyv_input = Opcode::Input(s);
-        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-        let pos = writer.archive(&rkyv_input).expect("IMES|API: couldn't archive input string");
-        let xous_buffer = writer.into_inner();
-
-        xous_buffer.lend(cid, pos as u32).expect("IMES|API: set_input operation failure");
-
-        Ok(())
+                xous_buffer.lend(cid, pos as u32).expect("IME|API: set_input operation failure");
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit),
+        }
     }
 
-    fn feedback_picked(&self, cid: CID, s: String<4096>) -> Result<(), xous::Error> {
+    fn feedback_picked(&self, s: String<4096>) -> Result<(), xous::Error> {
         use rkyv::Write;
+        match self.connection {
+            Some(cid) => {
+                let rkyv_picked = Opcode::Picked(s);
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&rkyv_picked).expect("IME|API: couldn't archive picked string");
+                let xous_buffer = writer.into_inner();
 
-        let rkyv_picked = Opcode::Picked(s);
-        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-        let pos = writer.archive(&rkyv_picked).expect("IMES|API: couldn't archive picked string");
-        let xous_buffer = writer.into_inner();
-
-        xous_buffer.lend(cid, pos as u32).expect("IMES|API: feedback_picked operation failure");
-
-        Ok(())
+                xous_buffer.lend(cid, pos as u32).expect("IME|API: feedback_picked operation failure");
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit),
+        }
     }
 
-    fn get_prediction(&self, cid: CID, index: u32) -> Result<xous::String<4096>, xous::Error> {
+    fn get_prediction(&self, index: u32) -> Result<xous::String<4096>, xous::Error> {
         use rkyv::Write;
         use rkyv::Unarchive;
+        match self.connection {
+            Some(cid) => {
+                let prediction = Prediction {
+                    index,
+                    string: xous::String::<4096>::new(),
+                };
+                let pred_op = Opcode::Prediction(prediction);
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&pred_op).expect("IME|API: couldn't archive prediction request");
+                let mut xous_buffer = writer.into_inner();
 
-        let prediction = Prediction {
-            index,
-            string: xous::String::<4096>::new(),
-        };
-        let pred_op = Opcode::Prediction(prediction);
+                xous_buffer.lend_mut(cid, pos as u32).expect("IME|API: prediction fetch operation failure");
 
-        let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-        let pos = writer.archive(&pred_op).expect("IMES|API: couldn't archive prediction request");
-        let mut xous_buffer = writer.into_inner();
-
-        xous_buffer.lend_mut(cid, pos as u32).expect("IMES|API: prediction fetch operation failure");
-
-        let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
-        if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
-            let pred_r: Prediction = result.unarchive();
-
-            let retstring: xous::String<4096> = pred_r.string.clone();
-            Ok(retstring)
-        } else {
-            let r = returned.unarchive();
-            Err(xous::Error::InvalidString)
+                let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
+                if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
+                    let pred_r: Prediction = result.unarchive();
+                    let retstring: xous::String<4096> = pred_r.string.clone();
+                    Ok(retstring)
+                } else {
+                    let r = returned.unarchive();
+                    log::error!("IME:API get_prediction returned an invalid result {:?}", r);
+                    Err(xous::Error::InvalidString)
+                }
+            },
+            _ => Err(xous::Error::UseBeforeInit),
         }
     }
 }

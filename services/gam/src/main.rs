@@ -141,6 +141,9 @@ fn xmain() -> ! {
     ime_frontend::set_input_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
     ime_frontend::set_prediction_canvas(imef_conn, chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
 
+    // ASSUME: shell is our default application, so set a default predictor of Shell
+    ime_frontend::set_predictor(imef_conn, xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("GAM: couldn't set IMEF prediction to shell");
+
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {

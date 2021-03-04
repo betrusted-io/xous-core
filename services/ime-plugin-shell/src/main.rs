@@ -19,11 +19,7 @@ fn xmain() -> ! {
     info!("IME_SH: my PID is {}", xous::process::id());
 
     let ime_sh_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IME_SH: can't register server");
-    info!("IME_SH: registered with NS -- {:?}", ime_sh_sid);
-
-    let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("IME_SH: can't connect to IMEF");
-
-    info!("IME_SH: ready to accept requests");
+    if debug1{info!("IME_SH: registered with NS -- {:?}", ime_sh_sid);}
 
     let mut history: Queue<xous::String<4096>, U3> = Queue::new(); // this has 2^3 elements = 8
     let history_max = 8;
@@ -34,6 +30,7 @@ fn xmain() -> ! {
         trigger_whitespace: false,
     };
 
+    info!("IME_SH: ready to accept requests");
     loop {
         let envelope = xous::receive_message(ime_sh_sid).unwrap();
         if debug1{info!("IME_SH: received message {:?}", envelope);}

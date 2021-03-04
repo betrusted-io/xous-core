@@ -8,11 +8,11 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
-use graphics_server::Gid;
+use graphics_server::{Gid, TextView};
 use heapless::Vec;
 use heapless::consts::U32;
 use core::pin::Pin;
-use ime_plugin_api::{PredictionTriggers, PredictionApi};
+use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
 use rkyv::Unarchive;
 use rkyv::archived_value;
@@ -20,14 +20,17 @@ use rkyv::archived_value;
 struct InputTracker {
     /// connection for handling graphical update requests
     pub gam_conn: xous::CID,
+
+
     /// input area canvas, as given by the GAM
-    pub input_canvas: Option<Gid>,
-    /// a connection to our current prediction engine
-    pub pred_conn: xous::CID,
+    input_canvas: Option<Gid>,
     /// prediction display area, as given by the GAM
-    pub pred_canvas: Option<Gid>,
-    /// triggers for predictions
-    pub pred_triggers: PredictionTriggers,
+    pred_canvas: Option<Gid>,
+
+    /// our current prediction engine
+    predictor: Option<PredictionPlugin>,
+    /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
+    pred_triggers: Option<PredictionTriggers>,
 
     /// track the progress of our input line
     line: xous::String::<4096>,
@@ -35,44 +38,43 @@ struct InputTracker {
     charwidths: [u8; 4096],
     /// what position the insertion cursor is at in the string. 0 is inserting elements into the front of the string
     insertion: u8,
+
+    predictions: [Option<TextView>; 4],
 }
 
-impl InputTracker {
-    pub fn new(gam_conn: xous::CID, pred_conn: xous::CID, predictor: impl PredictionApi)-> InputTracker {
-        // a little dangerous: bypassing any explicit API call implementation for this one
-        /*
-        let response = xous::send_message(pred_conn, ime_plugin_api::Opcode::GetPredictionTriggers.into())
-            .expect("IMEF: InputTracker failed to get predictions from default plugin");
-        if let xous::Result::Scalar1(code) = response {
-            InputTracker {
-                gam_conn,
-                input_canvas: None,
-                pred_conn,
-                pred_canvas: None,
-                pred_triggers: code.into(),
-                line: xous::String::<4096>::new(),
-                charwidths: [0; 4096],
-                insertion: 0,
-            }
-        } else {
-            panic!("IMEF: InputTracker::new() failed to get prediction triggers")
-        }*/
 
-        let pred_triggers = predictor.get_prediction_triggers(pred_conn)
-            .expect("IMEF: InputTracker failed to get predictions from default plugin");
+impl InputTracker {
+    pub fn new(gam_conn: xous::CID)-> InputTracker {
         InputTracker {
             gam_conn,
             input_canvas: None,
-            pred_conn,
             pred_canvas: None,
-            pred_triggers,
+            predictor: None,
+            pred_triggers: None,
             line: xous::String::<4096>::new(),
             charwidths: [0; 4096],
             insertion: 0,
+            predictions: [None; 4],
         }
+    }
+    pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
+        self.predictor = Some(predictor);
+        self.pred_triggers = Some(predictor.get_prediction_triggers()
+        .expect("IMEF: InputTracker failed to get prediction triggers from plugin"));
+    }
+    pub fn set_input_canvas(&mut self, input: Gid) {
+        self.input_canvas = Some(input);
+    }
+    pub fn set_pred_canvas(&mut self, pred: Gid) {
+        self.pred_canvas = Some(pred);
+    }
+    pub fn is_init(&self) -> bool {
+        self.input_canvas.is_some() && self.pred_canvas.is_some()
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) {
+
+        // just draw a rectangle for the prediction area for now
 
         /*
         what else do we need:
@@ -102,14 +104,9 @@ fn xmain() -> ! {
     let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
     keyboard::request_events(xous::names::SERVER_NAME_IME_FRONT, kbd_conn).expect("IMEF: couldn't request events from keyboard");
 
-    let default_predictor = ime_plugin_api::StandardPredictionPlugin {};
     let mut tracker = InputTracker::new(
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
-        // set a "default" prediction that is a shell-like history buffer of things previously typed
-        xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IMEF: can't connect to shell prediction engine"),
-        default_predictor
     );
-
     // The first message should be my Gid from the GAM.
     info!("IMEF: waiting for my canvas Gids");
     loop {
@@ -129,7 +126,7 @@ fn xmain() -> ! {
         } else {
             info!("IMEF: expected canvas Gid, but got other message first {:?}", envelope);
         }
-        if tracker.input_canvas.is_some() && tracker.pred_canvas.is_some() {
+        if tracker.is_init() {
             break;
         }
     }
@@ -163,7 +160,7 @@ fn xmain() -> ! {
                 rkyv::Archived::<api::Opcode>::SetPredictionServer(rkyv_s) => {
                     let s: xous::String<256> = rkyv_s.unarchive();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
-                        Ok(pc) => tracker.pred_conn = pc,
+                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },

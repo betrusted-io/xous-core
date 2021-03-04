@@ -547,6 +547,7 @@ dependencies = [
 name = "ime-plugin-api"
 version = "0.1.0"
 dependencies = [
+ "log",
  "rkyv",
  "xous",
 ]
