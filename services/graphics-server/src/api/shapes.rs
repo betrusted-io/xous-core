@@ -35,13 +35,13 @@ impl Rectangle {
         }
     }
     // stack a new rectangle on top of the current one (same width)
-    // positive widths go *below*, negative go *above* in screen coordinate space. borders are non-overlapping.
-    pub fn new_v_stack(reference: Rectangle, width: i16) -> Rectangle {
-        if width >= 0 { // rectangle below
+    // positive heights go *below*, negative go *above* in screen coordinate space. borders are non-overlapping.
+    pub fn new_v_stack(reference: Rectangle, height: i16) -> Rectangle {
+        if height >= 0 { // rectangle below
             Rectangle::new_coords(reference.tl.x, reference.br.y + 1,
-            reference.br.x, reference.br.y + width + 1)
+            reference.br.x, reference.br.y + height)
         } else { // rectangle above
-            Rectangle::new_coords(reference.tl.x, reference.tl.y + width - 1,
+            Rectangle::new_coords(reference.tl.x, reference.tl.y + height,
             reference.br.x, reference.tl.y - 1)
         }
     }
@@ -64,12 +64,21 @@ impl Rectangle {
     pub fn new_h_span(left: Rectangle, right: Rectangle) -> Rectangle {
         Rectangle::new_coords(left.br.x + 1, left.tl.y, right.tl.x - 1, right.br.y)
     }
+    // other: 0,0/336,536
+    // self: 0,476/336,505
     pub fn intersects(&self, other: Rectangle) -> bool {
         ((other.tl.x >= self.tl.x) && (other.tl.x <= self.br.x)) &&
         ((other.tl.y >= self.tl.y) && (other.tl.y <= self.br.y))
         ||
         ((other.br.x >= self.tl.x) && (other.br.x <= self.br.x)) &&
         ((other.br.y >= self.tl.y) && (other.br.y <= self.br.y))
+        ||
+        // case that self is inside other
+        ((self.tl.x >= other.tl.x) && (self.tl.x <= other.br.x)) &&
+        ((self.tl.y >= other.tl.y) && (self.tl.y <= other.br.y))
+        ||
+        ((self.br.x >= other.tl.x) && (self.br.x <= other.br.x)) &&
+        ((self.br.y >= other.tl.y) && (self.br.y <= other.br.y))
     }
     pub fn intersects_point(&self, point: Point) -> bool {
         ((point.x >= self.tl.x) && (point.x <= self.br.x)) &&
@@ -113,6 +122,12 @@ impl Rectangle {
         self.br.x += offset.x;
         self.tl.y += offset.y;
         self.br.y += offset.y;
+    }
+    pub fn normalize(&mut self) {
+        self.br.x -= self.tl.x;
+        self.br.y -= self.tl.y;
+        self.tl.x = 0;
+        self.tl.y = 0;
     }
 
     /// Make a rectangle of the full screen size
