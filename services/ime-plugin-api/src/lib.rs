@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use xous::{Message, ScalarMessage, String, CID};
+use graphics_server::Gid;
+
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub struct Prediction {
     pub index: u32,
@@ -189,6 +191,104 @@ impl PredictionApi for PredictionPlugin {
                 }
             },
             _ => Err(xous::Error::UseBeforeInit),
+        }
+    }
+}
+
+
+//////////////////////////////////////////////////////
+//////////////////// FRONT END API
+//////////////////////////////////////////////////////
+// Most people won't need to touch this, but it's packaged
+// in this crate so we can break circular dependencies
+// between the IMEF, GAM, and graphics server
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+pub enum ImefOpcode {
+    /// informs me where my input canvas is
+    SetInputCanvas(Gid),
+
+    /// informs me where my prediction canvas is
+    SetPredictionCanvas(Gid),
+
+    /// set prediction server. Must be a String of the name of a server that is loaded in the system.
+    SetPredictionServer(xous::String<256>),
+}
+
+impl core::convert::TryFrom<& Message> for ImefOpcode {
+    type Error = &'static str;
+    fn try_from(message: & Message) -> Result<Self, Self::Error> {
+        match message {
+            Message::Scalar(m) => match m.id {
+                0 => Ok(ImefOpcode::SetInputCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
+                1 => Ok(ImefOpcode::SetPredictionCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
+                _ => Err("IMEF api: unknown Scalar ID"),
+            },
+            _ => Err("IMEF api: unhandled message type"),
+        }
+    }
+}
+
+impl Into<Message> for ImefOpcode {
+    fn into(self) -> Message {
+        match self {
+            ImefOpcode::SetInputCanvas(gid) => Message::Scalar(ScalarMessage {
+                id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
+            }),
+            ImefOpcode::SetPredictionCanvas(gid) => Message::Scalar(ScalarMessage {
+                id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
+            }),
+            _ => panic!("IMEF api: Opcode type not handled by into()"),
+        }
+    }
+}
+
+pub trait ImeFrontEndApi {
+    fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
+    fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
+    fn set_predictor(&self, servername: &str) -> Result<(), xous::Error>;
+}
+
+pub struct ImeFrontEnd {
+    pub connection: Option<CID>,
+}
+
+impl ImeFrontEndApi for ImeFrontEnd {
+    fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                xous::send_message(cid, ImefOpcode::SetInputCanvas(g).into())?;
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit)
+        }
+    }
+
+    fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                xous::send_message(cid, ImefOpcode::SetPredictionCanvas(g).into())?;
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit)
+        }
+    }
+
+    fn set_predictor(&self, servername: &str) -> Result<(), xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                let mut server = xous::String::<256>::new();
+                use core::fmt::Write;
+                write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
+                let ime_op = ImefOpcode::SetPredictionServer(server);
+
+                use rkyv::Write as ArchiveWrite;
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
+                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredicitonServer request failure");
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit)
         }
     }
 }

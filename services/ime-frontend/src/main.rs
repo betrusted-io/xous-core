@@ -1,14 +1,17 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
-use api::*;
+
+use ime_plugin_api::ImefOpcode;
 
 use core::convert::TryFrom;
+use core::fmt::Write;
 
 use log::{error, info};
 
-use graphics_server::{Gid, TextView};
+use graphics_server::{Gid, TextView, Point, TextBounds, Rectangle, Line};
+use blitstr_ref as blitstr;
+use blitstr::Cursor;
 use heapless::Vec;
 use heapless::consts::U32;
 use core::pin::Pin;
@@ -37,11 +40,8 @@ struct InputTracker {
     /// we need to track character widths so we can draw a cursor
     charwidths: [u8; 4096],
     /// what position the insertion cursor is at in the string. 0 is inserting elements into the front of the string
-    insertion: u8,
-
-    predictions: [Option<TextView>; 4],
+    insertion: Cursor,
 }
-
 
 impl InputTracker {
     pub fn new(gam_conn: xous::CID)-> InputTracker {
@@ -53,8 +53,7 @@ impl InputTracker {
             pred_triggers: None,
             line: xous::String::<4096>::new(),
             charwidths: [0; 4096],
-            insertion: 0,
-            predictions: [None; 4],
+            insertion: Cursor::new(0, 0, 0), // canvases always have (0,0) as the top left
         }
     }
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
@@ -72,23 +71,63 @@ impl InputTracker {
         self.input_canvas.is_some() && self.pred_canvas.is_some()
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) {
-
+    pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
+        let debug1= true;
         // just draw a rectangle for the prediction area for now
+        if let Some(pc) = self.pred_canvas {
+            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            let mut starting_tv = TextView::new(pc, 255,
+                TextBounds::BoundingBox(Rectangle::new(Point::new(0, 0), pc_bounds)));
+            starting_tv.draw_border = true;
+            starting_tv.border_width = 1;
+            starting_tv.clear_area = true;
 
+            gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
+        }
+
+        if let Some(ic) = self.input_canvas {
+            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            let mut input_tv = TextView::new(ic, 255,
+                TextBounds::BoundingBox(Rectangle::new(Point::new(0,0), ic_bounds)));
+            input_tv.draw_border = true;
+            input_tv.border_width = 1;
+            input_tv.clear_area = true;
+
+            for &k in newkeys.iter() {
+                if debug1{info!("IMEF: got key '{}'", k);}
+                match k {
+                    '\u{0000}' => (),
+                    '\u{000d}' => {
+                        // carriage return case
+                        write!(self.line, "").expect("IMEF: can't clear line after carriage return");
+                    },
+                    _ => {
+                        self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
+                        write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
+                        gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
+                        if self.insertion.pt.y == input_tv.cursor.pt.y {
+                            self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - self.insertion.pt.x) as u8;
+                        } else {
+                            // line wrapped, assume we wrapped to x = 0
+                            self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - 0) as u8;
+                        }
+                        self.insertion.pt.y = input_tv.cursor.pt.y;
+                    },
+                }
+            }
+
+            // draw the insertion point
+            // do a manual type conversion, because external crate etc. etc.
+            let ins_pt: Point = Point::new(self.insertion.pt.x as i16, self.insertion.pt.y as i16);
+            gam::draw_line(self.gam_conn, ic,
+                Line::new(ins_pt, ins_pt + Point::new(0, self.insertion.line_height as i16 - input_tv.margin.y) )).expect("IMEF: can't draw insertion point");
+        }
         /*
         what else do we need:
         - current string that is being built up
         - cursor position in string, so we can do insertion/deletion
         */
-        // this is just reference to remind me how to decode the key array
-        /*
-        for &k in newkeys.iter() {
-            if k != '\u{0000}' {
-                key_queue.push(k).unwrap();
-                if debug1{info!("IMEF: got key '{}'", k);}
-            }
-        }*/
+        Ok(())
     }
 }
 
@@ -111,15 +150,15 @@ fn xmain() -> ! {
     info!("IMEF: waiting for my canvas Gids");
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+        if let Ok(opcode) = ImefOpcode::try_from(&envelope.body) {
             match opcode {
-                Opcode::SetInputCanvas(g) => {
+                ImefOpcode::SetInputCanvas(g) => {
                     if debug1{info!("IMEF: got input canvas {:?}", g);}
-                    tracker.input_canvas = Some(g);
+                    tracker.set_input_canvas(g);
                 },
-                Opcode::SetPredictionCanvas(g) => {
+                ImefOpcode::SetPredictionCanvas(g) => {
                     if debug1{info!("IMEF: got prediction canvas {:?}", g);}
-                    tracker.pred_canvas = Some(g);
+                    tracker.set_pred_canvas(g);
                 },
                 _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
             }
@@ -136,17 +175,17 @@ fn xmain() -> ! {
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
         if debug1{info!("IMEF: got message {:?}", envelope);}
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+        if let Ok(opcode) = ImefOpcode::try_from(&envelope.body) {
             match opcode {
-                Opcode::SetInputCanvas(g) => {
+                ImefOpcode::SetInputCanvas(g) => {
                     // there are valid reasons for this to happen, but it should be rare.
                     info!("IMEF: warning: input canvas Gid has been reset");
-                    tracker.input_canvas = Some(g);
+                    tracker.set_input_canvas(g);
                 },
-                Opcode::SetPredictionCanvas(g) => {
+                ImefOpcode::SetPredictionCanvas(g) => {
                     // there are valid reasons for this to happen, but it should be rare.
                     info!("IMEF: warning: prediction canvas Gid has been reset");
-                    tracker.pred_canvas = Some(g);
+                    tracker.set_pred_canvas(g);
                 },
                 _ => info!("IMEF: unhandled opcode {:?}", opcode)
             }
@@ -154,10 +193,10 @@ fn xmain() -> ! {
             let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
-                archived_value::<api::Opcode>(&bytes, m.id as usize)
+                archived_value::<ImefOpcode>(&bytes, m.id as usize)
             };
             match &*value {
-                rkyv::Archived::<api::Opcode>::SetPredictionServer(rkyv_s) => {
+                rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
                     let s: xous::String<256> = rkyv_s.unarchive();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
@@ -169,7 +208,7 @@ fn xmain() -> ! {
         } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
-                    tracker.update(keys);
+                    tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses");
                 },
                 _ => error!("IMEF: received KBD event opcode that wasn't expected"),
             }

@@ -11,6 +11,7 @@ use canvas::*;
 use blitstr_ref as blitstr;
 use blitstr::GlyphStyle;
 use graphics_server::*;
+use ime_plugin_api::ImeFrontEndApi;
 
 use log::info;
 
@@ -138,11 +139,12 @@ fn xmain() -> ! {
     // connect to the IME front end, and set its canvas
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
-    ime_frontend::set_input_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
-    ime_frontend::set_prediction_canvas(imef_conn, chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
+    let imef = ime_plugin_api::ImeFrontEnd{ connection: Some(imef_conn), };
+    imef.set_input_canvas(chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
+    imef.set_prediction_canvas(chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
 
     // ASSUME: shell is our default application, so set a default predictor of Shell
-    ime_frontend::set_predictor(imef_conn, xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("GAM: couldn't set IMEF prediction to shell");
+    imef.set_predictor(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("GAM: couldn't set IMEF prediction to shell");
 
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");

@@ -8,5 +8,6 @@ description = "IME Plugin Common APIs"
 [dependencies]
 xous = { path = "../../xous-rs" }
 rkyv = { version = "0.3.1", default_features = false }
+graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
 log = "0.4"
 
