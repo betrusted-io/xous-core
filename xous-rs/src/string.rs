@@ -105,9 +105,9 @@ impl<const N: usize> String<N> {
             },
             _ => {
                 let mut data: [u8; 4] = [0; 4];
-                ch.encode_utf8(&mut data);
-                if self.len() + data.len() < self.bytes.len() {
-                    for &c in data.iter() {
+                let subslice = ch.encode_utf8(&mut data);
+                if self.len() + subslice.len() < self.bytes.len() {
+                    for c in subslice.bytes() {
                         self.bytes[self.len()] = c;
                         self.len += 1;
                     }
