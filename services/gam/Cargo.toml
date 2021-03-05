@@ -19,7 +19,7 @@ heapless = "0.5"
 log = "0.4"
 com = { path = "../com"}
 blitstr-ref = { path = "../../imports/blitstr-ref" }
-ime-frontend = {path="../ime-frontend"}
+ime-plugin-api = {path="../ime-plugin-api"}
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

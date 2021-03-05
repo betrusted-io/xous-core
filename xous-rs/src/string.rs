@@ -91,6 +91,33 @@ impl<const N: usize> String<N> {
     pub fn to_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
     }
+
+    pub fn push(&mut self, ch: char) -> core::result::Result<(), Error> {
+        match ch.len_utf8() {
+            1 => {
+                if self.len() < self.bytes.len() {
+                    self.bytes[self.len()] = ch as u8;
+                    self.len += 1;
+                    Ok(())
+                } else {
+                    Err(Error::OutOfMemory)
+                }
+            },
+            _ => {
+                let mut data: [u8; 4] = [0; 4];
+                ch.encode_utf8(&mut data);
+                if self.len() + data.len() < self.bytes.len() {
+                    for &c in data.iter() {
+                        self.bytes[self.len()] = c;
+                        self.len += 1;
+                    }
+                    Ok(())
+                } else {
+                    Err(Error::OutOfMemory)
+                }
+            },
+        }
+    }
 }
 
 impl<const N: usize> core::fmt::Display for String<N> {

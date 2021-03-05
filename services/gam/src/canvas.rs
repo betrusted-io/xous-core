@@ -62,6 +62,7 @@ impl Canvas {
             }
         })
     }
+    pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
@@ -154,6 +155,7 @@ pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Recta
     let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
+    info!("CANVAS: received screen argument of {:?}", screen);
     info!("CANVAS: now determining which regions are drawable");
     loop {
         if let Some(c) = sorted_clipregions.pop() {
@@ -167,14 +169,14 @@ pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Recta
             }
             if !clip_region.intersects(screen) {
                 drawable = false;
-                if debug { info!("   CANVAS: not drawable, does not intersect");}
+                if debug { info!("    * CANVAS: not drawable, does not intersect");}
             } else { // short circuit this computation if it's not drawable because it's off screen
                 // note that this .iter() is *not* sorted by trust level, but all elements will be of greater than or equal to the current trust level
                 for &region in higher_clipregions.iter() {
                     // regions of the same trust level can draw over each other. Draw order is arbitrary.
                     if region.clip_rect().intersects(clip_region) && (region.trust_level() < trust_level) {
                         drawable = false;
-                        if debug { info!("   CANVAS: not drawable, lower trust intersecting with higher trust region");}
+                        if debug { info!("    * CANVAS: not drawable, lower trust intersecting with higher trust region");}
                     }
                 }
             }

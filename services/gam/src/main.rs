@@ -11,6 +11,7 @@ use canvas::*;
 use blitstr_ref as blitstr;
 use blitstr::GlyphStyle;
 use graphics_server::*;
+use ime_plugin_api::ImeFrontEndApi;
 
 use log::info;
 
@@ -69,6 +70,7 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
     // get the height of various text regions to compute the layout
     let small_height: i16 = graphics_server::glyph_height_hint(gfx_conn, GlyphStyle::Small).expect("GAM: couldn't get glyph height") as i16;
     let regular_height: i16 = graphics_server::glyph_height_hint(gfx_conn, GlyphStyle::Regular).expect("GAM: couldn't get glyph height") as i16;
+    let margin = 4;
 
     // allocate canvases in structures, and record their GID for future reference
     let status_canvas = Canvas::new(
@@ -78,14 +80,14 @@ fn add_chat_layout(gfx_conn: xous::CID, trng_conn: xous::CID, canvases: &mut Fnv
     canvases.insert(status_canvas.gid(), status_canvas).expect("GAM: can't store status canvus");
 
     let predictive_canvas = Canvas::new(
-        Rectangle::new_coords(0, screensize.y - regular_height, screensize.x, screensize.y),
+        Rectangle::new_coords(0, screensize.y - regular_height - margin*2, screensize.x, screensize.y),
         254,
         trng_conn, None
     ).expect("GAM: couldn't create predictive text canvas");
     canvases.insert(predictive_canvas.gid(), predictive_canvas).expect("GAM: couldn't store predictive canvas");
 
     let input_canvas = Canvas::new(
-        Rectangle::new_v_stack(predictive_canvas.clip_rect(), -regular_height),
+        Rectangle::new_v_stack(predictive_canvas.clip_rect(), -regular_height - margin*2),
         254, trng_conn, None
     ).expect("GAM: couldn't create input text canvas");
     canvases.insert(input_canvas.gid(), input_canvas).expect("GAM: couldn't store input canvas");
@@ -136,18 +138,23 @@ fn xmain() -> ! {
     xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
     // connect to the IME front end, and set its canvas
-    /*
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
-    ime_frontend::set_canvas(imef_conn, chatlayout.input).expect("GAM: couldn't set IMEF canvas");
-    */
+    let imef = ime_plugin_api::ImeFrontEnd{ connection: Some(imef_conn), };
+    imef.set_input_canvas(chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
+    imef.set_prediction_canvas(chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
+
+    // ASSUME: shell is our default application, so set a default predictor of Shell
+    imef.set_predictor(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("GAM: couldn't set IMEF prediction to shell");
+    // NOTE: all three API calls (set_input_canvas, set_prediction_canvas, set_predictor) are mandatory for IMEF initialization
+
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
         let maybe_env = xous::try_receive_message(gam_sid).unwrap();
+        if debug1 { if maybe_env.is_some() {info!("GAM: Message: {:?}", maybe_env);} }
         match maybe_env {
             Some(envelope) => {
-                // let envelope = xous::receive_message(gam_sid).unwrap();
                 if debug1 {info!("GAM: Message: {:?}", envelope); }
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     if debug1 {info!("GAM: Opcode: {:?}", opcode);}
@@ -170,7 +177,7 @@ fn xmain() -> ! {
                             match canvases.get(&gid) {
                                 Some(c) => {
                                     let mut rect = c.clip_rect();
-                                    rect.translate(rect.tl); // normalize to 0,0 coordinates
+                                    rect.normalize(); // normalize to 0,0 coordinates
                                     xous::return_scalar2(envelope.sender,
                                         rect.tl.into(),
                                         rect.br.into(),
@@ -214,8 +221,14 @@ fn xmain() -> ! {
                                             // issue the draw command
                                             graphics_server::draw_textview(gfx_conn, &mut tv_clone).expect("GAM: text view draw could not complete.");
                                             // copy back the fields that we want to be mutable
+                                            if debug1{info!("GAM: got computed cursor of {:?}", tv_clone.cursor);}
                                             tv.cursor = tv_clone.cursor;
                                             tv.bounds_computed = tv_clone.bounds_computed;
+
+                                            // pack our data back into the buffer to return
+                                            use rkyv::Write;
+                                            let mut writer = rkyv::ArchiveBuffer::new(buf);
+                                            writer.archive(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
                                         } else {
                                             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
                                         }
@@ -242,17 +255,37 @@ fn xmain() -> ! {
                                 // first, figure out if we should even be drawing to this canvas.
                                 if canvas.is_drawable() {
                                     match obj.obj {
-                                        GamObjectType::Line(line) => {
-                                            graphics_server::draw_line(gfx_conn, line).expect("GAM: couldn't draw line");
+                                        GamObjectType::Line(mut line) => {
+                                            line.translate(canvas.clip_rect().tl);
+                                            line.translate(canvas.pan_offset());
+                                            graphics_server::draw_line_clipped(gfx_conn,
+                                                line,
+                                                canvas.clip_rect(),
+                                            ).expect("GAM: couldn't draw line");
                                         },
-                                        GamObjectType::Circ(circ) => {
-                                            graphics_server::draw_circle(gfx_conn, circ).expect("GAM: couldn't draw circle");
+                                        GamObjectType::Circ(mut circ) => {
+                                            circ.translate(canvas.clip_rect().tl);
+                                            circ.translate(canvas.pan_offset());
+                                            graphics_server::draw_circle_clipped(gfx_conn,
+                                                circ,
+                                                canvas.clip_rect(),
+                                            ).expect("GAM: couldn't draw circle");
                                         },
-                                        GamObjectType::Rect(rect) => {
-                                            graphics_server::draw_rectangle(gfx_conn, rect).expect("GAM: couldn't draw rectangle");
+                                        GamObjectType::Rect(mut rect) => {
+                                            rect.translate(canvas.clip_rect().tl);
+                                            rect.translate(canvas.pan_offset());
+                                            graphics_server::draw_rectangle_clipped(gfx_conn,
+                                                rect,
+                                                canvas.clip_rect(),
+                                            ).expect("GAM: couldn't draw rectangle");
                                         },
-                                        GamObjectType::RoundRect(rr) => {
-                                            graphics_server::draw_rounded_rectangle(gfx_conn, rr).expect("GAM: couldn't draw rounded rectangle");
+                                        GamObjectType::RoundRect(mut rr) => {
+                                            rr.translate(canvas.clip_rect().tl);
+                                            rr.translate(canvas.pan_offset());
+                                            graphics_server::draw_rounded_rectangle_clipped(gfx_conn,
+                                                rr,
+                                                canvas.clip_rect(),
+                                            ).expect("GAM: couldn't draw rounded rectangle");
                                         }
                                     }
                                 } else {
@@ -277,6 +310,10 @@ fn xmain() -> ! {
         if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
             if elapsed_time - last_time > 33 {  // rate limit updates to 30fps
                 last_time = elapsed_time;
+
+                // TODO: enhance this update with a methods that:
+                //  1. deface dirty areas that require defacing
+                //  2. update the drawn dirty bits indicating things have been drawn, as appropriate
                 graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
             }
         }

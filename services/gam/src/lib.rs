@@ -54,9 +54,12 @@ pub fn draw_line(gam_cid: xous::CID, gid: Gid, line: Line) -> Result<(), xous::E
 }
 
 pub fn get_canvas_bounds(gam_cid: xous::CID, gid: Gid) -> Result<Point, xous::Error> {
+    let debug1 = false;
+    if debug1{info!("GAM_API: get_canvas_bounds");}
     let response = xous::send_message(gam_cid, api::Opcode::GetCanvasBounds(gid).into())?;
     if let xous::Result::Scalar2(tl, br) = response {
         // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
+        if debug1{info!("GAM_API: tl:{}, br:{}", tl, br);}
         assert!(tl == 0, "GAM_API: api call returned non-zero top left for canvas bounds");
         Ok(br.into())
     } else {

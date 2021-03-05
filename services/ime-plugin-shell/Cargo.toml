@@ -13,7 +13,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
 rkyv = { version = "0.3.1", default_features = false }
-
+ime-plugin-api = {path="../ime-plugin-api"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
