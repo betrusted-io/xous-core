@@ -163,6 +163,7 @@ impl XousDisplay {
                     Key::Home => '∴',
                     Key::Backspace => 0x8_u8.into(),
                     Key::Delete => 0x8_u8.into(),
+                    Key::Enter => 0xd_u8.into(),
                     Key::Space => ' ',
                     Key::Comma => ',',
                     Key::Period => '.',

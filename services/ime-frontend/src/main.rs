@@ -123,7 +123,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
-        let debug1= false;
+        let debug1= true;
         // just draw a rectangle for the prediction area for now
         if let Some(pc) = self.pred_canvas {
             if debug1{info!("IMEF: updating prediction area");}
@@ -146,15 +146,25 @@ impl InputTracker {
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
             input_tv.draw_border = false;
             input_tv.border_width = 1;
-            input_tv.clear_area = true;
+            input_tv.clear_area = true; // need this so that the insertion point is cleared and moved
 
             for &k in newkeys.iter() {
                 if debug1{info!("IMEF: got key '{}'", k);}
                 match k {
                     '\u{0000}' => (),
                     '\u{000d}' => {
+                        // TODO: send string to registered listeners
+                        // TODO: update the predictor on carriage return
+
                         // carriage return case
-                        write!(self.line, "").expect("IMEF: can't clear line after carriage return");
+                        if debug1{info!("IMEF: got carriage return");}
+                        self.line.clear();
+                        // clear all the temporary variables
+                        self.insertion.pt.y = 0;
+                        self.insertion.pt.x = 0;
+                        self.insertion.line_height = 0;
+                        self.charwidths = [0; 4096];
+                        self.clear_area().expect("IMEF: can't clear on carriage return");
                     },
                     _ => {
                         self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
@@ -186,8 +196,11 @@ impl InputTracker {
         }
         /*
         what else do we need:
-        - current string that is being built up
-        - cursor position in string, so we can do insertion/deletion
+        - backspace capability
+        - insertion point movement and character insert
+
+        - height up request of canvas when string wraps
+        - registration for listening to string results
         */
         Ok(())
     }
