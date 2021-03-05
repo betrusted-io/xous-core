@@ -71,6 +71,57 @@ impl InputTracker {
         self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
     }
 
+    pub fn clear_area(&mut self) -> Result<(), xous::Error> {
+        if let Some(pc) = self.pred_canvas {
+            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            gam::draw_rectangle(self.gam_conn, pc,
+                Rectangle::new_with_style(Point::new(0, 0), pc_bounds,
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("IMEF: can't clear prediction area");
+            // add the border line on top
+            gam::draw_line(self.gam_conn, pc,
+                Line::new_with_style(
+                    Point::new(0,0),
+                    Point::new(pc_bounds.x, 0),
+                   DrawStyle {
+                       fill_color: None,
+                       stroke_color: Some(PixelColor::Dark),
+                       stroke_width: 1,
+                   })
+            ).expect("IMEF: can't draw prediction top border");
+        }
+
+        if let Some(ic) = self.input_canvas {
+            let mut ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            gam::draw_rectangle(self.gam_conn, ic,
+                Rectangle::new_with_style(Point::new(0, 0), ic_bounds,
+                DrawStyle {
+                    fill_color: Some(PixelColor::Light),
+                    stroke_color: None,
+                    stroke_width: 0
+                }
+            )).expect("IMEF: can't clear input area");
+
+            // add the border line on top
+            gam::draw_line(self.gam_conn, ic,
+                Line::new_with_style(
+                    Point::new(0,0),
+                    Point::new(ic_bounds.x, 0),
+                    DrawStyle {
+                        fill_color: None,
+                        stroke_color: Some(PixelColor::Dark),
+                        stroke_width: 1,
+                    }))
+                    .expect("IMEF: can't draw input top line border");
+        }
+
+        Ok(())
+    }
+
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
         let debug1= false;
         // just draw a rectangle for the prediction area for now
@@ -86,18 +137,6 @@ impl InputTracker {
 
             if debug1{info!("IMEF: posting textview {:?}", starting_tv);}
             gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
-
-            // add the border line on top
-            gam::draw_line(self.gam_conn, pc,
-                Line::new_with_style(
-                    Point::new(0,0),
-                    Point::new(pc_bounds.x, 0),
-                   DrawStyle {
-                       fill_color: None,
-                       stroke_color: Some(PixelColor::Dark),
-                       stroke_width: 1,
-                   })
-            ).expect("IMEF: can't draw prediction top border");
         }
 
         if let Some(ic) = self.input_canvas {
@@ -144,18 +183,6 @@ impl InputTracker {
                 Line::new(ins_pt,
                     ins_pt + Point::new(0, self.insertion.line_height as i16 - input_tv.margin.y) ))
                     .expect("IMEF: can't draw insertion point");
-
-            // add the border line on top
-            gam::draw_line(self.gam_conn, ic,
-                Line::new_with_style(
-                    Point::new(0,0),
-                    Point::new(ic_bounds.x, 0),
-                    DrawStyle {
-                        fill_color: None,
-                        stroke_color: Some(PixelColor::Dark),
-                        stroke_width: 1,
-                    }))
-                    .expect("IMEF: can't draw input top line border");
         }
         /*
         what else do we need:
@@ -221,9 +248,9 @@ fn xmain() -> ! {
         }
     }
 
-    // force a redraw of the UI with no keys
+    // force a redraw of the UI
     if debug1{info!("IMEF: forcing initial UI redraw");}
-    tracker.update(['\u{0000}'; 4]).expect("IMEF: couldn't redraw initial UI");
+    tracker.clear_area().expect("IMEF: can't initially clear areas");
 
     let mut key_queue: Vec<char, U32> = Vec::new();
     info!("IMEF: entering main loop");

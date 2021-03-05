@@ -7,7 +7,7 @@ use rkyv::Write;
 use rkyv::Unarchive;
 use graphics_server::api::{TextOp, TextView};
 
-use graphics_server::api::{Point, Gid, Line};
+use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
 use log::info;
 
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
@@ -47,9 +47,43 @@ pub fn draw_line(gam_cid: xous::CID, gid: Gid, line: Line) -> Result<(), xous::E
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
     let xous_buffer = writer.into_inner();
-
     xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
-
+    Ok(())
+}
+pub fn draw_rectangle(gam_cid: xous::CID, gid: Gid, rect: Rectangle) -> Result<(), xous::Error> {
+    let rkyv_tv = api::Opcode::RenderObject(
+        GamObject {
+            canvas: gid,
+            obj: GamObjectType::Rect(rect),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
+    let xous_buffer = writer.into_inner();
+    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
+    Ok(())
+}
+pub fn draw_rouded_rectangle(gam_cid: xous::CID, gid: Gid, rr: RoundedRectangle) -> Result<(), xous::Error> {
+    let rkyv_tv = api::Opcode::RenderObject(
+        GamObject {
+            canvas: gid,
+            obj: GamObjectType::RoundRect(rr),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
+    let xous_buffer = writer.into_inner();
+    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
+    Ok(())
+}
+pub fn draw_circle(gam_cid: xous::CID, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
+    let rkyv_tv = api::Opcode::RenderObject(
+        GamObject {
+            canvas: gid,
+            obj: GamObjectType::Circ(circ),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
+    let xous_buffer = writer.into_inner();
+    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
     Ok(())
 }
 
