@@ -157,6 +157,26 @@ impl Rectangle {
         self.tl.x = 0;
         self.tl.y = 0;
     }
+    // this "margins in" a rectangle on all sides; if the margin is more than the twice any
+    // dimension it just reduces the rectangle to a line at the midpoint of the axis dimension
+    pub fn margin(&mut self, margin: Point) {
+        if margin.x * 2 <= (self.br.x - self.tl.x) {
+            self.tl.x += margin.x;
+            self.br.x -= margin.x;
+        } else {
+            let midpoint = (self.br.x + self.tl.x) / 2;
+            self.tl.x = midpoint;
+            self.br.x = midpoint;
+        }
+        if margin.y * 2 <= (self.br.y - self.tl.y) {
+            self.tl.y += margin.y;
+            self.br.y -= margin.y;
+        } else {
+            let midpoint = (self.br.y + self.tl.y) / 2;
+            self.tl.y = midpoint;
+            self.br.y = midpoint;
+        }
+    }
 
     /// Make a rectangle of the full screen size
     pub fn full_screen() -> Rectangle {
@@ -209,6 +229,10 @@ impl Line {
             style: style,
         }
     }
+    pub fn translate(&mut self, offset: Point) {
+        self.start = self.start + offset;
+        self.end = self.end + offset;
+    }
 }
 
 
@@ -238,6 +262,9 @@ impl Circle {
             style,
         }
     }
+    pub fn translate(&mut self, offset: Point) {
+        self.center = self.center + offset;
+    }
 }
 
 //////////////////////// Rounded Rectangle
@@ -260,6 +287,9 @@ impl RoundedRectangle {
             border: rr,
             radius: r_adj,
         }
+    }
+    pub fn translate(&mut self, offset: Point) {
+        self.border.translate(offset);
     }
 }
 

@@ -17,7 +17,7 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = false;
+    let debug1 = true;
     log_server::init_wait().unwrap();
     info!("NS: my PID is {}", xous::process::id());
 

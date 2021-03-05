@@ -9,7 +9,7 @@ use core::fmt::Write;
 
 use log::{error, info};
 
-use graphics_server::{Gid, TextView, Point, TextBounds, Rectangle, Line};
+use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
 use blitstr_ref as blitstr;
 use blitstr::Cursor;
 use heapless::Vec;
@@ -68,28 +68,44 @@ impl InputTracker {
         self.pred_canvas = Some(pred);
     }
     pub fn is_init(&self) -> bool {
-        self.input_canvas.is_some() && self.pred_canvas.is_some()
+        self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
-        let debug1= true;
+        let debug1= false;
         // just draw a rectangle for the prediction area for now
         if let Some(pc) = self.pred_canvas {
+            if debug1{info!("IMEF: updating prediction area");}
             let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
             let mut starting_tv = TextView::new(pc, 255,
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0, 0), pc_bounds)));
-            starting_tv.draw_border = true;
+            starting_tv.draw_border = false;
             starting_tv.border_width = 1;
-            starting_tv.clear_area = true;
+            starting_tv.clear_area = false;
 
+            if debug1{info!("IMEF: posting textview {:?}", starting_tv);}
             gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
+
+            // add the border line on top
+            gam::draw_line(self.gam_conn, pc,
+                Line::new_with_style(
+                    Point::new(0,0),
+                    Point::new(pc_bounds.x, 0),
+                   DrawStyle {
+                       fill_color: None,
+                       stroke_color: Some(PixelColor::Dark),
+                       stroke_width: 1,
+                   })
+            ).expect("IMEF: can't draw prediction top border");
         }
 
         if let Some(ic) = self.input_canvas {
-            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            if debug1{info!("IMEF: updating input area");}
+            let mut ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
             let mut input_tv = TextView::new(ic, 255,
-                TextBounds::BoundingBox(Rectangle::new(Point::new(0,0), ic_bounds)));
-            input_tv.draw_border = true;
+                TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
+            input_tv.draw_border = false;
             input_tv.border_width = 1;
             input_tv.clear_area = true;
 
@@ -105,6 +121,7 @@ impl InputTracker {
                         self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
                         write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
                         gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
+                        if debug1{info!("IMEF: got computed cursor of {:?}", input_tv.cursor);}
                         if self.insertion.pt.y == input_tv.cursor.pt.y {
                             self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - self.insertion.pt.x) as u8;
                         } else {
@@ -112,6 +129,8 @@ impl InputTracker {
                             self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - 0) as u8;
                         }
                         self.insertion.pt.y = input_tv.cursor.pt.y;
+                        self.insertion.pt.x = input_tv.cursor.pt.x;
+                        self.insertion.line_height = input_tv.cursor.line_height;
                     },
                 }
             }
@@ -119,8 +138,24 @@ impl InputTracker {
             // draw the insertion point
             // do a manual type conversion, because external crate etc. etc.
             let ins_pt: Point = Point::new(self.insertion.pt.x as i16, self.insertion.pt.y as i16);
+
+            if debug1{info!("IMEF: drawing insertion point: {:?}, height: {}", ins_pt, self.insertion.line_height);}
             gam::draw_line(self.gam_conn, ic,
-                Line::new(ins_pt, ins_pt + Point::new(0, self.insertion.line_height as i16 - input_tv.margin.y) )).expect("IMEF: can't draw insertion point");
+                Line::new(ins_pt,
+                    ins_pt + Point::new(0, self.insertion.line_height as i16 - input_tv.margin.y) ))
+                    .expect("IMEF: can't draw insertion point");
+
+            // add the border line on top
+            gam::draw_line(self.gam_conn, ic,
+                Line::new_with_style(
+                    Point::new(0,0),
+                    Point::new(ic_bounds.x, 0),
+                    DrawStyle {
+                        fill_color: None,
+                        stroke_color: Some(PixelColor::Dark),
+                        stroke_width: 1,
+                    }))
+                    .expect("IMEF: can't draw input top line border");
         }
         /*
         what else do we need:
@@ -133,7 +168,7 @@ impl InputTracker {
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = true;
+    let debug1 = false;
     log_server::init_wait().unwrap();
     info!("IMEF: my PID is {}", xous::process::id());
 
@@ -146,7 +181,7 @@ fn xmain() -> ! {
     let mut tracker = InputTracker::new(
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
     );
-    // The first message should be my Gid from the GAM.
+    // The main lop can't start until we've been assigned Gids from the GAM, and a Predictor.
     info!("IMEF: waiting for my canvas Gids");
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
@@ -162,6 +197,22 @@ fn xmain() -> ! {
                 },
                 _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
             }
+        } else if let xous::Message::Borrow(m) = &envelope.body {
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<ImefOpcode>(&bytes, m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
+                    let s: xous::String<256> = rkyv_s.unarchive();
+                    match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
+                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
+                        _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
+                    }
+                },
+                _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
+            };
         } else {
             info!("IMEF: expected canvas Gid, but got other message first {:?}", envelope);
         }
@@ -169,6 +220,10 @@ fn xmain() -> ! {
             break;
         }
     }
+
+    // force a redraw of the UI with no keys
+    if debug1{info!("IMEF: forcing initial UI redraw");}
+    tracker.update(['\u{0000}'; 4]).expect("IMEF: couldn't redraw initial UI");
 
     let mut key_queue: Vec<char, U32> = Vec::new();
     info!("IMEF: entering main loop");

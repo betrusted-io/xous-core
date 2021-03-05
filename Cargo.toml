@@ -9,8 +9,6 @@ members = [
     "services/log-server",
     "services/ticktimer-server",
     "services/com",
-    "services/llio",
-    "services/trng-tester",
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
@@ -26,18 +24,18 @@ members = [
     "imports/blitstr-ref",
     "imports/com_rs-ref",
     "services/ime-plugin-api",
+    "services/llio",
+    "services/trng-tester",
 ]
 default-members = [
     "services/shell",
     "services/log-server",
     "services/graphics-server",
     "services/ticktimer-server",
-    "services/trng-tester",
     "services/fcc-agent",
     "services/xous-names",
     "services/keyboard",
     "services/com",
-    "services/llio",
     "services/trng",
     "services/gam",
     "imports/blitstr-ref",
@@ -47,6 +45,8 @@ default-members = [
     "services/benchmark-target",
     "services/ime-frontend",
     "services/ime-plugin-shell",
+    "services/llio",
+    "services/trng-tester",
 ]
 
 # These packages have custom RUSTFLAGS, so if they

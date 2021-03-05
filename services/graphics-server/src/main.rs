@@ -4,7 +4,7 @@
 use log::{error, info};
 
 mod api;
-use api::Opcode;
+use api::{Opcode, ClipObject, ClipObjectType};
 
 use core::pin::Pin;
 use rkyv::{archived_value, Unarchive, archived_value_mut};
@@ -18,7 +18,7 @@ use core::convert::TryFrom;
 
 mod logo;
 
-use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle};
+use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point};
 use blitstr_ref as blitstr;
 
 mod fontmap;
@@ -57,8 +57,12 @@ fn map_fonts() {
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    let debug1 = false;
     log_server::init_wait().unwrap();
     info!("GFX: my PID is {}", xous::process::id());
+
+    let sid = xous_names::register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
+    info!("GFX: Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();
@@ -70,9 +74,6 @@ fn xmain() -> ! {
     let mut current_glyph = blitstr::GlyphStyle::Regular;
     let mut current_string_clip = blitstr::ClipRect::full_screen();
     let mut current_cursor = blitstr::Cursor::from_top_left_of(current_string_clip);
-
-    let sid = xous_names::register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
-    info!("GFX: Server listening on address {:?}", sid);
 
     if false {
         // leave this test case around
@@ -88,8 +89,10 @@ fn xmain() -> ! {
             stroke_width: 1,
         };
         let rr = RoundedRectangle::new(r, 16);
-        op::rounded_rectangle(display.native_buffer(), rr);
+        op::rounded_rectangle(display.native_buffer(), rr, None);
     }
+
+    let screen_clip = Rectangle::new(Point::new(0,0), display.screen_size());
 
     display.redraw();
     loop {
@@ -128,6 +131,24 @@ fn xmain() -> ! {
                         blitstr::xor_char
                     );
                 },
+                rkyv::Archived::<api::Opcode>::DrawClipObject(rco) => {
+                    let obj: ClipObject = rco.unarchive();
+                    if debug1{info!("GFX: DrawClipObject {:?}", obj);}
+                    match obj.obj {
+                        ClipObjectType::Line(line) => {
+                            op::line(display.native_buffer(), line, Some(obj.clip));
+                        },
+                        ClipObjectType::Circ(circ) => {
+                            op::circle(display.native_buffer(), circ, Some(obj.clip));
+                        },
+                        ClipObjectType::Rect(rect) => {
+                            op::rectangle(display.native_buffer(), rect, Some(obj.clip));
+                        },
+                        ClipObjectType::RoundRect(rr) => {
+                            op::rounded_rectangle(display.native_buffer(), rr, Some(obj.clip));
+                        }
+                    }
+                },
                 _ => panic!("GFX: invalid response from server -- corruption occurred in MemoryMessage")
             };
         } else if let xous::Message::MutableBorrow(m) = &msg.body {
@@ -135,27 +156,22 @@ fn xmain() -> ! {
             let value = unsafe {
                 archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
             };
-            //use rkyv::Write;
-            //let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
             let debugtv: bool = false;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
                     let mut tv = rtv.unarchive();
 
+                    if tv.clip_rect.is_none() { continue } // if no clipping rectangle is specified, nothing to draw
+                    let screen_offset: Point = tv.clip_rect.unwrap().tl; // this is the translation vector to and from screen space
+
                     let paintfn = if tv.dry_run {
                         if debugtv { info!("GFX(TV): doing dry run"); }
                         blitstr::simulate_char
                     } else {
-                        if debugtv { info!("GFX(TV): drawing"); }
+                        if debugtv { info!("GFX(TV): doing live run"); }
                         blitstr::xor_char
                     };
 
-                    /*
-                    1. figure out text bounds
-                    2. clear background, if requested
-                    3. draw surrounding rectangle, if requested
-                    4. draw text
-                    */
                     // first compute the bounding box, if it isn't computed
                     if tv.bounds_computed.is_none() {
                         match tv.bounds_hint {
@@ -177,7 +193,10 @@ fn xmain() -> ! {
 
                     // clear the bounding box if requested
                     let mut clear_rect = tv.bounds_computed.unwrap();
-                    clear_rect.translate(tv.clip_rect.unwrap().tl);
+
+                    // move things into screen coordinates
+                    clear_rect.translate(screen_offset);
+
                     let bordercolor = if tv.draw_border {
                         Some(PixelColor::Dark)
                     } else {
@@ -201,37 +220,51 @@ fn xmain() -> ! {
                     };
                     if tv.rounded_border.is_some() {
                         op::rounded_rectangle(display.native_buffer(),
-                           RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _));
+                           RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), tv.clip_rect);
                     } else {
                         if debugtv { info!("GFX(TV): clearing rectangle {:?}", clear_rect); }
-                        op::rectangle(display.native_buffer(), clear_rect);
+                        op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
                     }
 
 
-                    // this is the actual draw operation
-                    clear_rect.translate(tv.margin);
-
-                    /////// TODO: I think we need to clip the clear_rect.tl.x/y to within the screen area for this to be valid?
-                    let mut ref_cursor = blitstr::Cursor{
-                        pt: blitstr::Pt{x: clear_rect.tl.x as u32, y: clear_rect.tl.y as u32},
-                        line_height: 0,
+                    // compute the final clipping region for the string
+                    clear_rect.margin(tv.margin);
+                    let cr = match clear_rect.clip_with(screen_clip) {
+                        Some(r) => r,
+                        _ => continue, // don't draw anything if somehow this doesn't fit in the creen.
                     };
-                    if debugtv { info!("GFX(TV): paint_str with {:?} | {:?} | {:?} | {:?}", clear_rect, ref_cursor, tv.style, tv.text); }
+
+                    let mut ref_cursor = blitstr::Cursor::from_top_left_of(cr.into());
+                    if debugtv { info!("GFX(TV): paint_str with {:?} | {:?} | {:?} | {:?}", cr, ref_cursor, tv.style, tv.text); }
                     blitstr::paint_str(
                         display.native_buffer(),
-                        clear_rect.into(),
+                        cr.into(),
                         &mut ref_cursor,
                         tv.style.into(),
                         tv.text.as_str().unwrap(),
                         false,
                         paintfn
                     );
-                    tv.cursor = ref_cursor;
+                    // translate the cursor return value back to canvas coordinates
+                    tv.cursor = blitstr::Cursor {
+                        pt: blitstr::Pt::new(
+                            ref_cursor.pt.x - screen_offset.x as u32,
+                            ref_cursor.pt.y - screen_offset.y as u32,
+                        ),
+                        line_height: ref_cursor.line_height,
+                    };
+                    if debugtv{info!("GFX(TV): returning cursor of {:?}", tv.cursor);}
+
+                    // pack our data back into the buffer to return
+                    use rkyv::Write;
+                    let mut writer = rkyv::ArchiveBuffer::new(buf);
+                    writer.archive(&api::Opcode::DrawTextView(tv)).expect("GFX: couldn't re-archive return value");
                 },
                 _ => panic!("GFX: invalid mutable borrow message"),
-            }
+            };
         } else if let Ok(opcode) = Opcode::try_from(&msg.body) {
-            // info!("GFX: Opcode: {:?}", opcode);
+            let debugop = false;
+            if debugop {info!("GFX: Opcode: {:?}", opcode);}
             match opcode {
                 Opcode::Flush => {
                     display.update();
@@ -240,19 +273,19 @@ fn xmain() -> ! {
                 Opcode::Clear => {
                     let mut r = Rectangle::full_screen();
                     r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                    op::rectangle(display.native_buffer(), r)
+                    op::rectangle(display.native_buffer(), r, None)
                 }
                 Opcode::Line(l) => {
-                    op::line(display.native_buffer(), l);
+                    op::line(display.native_buffer(), l, None);
                 }
                 Opcode::Rectangle(r) => {
-                    op::rectangle(display.native_buffer(), r);
+                    op::rectangle(display.native_buffer(), r, None);
                 }
                 Opcode::RoundedRectangle(rr) => {
-                    op::rounded_rectangle(display.native_buffer(), rr);
+                    op::rounded_rectangle(display.native_buffer(), rr, None);
                 }
                 Opcode::Circle(c) => {
-                    op::circle(display.native_buffer(), c);
+                    op::circle(display.native_buffer(), c, None);
                 }
                 Opcode::SetGlyphStyle(glyph) => {
                     current_glyph = glyph;
@@ -270,7 +303,8 @@ fn xmain() -> ! {
                     current_string_clip = r;
                 }
                 Opcode::ScreenSize => {
-                    xous::return_scalar2(msg.sender, 336 as usize, 536 as usize)
+                    let pt = display.screen_size();
+                    xous::return_scalar2(msg.sender, pt.x as usize, pt.y as usize)
                         .expect("GFX: couldn't return ScreenSize request");
                 }
                 Opcode::QueryGlyphStyle => {

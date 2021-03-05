@@ -99,8 +99,11 @@ pub enum Opcode {
     /// gets info about the current glyph to assist with layout
     QueryGlyphProps(GlyphStyle),
 
-    // draws a textview
+    /// draws a textview
     DrawTextView(TextView),
+
+    /// draws an object that requires clipping
+    DrawClipObject(ClipObject),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -263,4 +266,19 @@ impl Into<Message> for Opcode {
             _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
         }
     }
+}
+
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub enum ClipObjectType {
+    Line(Line),
+    Circ(Circle),
+    Rect(Rectangle),
+    RoundRect(RoundedRectangle),
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub struct ClipObject {
+    pub clip: Rectangle,
+    pub obj: ClipObjectType,
 }

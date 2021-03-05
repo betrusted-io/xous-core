@@ -2,7 +2,7 @@
 
 // pub mod size;
 pub mod api;
-pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle};
+pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle, ClipObject, ClipObjectType};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
@@ -10,6 +10,9 @@ pub mod op;
 
 use xous::{send_message, CID};
 use core::fmt::Write;
+use rkyv::Write as RkyvWrite;
+use rkyv::Unarchive;
+
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
     let m: xous::Message = api::Opcode::Line(line).into();
@@ -116,10 +119,6 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
 }
 
 pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    use log::info;
-    use rkyv::Write;
-    use rkyv::Unarchive;
-
     let rkyv_tv = api::Opcode::DrawTextView(*tv);
     let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
     let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
@@ -130,12 +129,74 @@ pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
         let tvr: TextView = result.unarchive();
+        //log::info!("draw_textview: got cursor of {:?}, bounds of {:?}", tvr.cursor, tvr.bounds_computed);
         tv.bounds_computed = tvr.bounds_computed;
         tv.cursor = tvr.cursor;
         Ok(())
     } else {
         let tvr = returned.unarchive();
-        info!("draw_textview saw an unhandled return type of {:?}", tvr);
+        log::info!("draw_textview saw an unhandled return type of {:?}", tvr);
         Err(xous::Error::InternalError)
     }
+}
+
+
+pub fn draw_line_clipped(cid: xous::CID, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
+    let rkyv = api::Opcode::DrawClipObject(
+        ClipObject {
+            clip: clip,
+            obj: ClipObjectType::Line(line),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
+
+    Ok(())
+}
+
+pub fn draw_circle_clipped(cid: xous::CID, circ: Circle, clip: Rectangle) -> Result<(), xous::Error> {
+    let rkyv = api::Opcode::DrawClipObject(
+        ClipObject {
+            clip: clip,
+            obj: ClipObjectType::Circ(circ),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
+
+    Ok(())
+}
+
+pub fn draw_rectangle_clipped(cid: xous::CID, rect: Rectangle, clip: Rectangle) -> Result<(), xous::Error> {
+    let rkyv = api::Opcode::DrawClipObject(
+        ClipObject {
+            clip: clip,
+            obj: ClipObjectType::Rect(rect),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
+
+    Ok(())
+}
+
+pub fn draw_rounded_rectangle_clipped(cid: xous::CID, rr: RoundedRectangle, clip: Rectangle) -> Result<(), xous::Error> {
+    let rkyv = api::Opcode::DrawClipObject(
+        ClipObject {
+            clip: clip,
+            obj: ClipObjectType::RoundRect(rr),
+    });
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let xous_buffer = writer.into_inner();
+
+    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
+
+    Ok(())
 }

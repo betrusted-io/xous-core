@@ -1,8 +1,9 @@
 use utralib::generated::*;
 use xous::MemoryRange;
+use crate::api::Point;
 
 const FB_WIDTH_WORDS: usize = 11;
-// const FB_WIDTH_PIXELS: usize = 336;
+const FB_WIDTH_PIXELS: usize = 336;
 const FB_LINES: usize = 536;
 const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
@@ -65,6 +66,8 @@ impl XousDisplay {
 
         display
     }
+
+    pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }
 
     pub fn redraw(&mut self) {
         while self.busy() {xous::yield_slice()}

@@ -1,4 +1,5 @@
 use minifb::{Key, Window, WindowOptions, KeyRepeat};
+use crate::api::Point;
 
 const WIDTH: usize = 336;
 const HEIGHT: usize = 536;
@@ -53,6 +54,8 @@ impl XousDisplay {
             kbd_conn,
         }
     }
+
+    pub fn screen_size(&self) -> Point { Point::new(WIDTH as i16, HEIGHT as i16) }
 
     pub fn blit_screen(&mut self, bmp: [u32; FB_SIZE]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {

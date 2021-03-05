@@ -236,7 +236,7 @@ impl Into<Message> for ImefOpcode {
                 id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
             }),
             ImefOpcode::SetPredictionCanvas(gid) => Message::Scalar(ScalarMessage {
-                id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
+                id: 1, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
             }),
             _ => panic!("IMEF api: Opcode type not handled by into()"),
         }
