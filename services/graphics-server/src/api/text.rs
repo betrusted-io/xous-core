@@ -67,6 +67,7 @@ pub struct TextView {
     pub style: GlyphStyle,
     pub text: xous::String::<3072>,
     pub cursor: Cursor,
+    pub insertion: Option<u32>, // this is the insertion point offset, if it's to be drawn, on the string
 
     pub draw_border: bool,
     pub clear_area: bool, // you almost always want this to be true
@@ -94,6 +95,7 @@ impl TextView {
             style: GlyphStyle::Regular,
             text: xous::String::<3072>::new(),
             cursor: Cursor::new(0,0,0),
+            insertion: None,
             draw_border: true,
             border_width: 1,
             rounded_border: None,
@@ -136,6 +138,7 @@ impl TextView {
         self.overflow = t.overflow;
         self.clip_rect = t.clip_rect;
         self.dry_run = t.dry_run;
+        self.insertion = t.insertion;
     }
 }
 

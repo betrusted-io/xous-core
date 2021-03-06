@@ -115,6 +115,7 @@ fn xmain() -> ! {
                         current_glyph.into(),
                         s.as_str().unwrap(),
                         false,
+                        None,
                         blitstr::xor_char
                     );
                     //info!("GFX: string painted");
@@ -128,6 +129,7 @@ fn xmain() -> ! {
                         current_glyph.into(),
                         s.as_str().unwrap(),
                         true,
+                        None,
                         blitstr::xor_char
                     );
                 },
@@ -243,6 +245,7 @@ fn xmain() -> ! {
                         tv.style.into(),
                         tv.text.as_str().unwrap(),
                         false,
+                        tv.insertion,
                         paintfn
                     );
                     // translate the cursor return value back to canvas coordinates
