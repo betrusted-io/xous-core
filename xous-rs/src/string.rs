@@ -8,7 +8,7 @@ use core::pin::Pin;
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
     bytes: [u8; N],
-    len: u32,
+    len: u32, // length in bytes, not characters
 }
 
 impl<const N: usize> String<N> {
@@ -90,6 +90,43 @@ impl<const N: usize> String<N> {
 
     pub fn to_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
+    }
+
+    /// awful, O(N) implementation because we have to iterate through the entire string
+    /// and decode variable-length utf8 characters, until we can't.
+    pub fn pop(&mut self) -> Option<char> {
+        if self.len() < 1 {
+            return None;
+        }
+        // first, make a copy of the string
+        let tempbytes: [u8; N] = self.bytes;
+        let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.len()]) }.clone();
+        // clear our own string
+        self.len = 0;
+        self.bytes = [0; N];
+
+        // now copy over character by character, until just before the last character
+        let mut char_iter = tempstr.chars();
+        let mut maybe_c = char_iter.next();
+        loop {
+            match maybe_c {
+                Some(c) => {
+                    let next_c = char_iter.next();
+                    match next_c {
+                        Some(_thing) => {
+                            self.push(c).unwrap(); // always succeeds because we're re-encoding our string
+                            maybe_c = next_c;
+                        },
+                        None => {
+                            return next_c
+                        }
+                    }
+                },
+                None => {
+                    return None // we should actually never get here because len() == 0 case already covered
+                }
+            }
+        }
     }
 
     pub fn push(&mut self, ch: char) -> core::result::Result<(), Error> {

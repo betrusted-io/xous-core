@@ -37,10 +37,12 @@ struct InputTracker {
 
     /// track the progress of our input line
     line: xous::String::<4096>,
-    /// we need to track character widths so we can draw a cursor
-    charwidths: [u8; 4096],
-    /// what position the insertion cursor is at in the string. 0 is inserting elements into the front of the string
-    insertion: Cursor,
+    /// we need to track character locations so we can draw a cursor, resize text boxes, etc.
+    char_locs: [Point; 4096],
+    /// length of the line in *characters*, not bytes (which is what .len() returns), used to index char_locs
+    characters: usize,
+    /// the last computed line height, to help with drawing the insertion points
+    line_height: u32,
 }
 
 impl InputTracker {
@@ -52,8 +54,9 @@ impl InputTracker {
             predictor: None,
             pred_triggers: None,
             line: xous::String::<4096>::new(),
-            charwidths: [0; 4096],
-            insertion: Cursor::new(0, 0, 0), // canvases always have (0,0) as the top left
+            char_locs: [Point::default(); 4096],
+            characters: 0,
+            line_height: 0,
         }
     }
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
@@ -152,46 +155,47 @@ impl InputTracker {
                 if debug1{info!("IMEF: got key '{}'", k);}
                 match k {
                     '\u{0000}' => (),
-                    '\u{000d}' => {
+                    '\u{0008}' => { // backspace
+                        if self.characters > 0 {
+                            self.char_locs[self.characters] = Point::default();
+                            self.line.pop();
+                            self.characters -= 1;
+                            // now re-write our string to get rid of the old character
+                            write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
+                            gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
+                        }
+                    }
+                    '\u{000d}' => { // carriage return
                         // TODO: send string to registered listeners
                         // TODO: update the predictor on carriage return
 
-                        // carriage return case
                         if debug1{info!("IMEF: got carriage return");}
                         self.line.clear();
                         // clear all the temporary variables
-                        self.insertion.pt.y = 0;
-                        self.insertion.pt.x = 0;
-                        self.insertion.line_height = 0;
-                        self.charwidths = [0; 4096];
+                        self.line_height = 0;
+                        self.char_locs = [Point::default(); 4096];
                         self.clear_area().expect("IMEF: can't clear on carriage return");
                     },
                     _ => {
                         self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
+                        self.characters += 1;
                         write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
                         gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
                         if debug1{info!("IMEF: got computed cursor of {:?}", input_tv.cursor);}
-                        if self.insertion.pt.y == input_tv.cursor.pt.y {
-                            self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - self.insertion.pt.x) as u8;
-                        } else {
-                            // line wrapped, assume we wrapped to x = 0
-                            self.charwidths[self.line.len()] = (input_tv.cursor.pt.x - 0) as u8;
-                        }
-                        self.insertion.pt.y = input_tv.cursor.pt.y;
-                        self.insertion.pt.x = input_tv.cursor.pt.x;
-                        self.insertion.line_height = input_tv.cursor.line_height;
+                        self.char_locs[self.characters] = Point::new(input_tv.cursor.pt.x as i16, input_tv.cursor.pt.y as i16);
+                        self.line_height = input_tv.cursor.line_height;
                     },
                 }
             }
 
             // draw the insertion point
             // do a manual type conversion, because external crate etc. etc.
-            let ins_pt: Point = Point::new(self.insertion.pt.x as i16, self.insertion.pt.y as i16);
+            let ins_pt: Point = Point::new(self.char_locs[self.characters].x as i16, self.char_locs[self.characters].y as i16);
 
-            if debug1{info!("IMEF: drawing insertion point: {:?}, height: {}", ins_pt, self.insertion.line_height);}
+            if debug1{info!("IMEF: drawing insertion point: {:?}, height: {}", ins_pt, self.line_height);}
             gam::draw_line(self.gam_conn, ic,
                 Line::new(ins_pt,
-                    ins_pt + Point::new(0, self.insertion.line_height as i16 - input_tv.margin.y) ))
+                    ins_pt + Point::new(0, self.line_height as i16 - input_tv.margin.y) ))
                     .expect("IMEF: can't draw insertion point");
         }
         /*
@@ -199,7 +203,7 @@ impl InputTracker {
         - backspace capability
         - insertion point movement and character insert
 
-        - height up request of canvas when string wraps
+        - height up request of canvas when string wraps, and reset of canvas height after carriage return
         - registration for listening to string results
         */
         Ok(())
