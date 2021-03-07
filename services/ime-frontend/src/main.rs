@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 
+use gam::api::SetCanvasBoundsRequest;
 use ime_plugin_api::ImefOpcode;
 
 use core::convert::TryFrom;
@@ -41,6 +42,10 @@ struct InputTracker {
     characters: usize,
     /// the insertion point, 0 is inserting characters before the first, 1 inserts characters after the first, etc.
     insertion: usize,
+    /// last returned line height, which is used as a reference for growing the area when we run out of space
+    last_height: u32,
+    /// keep track if our box was grown
+    was_grown: bool,
 }
 
 impl InputTracker {
@@ -54,6 +59,8 @@ impl InputTracker {
             line: xous::String::<4096>::new(),
             characters: 0,
             insertion: 0,
+            last_height: 0,
+            was_grown: false,
         }
     }
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
@@ -96,7 +103,7 @@ impl InputTracker {
         }
 
         if let Some(ic) = self.input_canvas {
-            let mut ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
             gam::draw_rectangle(self.gam_conn, ic,
                 Rectangle::new_with_style(Point::new(0, 0), ic_bounds,
                 DrawStyle {
@@ -124,21 +131,6 @@ impl InputTracker {
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
         let debug1= true;
-        // just draw a rectangle for the prediction area for now
-        if let Some(pc) = self.pred_canvas {
-            if debug1{info!("IMEF: updating prediction area");}
-            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
-            if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
-            let mut starting_tv = TextView::new(pc, 255,
-                TextBounds::BoundingBox(Rectangle::new(Point::new(0, 0), pc_bounds)));
-            starting_tv.draw_border = false;
-            starting_tv.border_width = 1;
-            starting_tv.clear_area = false;
-
-            if debug1{info!("IMEF: posting textview {:?}", starting_tv);}
-            gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
-        }
-
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
             let mut ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
@@ -166,13 +158,23 @@ impl InputTracker {
                         }
                         do_redraw = true;
                     }
+                    '↑' => {
+                        // bring the insertion point to the front of the text box
+                        self.insertion = 0;
+                        do_redraw = true;
+                    }
+                    '↓' => {
+                        // bring insertion point to the very end of the text box
+                        self.insertion = self.characters;
+                        do_redraw = true;
+                    }
                     '\u{0008}' => { // backspace
                         if (self.characters > 0) && (self.insertion == self.characters) {
                             self.line.pop();
                             self.characters -= 1;
                             self.insertion -= 1;
                             do_redraw = true;
-                        } else if (self.characters > 0) && (self.insertion > 0) {
+                        } else if (self.characters > 0)  && (self.insertion > 0) {
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
                             let tempbytes: [u8; 4096] = self.line.as_bytes();
@@ -208,6 +210,20 @@ impl InputTracker {
                         // clear all the temporary variables
                         self.characters = 0;
                         self.insertion = 0;
+                        if self.was_grown {
+                            let mut req = gam::api::SetCanvasBoundsRequest {
+                                canvas: ic,
+                                requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
+                                granted: None,
+                            };
+                            if debug1{info!("IMEF: attempting resize to {:?}", req.requested);}
+                            gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("IMEF: couldn't call set_bounds_request on input area overflow");
+                            if debug1{
+                                info!("IMEF: carriage return resize to {:?}", req.granted);
+                            }
+                            self.last_height = 0;
+                            self.was_grown = false;
+                        }
                         self.clear_area().expect("IMEF: can't clear on carriage return");
                     },
                     _ => {
@@ -253,16 +269,62 @@ impl InputTracker {
                 write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
                 gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
                 if debug1{info!("IMEF: got computed cursor of {:?}", input_tv.cursor);}
+
+                // check if the cursor is now at the bottom of the textview, this means we need to grow the box
+                if input_tv.cursor.line_height == 0 {
+                    if debug1{info!("IMEF: caught case of overflowed text box, attempting to resize");}
+                    let delta = if self.last_height > 0 {
+                        self.last_height + 1 + 1 // 1 pixel allowance for interline space, plus 1 for fencepost
+                    } else {
+                        31 // a default value to grow in case we don't have a valid last height
+                    };
+                    let mut req = gam::api::SetCanvasBoundsRequest {
+                        canvas: ic,
+                        requested: Point::new(0, ic_bounds.y + delta as i16),
+                        granted: None,
+                    };
+                    if debug1{info!("IMEF: attempting resize to {:?}", req.requested);}
+                    gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("IMEF: couldn't call set_bounds_request on input area overflow");
+                    self.clear_area().expect("IMEF: couldn't clear area after resize");
+                    match req.granted {
+                        Some(bounds) => {
+                            self.was_grown = true;
+                            if debug1{info!("IMEF: refresh succeeded, now redrawing");}
+                            // request was approved, redraw with the new bounding box
+                            input_tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds));
+                            input_tv.bounds_computed = None;
+                            gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
+                        },
+                        _ => info!("IMEF: couldn't resize input canvas after overflow of text")
+                    }
+                } else {
+                    self.last_height = input_tv.cursor.line_height as u32;
+                }
             }
         }
         /*
         what else do we need:
-        - backspace capability
-        - insertion point movement and character insert
-
         - height up request of canvas when string wraps, and reset of canvas height after carriage return
+        - relay hints to the prediction engine, and draw prediction results
+        - extend blitstr to add ellipsis '…" when the clipping rectangle overflows
         - registration for listening to string results
         */
+        // prediction area is drawn second because the area could be cleared on behalf of a resize of the text box
+        // just draw a rectangle for the prediction area for now
+        if let Some(pc) = self.pred_canvas {
+            if debug1{info!("IMEF: updating prediction area");}
+            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
+            let mut starting_tv = TextView::new(pc, 255,
+                TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
+            starting_tv.draw_border = false;
+            starting_tv.border_width = 1;
+            starting_tv.clear_area = false;
+
+            if debug1{info!("IMEF: posting textview {:?}", starting_tv);}
+            gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
+        }
+
         Ok(())
     }
 }

@@ -100,3 +100,23 @@ pub fn get_canvas_bounds(gam_cid: xous::CID, gid: Gid) -> Result<Point, xous::Er
         panic!("GAM_API: can't get canvas bounds")
     }
 }
+
+pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRequest) -> Result<(), xous::Error> {
+    let rkyv = api::Opcode::SetCanvasBounds((*req).clone());
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GAM_API: couldn't archive SetCanvasBounds");
+    let mut xous_buffer = writer.into_inner();
+    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: SetCanvasBounds operation failure");
+
+    // recover the mutable values and mirror the ones we care about back into our local structure
+    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
+    if let rkyv::Archived::<api::Opcode>::SetCanvasBounds(result) = returned {
+            let ret: SetCanvasBoundsRequest = result.unarchive();
+            req.granted = ret.granted;
+    } else {
+        let ret = returned.unarchive();
+        info!("got {:?}", ret);
+        panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled");
+    }
+    Ok(())
+}

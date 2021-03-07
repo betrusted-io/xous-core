@@ -1,5 +1,5 @@
 use xous::{Message, ScalarMessage};
-use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle};
+use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle, Point};
 
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 pub enum GamObjectType {
@@ -16,13 +16,32 @@ pub struct GamObject {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub struct SetCanvasBoundsRequest {
+    pub canvas: Gid,
+    pub requested: Point,
+    pub granted: Option<Point>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 // #[archive(derive(Copy, Clone))]
 pub enum Opcode {
     // clears a canvas with a given GID
     ClearCanvas(Gid),
 
+    // return the dimensions of a canvas as a Point (the top left is always (0,0))
+    GetCanvasBounds(Gid),
+
+    // request a new size for my canvas.
+    // This normally will be denied, unless the requested Gid corresponds to a special canvas that allows resizing.
+    SetCanvasBounds(SetCanvasBoundsRequest),
+
+    // draws an object
+    RenderObject(GamObject),
+
     // renders a TextView
     RenderTextView(TextView),
+
+    /////// planned
 
     // returns a GID to the "content" Canvas; requires an authentication token
     RequestContentCanvas(Gid),
@@ -36,11 +55,6 @@ pub enum Opcode {
     // indicates if the current UI layout requires an input field
     HasInput(bool),
 
-    // return the dimensions of a canvas
-    GetCanvasBounds(Gid),
-
-    // draws an object
-    RenderObject(GamObject),
 }
 
 impl core::convert::TryFrom<&Message> for Opcode {
