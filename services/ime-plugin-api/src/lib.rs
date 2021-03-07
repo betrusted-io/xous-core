@@ -6,7 +6,11 @@ use graphics_server::Gid;
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub struct Prediction {
     pub index: u32,
-    pub string: xous::String<4096>,
+    pub valid: bool,
+    // to *return* a value in rkyv, we can't have a variable-length string, as the "pos" argument changes
+    // this is OK for predictions, we only show the first few characters anyways.
+    pub string: [u8; 31], // 31 is the longest fixed-length array rkyv supports
+    pub len: u32,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -42,10 +46,10 @@ impl From<usize> for PredictionTriggers {
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
-    Input(xous::String<4096>),
+    Input(xous::String<4000>),
 
     /// feed back to the IME plugin as to what was picked, so predictions can be updated
-    Picked(xous::String<4096>),
+    Picked(xous::String<4000>),
 
     /// Undo the last Picked value. To be used when a user hits backspace after picking a prediction
     /// note that repeated calls to Unpick will have an implementation-defined behavior
@@ -96,9 +100,9 @@ impl Into<Message> for Opcode {
 pub trait PredictionApi {
     fn get_prediction_triggers(&self) -> Result<PredictionTriggers, xous::Error>;
     fn unpick(&self) -> Result<(), xous::Error>;
-    fn set_input(&self, s: String<4096>) -> Result<(), xous::Error>;
-    fn feedback_picked(&self, s: String<4096>) -> Result<(), xous::Error>;
-    fn get_prediction(&self, index: u32) -> Result<xous::String<4096>, xous::Error>;
+    fn set_input(&self, s: String<4000>) -> Result<(), xous::Error>;
+    fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error>;
+    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error>;
 }
 
 // provide a convenience version of the API for generic/standard calls
@@ -132,7 +136,7 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn set_input(&self, s: String<4096>) -> Result<(), xous::Error> {
+    fn set_input(&self, s: String<4000>) -> Result<(), xous::Error> {
         use rkyv::Write;
         match self.connection {
             Some(cid) => {
@@ -148,7 +152,7 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn feedback_picked(&self, s: String<4096>) -> Result<(), xous::Error> {
+    fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error> {
         use rkyv::Write;
         match self.connection {
             Some(cid) => {
@@ -164,30 +168,42 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn get_prediction(&self, index: u32) -> Result<xous::String<4096>, xous::Error> {
+    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
         use rkyv::Write;
         use rkyv::Unarchive;
+        let debug1 = true;
         match self.connection {
             Some(cid) => {
                 let prediction = Prediction {
                     index,
-                    string: xous::String::<4096>::new(),
+                    string: [0; 31],
+                    len: 0,
+                    valid: false,
                 };
                 let pred_op = Opcode::Prediction(prediction);
                 let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                 let pos = writer.archive(&pred_op).expect("IME|API: couldn't archive prediction request");
                 let mut xous_buffer = writer.into_inner();
+                if debug1{log::info!("IME|API: lending Prediction with pos {}", pos);}
 
                 xous_buffer.lend_mut(cid, pos as u32).expect("IME|API: prediction fetch operation failure");
 
+                if debug1{log::info!("IME|API: returned from get_prediction");}
                 let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
                 if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
                     let pred_r: Prediction = result.unarchive();
-                    let retstring: xous::String<4096> = pred_r.string.clone();
-                    Ok(retstring)
+                    if debug1{log::info!("IME|API: got {:?}", pred_r);}
+                    if pred_r.valid {
+                        let mut ret = xous::String::<4000>::new();
+                        use core::fmt::Write as CoreWrite;
+                        write!(ret, "{}", core::str::from_utf8(&pred_r.string[0..pred_r.len as usize]).unwrap()).unwrap();
+                        Ok(Some(ret))
+                    } else {
+                        Ok(None)
+                    }
                 } else {
                     let r = returned.unarchive();
-                    log::error!("IME:API get_prediction returned an invalid result {:?}", r);
+                    log::error!("IME: API get_prediction returned an invalid result {:?}", r);
                     Err(xous::Error::InvalidString)
                 }
             },
