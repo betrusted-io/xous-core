@@ -40,13 +40,13 @@ struct InputTracker {
     /// set if we're in a state where a backspace should trigger an unpredict
     can_unpick: bool, // note: untested as of Mar 7 2021
     /// the predictor string -- this is different from the input line, because it can be broken up by spaces and punctuatino
-    pred_phrase: xous::String::<4096>, // note: untested as of Mar 7 2021
+    pred_phrase: xous::String::<4000>, // note: untested as of Mar 7 2021
     /// character position of the last prediction trigger -- this is where the prediction overwrite starts
     /// if None, it means we were unable to determine the trigger (e.g., we went back and edited text manually)
     last_trigger_char: Option<usize>,
 
     /// track the progress of our input line
-    line: xous::String::<4096>,
+    line: xous::String::<4000>,
     /// length of the line in *characters*, not bytes (which is what .len() returns), used to index char_locs
     characters: usize,
     /// the insertion point, 0 is inserting characters before the first, 1 inserts characters after the first, etc.
@@ -57,7 +57,7 @@ struct InputTracker {
     was_grown: bool,
 
     /// render the predictions
-    pred_options: [Option<xous::String::<4096>>; MAX_PREDICTION_OPTIONS],
+    pred_options: [Option<xous::String::<4000>>; MAX_PREDICTION_OPTIONS],
 }
 
 impl InputTracker {
@@ -69,9 +69,9 @@ impl InputTracker {
             predictor: None,
             pred_triggers: None,
             can_unpick: false,
-            pred_phrase: xous::String::<4096>::new(),
+            pred_phrase: xous::String::<4000>::new(),
             last_trigger_char: Some(0),
-            line: xous::String::<4096>::new(),
+            line: xous::String::<4000>::new(),
             characters: 0,
             insertion: 0,
             last_height: 0,
@@ -146,14 +146,17 @@ impl InputTracker {
     }
 
     fn insert_prediction(&mut self, index: usize) {
+        let debug1 = true;
+        if debug1{info!("IMEF|insert_prediction index {}", index);}
         let pred_str = match self.pred_options[index] {
             Some(s) => s,
             _ => return // if the index doesn't exist for some reason, do nothing without throwing an error
         };
+        if debug1{info!("IMEF|insert_prediction string {}, last_trigger {:?}", pred_str, self.last_trigger_char);}
         if let Some(offset) = self.last_trigger_char {
             if offset < self.characters {
                 // copy the bytes in the original string, up to the offset; and then copy the bytes in the selected predictor
-                let tempbytes: [u8; 4096] = self.line.as_bytes();
+                let tempbytes: [u8; 4000] = self.line.as_bytes();
                 let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
                 self.line.clear();
                 let mut chars = 0;
@@ -296,7 +299,7 @@ impl InputTracker {
                         } else if (self.characters > 0)  && (self.insertion > 0) {
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
-                            let tempbytes: [u8; 4096] = self.line.as_bytes();
+                            let tempbytes: [u8; 4000] = self.line.as_bytes();
                             let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
                             // clear the string
                             self.line.clear();
@@ -411,7 +414,7 @@ impl InputTracker {
                             if debug1{info!("IMEF: handling case of inserting characters. insertion: {}", self.insertion)};
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
-                            let tempbytes: [u8; 4096] = self.line.as_bytes();
+                            let tempbytes: [u8; 4000] = self.line.as_bytes();
                             let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
                             // clear the string
                             self.line.clear();
@@ -493,6 +496,15 @@ impl InputTracker {
             );
             if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
 
+            if update_predictor {
+                // Query the prediction engine for the latest predictions
+                if let Some(pred) = self.predictor {
+                    for i in 0..self.pred_options.len() {
+                        self.pred_options[i] = pred.get_prediction(i as u32).expect("IMEF: couldn't query prediction engine");
+                    }
+                }
+            }
+
             // count the number of valid options
             let mut valid_predictions = 0;
             for p in self.pred_options.iter() {
@@ -510,15 +522,12 @@ impl InputTracker {
                 write!(empty_tv.text, "Ready for input...").expect("IMEF: couldn't set up empty TextView");
                 gam::post_textview(self.gam_conn, &mut empty_tv).expect("IMEF: can't draw prediction TextView");
             } else if update_predictor  {
-
-                // TODO: insert the routine to query/update the predictions set here
-                // for now, without this, we'll just get the empty prediction set, always
-
                 // alright, first, let's clear the area
                 gam::draw_rectangle(self.gam_conn, pc, pc_clip).expect("IMEF: couldn't clear predictor area");
 
+                if debug1{info!("IMEF: valid_predictions: {}", valid_predictions);}
                 // OK, let's start initially with just a naive, split-by-N layout of the prediction area
-                let approx_width = pc_bounds.y / valid_predictions as i16;
+                let approx_width = pc_bounds.x / valid_predictions as i16;
 
                 let mut i = 0;
                 for p in self.pred_options.iter() {
