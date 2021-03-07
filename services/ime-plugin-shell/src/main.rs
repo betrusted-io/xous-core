@@ -6,7 +6,7 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 use heapless::spsc::Queue;
-use heapless::consts::U8;
+use heapless::consts::U4;
 
 use rkyv::Unarchive;
 use core::pin::Pin;
@@ -14,7 +14,7 @@ use rkyv::{archived_value, archived_value_mut};
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = true;
+    let debug1 = false;
     log_server::init_wait().unwrap();
     info!("IME_SH: my PID is {}", xous::process::id());
 

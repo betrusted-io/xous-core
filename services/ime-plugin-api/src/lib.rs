@@ -171,7 +171,7 @@ impl PredictionApi for PredictionPlugin {
     fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
         use rkyv::Write;
         use rkyv::Unarchive;
-        let debug1 = true;
+        let debug1 = false;
         match self.connection {
             Some(cid) => {
                 let prediction = Prediction {

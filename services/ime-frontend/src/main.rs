@@ -146,7 +146,7 @@ impl InputTracker {
     }
 
     fn insert_prediction(&mut self, index: usize) {
-        let debug1 = true;
+        let debug1 = false;
         if debug1{info!("IMEF|insert_prediction index {}", index);}
         let pred_str = match self.pred_options[index] {
             Some(s) => s,
@@ -162,7 +162,7 @@ impl InputTracker {
                 let mut chars = 0;
                 let mut c_iter = tempstr.chars();
                 loop {
-                    if chars == offset {
+                    if chars == offset + 1 { // +1 to include the original trigger (don't overwrite it)
                         break;
                     }
                     if let Some(c) = c_iter.next() {
@@ -182,7 +182,7 @@ impl InputTracker {
                     if let Some(trigger) = self.pred_triggers {
                         if trigger.whitespace && c.is_ascii_whitespace() ||
                            trigger.punctuation && c.is_ascii_punctuation() {
-                               // include the trigger
+                               // include the trigger that was found
                                self.line.push(c).expect("IMEF: ran out of space inserting prediction");
                                chars += 1;
                                break;
@@ -212,7 +212,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
-        let debug1= true;
+        let debug1= false;
         let mut update_predictor = false;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
@@ -622,7 +622,6 @@ fn xmain() -> ! {
     tracker.clear_area().expect("IMEF: can't initially clear areas");
     tracker.update(['\u{0000}'; 4]).expect("IMEF: can't setup initial screen arrangement");
 
-    let mut key_queue: Vec<char, U32> = Vec::new();
     info!("IMEF: entering main loop");
     loop {
         let envelope = xous::receive_message(imef_sid).unwrap();
