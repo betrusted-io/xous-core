@@ -195,7 +195,7 @@ fn xmain() -> ! {
     let mut canvases: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
     let modallayout = ModalCanvases::init(trng_conn, &mut canvases).expect("GAM: can't add modal layouts");
     let mut chatlayout = ChatLayout::init(gfx_conn, trng_conn, &mut canvases).expect("GAM: couldn't create chat layout");
-    chatlayout.clear(&mut canvases);
+    chatlayout.clear(&mut canvases).expect("GAM: couldn't clear initial chatlayout");
 
     // now that all the initial canvases have been allocated, compute what canvases are drawable
     // this _replaces_ the original canvas structure, to avoid complications of tracking mutable references through compound data structures
@@ -294,7 +294,7 @@ fn xmain() -> ! {
                                             use rkyv::Write;
                                             let mut writer = rkyv::ArchiveBuffer::new(buf);
                                             writer.archive(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
-                                            canvas.do_drawn();
+                                            canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
                                         } else {
                                             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
                                         }
@@ -371,7 +371,7 @@ fn xmain() -> ! {
                                             ).expect("GAM: couldn't draw rounded rectangle");
                                         }
                                     }
-                                    canvas.do_drawn();
+                                    canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
                                 } else {
                                     info!("GAM: attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
                                 }

@@ -25,9 +25,9 @@ fn xmain() -> ! {
     let history_max = 8;
 
     let mytriggers = PredictionTriggers {
-        trigger_newline: true,
-        trigger_punctuation: false,
-        trigger_whitespace: false,
+        newline: true,
+        punctuation: false,
+        whitespace: false,
     };
 
     info!("IME_SH: ready to accept requests");

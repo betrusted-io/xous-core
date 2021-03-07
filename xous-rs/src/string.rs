@@ -129,30 +129,42 @@ impl<const N: usize> String<N> {
         }
     }
 
-    pub fn push(&mut self, ch: char) -> core::result::Result<(), Error> {
+    pub fn push(&mut self, ch: char) -> core::result::Result<usize, Error> {
         match ch.len_utf8() {
             1 => {
                 if self.len() < self.bytes.len() {
                     self.bytes[self.len()] = ch as u8;
                     self.len += 1;
-                    Ok(())
+                    Ok(1)
                 } else {
                     Err(Error::OutOfMemory)
                 }
             },
             _ => {
+                let mut bytes: usize = 0;
                 let mut data: [u8; 4] = [0; 4];
                 let subslice = ch.encode_utf8(&mut data);
                 if self.len() + subslice.len() < self.bytes.len() {
                     for c in subslice.bytes() {
                         self.bytes[self.len()] = c;
                         self.len += 1;
+                        bytes += 1;
                     }
-                    Ok(())
+                    Ok(bytes)
                 } else {
                     Err(Error::OutOfMemory)
                 }
             },
+        }
+    }
+
+    pub fn push_byte(&mut self, b: u8) -> core::result::Result<(), Error> {
+        if self.len() < self.bytes.len() {
+            self.bytes[self.len()] = b;
+            self.len += 1;
+            Ok(())
+        } else {
+            Err(Error::OutOfMemory)
         }
     }
 }

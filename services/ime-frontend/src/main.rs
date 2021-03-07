@@ -12,7 +12,6 @@ use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
 use blitstr_ref as blitstr;
-use blitstr::Cursor;
 use heapless::Vec;
 use heapless::consts::U32;
 use core::pin::Pin;
@@ -20,6 +19,9 @@ use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
 use rkyv::Unarchive;
 use rkyv::archived_value;
+
+/// max number of prediction options to track/render
+const MAX_PREDICTION_OPTIONS: usize = 4;
 
 struct InputTracker {
     /// connection for handling graphical update requests
@@ -35,6 +37,13 @@ struct InputTracker {
     predictor: Option<PredictionPlugin>,
     /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
     pred_triggers: Option<PredictionTriggers>,
+    /// set if we're in a state where a backspace should trigger an unpredict
+    can_unpick: bool, // note: untested as of Mar 7 2021
+    /// the predictor string -- this is different from the input line, because it can be broken up by spaces and punctuatino
+    pred_phrase: xous::String::<4096>, // note: untested as of Mar 7 2021
+    /// character position of the last prediction trigger -- this is where the prediction overwrite starts
+    /// if None, it means we were unable to determine the trigger (e.g., we went back and edited text manually)
+    last_trigger_char: Option<usize>,
 
     /// track the progress of our input line
     line: xous::String::<4096>,
@@ -46,6 +55,9 @@ struct InputTracker {
     last_height: u32,
     /// keep track if our box was grown
     was_grown: bool,
+
+    /// render the predictions
+    pred_options: [Option<xous::String::<4096>>; MAX_PREDICTION_OPTIONS],
 }
 
 impl InputTracker {
@@ -56,11 +68,15 @@ impl InputTracker {
             pred_canvas: None,
             predictor: None,
             pred_triggers: None,
+            can_unpick: false,
+            pred_phrase: xous::String::<4096>::new(),
+            last_trigger_char: Some(0),
             line: xous::String::<4096>::new(),
             characters: 0,
             insertion: 0,
             last_height: 0,
             was_grown: false,
+            pred_options: [None; MAX_PREDICTION_OPTIONS],
         }
     }
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
@@ -129,11 +145,75 @@ impl InputTracker {
         Ok(())
     }
 
+    fn insert_prediction(&mut self, index: usize) {
+        let pred_str = match self.pred_options[index] {
+            Some(s) => s,
+            _ => return // if the index doesn't exist for some reason, do nothing without throwing an error
+        };
+        if let Some(offset) = self.last_trigger_char {
+            if offset < self.characters {
+                // copy the bytes in the original string, up to the offset; and then copy the bytes in the selected predictor
+                let tempbytes: [u8; 4096] = self.line.as_bytes();
+                let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.line.len()]) }.clone();
+                self.line.clear();
+                let mut chars = 0;
+                let mut c_iter = tempstr.chars();
+                loop {
+                    if chars == offset {
+                        break;
+                    }
+                    if let Some(c) = c_iter.next() {
+                        self.line.push(c).unwrap(); // this should be infallible
+                        chars += 1;
+                    } else {
+                        break;
+                    }
+                }
+                // now push the characters in the predicted options onto the line
+                for c in pred_str.as_str().unwrap().chars() {
+                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    chars += 1;
+                }
+                // forward until we find the next prediction trigger in the original string
+                while let Some(c) = c_iter.next() {
+                    if let Some(trigger) = self.pred_triggers {
+                        if trigger.whitespace && c.is_ascii_whitespace() ||
+                           trigger.punctuation && c.is_ascii_punctuation() {
+                               // include the trigger
+                               self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                               chars += 1;
+                               break;
+                        }
+                    } else {
+                        // skip the replaced characters
+                    }
+                }
+                self.insertion = chars;
+                self.last_trigger_char = Some(chars);
+                // copy the remainder of the line, if any
+                while let Some(c) = c_iter.next() {
+                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    chars += 1;
+                }
+                self.characters = chars;
+            } else {
+                // just append the prediction to the line
+                for c in pred_str.as_str().unwrap().chars() {
+                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    self.characters += 1;
+                }
+                self.last_trigger_char = Some(self.insertion);
+                self.insertion = self.characters;
+            }
+        }
+    }
+
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
         let debug1= true;
+        let mut update_predictor = false;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
-            let mut ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
             let mut input_tv = TextView::new(ic, 255,
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
             input_tv.draw_border = false;
@@ -151,21 +231,51 @@ impl InputTracker {
                             self.insertion -= 1;
                         }
                         do_redraw = true;
+                        self.pred_phrase.clear(); // don't track predictions on edits
+                        self.can_unpick = false;
+                        self.last_trigger_char = None;
                     }
                     '→' => {
                         if self.insertion < self.characters {
                             self.insertion += 1;
                         }
                         do_redraw = true;
+                        self.pred_phrase.clear();
+                        self.can_unpick = false;
+                        self.last_trigger_char = None;
                     }
                     '↑' => {
                         // bring the insertion point to the front of the text box
                         self.insertion = 0;
                         do_redraw = true;
+                        self.pred_phrase.clear();
+                        self.can_unpick = false;
+                        self.last_trigger_char = None;
                     }
                     '↓' => {
                         // bring insertion point to the very end of the text box
                         self.insertion = self.characters;
+                        do_redraw = true;
+                        self.pred_phrase.clear();
+                        self.can_unpick = false;
+                        // this means that when we resume typing after an edit, the predictor will set its insertion point
+                        // at the very end, not the space prior to the last word...
+                        self.last_trigger_char = Some(self.characters);
+                    }
+                    '\u{0011}' => { // F1
+                        self.insert_prediction(0);
+                        do_redraw = true;
+                    }
+                    '\u{0012}' => { // F2
+                        self.insert_prediction(1);
+                        do_redraw = true;
+                    }
+                    '\u{0013}' => { // F3
+                        self.insert_prediction(2);
+                        do_redraw = true;
+                    }
+                    '\u{0014}' => { // F4
+                        self.insert_prediction(3);
                         do_redraw = true;
                     }
                     '\u{0008}' => { // backspace
@@ -174,6 +284,15 @@ impl InputTracker {
                             self.characters -= 1;
                             self.insertion -= 1;
                             do_redraw = true;
+
+                            if let Some(predictor) = self.predictor {
+                                if self.can_unpick {
+                                    predictor.unpick().expect("IMEF: couldn't unpick last prediction");
+                                    self.can_unpick = false;
+                                    update_predictor = true;
+                                }
+                                self.pred_phrase.clear();
+                            }
                         } else if (self.characters > 0)  && (self.insertion > 0) {
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
@@ -183,14 +302,24 @@ impl InputTracker {
                             self.line.clear();
 
                             // delete the character in the array
-                            let mut i = 0;
+                            let mut i = 0; // character position
+                            let mut dest_chars = 0; // destination character position
                             for c in tempstr.chars() {
                                 if debug1{info!("checking index {}", i);}
                                 if i == self.insertion - 1 {
                                     if debug1{info!("skipping char");}
                                 } else {
+                                    dest_chars += 1;
+                                    // if we encounter a trigger character, set the trigger to just after this point (hence the += before this line)
+                                    if let Some(trigger) = self.pred_triggers {
+                                        if trigger.punctuation && c.is_ascii_punctuation() {
+                                            self.last_trigger_char = Some(dest_chars);
+                                        } else if trigger.whitespace && c.is_ascii_whitespace() {
+                                            self.last_trigger_char = Some(dest_chars);
+                                        }
+                                    }
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line")
+                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
                                 }
                                 i += 1;
                             }
@@ -203,15 +332,24 @@ impl InputTracker {
                     }
                     '\u{000d}' => { // carriage return
                         // TODO: send string to registered listeners
-                        // TODO: update the predictor on carriage return
+                        if let Some(trigger) = self.pred_triggers {
+                            if trigger.newline {
+                                self.predictor.unwrap().feedback_picked(self.line).expect("IMEF: couldn't send feedback to predictor");
+                            } else if trigger.punctuation {
+                                self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                            }
+                        }
+                        self.can_unpick = false;
+                        self.pred_phrase.clear();
 
                         if debug1{info!("IMEF: got carriage return");}
                         self.line.clear();
+                        self.last_trigger_char = Some(0);
                         // clear all the temporary variables
                         self.characters = 0;
                         self.insertion = 0;
                         if self.was_grown {
-                            let mut req = gam::api::SetCanvasBoundsRequest {
+                            let mut req = SetCanvasBoundsRequest {
                                 canvas: ic,
                                 requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
                                 granted: None,
@@ -225,14 +363,51 @@ impl InputTracker {
                             self.was_grown = false;
                         }
                         self.clear_area().expect("IMEF: can't clear on carriage return");
+                        update_predictor = true;
                     },
                     _ => {
+                        if let Some(trigger) = self.pred_triggers {
+                            if trigger.whitespace && k.is_ascii_whitespace() {
+                                if self.pred_phrase.len() > 0 {
+                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                                    self.pred_phrase.clear();
+                                    self.can_unpick = true;
+                                }
+                                self.last_trigger_char = Some(self.insertion);
+                            }
+                            if trigger.punctuation && k.is_ascii_punctuation() {
+                                if self.pred_phrase.len() > 0 {
+                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                                    self.pred_phrase.clear();
+                                    self.can_unpick = true;
+                                }
+                                self.last_trigger_char = Some(self.insertion);
+                            }
+                        }
                         if self.insertion == self.characters {
                             self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
+                            if let Some(trigger) = self.pred_triggers {
+                                if !(trigger.punctuation && k.is_ascii_punctuation() ||
+                                    trigger.whitespace  && k.is_ascii_whitespace() ) {
+                                    self.pred_phrase.push(k).expect("IMEF: ran out of space pushing character into prediction phrase");
+                                    update_predictor = true;
+                                }
+                            }
                             self.characters += 1;
                             self.insertion += 1;
                             do_redraw = true;
                         } else {
+                            // we're going back and editing -- clear predictions in this case
+                            if self.pred_phrase.len() > 0 {
+                                self.pred_phrase.clear();
+                                self.can_unpick = false; // we don't know how far back the user is going to make the edit
+
+                                // in order to do predictions on arbitrary words, every time the scroll keys are
+                                // pressed, we need to reset the prediction trigger to the previous word, which we
+                                // don't keep. so, for now, we just keep the old predictions around, until the user
+                                // goes back to appending words at the end of the sentence
+                            }
+
                             if debug1{info!("IMEF: handling case of inserting characters. insertion: {}", self.insertion)};
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
@@ -248,10 +423,10 @@ impl InputTracker {
                                 if i == self.insertion {
                                     if debug1{info!("inserting char {}", k);}
                                     self.line.push(k).expect("IMEF: ran out of space inserting new character into input line");
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line")
+                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
                                 } else {
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line")
+                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
                                 }
                                 i += 1;
                             }
@@ -278,7 +453,7 @@ impl InputTracker {
                     } else {
                         31 // a default value to grow in case we don't have a valid last height
                     };
-                    let mut req = gam::api::SetCanvasBoundsRequest {
+                    let mut req = SetCanvasBoundsRequest {
                         canvas: ic,
                         requested: Point::new(0, ic_bounds.y + delta as i16),
                         granted: None,
@@ -304,7 +479,6 @@ impl InputTracker {
         }
         /*
         what else do we need:
-        - height up request of canvas when string wraps, and reset of canvas height after carriage return
         - relay hints to the prediction engine, and draw prediction results
         - extend blitstr to add ellipsis '…" when the clipping rectangle overflows
         - registration for listening to string results
@@ -314,15 +488,65 @@ impl InputTracker {
         if let Some(pc) = self.pred_canvas {
             if debug1{info!("IMEF: updating prediction area");}
             let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            let pc_clip: Rectangle = Rectangle::new_with_style(Point::new(0,1), pc_bounds,
+                DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 }
+            );
             if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
-            let mut starting_tv = TextView::new(pc, 255,
-                TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
-            starting_tv.draw_border = false;
-            starting_tv.border_width = 1;
-            starting_tv.clear_area = false;
 
-            if debug1{info!("IMEF: posting textview {:?}", starting_tv);}
-            gam::post_textview(self.gam_conn, &mut starting_tv).expect("IMEF: can't draw prediction TextView");
+            // count the number of valid options
+            let mut valid_predictions = 0;
+            for p in self.pred_options.iter() {
+                if p.is_some() {
+                    valid_predictions += 1;
+                }
+            }
+
+            if valid_predictions == 0 {
+                let mut empty_tv = TextView::new(pc, 255,
+                    TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
+                empty_tv.draw_border = false;
+                empty_tv.border_width = 1;
+                empty_tv.clear_area = true;
+                write!(empty_tv.text, "Ready for input...").expect("IMEF: couldn't set up empty TextView");
+                gam::post_textview(self.gam_conn, &mut empty_tv).expect("IMEF: can't draw prediction TextView");
+            } else if update_predictor  {
+
+                // TODO: insert the routine to query/update the predictions set here
+                // for now, without this, we'll just get the empty prediction set, always
+
+                // alright, first, let's clear the area
+                gam::draw_rectangle(self.gam_conn, pc, pc_clip).expect("IMEF: couldn't clear predictor area");
+
+                // OK, let's start initially with just a naive, split-by-N layout of the prediction area
+                let approx_width = pc_bounds.y / valid_predictions as i16;
+
+                let mut i = 0;
+                for p in self.pred_options.iter() {
+                    if let Some(pred_str) = p {
+                        // the post-clip is necessary because the approx_width is rounded to some integer fraction
+                        let p_clip = Rectangle::new(
+                            Point::new(i * approx_width, 1),
+                            Point::new((i+1) * approx_width, pc_bounds.y)).clip_with(pc_clip).unwrap();
+                        if i > 0 {
+                            gam::draw_line(self.gam_conn, pc,
+                            Line::new_with_style(
+                            Point::new(i * approx_width, 1),
+                            Point::new( i * approx_width, pc_bounds.y),
+                            DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 1 }
+                            )).expect("IMEF: couldn't draw dividing lines in prediction area");
+                        }
+                        let mut p_tv = TextView::new(pc, 255,
+                            TextBounds::BoundingBox(p_clip));
+                        p_tv.draw_border = false;
+                        p_tv.border_width = 1;
+                        p_tv.clear_area = false;
+                        p_tv.style = blitstr::GlyphStyle::Small;
+                        write!(p_tv.text, "{}", pred_str).expect("IMEF: can't write the prediction string");
+                        gam::post_textview(self.gam_conn, &mut p_tv).expect("IMEF: couldn't post prediction text");
+                        i += 1;
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -387,6 +611,7 @@ fn xmain() -> ! {
     // force a redraw of the UI
     if debug1{info!("IMEF: forcing initial UI redraw");}
     tracker.clear_area().expect("IMEF: can't initially clear areas");
+    tracker.update(['\u{0000}'; 4]).expect("IMEF: can't setup initial screen arrangement");
 
     let mut key_queue: Vec<char, U32> = Vec::new();
     info!("IMEF: entering main loop");

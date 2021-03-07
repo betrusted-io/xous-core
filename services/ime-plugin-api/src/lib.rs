@@ -11,28 +11,29 @@ pub struct Prediction {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PredictionTriggers {
-    /// trigger predictions on newline
-    pub trigger_newline: bool,
-    /// trigger predictions punctuation
-    pub trigger_punctuation: bool,
-    /// trigger predictions on whitespace
-    pub trigger_whitespace: bool,
+    /// trigger line predictions on newline -- if set, sends the *whole* line to the predictor
+    /// if just wanting the last word, set `punctuation = true`
+    pub newline: bool,
+    /// trigger word predictions punctuation
+    pub punctuation: bool,
+    /// trigger word predictions on whitespace
+    pub whitespace: bool,
 }
 impl Into<usize> for PredictionTriggers {
     fn into(self) -> usize {
         let mut ret: usize = 0;
-        if self.trigger_newline { ret |= 0x1; }
-        if self.trigger_punctuation { ret |= 0x2; }
-        if self.trigger_whitespace { ret |= 0x4; }
+        if self.newline { ret |= 0x1; }
+        if self.punctuation { ret |= 0x2; }
+        if self.whitespace { ret |= 0x4; }
         ret
     }
 }
 impl From<usize> for PredictionTriggers {
     fn from(code: usize) -> PredictionTriggers {
         PredictionTriggers {
-            trigger_newline: (code & 0x1) != 0,
-            trigger_punctuation: (code & 0x2) != 0,
-            trigger_whitespace: (code & 0x4) != 0,
+            newline: (code & 0x1) != 0,
+            punctuation: (code & 0x2) != 0,
+            whitespace: (code & 0x4) != 0,
         }
     }
 }
