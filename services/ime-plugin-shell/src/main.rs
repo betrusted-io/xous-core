@@ -40,7 +40,7 @@ fn xmain() -> ! {
     let mytriggers = PredictionTriggers {
         newline: true,
         punctuation: false,
-        whitespace: true,
+        whitespace: false,
     };
 
     info!("IME_SH: ready to accept requests");
