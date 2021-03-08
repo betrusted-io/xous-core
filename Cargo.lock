@@ -553,6 +553,7 @@ dependencies = [
  "log",
  "rkyv",
  "xous",
+ "xous-names",
 ]
 
 [[package]]

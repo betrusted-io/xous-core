@@ -79,7 +79,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
                             }
                             stats_phase = (stats_phase + 1) % 8;
                             gam::post_textview(gam_conn, &mut battstats_tv).expect("GAM|status: can't draw battery stats");
-                            gam::redraw(gam_conn);
+                            gam::redraw(gam_conn).expect("GAM|status: couldn't redraw");
                         },
                         _ => error!("GAM|status received COM event opcode that wasn't expected"),
                     }
@@ -99,7 +99,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
                    (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds).expect("GAM|status: can't write string");
                 if debug1{info!("GAM|status: requesting draw of '{}'", uptime_tv);}
                 gam::post_textview(gam_conn, &mut uptime_tv).expect("GAM|status: can't draw uptime");
-                gam::redraw(gam_conn);
+                gam::redraw(gam_conn).expect("GAM|status: couldn't redraw");
             }
 
             if elapsed_time - last_time > 500 {

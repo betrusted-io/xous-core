@@ -18,6 +18,9 @@ use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 use rkyv::Unarchive;
 use rkyv::archived_value;
 
+use heapless::Vec;
+use heapless::consts::*;
+
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
 
@@ -209,9 +212,10 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<xous::String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
+        let mut retstring: Option<xous::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
             let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
@@ -332,7 +336,10 @@ impl InputTracker {
                         }
                     }
                     '\u{000d}' => { // carriage return
-                        // TODO: send string to registered listeners
+                        let mut ret = xous::String::<4000>::new();
+                        write!(ret, "{}", self.line.as_str().expect("IMEF: couldn't convert input line")).expect("IMEF: couldn't copy input ilne to output");
+                        retstring = Some(ret);
+
                         if let Some(trigger) = self.pred_triggers {
                             if trigger.newline {
                                 self.predictor.unwrap().feedback_picked(self.line).expect("IMEF: couldn't send feedback to predictor");
@@ -479,10 +486,7 @@ impl InputTracker {
                 }
             }
         }
-        /*
-        what else do we need:
-        - registration for listening to string results
-        */
+
         // prediction area is drawn second because the area could be cleared on behalf of a resize of the text box
         // just draw a rectangle for the prediction area for now
         if let Some(pc) = self.pred_canvas {
@@ -558,7 +562,7 @@ impl InputTracker {
 
         gam::redraw(self.gam_conn).expect("IMEF: couldn't redraw screen");
 
-        Ok(())
+        Ok(retstring)
     }
 }
 
@@ -577,6 +581,9 @@ fn xmain() -> ! {
     let mut tracker = InputTracker::new(
         xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
     );
+
+    let mut listeners: Vec<xous::CID, U32> = Vec::new();
+
     // The main lop can't start until we've been assigned Gids from the GAM, and a Predictor.
     info!("IMEF: waiting for my canvas Gids");
     loop {
@@ -606,6 +613,11 @@ fn xmain() -> ! {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
+                },
+                rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
+                    // note second copy down below, this is put in early-init because we're likely to get these requests early on
+                    let cid = xous_names::request_connection_blocking(registration.as_str()).expect("IMEF: can't connect to requested listener for reporting events");
+                    listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
             };
@@ -654,12 +666,24 @@ fn xmain() -> ! {
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
+                rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
+                    let cid = xous_names::request_connection_blocking(registration.as_str()).expect("IMEF: can't connect to requested listener for reporting events");
+                    listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
+                },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
             };
         } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
-                    tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses");
+                    if let Some(line) = tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses") {
+                        for &conn in listeners.iter() {
+                            use rkyv::Write;
+                            let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                            let pos = writer.archive(&line).expect("IMEF: couldn't archive line for sending");
+                            let xous_buffer = writer.into_inner();
+                            xous_buffer.send(conn, pos as u32).expect("IMEF: couldn't send input line to listener");
+                        }
+                    }
                 },
                 _ => error!("IMEF: received KBD event opcode that wasn't expected"),
             }

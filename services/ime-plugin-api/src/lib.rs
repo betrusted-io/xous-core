@@ -230,6 +230,12 @@ pub enum ImefOpcode {
 
     /// set prediction server. Must be a String of the name of a server that is loaded in the system.
     SetPredictionServer(xous::String<256>),
+
+    /// register a listener for finalized inputs
+    RegisterListener(xous_names::api::XousServerName),
+
+    /// this is the event opcode used by listeners
+    GotInputLine(xous::String<4000>),
 }
 
 impl core::convert::TryFrom<& Message> for ImefOpcode {
