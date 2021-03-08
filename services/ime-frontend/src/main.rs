@@ -615,8 +615,10 @@ fn xmain() -> ! {
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
+                    let s: xous::String<256> = registration.unarchive();
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
-                    let cid = xous_names::request_connection_blocking(registration.as_str()).expect("IMEF: can't connect to requested listener for reporting events");
+                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
+                      .expect("IMEF: can't connect to requested listener for reporting events");
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
@@ -667,7 +669,10 @@ fn xmain() -> ! {
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let cid = xous_names::request_connection_blocking(registration.as_str()).expect("IMEF: can't connect to requested listener for reporting events");
+                    let s: xous::String<256> = registration.unarchive();
+                    // note first copy above, put in early-init because we're likely to get these requests early on
+                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
+                      .expect("IMEF: can't connect to requested listener for reporting events");
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")

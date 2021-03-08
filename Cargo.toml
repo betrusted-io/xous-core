@@ -19,6 +19,7 @@ members = [
     "services/benchmark-target",
     "services/ime-frontend",
     "services/ime-plugin-shell",
+    "services/shellchat",
     "svd2utra",
     "xtask",
     "imports/blitstr-ref",
@@ -45,6 +46,7 @@ default-members = [
     "services/benchmark-target",
     "services/ime-frontend",
     "services/ime-plugin-shell",
+    "services/shellchat",
     "services/llio",
     "services/trng-tester",
 ]

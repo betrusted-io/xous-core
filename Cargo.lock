@@ -1075,6 +1075,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "shellchat"
+version = "0.1.0"
+dependencies = [
+ "gam",
+ "heapless",
+ "ime-plugin-api",
+ "log",
+ "log-server",
+ "rkyv",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "shlex"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

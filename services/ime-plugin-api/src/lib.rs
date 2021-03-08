@@ -232,7 +232,7 @@ pub enum ImefOpcode {
     SetPredictionServer(xous::String<256>),
 
     /// register a listener for finalized inputs
-    RegisterListener(xous_names::api::XousServerName),
+    RegisterListener(xous::String<256>),
 
     /// this is the event opcode used by listeners
     GotInputLine(xous::String<4000>),
@@ -270,6 +270,7 @@ pub trait ImeFrontEndApi {
     fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
     fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error>;
+    fn register_listener(&self, servername: &str) -> Result<(), xous::Error>;
 }
 
 pub struct ImeFrontEnd {
@@ -304,6 +305,24 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 use core::fmt::Write;
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::SetPredictionServer(server);
+
+                use rkyv::Write as ArchiveWrite;
+                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+                let pos = writer.archive(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
+                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredicitonServer request failure");
+                Ok(())
+            },
+            _ => Err(xous::Error::UseBeforeInit)
+        }
+    }
+
+    fn register_listener(&self, servername: &str) -> Result<(), xous::Error> {
+        match self.connection {
+            Some(cid) => {
+                let mut server = xous::String::<256>::new();
+                use core::fmt::Write;
+                write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
+                let ime_op = ImefOpcode::RegisterListener(server);
 
                 use rkyv::Write as ArchiveWrite;
                 let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
