@@ -569,6 +569,7 @@ impl InputTracker {
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;
+    let dbglistener = true;
     log_server::init_wait().unwrap();
     info!("IMEF: my PID is {}", xous::process::id());
 
@@ -616,9 +617,11 @@ fn xmain() -> ! {
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
                     let s: xous::String<256> = registration.unarchive();
+                    if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
                       .expect("IMEF: can't connect to requested listener for reporting events");
+                    if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
                 },
                 _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
@@ -670,23 +673,27 @@ fn xmain() -> ! {
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
                     let s: xous::String<256> = registration.unarchive();
+                    if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note first copy above, put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
                       .expect("IMEF: can't connect to requested listener for reporting events");
+                    if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
                 },
-                _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
+                _ => panic!("IMEF: invalid response from server -- corruption occurred in MemoryMessage")
             };
         } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
             match opcode {
                 keyboard::api::Opcode::KeyboardEvent(keys) => {
                     if let Some(line) = tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses") {
+                        if dbglistener{info!("IMEF: sending listeners {:?}", line);}
                         for &conn in listeners.iter() {
                             use rkyv::Write;
+                            let op = ImefOpcode::GotInputLine(line);
                             let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                            let pos = writer.archive(&line).expect("IMEF: couldn't archive line for sending");
-                            let xous_buffer = writer.into_inner();
-                            xous_buffer.send(conn, pos as u32).expect("IMEF: couldn't send input line to listener");
+                            let pos = writer.archive(&op).expect("IMEF: couldn't archive line for sending");
+                            if dbglistener{info!("IMEF: sending to conn {:?}", conn);}
+                            writer.into_inner().lend(conn, pos as u32).expect("IMEF: couldn't send input line to listener");
                         }
                     }
                 },

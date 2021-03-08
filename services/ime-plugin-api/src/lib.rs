@@ -309,7 +309,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 use rkyv::Write as ArchiveWrite;
                 let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
                 let pos = writer.archive(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
-                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredicitonServer request failure");
+                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredictionServer request failure");
                 Ok(())
             },
             _ => Err(xous::Error::UseBeforeInit)
