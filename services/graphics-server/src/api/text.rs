@@ -68,6 +68,7 @@ pub struct TextView {
     pub text: xous::String::<3072>,
     pub cursor: Cursor,
     pub insertion: Option<u32>, // this is the insertion point offset, if it's to be drawn, on the string
+    pub ellipsis: bool,
 
     pub draw_border: bool,
     pub clear_area: bool, // you almost always want this to be true
@@ -96,6 +97,7 @@ impl TextView {
             text: xous::String::<3072>::new(),
             cursor: Cursor::new(0,0,0),
             insertion: None,
+            ellipsis: false,
             draw_border: true,
             border_width: 1,
             rounded_border: None,

@@ -116,6 +116,7 @@ fn xmain() -> ! {
                         s.as_str().unwrap(),
                         false,
                         None,
+                        false,
                         blitstr::xor_char
                     );
                     //info!("GFX: string painted");
@@ -130,6 +131,7 @@ fn xmain() -> ! {
                         s.as_str().unwrap(),
                         true,
                         None,
+                        false,
                         blitstr::xor_char
                     );
                 },
@@ -246,6 +248,7 @@ fn xmain() -> ! {
                         tv.text.as_str().unwrap(),
                         false,
                         tv.insertion,
+                        tv.ellipsis,
                         paintfn
                     );
                     // translate the cursor return value back to canvas coordinates
