@@ -10,6 +10,10 @@ use graphics_server::api::{TextOp, TextView};
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
 use log::info;
 
+pub fn redraw(gam_cid: xous::CID) -> Result<(), xous::Error> {
+    xous::send_message(gam_cid, api::Opcode::Redraw.into()).map(|_|())
+}
+
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
 /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
 /// the actual screen update is allowed

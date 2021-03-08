@@ -41,6 +41,9 @@ pub enum Opcode {
     // renders a TextView
     RenderTextView(TextView),
 
+    // forces a redraw (which also does defacement, etc.)
+    Redraw,
+
     /////// planned
 
     // returns a GID to the "content" Canvas; requires an authentication token
@@ -63,6 +66,7 @@ impl core::convert::TryFrom<&Message> for Opcode {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::ClearCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
+                1 => Ok(Opcode::Redraw),
                 _ => Err("GAM api: unknown Scalar ID"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -79,6 +83,9 @@ impl Into<Message> for Opcode {
         match self {
             Opcode::ClearCanvas(gid) => Message::Scalar(ScalarMessage {
                 id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
+            }),
+            Opcode::Redraw => Message::Scalar(ScalarMessage {
+                id: 1, arg1: 0, arg2: 0, arg3: 0, arg4: 0
             }),
             Opcode::GetCanvasBounds(gid) => Message::BlockingScalar(ScalarMessage {
                 id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _

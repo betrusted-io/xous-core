@@ -251,6 +251,20 @@ fn xmain() -> ! {
                                 None => info!("GAM: attempt to get bounds on bogus canvas, ignored."),
                             }
                         }
+                        Opcode::Redraw => {
+                            if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+                                if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
+                                    last_time = elapsed_time;
+
+                                    deface(gfx_conn, &mut canvases);
+                                    graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
+                                    /* // this throws errors right now because deface() doesn't work.
+                                    for (_, c) in canvases.iter_mut() {
+                                        c.do_flushed();
+                                    }*/
+                                }
+                            }
+                        },
                         _ => todo!("GAM: opcode not yet implemented"),
                     }
                 } else if let xous::Message::MutableBorrow(m) = &envelope.body {
@@ -391,18 +405,7 @@ fn xmain() -> ! {
             // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
         }
 
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 33 {  // rate limit updates to 30fps
-                last_time = elapsed_time;
-
-                deface(gfx_conn, &mut canvases);
-                graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
-                /* // this throws errors right now because deface() doesn't work.
-                for (_, c) in canvases.iter_mut() {
-                    c.do_flushed();
-                }*/
-
-            }
-        }
+        // auto-redraw code used to be here, but I think it's a bad idea....causes more
+        // graphics traffic than necessary? Trying out redraw-on-demand by clients.
     }
 }

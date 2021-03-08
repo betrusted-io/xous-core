@@ -210,7 +210,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
-        let debug1= true;
+        let debug1= false;
         let mut update_predictor = false;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
@@ -556,6 +556,8 @@ impl InputTracker {
                 }
             }
         }
+
+        gam::redraw(self.gam_conn).expect("IMEF: couldn't redraw screen");
 
         Ok(())
     }
