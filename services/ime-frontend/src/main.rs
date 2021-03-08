@@ -12,8 +12,6 @@ use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
 use blitstr_ref as blitstr;
-use heapless::Vec;
-use heapless::consts::U32;
 use core::pin::Pin;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
@@ -212,7 +210,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<(), xous::Error> {
-        let debug1= false;
+        let debug1= true;
         let mut update_predictor = false;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
@@ -375,6 +373,7 @@ impl InputTracker {
                                     self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
+                                    update_predictor = true;
                                 }
                                 self.last_trigger_char = Some(self.insertion);
                             }
@@ -383,6 +382,7 @@ impl InputTracker {
                                     self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
+                                    update_predictor = true;
                                 }
                                 self.last_trigger_char = Some(self.insertion);
                             }
@@ -393,7 +393,6 @@ impl InputTracker {
                                 if !(trigger.punctuation && k.is_ascii_punctuation() ||
                                     trigger.whitespace  && k.is_ascii_whitespace() ) {
                                     self.pred_phrase.push(k).expect("IMEF: ran out of space pushing character into prediction phrase");
-                                    update_predictor = true;
                                 }
                             }
                             self.characters += 1;
@@ -442,7 +441,7 @@ impl InputTracker {
             }
 
             input_tv.insertion = Some(self.insertion as u32);
-            info!("IMEF: insertion point is {}, characters in string {}", self.insertion, self.characters);
+            if debug1{info!("IMEF: insertion point is {}, characters in string {}", self.insertion, self.characters);}
             if do_redraw {
                 write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
                 gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
@@ -467,9 +466,9 @@ impl InputTracker {
                     match req.granted {
                         Some(bounds) => {
                             self.was_grown = true;
-                            if debug1{info!("IMEF: refresh succeeded, now redrawing");}
+                            if debug1{info!("IMEF: refresh succeeded, now redrawing with height of {:?}", bounds);}
                             // request was approved, redraw with the new bounding box
-                            input_tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds));
+                            input_tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), bounds));
                             input_tv.bounds_computed = None;
                             gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
                         },
@@ -482,8 +481,7 @@ impl InputTracker {
         }
         /*
         what else do we need:
-        - relay hints to the prediction engine, and draw prediction results
-        - extend blitstr to add ellipsis '…" when the clipping rectangle overflows
+        - debug prediction order
         - registration for listening to string results
         */
         // prediction area is drawn second because the area could be cleared on behalf of a resize of the text box
@@ -549,6 +547,7 @@ impl InputTracker {
                         p_tv.draw_border = false;
                         p_tv.border_width = 1;
                         p_tv.clear_area = false;
+                        p_tv.ellipsis = true;
                         p_tv.style = blitstr::GlyphStyle::Small;
                         write!(p_tv.text, "{}", pred_str).expect("IMEF: can't write the prediction string");
                         gam::post_textview(self.gam_conn, &mut p_tv).expect("IMEF: couldn't post prediction text");

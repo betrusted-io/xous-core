@@ -194,8 +194,8 @@ pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Recta
     let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
-    info!("CANVAS: received screen argument of {:?}", screen);
-    info!("CANVAS: now determining which regions are drawable");
+    if debug{info!("CANVAS: received screen argument of {:?}", screen);}
+    if debug{info!("CANVAS: now determining which regions are drawable");}
     loop {
         if let Some(c) = sorted_clipregions.pop() {
             if debug { info!("   CANVAS: considering {:?}", c);}

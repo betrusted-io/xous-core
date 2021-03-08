@@ -24,10 +24,23 @@ fn xmain() -> ! {
     let mut history: Queue<xous::String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
     let history_max = 4;
 
+    if true { // loads defaults into the predictor array to test things
+        use core::fmt::Write as CoreWriter;
+        let mut test1: xous::String::<64> = xous::String::new();
+        write!(test1, "This〰should overflow the box").unwrap();
+        history.enqueue(test1).unwrap();
+        let mut test2: xous::String::<64> = xous::String::new();
+        write!(test2, "Another string too long").unwrap();
+        history.enqueue(test2).unwrap();
+        let mut test3: xous::String::<64> = xous::String::new();
+        write!(test3, "Mary had a little lamb").unwrap();
+        history.enqueue(test3).unwrap();
+    }
+
     let mytriggers = PredictionTriggers {
         newline: true,
         punctuation: false,
-        whitespace: false,
+        whitespace: true,
     };
 
     info!("IME_SH: ready to accept requests");

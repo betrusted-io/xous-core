@@ -104,7 +104,7 @@ impl ChatLayout {
         graphics_server::draw_rectangle(self.gfx_conn, rect).expect("GAM: can't clear canvas");
         Ok(())
     }
-    pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<i16, xous::Error> {
+    pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("GAM: couldn't find input canvas");
         let content_canvas = canvases.get(&self.content).expect("GAM: couldn't find content canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("GAM: couldn't find predictive canvas");
@@ -131,10 +131,10 @@ impl ChatLayout {
                 graphics_server::draw_rectangle(self.gfx_conn, new_content_rect).expect("GAM: can't clear canvas");
             }
             // we resized to this new height
-            Ok(height)
+            Ok(new_content_rect.br)
         } else {
             // we didn't resize anything, height unchanged
-            Ok(input_canvas.clip_rect().br.y)
+            Ok(input_canvas.clip_rect().br)
         }
     }
 }
@@ -312,7 +312,7 @@ fn xmain() -> ! {
                             // very few canvases allow dynamic resizing, so we special case these
                             if cb.canvas == chatlayout.input {
                                 let newheight = chatlayout.resize_input(cb.requested.y, &mut canvases).expect("GAM: SetCanvasBoundsRequest couldn't recompute input canvas height");
-                                cb.granted = Some(Point::new(0, newheight));
+                                cb.granted = Some(newheight);
                                 canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
                             } else {
                                 cb.granted = None;
