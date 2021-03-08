@@ -24,7 +24,7 @@ fn xmain() -> ! {
     let mut history: Queue<xous::String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
     let history_max = 4;
 
-    if true { // loads defaults into the predictor array to test things
+    if false { // loads defaults into the predictor array to test things
         use core::fmt::Write as CoreWriter;
         let mut test1: xous::String::<64> = xous::String::new();
         write!(test1, "This〰should overflow the box").unwrap();
@@ -33,7 +33,7 @@ fn xmain() -> ! {
         write!(test2, "Another string too long").unwrap();
         history.enqueue(test2).unwrap();
         let mut test3: xous::String::<64> = xous::String::new();
-        write!(test3, "Mary had a little lamb").unwrap();
+        write!(test3, "未雨绸缪").unwrap();
         history.enqueue(test3).unwrap();
     }
 
@@ -87,7 +87,7 @@ fn xmain() -> ! {
                         if index >= history.len() as u32 {
                             index = history.len() as u32 - 1;
                         }
-                        let mut i = history.len() as u32;
+                        let mut i = 1;
                         for &s in history.iter() {
                             // iterator is from oldest to newest, so do some math to go from newest to oldest
                             if (history.len() as u32 - i) == index {
@@ -121,7 +121,7 @@ fn xmain() -> ! {
                                 prediction.valid = true;
                                 break;
                             }
-                            i = i - 1;
+                            i = i + 1;
                         }
                     } else { // there is no history
                         prediction.valid = false;

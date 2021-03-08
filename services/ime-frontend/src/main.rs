@@ -481,7 +481,6 @@ impl InputTracker {
         }
         /*
         what else do we need:
-        - debug prediction order
         - registration for listening to string results
         */
         // prediction area is drawn second because the area could be cleared on behalf of a resize of the text box
