@@ -158,6 +158,18 @@ impl<const N: usize> String<N> {
         }
     }
 
+    pub fn append(&mut self, s: &str) -> core::result::Result<usize, Error> {
+        let mut bytes_added = 0;
+        for ch in s.chars() {
+            if let Ok(bytes) = self.push(ch) {
+                bytes_added += bytes;
+            } else {
+                return Err(Error::OutOfMemory)
+            }
+        }
+        Ok(bytes_added)
+    }
+
     pub fn push_byte(&mut self, b: u8) -> core::result::Result<(), Error> {
         if self.len() < self.bytes.len() {
             self.bytes[self.len()] = b;
