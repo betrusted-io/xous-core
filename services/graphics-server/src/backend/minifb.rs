@@ -167,6 +167,12 @@ impl XousDisplay {
                     Key::Space => ' ',
                     Key::Comma => ',',
                     Key::Period => '.',
+                    Key::F1 => 0x11_u8.into(),
+                    Key::F2 => 0x12_u8.into(),
+                    Key::F3 => 0x13_u8.into(),
+                    Key::F4 => 0x14_u8.into(),
+                    Key::F5 => '😃',
+                    Key::F6 => '福',
                     _ => '\u{0000}',
                 }
             } else {
