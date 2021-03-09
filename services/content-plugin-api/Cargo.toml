@@ -1,0 +1,14 @@
+[package]
+name = "content-plugin-api"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Content Canvas Plugin Common APIs"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+rkyv = { version = "0.3.1", default_features = false }
+graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
+xous-names = {path="../xous-names"} # used by the IMEF for registering listeners
+log = "0.4"
+
