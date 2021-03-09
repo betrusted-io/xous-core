@@ -213,7 +213,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<xous::String::<4000>>, xous::Error> {
-        let debug1= false;
+        let debug1= true;
         let mut update_predictor = false;
         let mut retstring: Option<xous::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
@@ -285,6 +285,7 @@ impl InputTracker {
                     }
                     '\u{0008}' => { // backspace
                         if (self.characters > 0) && (self.insertion == self.characters) {
+                            if debug1{info!("IMEF: simple backspace case")}
                             self.line.pop();
                             self.characters -= 1;
                             self.insertion -= 1;
@@ -299,6 +300,7 @@ impl InputTracker {
                                 self.pred_phrase.clear();
                             }
                         } else if (self.characters > 0)  && (self.insertion > 0) {
+                            if debug1{info!("IMEF: mid-string backspace case")}
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
                             let tempbytes: [u8; 4000] = self.line.as_bytes();
@@ -456,7 +458,7 @@ impl InputTracker {
                 if debug1{info!("IMEF: got computed cursor of {:?}", input_tv.cursor);}
 
                 // check if the cursor is now at the bottom of the textview, this means we need to grow the box
-                if input_tv.cursor.line_height == 0 {
+                if input_tv.cursor.line_height == 0 && self.characters > 0 {
                     if debug1{info!("IMEF: caught case of overflowed text box, attempting to resize");}
                     let delta = if self.last_height > 0 {
                         self.last_height + 1 + 1 // 1 pixel allowance for interline space, plus 1 for fencepost
