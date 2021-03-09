@@ -400,6 +400,7 @@ impl InputTracker {
                                 if !(trigger.punctuation && k.is_ascii_punctuation() ||
                                     trigger.whitespace  && k.is_ascii_whitespace() ) {
                                     self.pred_phrase.push(k).expect("IMEF: ran out of space pushing character into prediction phrase");
+                                    update_predictor = true;
                                 }
                             }
                             self.characters += 1;
@@ -498,6 +499,12 @@ impl InputTracker {
             if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
 
             if update_predictor {
+                if self.pred_phrase.len() > 0 {
+                    if let Some(pred) = self.predictor {
+                        pred.set_input(self.pred_phrase).expect("IMEF: couldn't update predictor with current input");
+                    }
+                }
+
                 // Query the prediction engine for the latest predictions
                 if let Some(pred) = self.predictor {
                     for i in 0..self.pred_options.len() {
