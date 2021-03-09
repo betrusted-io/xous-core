@@ -213,7 +213,7 @@ impl InputTracker {
     }
 
     pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<xous::String::<4000>>, xous::Error> {
-        let debug1= true;
+        let debug1= false;
         let mut update_predictor = false;
         let mut retstring: Option<xous::String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
