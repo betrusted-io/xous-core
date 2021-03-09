@@ -311,7 +311,7 @@ fn xmain() -> ! {
                         None
                     };
                     let borderwidth: i16 = if tv.draw_border {
-                        1
+                        tv.border_width as i16
                     } else {
                         0
                     };
