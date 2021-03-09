@@ -23,6 +23,14 @@ pub struct SetCanvasBoundsRequest {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+pub struct ContentCanvasRequest {
+    // return value of the canvas Gid
+    pub canvas: Gid,
+    // name of the server requesting the content canvas
+    pub servername: xous::String<256>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 // #[archive(derive(Copy, Clone))]
 pub enum Opcode {
     // clears a canvas with a given GID
@@ -44,20 +52,17 @@ pub enum Opcode {
     // forces a redraw (which also does defacement, etc.)
     Redraw,
 
-    /////// planned
+    // returns a GID to the "content" Canvas; currently, anyone can request it and draw to it, but maybe that policy should be stricter.
+    // the Gid argument is the rkyv return value.
+    RequestContentCanvas(ContentCanvasRequest),
 
-    // returns a GID to the "content" Canvas; requires an authentication token
-    RequestContentCanvas(Gid),
+    /////// planned
 
     // hides a canvas with a given GID
     HideCanvas(Gid),
 
-    // requests the GID to the "input" Canvas; call only works once (for the IME server), then maps out
-    RequestInputCanvas,
-
     // indicates if the current UI layout requires an input field
     HasInput(bool),
-
 }
 
 impl core::convert::TryFrom<&Message> for Opcode {

@@ -199,7 +199,7 @@ impl Rectangle {
 
 impl Into<ClipRect> for Rectangle {
     fn into(self) -> ClipRect {
-        ClipRect::new(self.x0() as u32, self.y0() as u32, self.x1() as u32, self.y1() as u32)
+        ClipRect::new(self.x0() as _, self.y0() as _, self.x1() as _, self.y1() as _)
     }
 }
 

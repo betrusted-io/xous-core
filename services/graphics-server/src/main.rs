@@ -166,6 +166,7 @@ fn xmain() -> ! {
                     let mut tv = rtv.unarchive();
 
                     if tv.clip_rect.is_none() { continue } // if no clipping rectangle is specified, nothing to draw
+                    let clip_rect = tv.clip_rect.unwrap(); // this is the clipping rectangle of the canvas
                     let screen_offset: Point = tv.clip_rect.unwrap().tl; // this is the translation vector to and from screen space
 
                     let paintfn = if tv.dry_run {
@@ -182,18 +183,121 @@ fn xmain() -> ! {
                             TextBounds::BoundingBox(r) => {
                                 tv.bounds_computed = Some(r);
                             },
-                            TextBounds::GrowableFromBr(_br, _width) => {
-                                unimplemented!()
+                            TextBounds::GrowableFromBr(br, width) => {
+                                if !clip_rect.intersects_point(br) {
+                                    continue;
+                                }
+                                // assume: clip_rect is the total canvas area we could draw
+                                // assume: br is the point we want to extend the drawable text bubble on
+                                let checkedwidth: i16 = if width as i16 <= (br.x - clip_rect.tl.x) {
+                                    width as _
+                                } else {
+                                    (br.x - clip_rect.tl.x) as _
+                                };
+                                // first, create a clip that's the width of the growable, but as big as the height of the screen
+                                let clip = blitstr::ClipRect::new(0, 0, checkedwidth as _, display.screen_size().y as _);
+                                let mut c = blitstr::Cursor::new(0, 0, 0);
+                                // now simulate the string painting
+                                blitstr::paint_str(
+                                    display.native_buffer(),
+                                    clip,
+                                    &mut c,
+                                    tv.style.into(),
+                                    tv.text.as_str().unwrap(),
+                                    false,
+                                    None,
+                                    false,
+                                    blitstr::simulate_char
+                                );
+                                // the resulting cursor position + line_height + margin is the height of the bounds
+                                let checkedheight: i16 = if (c.pt.y as i16 + c.line_height as i16 + (tv.margin.y as i16) * 2) <= (br.y - clip_rect.tl.y as i16) {
+                                    c.pt.y as i16 + c.line_height as i16 + 2 * tv.margin.y
+                                } else {
+                                    br.y as i16 - clip_rect.tl.y as i16
+                                };
+                                // if less than one line of text, shrink the box
+                                let finalwidth = if c.pt.y <= c.line_height {
+                                    if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
+                                        c.pt.x as i16 + tv.margin.x * 3
+                                    } else {
+                                        checkedwidth
+                                    }
+                                } else {
+                                    checkedwidth
+                                };
+                                let tl = Point::new(br.x - finalwidth, br.y - checkedheight);
+                                if clip_rect.intersects_point(tl) {
+                                    tv.bounds_computed = Some(Rectangle::new(
+                                        tl,
+                                        br
+                                    ));
+                                } else {
+                                    tv.bounds_computed = None;
+                                }
                             },
                             TextBounds::GrowableFromTl(_tl, _width) => {
                                 unimplemented!()
                             },
-                            TextBounds::GrowableFromBl(_bl, _width) => {
-                                unimplemented!()
-                            }
+                            TextBounds::GrowableFromBl(bl, width) => {
+                                if !clip_rect.intersects_point(bl) {
+                                    continue;
+                                }
+                                // assume: clip_rect is the total canvas area we could draw
+                                // assume: bl is the point we want to extend the drawable text bubble on
+                                let checkedwidth: i16 = if width as i16 <= (clip_rect.br.x - bl.x) {
+                                    width as _
+                                } else {
+                                    (clip_rect.br.x - bl.x) as _
+                                };
+                                // first, create a clip that's the width of the growable, but as big as the height of the screen
+                                let clip = blitstr::ClipRect::new(0, 0, checkedwidth as _, display.screen_size().y as _);
+                                let mut c = blitstr::Cursor::new(0, 0, 0);
+                                // now simulate the string painting
+                                blitstr::paint_str(
+                                    display.native_buffer(),
+                                    clip,
+                                    &mut c,
+                                    tv.style.into(),
+                                    tv.text.as_str().unwrap(),
+                                    false,
+                                    None,
+                                    false,
+                                    blitstr::simulate_char
+                                );
+                                // the resulting cursor position + line_height is the height of the bounds
+                                let checkedheight: i16 = if (c.pt.y as i16 + c.line_height as i16 + 2 * tv.margin.y as i16) <= (bl.y as i16 - clip_rect.tl.y as i16) {
+                                    c.pt.y as i16 + c.line_height as i16 + 2 * tv.margin.y
+                                } else {
+                                    bl.y as i16 - clip_rect.tl.y as i16
+                                };
+
+                                // if less than one line of text, shrink the box
+                                let finalwidth = if c.pt.y <= c.line_height {
+                                    if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
+                                        c.pt.x as i16 + tv.margin.x * 3
+                                    } else {
+                                        checkedwidth
+                                    }
+                                } else {
+                                    checkedwidth
+                                };
+                                let tl = Point::new(bl.x, bl.y - checkedheight);
+                                if clip_rect.intersects_point(tl) {
+                                    tv.bounds_computed = Some(Rectangle::new(
+                                        tl,
+                                        Point::new(bl.x + finalwidth, bl.y)
+                                    ));
+                                } else {
+                                    tv.bounds_computed = None
+                                }
+                            },
                         }
                     }
                     if debugtv { info!("GFX(TV): computed bounds {:?}", tv.bounds_computed); }
+                    if tv.bounds_computed.is_none() {
+                        // the bounds weren't valid, so don't draw
+                        continue;
+                    }
 
                     // clear the bounding box if requested
                     let mut clear_rect = tv.bounds_computed.unwrap();
@@ -224,7 +328,7 @@ fn xmain() -> ! {
                     };
                     if tv.rounded_border.is_some() {
                         op::rounded_rectangle(display.native_buffer(),
-                           RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), tv.clip_rect);
+                           RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), Some(clear_rect));
                     } else {
                         if debugtv { info!("GFX(TV): clearing rectangle {:?}", clear_rect); }
                         op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
@@ -254,8 +358,8 @@ fn xmain() -> ! {
                     // translate the cursor return value back to canvas coordinates
                     tv.cursor = blitstr::Cursor {
                         pt: blitstr::Pt::new(
-                            ref_cursor.pt.x - screen_offset.x as u32,
-                            ref_cursor.pt.y - screen_offset.y as u32,
+                            ref_cursor.pt.x - screen_offset.x as i32,
+                            ref_cursor.pt.y - screen_offset.y as i32,
                         ),
                         line_height: ref_cursor.line_height,
                     };

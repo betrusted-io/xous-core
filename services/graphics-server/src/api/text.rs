@@ -67,7 +67,7 @@ pub struct TextView {
     pub style: GlyphStyle,
     pub text: xous::String::<3072>,
     pub cursor: Cursor,
-    pub insertion: Option<u32>, // this is the insertion point offset, if it's to be drawn, on the string
+    pub insertion: Option<i32>, // this is the insertion point offset, if it's to be drawn, on the string
     pub ellipsis: bool,
 
     pub draw_border: bool,

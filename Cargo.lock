@@ -121,7 +121,7 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.5.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=216422d5b57af7464970552cc384a24cf5e1d782#216422d5b57af7464970552cc384a24cf5e1d782"
+source = "git+https://github.com/betrusted-io/blitstr.git?rev=d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16#d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16"
 dependencies = [
  "log",
  "rkyv",
@@ -262,6 +262,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "content-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "graphics-server",
+ "log",
+ "rkyv",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -388,6 +399,7 @@ dependencies = [
  "bitflags",
  "blitstr-ref",
  "com",
+ "content-plugin-api",
  "graphics-server",
  "heapless",
  "ime-plugin-api",
@@ -1078,7 +1090,9 @@ dependencies = [
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
+ "content-plugin-api",
  "gam",
+ "graphics-server",
  "heapless",
  "ime-plugin-api",
  "log",

@@ -90,6 +90,7 @@ fn xmain() -> ! {
                         let mut i = 1;
                         for &s in history.iter() {
                             // iterator is from oldest to newest, so do some math to go from newest to oldest
+                            // TIL: there is a .rev() feature in iterators. Next time maybe use that instead.
                             if (history.len() as u32 - i) == index {
                                 // decompose the string into a character-by-character sequence
                                 // and then stuff byte-by-byte, as fits, into the return array

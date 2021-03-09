@@ -12,7 +12,9 @@ log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 gam = {path="../gam"}
+graphics-server = {path="../graphics-server"}
 ime-plugin-api = {path="../ime-plugin-api"}
+content-plugin-api = {path="../content-plugin-api"} # all content canvas providers must provide this API
 log = "0.4"
 rkyv = { version = "0.3.1", default_features = false }
 

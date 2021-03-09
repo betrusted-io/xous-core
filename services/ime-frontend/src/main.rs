@@ -447,7 +447,7 @@ impl InputTracker {
                 }
             }
 
-            input_tv.insertion = Some(self.insertion as u32);
+            input_tv.insertion = Some(self.insertion as _);
             if debug1{info!("IMEF: insertion point is {}, characters in string {}", self.insertion, self.characters);}
             if do_redraw {
                 write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");

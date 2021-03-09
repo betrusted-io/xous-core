@@ -13,6 +13,8 @@ use blitstr::GlyphStyle;
 use graphics_server::*;
 use ime_plugin_api::ImeFrontEndApi;
 
+use content_plugin_api::{ContentCanvasConnection, ContentCanvasApi};
+
 use log::info;
 
 use core::convert::TryFrom;
@@ -106,7 +108,6 @@ impl ChatLayout {
     }
     pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("GAM: couldn't find input canvas");
-        let content_canvas = canvases.get(&self.content).expect("GAM: couldn't find content canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("GAM: couldn't find predictive canvas");
         let status_canvas = canvases.get(&self.status).expect("GAM: couldn't find status canvas");
 
@@ -216,6 +217,9 @@ fn xmain() -> ! {
     // ASSUME: shell is our default application, so set a default predictor of Shell
     imef.set_predictor(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("GAM: couldn't set IMEF prediction to shell");
     // NOTE: all three API calls (set_input_canvas, set_prediction_canvas, set_predictor) are mandatory for IMEF initialization
+
+    // no content canvas initially, but keep a placeholder for one
+    let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None};
 
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
@@ -328,6 +332,10 @@ fn xmain() -> ! {
                                 let newheight = chatlayout.resize_input(cb.requested.y, &mut canvases).expect("GAM: SetCanvasBoundsRequest couldn't recompute input canvas height");
                                 cb.granted = Some(newheight);
                                 canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+
+                                if ccc.connection.is_some() {
+                                    ccc.redraw_canvas().expect("GAM: couldn't issue redraw to content canvas");
+                                }
                             } else {
                                 cb.granted = None;
                             }
@@ -335,6 +343,26 @@ fn xmain() -> ! {
                             use rkyv::Write;
                             let mut writer = rkyv::ArchiveBuffer::new(buf);
                             writer.archive(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
+                        },
+                        rkyv::Archived::<api::Opcode>::RequestContentCanvas(rcc) => {
+                            let mut req: ContentCanvasRequest = rcc.unarchive();
+                            if debug1{info!("GAM: RequestContentCanvas {:?}", req);}
+                            // for now, we do nothing with the incoming gid value; but, in the future, we can use it
+                            // as an authentication token perhaps to control access
+
+                            //// here make a connection back to the requesting server, so that we can tell it to redraw if the layout has changed, etc.
+                            if let Ok(cc) = xous_names::request_connection_blocking(req.servername.as_str().expect("GAM: malformed server name in content canvas request")) {
+                                ccc.connection = Some(cc);
+                            } else {
+                                log::error!("GAM: content requestor gave us a bogus canvas result, aborting");
+                                continue;
+                            };
+
+                            req.canvas = chatlayout.content;
+                            // pack our data back into the buffer to return
+                            use rkyv::Write;
+                            let mut writer = rkyv::ArchiveBuffer::new(buf);
+                            writer.archive(&api::Opcode::RequestContentCanvas(req)).expect("GAM: RequestContentCanvas couldn't re-archive return value");
                         },
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };

@@ -124,3 +124,31 @@ pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRe
     }
     Ok(())
 }
+
+pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Result<Gid, xous::Error> {
+    let mut server = xous::String::<256>::new();
+    use core::fmt::Write;
+    write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
+    let req = ContentCanvasRequest {
+        canvas: Gid::new([0,0,0,0]),
+        servername: server,
+    };
+    let rkyv = api::Opcode::RequestContentCanvas(req);
+
+    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
+    let pos = writer.archive(&rkyv).expect("GAM_API: couldn't archive RequestContentCanvas");
+    let mut xous_buffer = writer.into_inner();
+    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: RequestContentCanvas operation failure");
+
+    // recover the mutable values and mirror the ones we care about back into our local structure
+    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
+    if let rkyv::Archived::<api::Opcode>::RequestContentCanvas(result) = returned {
+        let ret: ContentCanvasRequest = result.unarchive();
+        Ok(ret.canvas)
+    } else {
+        let ret = returned.unarchive();
+        info!("got {:?}", ret);
+        log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
+        Err(xous::Error::InternalError)
+    }
+}
