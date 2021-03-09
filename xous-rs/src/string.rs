@@ -8,7 +8,7 @@ use core::pin::Pin;
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
     bytes: [u8; N],
-    len: u32,
+    len: u32, // length in bytes, not characters
 }
 
 impl<const N: usize> String<N> {
@@ -92,30 +92,79 @@ impl<const N: usize> String<N> {
         unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
     }
 
-    pub fn push(&mut self, ch: char) -> core::result::Result<(), Error> {
+    /// awful, O(N) implementation because we have to iterate through the entire string
+    /// and decode variable-length utf8 characters, until we can't.
+    pub fn pop(&mut self) -> Option<char> {
+        if self.len() < 1 {
+            return None;
+        }
+        // first, make a copy of the string
+        let tempbytes: [u8; N] = self.bytes;
+        let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.len()]) }.clone();
+        // clear our own string
+        self.len = 0;
+        self.bytes = [0; N];
+
+        // now copy over character by character, until just before the last character
+        let mut char_iter = tempstr.chars();
+        let mut maybe_c = char_iter.next();
+        loop {
+            match maybe_c {
+                Some(c) => {
+                    let next_c = char_iter.next();
+                    match next_c {
+                        Some(_thing) => {
+                            self.push(c).unwrap(); // always succeeds because we're re-encoding our string
+                            maybe_c = next_c;
+                        },
+                        None => {
+                            return next_c
+                        }
+                    }
+                },
+                None => {
+                    return None // we should actually never get here because len() == 0 case already covered
+                }
+            }
+        }
+    }
+
+    pub fn push(&mut self, ch: char) -> core::result::Result<usize, Error> {
         match ch.len_utf8() {
             1 => {
                 if self.len() < self.bytes.len() {
                     self.bytes[self.len()] = ch as u8;
                     self.len += 1;
-                    Ok(())
+                    Ok(1)
                 } else {
                     Err(Error::OutOfMemory)
                 }
             },
             _ => {
+                let mut bytes: usize = 0;
                 let mut data: [u8; 4] = [0; 4];
-                ch.encode_utf8(&mut data);
-                if self.len() + data.len() < self.bytes.len() {
-                    for &c in data.iter() {
+                let subslice = ch.encode_utf8(&mut data);
+                if self.len() + subslice.len() < self.bytes.len() {
+                    for c in subslice.bytes() {
                         self.bytes[self.len()] = c;
                         self.len += 1;
+                        bytes += 1;
                     }
-                    Ok(())
+                    Ok(bytes)
                 } else {
                     Err(Error::OutOfMemory)
                 }
             },
+        }
+    }
+
+    pub fn push_byte(&mut self, b: u8) -> core::result::Result<(), Error> {
+        if self.len() < self.bytes.len() {
+            self.bytes[self.len()] = b;
+            self.len += 1;
+            Ok(())
+        } else {
+            Err(Error::OutOfMemory)
         }
     }
 }

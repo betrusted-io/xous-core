@@ -15,6 +15,7 @@ pub const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
 pub const SERVER_NAME_STATUS: &str   = "_Status bar manager_";
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
 pub const SERVER_NAME_IME_PLUGIN_SHELL: &str = "_IME shell plugin_";
+pub const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 
 pub const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
 pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";

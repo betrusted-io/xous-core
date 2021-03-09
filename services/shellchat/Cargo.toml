@@ -1,0 +1,27 @@
+[package]
+name = "shellchat"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "A shell with a chat-like interface"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+heapless = "0.5.6"
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+gam = {path="../gam"}
+graphics-server = {path="../graphics-server"}
+ime-plugin-api = {path="../ime-plugin-api"}
+content-plugin-api = {path="../content-plugin-api"} # all content canvas providers must provide this API
+log = "0.4"
+rkyv = { version = "0.3.1", default_features = false }
+
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+default = [] # "debugprint"

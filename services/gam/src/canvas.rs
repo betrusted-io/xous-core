@@ -64,6 +64,7 @@ impl Canvas {
     }
     pub fn pan_offset(&self) -> Point { self.pan_offset }
     pub fn clip_rect(&self) -> Rectangle { self.clip_rect }
+    pub fn set_clip(&mut self, cr: Rectangle) { self.clip_rect = cr; self.state = CanvasState::Created }
     pub fn gid(&self) -> Gid { self.gid }
     pub fn trust_level(&self) -> u8 { self.trust_level }
     pub fn state(&self) -> CanvasState { self.state }
@@ -118,6 +119,13 @@ impl Canvas {
             Err(xous::Error::DoubleFree)
         }
     }
+    pub fn needs_defacing(&self) -> bool {
+        if self.state == CanvasState::NotDrawableDirty {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Ord for Canvas {
@@ -138,6 +146,37 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
+pub fn deface(gfx_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<(), xous::Error> {
+    // first check if any need defacing, if not, then we're done
+    let mut needs_defacing = false;
+    for (_, c) in canvases.iter() {
+        if c.needs_defacing() {
+            needs_defacing = true;
+        }
+    }
+    if needs_defacing {
+        error!("GAM: haven't implemented canvas defacing yet");
+        /*
+        This routine will need to do something similar to recompute_canvases, where it extracts
+        a sorted order and draws the defacement upon the canvas that requires defacing.
+
+        For simplicity, we may be able to assume this is called with at most one layout change
+        in between states, so in the worst case we are drawing defacement with a rectangular clip
+        area open in the middle of a canvas...
+         */
+        //Err(xous::Error::InternalError)
+
+        // temporarirly clear the error so we can develop other features
+        for (_, c) in canvases.iter_mut() {
+            if c.needs_defacing() {
+                c.do_defaced();
+            }
+        }
+        Ok(())
+    } else {
+        Ok(())
+    }
+}
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
 pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, U32> {
@@ -155,8 +194,8 @@ pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Recta
     let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
-    info!("CANVAS: received screen argument of {:?}", screen);
-    info!("CANVAS: now determining which regions are drawable");
+    if debug{info!("CANVAS: received screen argument of {:?}", screen);}
+    if debug{info!("CANVAS: now determining which regions are drawable");}
     loop {
         if let Some(c) = sorted_clipregions.pop() {
             if debug { info!("   CANVAS: considering {:?}", c);}

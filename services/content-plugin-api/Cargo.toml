@@ -1,9 +1,9 @@
 [package]
-name = "ime-plugin-api"
+name = "content-plugin-api"
 version = "0.1.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
-description = "IME Plugin Common APIs"
+description = "Content Canvas Plugin Common APIs"
 
 [dependencies]
 xous = { path = "../../xous-rs" }

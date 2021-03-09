@@ -20,6 +20,7 @@ log = "0.4"
 com = { path = "../com"}
 blitstr-ref = { path = "../../imports/blitstr-ref" }
 ime-plugin-api = {path="../ime-plugin-api"}
+content-plugin-api = {path="../content-plugin-api"}
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

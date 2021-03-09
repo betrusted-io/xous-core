@@ -6,7 +6,7 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 use heapless::spsc::Queue;
-use heapless::consts::U3;
+use heapless::consts::U4;
 
 use rkyv::Unarchive;
 use core::pin::Pin;
@@ -14,20 +14,33 @@ use rkyv::{archived_value, archived_value_mut};
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = true;
+    let debug1 = false;
     log_server::init_wait().unwrap();
     info!("IME_SH: my PID is {}", xous::process::id());
 
     let ime_sh_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IME_SH: can't register server");
     if debug1{info!("IME_SH: registered with NS -- {:?}", ime_sh_sid);}
 
-    let mut history: Queue<xous::String<4096>, U3> = Queue::new(); // this has 2^3 elements = 8
-    let history_max = 8;
+    let mut history: Queue<xous::String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
+    let history_max = 4;
+
+    if false { // loads defaults into the predictor array to test things
+        use core::fmt::Write as CoreWriter;
+        let mut test1: xous::String::<64> = xous::String::new();
+        write!(test1, "This〰should overflow the box").unwrap();
+        history.enqueue(test1).unwrap();
+        let mut test2: xous::String::<64> = xous::String::new();
+        write!(test2, "Another string too long").unwrap();
+        history.enqueue(test2).unwrap();
+        let mut test3: xous::String::<64> = xous::String::new();
+        write!(test3, "未雨绸缪").unwrap();
+        history.enqueue(test3).unwrap();
+    }
 
     let mytriggers = PredictionTriggers {
-        trigger_newline: true,
-        trigger_punctuation: false,
-        trigger_whitespace: false,
+        newline: true,
+        punctuation: false,
+        whitespace: false,
     };
 
     info!("IME_SH: ready to accept requests");
@@ -46,11 +59,16 @@ fn xmain() -> ! {
                     // the picked results
                 },
                 rkyv::Archived::<Opcode>::Picked(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    let s: xous::String<4000> = rkyv_s.unarchive();
+                    let mut local_s: xous::String<64> = xous::String::new();
+                    use core::fmt::Write;
+                    write!(local_s, "{:32}", s).expect("IME_SH: overflowed history variable");
+                    if debug1{info!("IME_SH: storing history value | {}", s);}
                     if history.len() == history_max {
                         history.dequeue().expect("IME_SH: couldn't dequeue history");
                     }
-                    history.enqueue(s).expect("IME_SH: couldn't store history");
+                    history.enqueue(local_s).expect("IME_SH: couldn't store history");
+                    if debug1{info!("IME_SH: history has length {}", history.len());}
                 },
                 _ => error!("IME_SH: unknown Borrow message")
             };
@@ -62,29 +80,65 @@ fn xmain() -> ! {
             match &*value {
                 rkyv::Archived::<Opcode>::Prediction(pred_r) => {
                     let mut prediction: Prediction = pred_r.unarchive();
-                    if history.len() > 0 {
+                    if debug1{info!("IME_SH: querying prediction index {}", prediction.index);}
+                    if debug1{info!("IME_SH: {:?}", prediction);}
+                    if history.len() > 0 && ((prediction.index as usize) < history.len()) {
                         let mut index = prediction.index;
                         if index >= history.len() as u32 {
                             index = history.len() as u32 - 1;
                         }
-                        let mut i = history.len() as u32;
-                        let mut retstr = xous::String::new();
+                        let mut i = 1;
                         for &s in history.iter() {
                             // iterator is from oldest to newest, so do some math to go from newest to oldest
+                            // TIL: there is a .rev() feature in iterators. Next time maybe use that instead.
                             if (history.len() as u32 - i) == index {
-                                retstr = s;
+                                // decompose the string into a character-by-character sequence
+                                // and then stuff byte-by-byte, as fits, into the return array
+                                prediction.len = 0;
+                                for ch in s.as_str().unwrap().chars() {
+                                    match ch.len_utf8() {
+                                        1 => {
+                                            if prediction.len < prediction.string.len() as u32 {
+                                                prediction.string[prediction.len as usize] = ch as u8;
+                                                prediction.len += 1;
+                                            } else {
+                                                break;
+                                            }
+                                        },
+                                        _ => {
+                                            let mut data: [u8; 4] = [0; 4];
+                                            let subslice = ch.encode_utf8(&mut data);
+                                            if prediction.len + (subslice.len() as u32) < prediction.string.len() as u32 {
+                                                for c in subslice.bytes() {
+                                                    prediction.string[prediction.len as usize] = c;
+                                                    prediction.len += 1;
+                                                }
+                                            } else {
+                                                break;
+                                            }
+                                        },
+                                    }
+                                }
+                                prediction.valid = true;
                                 break;
                             }
                             i = i + 1;
                         }
-                        prediction.string = retstr;
                     } else { // there is no history
-                        // return the empty string
-                        prediction.string = xous::String::new();
+                        prediction.valid = false;
+                        if debug1{info!("IME_SH: no prediction found");}
                     }
+                    if debug1{info!("IME_SH: returning index {} string {:?}", prediction.index, prediction.string);}
+
+                    // pack our data back into the buffer to return
+                    use rkyv::Write;
+                    let ret_op = Opcode::Prediction(prediction);
+                    let mut writer = rkyv::ArchiveBuffer::new(buf);
+                    let _pos = writer.archive(&ret_op).expect("IME_SH: Prediction query couldn't re-archive return value");
+                    if debug1{info!("IME_SH: archived with pos {}", _pos);}
                 },
-                _ => error!("IME_SH: unknown MutableBorrow message"),
-            }
+                _ => error!("IME_SH: Got invalid MutableBorrow")
+            };
         } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             match opcode {
                 Opcode::Unpick => {

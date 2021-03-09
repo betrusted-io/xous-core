@@ -270,7 +270,7 @@ impl Iterator for QuadrantIterator {
 
     // https://stackoverflow.com/questions/1201200/fast-algorithm-for-drawing-filled-circles
     fn next(&mut self) -> Option<Self::Item> {
-        // If border or stroke colour is `None`, treat entire object as transparent and exit early
+        // If border and stroke colour is `None`, treat entire object as transparent and exit early
         if self.style.stroke_color.is_none() && self.style.fill_color.is_none() {
             return None;
         }
@@ -281,10 +281,11 @@ impl Iterator for QuadrantIterator {
         let inner_radius_sq = inner_radius * inner_radius;
         let outer_radius_sq = outer_radius * outer_radius;
 
+        //log::info!("GFX|OP: quaditerator {}, {:?}, {:?}, {:?}, {:?}, {:?}", self.radius, self.center, self.p, self.quad, self.clip, self.style);
         loop {
             let mut item = None;
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p)) {
+               (self.clip.unwrap().intersects_point(self.p + self.center)) {
 
                 let t = self.p;
                 let len = t.x * t.x + t.y * t.y;
@@ -484,6 +485,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
     // call the rr iterator on the rectangle
     // then call it on one each of the four circle quadrants
 
+    //log::info!("GFX|OP: rr: {:?}, clip: {:?}", rr, clip);
     let rri = RoundedRectangleIterator {
         top_left: rr.border.tl,
         bottom_right: rr.border.br,
@@ -508,6 +510,7 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
     for pixel in rri {
         put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
+    //log::info!("GFX|OP: topleft {:?}, {:?}, {:?}, {:?}", rri.tlq.br, rr.radius, rr.border.style, clip);
     // now draw the corners
     quadrant(fb,
         Circle::new_with_style(rri.tlq.br, rr.radius, rr.border.style),
