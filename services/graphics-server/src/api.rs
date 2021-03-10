@@ -104,6 +104,9 @@ pub enum Opcode {
 
     /// draws an object that requires clipping
     DrawClipObject(ClipObject),
+
+    /// draws the sleep screen; assumes requests are vetted by GAM/xous-names
+    DrawSleepScreen
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {
@@ -146,6 +149,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
                     DrawStyle::from(m.arg3)),
                     m.arg4 as _
                 ))),
+                16 => Ok(Opcode::DrawSleepScreen),
                 _ => Err("unrecognized opcode"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -262,6 +266,9 @@ impl Into<Message> for Opcode {
                 arg2: rr.border.br.into(),
                 arg3: rr.border.style.into(),
                 arg4: rr.radius as _,
+            }),
+            Opcode::DrawSleepScreen => Message::Scalar(ScalarMessage {
+                id: 16, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
         }

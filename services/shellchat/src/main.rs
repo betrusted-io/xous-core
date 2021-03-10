@@ -16,6 +16,9 @@ use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, Gl
 use heapless::spsc::Queue;
 use heapless::consts::U16;
 
+mod cmds;
+use cmds::*;
+
 #[derive(Debug)]
 struct History {
     // the history record
@@ -43,8 +46,11 @@ struct Repl {
     bubble_margin: Point, // margin of text in bubbles
     bubble_radius: u16,
     bubble_space: i16, // spacing between text bubbles
+
+    // command environment
+    env: CmdEnv,
 }
-impl Repl {
+impl Repl{
     fn new(my_server_name: &str) -> Self {
         let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("SHCH: can't connect to GAM");
         let content = gam::request_content_canvas(gam_conn, my_server_name).expect("SHCH: couldn't get content canvas");
@@ -60,6 +66,7 @@ impl Repl {
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
+            env: CmdEnv::new(gam_conn),
         }
     }
 
@@ -82,7 +89,7 @@ impl Repl {
 
     /// update the loop, in response to various inputs
     fn update(&mut self) -> Result<(), xous::Error> {
-        let debug1 = true;
+        let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = self.input {
             let input_history = History {
@@ -93,25 +100,24 @@ impl Repl {
         }
 
         // AT THIS POINT: if we have other inputs, update accordingly
-        // (PLACEHOLDER)
+        // other inputs might be, for example, events that came in from other servers that would
+        // side effect our commands
 
-        // redraw UI once upon accepting input
+        // redraw UI once upon accepting all input
         self.redraw().expect("SHCH: can't redraw");
 
-
-        ////// AT THIS POINT
         // take the input and pass it on to the various command parsers, and attach result
-        // (PLACEHOLDER)
-        if let Some(local) = self.input {
-            let mut response = xous::String::<1024>::new();
-            write!(response, "Command not recognized: {}", local.as_str().unwrap()).unwrap();
-            let output_history = History {
-                text: response,
-                is_input: false
-            };
-            self.circular_push(output_history);
+        if let Some(mut local) = self.input {
+            if let Some(res) = self.env.dispatch(&mut local).expect("SHCH: command dispatch failed") {
+                let mut response = xous::String::<1024>::new();
+                write!(response, "{}", res).expect("SHCH: can't copy result to history");
+                let output_history = History {
+                    text: response,
+                    is_input: false
+                };
+                self.circular_push(output_history);
+            }
         }
-
 
         // clear all the inputs to the loop, so we don't process them twice
         self.input = None;
@@ -123,11 +129,10 @@ impl Repl {
                 info!("SHCH: command history is_input: {}, text:{}", h.is_input, h.text);
             }
         }
-
         Ok(())
     }
 
-    pub fn clear_area(&self) {
+    fn clear_area(&self) {
         gam::draw_rectangle(self.gam, self.content,
             Rectangle::new_with_style(Point::new(0, 0), self.screensize,
             DrawStyle {

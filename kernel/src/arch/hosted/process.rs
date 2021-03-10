@@ -91,7 +91,7 @@ pub fn set_current_pid(pid: PID) {
 }
 
 pub fn register_connection_for_key(
-    conn: TcpStream,
+    mut conn: TcpStream,
     key: ProcessKey,
 ) -> Result<PID, xous_kernel::Error> {
     PROCESS_TABLE.with(|pt| {
@@ -99,6 +99,7 @@ pub fn register_connection_for_key(
         for (pid_minus_1, process) in process_table.table.iter_mut().enumerate() {
             if let Some(process) = process.as_mut() {
                 if process.key == key && process.conn.is_none() {
+                    conn.write_all(&[pid_minus_1 as u8 + 1]).unwrap();
                     process.conn = Some(conn);
                     return Ok(PID::new(pid_minus_1 as u8 + 1).unwrap());
                 }
