@@ -416,7 +416,7 @@ fn xmain() -> ! {
     if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
 
     // Create a new com object
-    let mut llio = Llio::new();
+    let llio = Llio::new();
 
     if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;

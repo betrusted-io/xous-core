@@ -89,7 +89,7 @@ impl Repl{
 
     /// update the loop, in response to various inputs
     fn update(&mut self) -> Result<(), xous::Error> {
-        let debug1 = true;
+        let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = self.input {
             let input_history = History {
