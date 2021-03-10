@@ -119,10 +119,14 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
+    let base_path = build(packages, debug, Some(TARGET), None)?;
     for pkg in packages {
-        init.push(build(pkg, debug, Some(TARGET), None)?);
+        let mut pkg_path = base_path.clone();
+        pkg_path.push(pkg);
+        init.push(pkg_path);
     }
-    let loader = build("loader", debug, Some(TARGET), Some("loader".into()))?;
+    let mut loader = build(&["loader"], debug, Some(TARGET), Some("loader".into()))?;
+    loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
     println!();
@@ -173,10 +177,13 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
+    let base_path = build(packages, debug, Some(TARGET), None)?;
     for pkg in packages {
-        init.push(build(pkg, debug, Some(TARGET), None)?);
+        let mut pkg_path = base_path.clone();
+        pkg_path.push(pkg);
+        init.push(pkg_path);
     }
-    build("loader", debug, Some(TARGET), Some("loader".into()))?;
+    build(&["loader"], debug, Some(TARGET), Some("loader".into()))?;
 
     create_image(
         &kernel,
@@ -207,11 +214,7 @@ fn run(debug: bool) -> Result<(), DynError> {
         "trng",
     ];
 
-    // let mut init_paths = vec![];
-    for pkg in &init {
-        build(pkg, debug, None, None)?;
-    }
-    // println!("Built packages: {:?}", init_paths);
+    build(&init, debug, None, None)?;
 
     // Build and run the kernel
     let mut args = vec!["run"];
@@ -252,18 +255,26 @@ fn run(debug: bool) -> Result<(), DynError> {
 }
 
 fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    build("kernel", debug, Some(TARGET), Some("kernel".into()))
+    let mut path = build(&["kernel"], debug, Some(TARGET), Some("kernel".into()))?;
+    path.push("kernel");
+    Ok(path)
 }
 
 fn build(
-    project: &str,
+    packages: &[&str],
     debug: bool,
     target: Option<&str>,
     directory: Option<PathBuf>,
 ) -> Result<PathBuf, DynError> {
-    println!("Building {}...", project);
     let stream = if debug { "debug" } else { "release" };
-    let mut args = vec!["build", "--package", project];
+    let mut args = vec!["build"];
+    print!("Building");
+    for package in packages {
+        print!(" {}", package);
+        args.push("--package");
+        args.push(package);
+    }
+    println!();
     let mut target_path = "".to_owned();
     if let Some(t) = target {
         args.push("--target");
@@ -291,14 +302,13 @@ fn build(
 
     if let Some(base_dir) = &directory {
         Ok(project_root().join(&format!(
-            "{}/target/{}{}/{}",
+            "{}/target/{}{}/",
             base_dir.to_str().ok_or(BuildError::PathConversionError)?,
             target_path,
             stream,
-            project
         )))
     } else {
-        Ok(project_root().join(&format!("target/{}{}/{}", target_path, stream, project)))
+        Ok(project_root().join(&format!("target/{}{}/", target_path, stream)))
     }
 }
 
