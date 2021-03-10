@@ -397,6 +397,9 @@ fn xous_connect_impl(
         Ok(mut conn) => {
             conn.write_all(&key.0).unwrap(); // Send key to authenticate us as PID 1
             conn.flush().unwrap();
+            let mut pid = [0u8];
+            conn.read_exact(&mut pid).unwrap();
+            PROCESS_ID.with(|process_id| *process_id.borrow_mut() = PID::new(pid[0]).unwrap());
             Ok(ServerConnection {
                 send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
                 recv: Arc::new(Mutex::new(conn)),
