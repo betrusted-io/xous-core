@@ -10,6 +10,7 @@ use blitstr_ref as blitstr;
 pub fn status_thread(canvas_gid: [u32; 4]) {
     let debug1 = false;
     let status_gid: Gid = Gid::new(canvas_gid);
+    if debug1{info!("GAM|status: my canvas {:?}", status_gid)};
 
     if debug1{info!("GAM|status: registering GAM|status thread");}
     let status_sid = xous_names::register_name(xous::names::SERVER_NAME_STATUS).expect("GAM|status: can't register server");

@@ -203,10 +203,6 @@ fn xmain() -> ! {
     // this is broken into two steps because of https://github.com/rust-lang/rust/issues/71126
     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // make a thread to manage the status bar
-    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
-    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
-
     // connect to the IME front end, and set its canvas
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
@@ -220,6 +216,10 @@ fn xmain() -> ! {
 
     // no content canvas initially, but keep a placeholder for one
     let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None};
+
+    // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
+    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
+    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
@@ -253,7 +253,7 @@ fn xmain() -> ! {
                                         rect.br.into(),
                                     ).expect("GAM: couldn't return canvas bounds");
                                 },
-                                None => info!("GAM: attempt to get bounds on bogus canvas, ignored."),
+                                None => info!("GAM: attempt to get bounds on bogus canvas gid {:?}, {:?} ignored.", gid, envelope),
                             }
                         },
                         Opcode::PowerDownRequest => {
