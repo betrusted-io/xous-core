@@ -30,7 +30,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
-    uptime_tv.margin = Point::new(0, 0);
+    uptime_tv.margin = Point::new(3, 0);
     write!(uptime_tv, "Booting up...").expect("GAM|status: couldn't init uptime text");
     if debug1{info!("GAM|status: screensize as reported: {:?}", screensize);}
     if debug1{info!("GAM|status: uptime initialized to '{:?}'", uptime_tv);}
