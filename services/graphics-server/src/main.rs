@@ -17,6 +17,7 @@ mod op;
 use core::convert::TryFrom;
 
 mod logo;
+mod poweron;
 
 use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point};
 use blitstr_ref as blitstr;
@@ -24,7 +25,7 @@ use blitstr_ref as blitstr;
 mod fontmap;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
-    display.blit_screen(logo::LOGO_MAP);
+    display.blit_screen(poweron::LOGO_MAP);
 }
 
 #[cfg(target_os = "none")]
