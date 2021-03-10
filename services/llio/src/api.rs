@@ -83,7 +83,7 @@ pub struct I2cTransactionResolver {
 }
 impl rkyv::Resolve<I2cTransaction> for I2cTransactionResolver {
     type Archived = ArchivedI2cTransaction;
-    fn resolve(self, pos: usize, value: &I2cTransaction) -> Self::Archived {
+    fn resolve(self, pos: usize, _value: &I2cTransaction) -> Self::Archived {
         Self::Archived {
             ptr: unsafe {
                 rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedI2cTransaction, ptr), self.bytes_pos)

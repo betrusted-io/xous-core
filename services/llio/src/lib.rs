@@ -4,11 +4,10 @@
 /// are calling these functions inside a different process.
 pub mod api;
 
-use api::*;
-use xous::{send_message, Error, CID};
+use xous::{send_message, CID};
 
 pub fn allow_power_off(cid: CID, allow: bool) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::PowerSelf(allow).into()).map(|_| ())
+    send_message(cid, api::Opcode::PowerSelf(!allow).into()).map(|_| ())
 }
 
 pub fn allow_ec_snoop(cid: CID, allow: bool) -> Result<(), xous::Error> {

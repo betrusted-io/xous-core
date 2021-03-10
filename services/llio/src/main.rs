@@ -8,14 +8,11 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
-use xous::CID;
-
 #[cfg(target_os = "none")]
 mod implementation {
     use crate::api::*;
     use log::{error, info};
     use utralib::generated::*;
-    use ticktimer_server::*;
 
     const STD_TIMEOUT: u32 = 100;
 
@@ -242,8 +239,11 @@ mod implementation {
         }
         pub fn power_self(&mut self, power_on: bool) {
             if power_on {
+                info!("LLIO: setting self-power state to on");
                 self.power_csr.rmwf(utra::power::POWER_SELF, 1);
             } else {
+                info!("LLIO: setting self-power state to OFF");
+                self.power_csr.rmwf(utra::power::POWER_STATE, 0);
                 self.power_csr.rmwf(utra::power::POWER_SELF, 0);
             }
         }
@@ -406,8 +406,8 @@ mod implementation {
 fn xmain() -> ! {
     let debug1 = false;
     use crate::implementation::Llio;
-    use heapless::Vec;
-    use heapless::consts::*;
+    //use heapless::Vec;
+    //use heapless::consts::*;
 
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
