@@ -212,6 +212,17 @@ pub enum Opcode {
     /// not tested -- vibe
     Vibe(VibePattern),
 
+    /// not tested -- xadc
+    AdcVbus,
+    AdcVccInt,
+    AdcVccAux,
+    AdcVccBram,
+    AdcUsbN,
+    AdcUsbP,
+    AdcTemperature,
+    AdcGpio5,
+    AdcGpio2,
+
     /// not tested - I2C functions
     I2cWrite(I2cTransaction), /// LEFT OFF HERE -- need rkyv sending of messages
     I2cReadBlocking(I2cTransaction),
@@ -293,6 +304,15 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 0x106 => Ok(Opcode::InfoPlatform),
                 0x107 => Ok(Opcode::InfoTarget),
                 0x108 => Ok(Opcode::InfoSeed),
+                0x109 => Ok(Opcode::AdcVbus),
+                0x10A => Ok(Opcode::AdcVccInt),
+                0x10B => Ok(Opcode::AdcVccAux),
+                0x10C => Ok(Opcode::AdcVccBram),
+                0x10D => Ok(Opcode::AdcUsbN),
+                0x10E => Ok(Opcode::AdcUsbP),
+                0x10F => Ok(Opcode::AdcTemperature),
+                0x110 => Ok(Opcode::AdcGpio5),
+                0x111 => Ok(Opcode::AdcGpio2),
                 _ => Err("LLIO api: unknown BlockingScalar ID"),
             },
             _ => Err("unhandled message type"),
@@ -470,6 +490,42 @@ impl Into<Message> for Opcode {
             }),
             Opcode::InfoSeed => Message::BlockingScalar(ScalarMessage {
                 id: 0x108,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcVbus => Message::BlockingScalar(ScalarMessage {
+                id: 0x109,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcVccInt => Message::BlockingScalar(ScalarMessage {
+                id: 0x10A,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcVccAux => Message::BlockingScalar(ScalarMessage {
+                id: 0x10B,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcVccBram => Message::BlockingScalar(ScalarMessage {
+                id: 0x10C,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcUsbN => Message::BlockingScalar(ScalarMessage {
+                id: 0x10D,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcUsbP => Message::BlockingScalar(ScalarMessage {
+                id: 0x10E,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcTemperature => Message::BlockingScalar(ScalarMessage {
+                id: 0x10F,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcGpio5 => Message::BlockingScalar(ScalarMessage {
+                id: 0x110,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
+            Opcode::AdcGpio2 => Message::BlockingScalar(ScalarMessage {
+                id: 0x110,
                 arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             }),
             _ => panic!("opcode not handled -- maybe you meant to use one of the direct APIs")

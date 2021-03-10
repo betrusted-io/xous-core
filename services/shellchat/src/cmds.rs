@@ -58,13 +58,15 @@ mod test;
 use test::*;
 mod sleep;
 use sleep::*;
+mod sensors;
+use sensors::*;
 
 #[derive(Debug)]
 pub struct CmdEnv {
     common_env: CommonEnv,
-    echo_cmd: Echo,
     test_cmd: Test,
     sleep_cmd: Sleep,
+    sensors_cmd: Sensors,
 }
 impl CmdEnv {
     pub fn new(gam: xous::CID) -> CmdEnv {
@@ -74,8 +76,12 @@ impl CmdEnv {
              - ensure that the command implements the ShellCmdApi
              - mod/use the new command (above)
              - create an entry for the command's storage in the CmdEnv structure
-             - initialize the command here
+             - initialize the persistant storage here
              - add it to the "commands" array in the dispatch() routine below
+
+            Side note: if your command doesn't require persistent storage, you could,
+            technically, generate the command dynamically every time it's called. Echo
+            demonstrates this.
         */
         CmdEnv {
             common_env: CommonEnv {
@@ -84,19 +90,21 @@ impl CmdEnv {
                 ticktimer: xous::connect(ticktimer_server_id).unwrap(),
                 gam,
             },
-            echo_cmd: Echo {},
             test_cmd: Test::new(),
             sleep_cmd: Sleep::new(),
+            sensors_cmd: Sensors::new(),
         }
     }
 
     pub fn dispatch(&mut self, cmdline: &mut String::<1024>) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
 
+        let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
-            &mut self.echo_cmd,
+            &mut echo_cmd,
             &mut self.test_cmd,
             &mut self.sleep_cmd,
+            &mut self.sensors_cmd,
         ];
 
         let maybe_verb = tokenize(cmdline);

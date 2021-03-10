@@ -29,6 +29,7 @@ mod implementation {
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
+        xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer_conn: xous::CID,
         destruct_armed: bool,
     }
@@ -117,6 +118,13 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Seed CSR range");
+            let xadc_csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::trng::HW_TRNG_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
 
             let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
             let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
@@ -131,9 +139,12 @@ mod implementation {
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
+                xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer_conn,
                 destruct_armed: false,
             };
+            // setup the initial logging output
+            xl.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
 
             xous::claim_interrupt(
                 utra::btevents::BTEVENTS_IRQ,
@@ -291,6 +302,33 @@ mod implementation {
                 },
             }
         }
+        pub fn xadc_vbus(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) as u16
+        }
+        pub fn xadc_vccint(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCINT_XADC_VCCINT) as u16
+        }
+        pub fn xadc_vccaux(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCAUX_XADC_VCCAUX) as u16
+        }
+        pub fn xadc_vccbram(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCBRAM_XADC_VCCBRAM) as u16
+        }
+        pub fn xadc_usbn(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_USB_N_XADC_USB_N) as u16
+        }
+        pub fn xadc_usbp(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_USB_P_XADC_USB_P) as u16
+        }
+        pub fn xadc_temperature(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_TEMPERATURE_XADC_TEMPERATURE) as u16
+        }
+        pub fn xadc_gpio5(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_GPIO5_XADC_GPIO5) as u16
+        }
+        pub fn xadc_gpio2(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
+        }
     }
 }
 
@@ -332,6 +370,35 @@ mod implementation {
         pub fn ec_power_on(&self, ) {}
         pub fn self_destruct(&self, _code: u32) {}
         pub fn vibe(&self, _pattern: VibePattern) {}
+
+
+        pub fn xadc_vbus(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccint(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccaux(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccbram(&self) -> u16 {
+            0
+        }
+        pub fn xadc_usbn(&self) -> u16 {
+            0
+        }
+        pub fn xadc_usbp(&self) -> u16 {
+            0
+        }
+        pub fn xadc_temperature(&self) -> u16 {
+            0
+        }
+        pub fn xadc_gpio5(&self) -> u16 {
+            0
+        }
+        pub fn xadc_gpio2(&self) -> u16 {
+            0
+        }
     }
 }
 
@@ -457,6 +524,33 @@ fn xmain() -> ! {
                 },
                 Opcode::Vibe(pattern) => {
                     llio.vibe(pattern);
+                },
+                Opcode::AdcVbus => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vbus() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccInt => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccint() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccAux => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccaux() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccBram => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccbram() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcUsbN => {
+                    xous::return_scalar(envelope.sender, llio.xadc_usbn() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcUsbP => {
+                    xous::return_scalar(envelope.sender, llio.xadc_usbp() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcTemperature => {
+                    xous::return_scalar(envelope.sender, llio.xadc_temperature() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcGpio5 => {
+                    xous::return_scalar(envelope.sender, llio.xadc_gpio5() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcGpio2 => {
+                    xous::return_scalar(envelope.sender, llio.xadc_gpio2() as _).expect("LLIO: couldn't return Xadc");
                 },
             _ => error!("LLIO: no handler for opcode"),
             }
