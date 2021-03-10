@@ -1,6 +1,7 @@
-use crate::ShellCmdApi;
+use crate::{ShellCmdApi,CommonEnv};
 use xous::String;
 
+#[derive(Debug)]
 pub struct Test {
     state: u32
 }
@@ -23,7 +24,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         }
     }
 
-    fn process(&mut self, _rest: String::<1024>) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, _rest: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         self.state += 1;

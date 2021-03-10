@@ -5,7 +5,7 @@ pub trait ShellCmdApi<'a> {
     // checks if the command matches the current verb in question
     fn matches(&self, verb: &str) -> bool;
     // called to process the command with the remainder of the string attached
-    fn process(&mut self, rest: String::<1024>) -> Result<Option<String::<1024>>, xous::Error>;
+    fn process(&mut self, rest: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
     // returns my verb
     fn verb(&self) -> &'static str;
 }
@@ -44,36 +44,59 @@ pub fn tokenize(line: &mut String::<1024>) -> Option<String::<1024>> {
     }
 }
 
+#[derive(Debug)]
+pub struct CommonEnv {
+    llio: xous::CID,
+    com: xous::CID,
+    ticktimer: xous::CID,
+    gam: xous::CID,
+}
+
 mod echo;
 use echo::*;
 mod test;
 use test::*;
+mod sleep;
+use sleep::*;
 
 #[derive(Debug)]
 pub struct CmdEnv {
-    // placeholder for any environment variables relevant to interpreting commands
+    common_env: CommonEnv,
+    echo_cmd: Echo,
+    test_cmd: Test,
+    sleep_cmd: Sleep,
 }
-
 impl CmdEnv {
-    pub fn new() -> CmdEnv {
-        CmdEnv { }
-    }
-
-    pub fn dispatch(&self, cmdline: &mut String::<1024>) -> Result<Option<String::<1024>>, xous::Error> {
-        let mut ret = String::<1024>::new();
-
+    pub fn new(gam: xous::CID) -> CmdEnv {
+        let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
         /*
            To add a new command:
              - ensure that the command implements the ShellCmdApi
              - mod/use the new command (above)
-             - create a mutable version of the command's data structure
-             - add the structure to the array all_commands below
+             - create an entry for the command's storage in the CmdEnv structure
+             - initialize the command here
+             - add it to the "commands" array in the dispatch() routine below
         */
-        let mut echo_cmd = Echo {};
-        let mut test_cmd = Test::new();
-        let all_commands: &mut [&mut dyn ShellCmdApi] = &mut [
-            &mut echo_cmd,
-            &mut test_cmd,
+        CmdEnv {
+            common_env: CommonEnv {
+                llio: xous_names::request_connection_blocking(xous::names::SERVER_NAME_LLIO).expect("CMD: can't connect to LLIO"),
+                com: xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("CMD: can't connect to COM"),
+                ticktimer: xous::connect(ticktimer_server_id).unwrap(),
+                gam,
+            },
+            echo_cmd: Echo {},
+            test_cmd: Test::new(),
+            sleep_cmd: Sleep::new(),
+        }
+    }
+
+    pub fn dispatch(&mut self, cmdline: &mut String::<1024>) -> Result<Option<String::<1024>>, xous::Error> {
+        let mut ret = String::<1024>::new();
+
+        let commands: &mut [& mut dyn ShellCmdApi] = &mut [
+            &mut self.echo_cmd,
+            &mut self.test_cmd,
+            &mut self.sleep_cmd,
         ];
 
         let maybe_verb = tokenize(cmdline);
@@ -85,10 +108,10 @@ impl CmdEnv {
             // search through the list of commands linearly until one matches,
             // then run it.
             let mut match_found = false;
-            for cmd in all_commands.iter_mut() {
+            for cmd in commands.iter_mut() {
                 if cmd.matches(verb) {
                     match_found = true;
-                    cmd_ret = cmd.process(*cmdline);
+                    cmd_ret = cmd.process(*cmdline, &mut self.common_env);
                 };
             }
 
@@ -96,12 +119,12 @@ impl CmdEnv {
             if !match_found {
                 let mut first = true;
                 write!(ret, "Commands: ").unwrap();
-                for cmd in all_commands.iter() {
+                for cmd in commands.iter() {
                     if !first {
                         ret.append(", ")?;
-                        first = false;
                     }
                     ret.append(cmd.verb())?;
+                    first = false;
                 }
                 Ok(Some(ret))
             } else {
