@@ -221,6 +221,7 @@ fn xmain() -> ! {
     // no content canvas initially, but keep a placeholder for one
     let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None};
 
+    let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
@@ -254,8 +255,17 @@ fn xmain() -> ! {
                                 },
                                 None => info!("GAM: attempt to get bounds on bogus canvas, ignored."),
                             }
-                        }
+                        },
+                        Opcode::PowerDownRequest => {
+                            powerdown_requested = true;
+                            graphics_server::draw_sleepscreen(gfx_conn).expect("GAM: couldn't draw sleep screen");
+                            // a screen flush is part of the draw_sleepscreen abstraction
+                            xous::return_scalar(envelope.sender, 1).expect("GAM: couldn't confirm power down UI request");
+                        },
                         Opcode::Redraw => {
+                            if powerdown_requested {
+                                continue; // don't allow any redraws if a powerdown is requested
+                            }
                             if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
                                 if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
                                     last_time = elapsed_time;

@@ -36,6 +36,10 @@ pub fn flush(cid: CID) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::Flush.into()).map(|_| ())
 }
 
+pub fn draw_sleepscreen(cid: CID) -> Result<(), xous::Error> {
+    send_message(cid, api::Opcode::DrawSleepScreen.into()).map(|_| ())
+}
+
 #[deprecated(
     note = "Please use draw_textview for atomic text updates"
 )]

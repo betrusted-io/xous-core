@@ -14,13 +14,8 @@ use xous::CID;
 mod implementation {
     use crate::api::*;
     use log::{error, info};
-    use utra::info::GIT_GITEXTRA_GIT_GITEXTRA;
     use utralib::generated::*;
-    use xous::CID;
     use ticktimer_server::*;
-
-    use heapless::Vec;
-    use heapless::consts::*;
 
     const STD_TIMEOUT: u32 = 100;
 
@@ -257,7 +252,7 @@ mod implementation {
         }
         pub fn ec_reset(&mut self) {
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            ticktimer_server::sleep_ms(self.ticktimer_conn, 100);
+            ticktimer_server::sleep_ms(self.ticktimer_conn, 100).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
         }
         pub fn ec_power_on(&mut self) {
@@ -277,21 +272,21 @@ mod implementation {
             match pattern {
                 VibePattern::Short => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Long => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Double => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
             }
@@ -314,34 +309,35 @@ mod implementation {
             }
         }
 
-        pub fn reboot(_reboot_soc: bool) {}
-        pub fn set_rebot_vector(_vector: u32) {}
-        pub fn gpio_dout(_d: u32) {}
-        pub fn gpio_din() -> u32 { 0xDEAD_BEEF }
-        pub fn gpio_drive(_d: u32) {}
-        pub fn gpio_int_mask(_d: u32) {}
-        pub fn gpio_int_as_falling(_d: u32) {}
-        pub fn gpio_int_pending() -> u32 { 0x0 }
-        pub fn gpio_int_ena(_d: u32) {}
-        pub fn set_uart_mux(_mux: UartType) {}
-        pub fn get_info_dna() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_git() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_platform() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_target() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_seed() ->  (usize, usize) { (0, 0) }
-        pub fn power_audio(_power_on: bool) {}
-        pub fn power_self(_power_on: bool) {}
-        pub fn power_boost_mode(_power_on: bool) {}
-        pub fn ec_snoop_allow(_power_on: bool) {}
-        pub fn ec_reset() {}
-        pub fn ec_power_on() {}
-        pub fn self_destruct(_code: u32) {}
-        pub fn vibe(_pattern: VibePattern) {}
+        pub fn reboot(&self, _reboot_soc: bool) {}
+        pub fn set_reboot_vector(&self, _vector: u32) {}
+        pub fn gpio_dout(&self, _d: u32) {}
+        pub fn gpio_din(&self, ) -> u32 { 0xDEAD_BEEF }
+        pub fn gpio_drive(&self, _d: u32) {}
+        pub fn gpio_int_mask(&self, _d: u32) {}
+        pub fn gpio_int_as_falling(&self, _d: u32) {}
+        pub fn gpio_int_pending(&self, ) -> u32 { 0x0 }
+        pub fn gpio_int_ena(&self, _d: u32) {}
+        pub fn set_uart_mux(&self, _mux: UartType) {}
+        pub fn get_info_dna(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_git(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_seed(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn power_audio(&self, _power_on: bool) {}
+        pub fn power_self(&self, _power_on: bool) {}
+        pub fn power_boost_mode(&self, _power_on: bool) {}
+        pub fn ec_snoop_allow(&self, _power_on: bool) {}
+        pub fn ec_reset(&self, ) {}
+        pub fn ec_power_on(&self, ) {}
+        pub fn self_destruct(&self, _code: u32) {}
+        pub fn vibe(&self, _pattern: VibePattern) {}
     }
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    let debug1 = false;
     use crate::implementation::Llio;
     use heapless::Vec;
     use heapless::consts::*;
@@ -350,16 +346,16 @@ fn xmain() -> ! {
     info!("LLIO: my PID is {}", xous::process::id());
 
     let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
-    info!("LLIO: registered with NS -- {:?}", llio_sid);
+    if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
 
     // Create a new com object
     let mut llio = Llio::new();
 
-    info!("LLIO: starting main loop");
+    if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;
     loop {
         let envelope = xous::receive_message(llio_sid).unwrap();
-        // info!("LLIO: Message: {:?}", envelope);
+        if debug1{info!("LLIO: Message: {:?}", envelope)};
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("LLIO: Opcode: {:?}", opcode);
             // reset the reboot request if the very next opcode is not a confirm
@@ -414,9 +410,6 @@ fn xmain() -> ! {
                 },
                 Opcode::GpioIntEna(d) => {
                     llio.gpio_int_ena(d);
-                },
-                Opcode::GpioIntSubscribe(_Registration) => {
-                    todo!("LLIO: GPIO push interrupt events not yet implemented.");
                 },
                 Opcode::UartMux(mux) => {
                     llio.set_uart_mux(mux);

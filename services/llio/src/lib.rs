@@ -7,3 +7,7 @@ pub mod api;
 use api::*;
 use xous::{send_message, Error, CID};
 
+pub fn allow_power_off(cid: CID, allow: bool) -> Result<(), xous::Error> {
+    // note sense inversion on allow versus the opcode
+    send_message(cid, api::Opcode::PowerSelf(!allow).into()).map(|_| ())
+}

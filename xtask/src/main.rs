@@ -49,7 +49,7 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
-        //"llio",
+        "llio",
     ];
     let fcc_pkgs = [
         "shell",
@@ -212,6 +212,7 @@ fn run(debug: bool) -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
+        "llio",
     ];
 
     build(&init, debug, None, None)?;

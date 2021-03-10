@@ -433,11 +433,11 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: could not return QueryGlyphProps request");
                 }
-                /*
-                Opcode::TextView(tv) => {
-                    info!("GFX: got draw of '{:?}'", tv);
-                    op::textview(display.native_buffer(), tv);
-                }*/
+                Opcode::DrawSleepScreen => {
+                    display.blit_screen(logo::LOGO_MAP);
+                    display.update();
+                    display.redraw();
+                }
                 _ => panic!("GFX: received opcode scalar that is not handled")
             }
         } else {

@@ -1,14 +1,7 @@
 use xous::{Message, ScalarMessage};
-use xous_names::api::Registration;
+use xous::String;
 
-pub const SUBTYPE_REGISTER_GPIO_LISTENER: u16 = 0;
-pub const SUBTYPE_REGISTER_COM_LISTENER: u16 = 1;
-pub const SUBTYPE_REGISTER_RTC_LISTENER: u16 = 2;
-pub const SUBTYPE_REGISTER_USB_LISTENER: u16 = 3;
-pub const SUBTYPE_I2C_WRITE: u16 = 4;
-pub const SUBTYPE_I2C_READ: u16 = 5;
-pub const SUBTYPE_LITEX_ID: u16 = 6;
-
+/////////////////////// UART TYPE
 #[derive(Debug)]
 pub enum UartType {
     Kernel,
@@ -49,15 +42,80 @@ impl Into<u32> for UartType {
     }
 }
 
+/////////////////////// I2C
+use core::slice;
+use core::ops::{Deref, DerefMut};
 #[derive(Debug, Copy, Clone)]
 pub struct I2cTransaction {
-    busAddr: u8,
+    bus_addr: u8,
     // write address and read address are encoded in the packet field below
     packet: [u8; 258], // up to 258 bytes total packet length; note cost is "same" b/c these are sent via 4kiB page remaps
     length: u8,
     // read or write type is encoded in the opcode
 }
+impl I2cTransaction {
+    pub fn new() -> Self {
+        I2cTransaction{ bus_addr: 0, packet: [0; 258], length: 0 }
+    }
+}
+impl Deref for I2cTransaction {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(self as *const I2cTransaction as *const u8, core::mem::size_of::<I2cTransaction>())
+               as &[u8]
+        }
+    }
+}
+impl DerefMut for I2cTransaction {
+    fn deref_mut(&mut self) -> &mut[u8] {
+        unsafe {
+            slice::from_raw_parts_mut(self as *mut I2cTransaction as *mut u8, core::mem::size_of::<I2cTransaction>())
+               as &mut [u8]
+        }
+    }
+}
+pub struct ArchivedI2cTransaction {
+    ptr: rkyv::RelPtr,
+}
+pub struct I2cTransactionResolver {
+    bytes_pos: usize,
+}
+impl rkyv::Resolve<I2cTransaction> for I2cTransactionResolver {
+    type Archived = ArchivedI2cTransaction;
+    fn resolve(self, pos: usize, value: &I2cTransaction) -> Self::Archived {
+        Self::Archived {
+            ptr: unsafe {
+                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedI2cTransaction, ptr), self.bytes_pos)
+            },
+        }
+    }
+}
 
+impl rkyv::Archive for I2cTransaction {
+    type Archived = ArchivedI2cTransaction;
+    type Resolver = I2cTransactionResolver;
+
+    fn archive<W: rkyv::Write + ?Sized>(&self, writer: &mut W) -> core::result::Result<Self::Resolver, W::Error> {
+        let bytes_pos = writer.pos();
+        writer.write(self.deref())?;
+        Ok(Self::Resolver { bytes_pos })
+    }
+}
+impl rkyv::Unarchive<I2cTransaction> for ArchivedI2cTransaction {
+    fn unarchive(&self) -> I2cTransaction {
+        let mut i2c: I2cTransaction = I2cTransaction::new();
+        unsafe {
+            let p = self.ptr.as_ptr() as *const u8;
+            for(i, val) in i2c.deref_mut().iter_mut().enumerate() {
+                *val = p.add(i).read();
+            }
+        };
+        i2c
+    }
+}
+
+////////////////////////////////// VIBE
 #[derive(Debug)]
 pub enum VibePattern {
     Short,
@@ -67,9 +125,9 @@ pub enum VibePattern {
 impl From<usize> for VibePattern {
     fn from(pattern: usize) -> Self {
         match pattern {
-            _ => VibePattern::Short,
             0 => VibePattern::Long,
             1 => VibePattern::Double,
+            _ => VibePattern::Short,
         }
     }
 }
@@ -83,6 +141,7 @@ impl Into<usize> for VibePattern {
     }
 }
 
+//////////////////////////////// CLOCK GATING (placeholder)
 #[derive(Debug)]
 pub enum ClockMode {
     Low,
@@ -105,6 +164,7 @@ impl Into<usize> for ClockMode {
     }
 }
 
+//////////////////////////////////// OPCODES
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Opcode {
@@ -127,13 +187,13 @@ pub enum Opcode {
     GpioIntAsFalling(u32),
     GpioIntPending,
     GpioIntEna(u32),
-    GpioIntSubscribe(Registration), // TODO
+    GpioIntSubscribe(String<64>), // TODO
 
     /// not tested - set UART mux
     UartMux(UartType),
 
     /// not tested - information about the SoC build and revision
-    InfoLitexId(Registration), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
+    InfoLitexId(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
@@ -154,12 +214,14 @@ pub enum Opcode {
 
     /// not tested - I2C functions
     I2cWrite(I2cTransaction), /// LEFT OFF HERE -- need rkyv sending of messages
-    I2cRead(I2cTransaction),
+    I2cReadBlocking(I2cTransaction),
+    I2cReadSubscribe(String<64>),
+    I2cReadNonBlocking(I2cTransaction),
 
     /// not tested -- events
-    EventComSubscribe(Registration),
-    EventRtcSubscribe(Registration),
-    EventUsbAttachSubscribe(Registration),
+    EventComSubscribe(String<64>),
+    EventRtcSubscribe(String<64>),
+    EventUsbAttachSubscribe(String<64>),
     EventComEnable(bool),
     EventRtcEnable(bool),
     EventUsbAttachEnable(bool),
@@ -233,44 +295,6 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 0x108 => Ok(Opcode::InfoSeed),
                 _ => Err("LLIO api: unknown BlockingScalar ID"),
             },
-            Message::Borrow(m) => {
-                if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_GPIO_LISTENER) {
-                    Ok(Opcode::GpioIntSubscribe({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_COM_LISTENER) {
-                    Ok(Opcode::EventComSubscribe({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_RTC_LISTENER) {
-                    Ok(Opcode::EventRtcSubscribe({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if xous_names::api::Registration::match_subtype(m.id, SUBTYPE_REGISTER_USB_LISTENER) {
-                    Ok(Opcode::EventUsbAttachSubscribe({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut xous_names::api::Registration) }
-                    }))
-                } else if m.id as u16 == SUBTYPE_I2C_WRITE {
-                    Ok(Opcode::I2cWrite({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut I2cTransaction) }
-                    }))
-                } else {
-                    Err("COM: unknown borrow ID")
-                }
-            },
-            Message::MutableBorrow(m) => {
-                if m.id as u16 == SUBTYPE_I2C_READ {
-                    Ok(Opcode::I2cRead({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut I2cTransaction) }
-                    }))
-                } else if m.id as u16 == SUBTYPE_LITEX_ID {
-                    Ok(Opcode::InfoLitexId({
-                        unsafe { *( (m.buf.as_mut_ptr()) as *mut Registration) }
-                    }))
-                } else {
-                    Err("COM: unknown mutable borrow ID")
-                }
-            }
             _ => Err("unhandled message type"),
         }
     }

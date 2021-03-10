@@ -3,6 +3,7 @@
 pub mod api;
 use api::*;
 
+use xous::send_message;
 use rkyv::Write;
 use rkyv::Unarchive;
 use graphics_server::api::{TextOp, TextView};
@@ -12,6 +13,19 @@ use log::info;
 
 pub fn redraw(gam_cid: xous::CID) -> Result<(), xous::Error> {
     xous::send_message(gam_cid, api::Opcode::Redraw.into()).map(|_|())
+}
+
+pub fn powerdown_request(gam_cid: xous::CID) -> Result<bool, xous::Error> {
+    let response = send_message(gam_cid, api::Opcode::PowerDownRequest.into())?;
+    if let xous::Result::Scalar1(confirmed) = response {
+        if confirmed != 0 {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    } else {
+        panic!("GAM_API: unexpected return value: {:#?}", response);
+    }
 }
 
 /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
