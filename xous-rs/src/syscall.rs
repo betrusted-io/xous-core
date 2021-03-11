@@ -8,7 +8,7 @@ use core::convert::TryInto;
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 use crate::ProcessArgsAsThread;
 
 #[derive(Debug, PartialEq)]
@@ -299,6 +299,12 @@ pub enum SysCall {
     /// disclosing SIDs.
     ConnectForProcess(PID, SID),
 
+    /// Get the current Thread ID
+    GetThreadId,
+
+    /// Get the current Process ID
+    GetProcessId,
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -336,6 +342,8 @@ pub enum SysCallNumber {
     CreateServer = 29,
     ConnectForProcess = 30,
     CreateServerId = 31,
+    GetThreadId = 32,
+    GetProcessId = 33,
     Invalid,
 }
 
@@ -373,6 +381,8 @@ impl SysCallNumber {
             29 => CreateServer,
             30 => ConnectForProcess,
             31 => CreateServerId,
+            32 => GetThreadId,
+            33 => GetProcessId,
             _ => Invalid,
         }
     }
@@ -395,7 +405,7 @@ impl SysCall {
                 a1.map(|x| x.get()).unwrap_or_default(),
                 a2.map(|x| x.get()).unwrap_or_default(),
                 a3.get(),
-                a4.bits(),
+                crate::get_bits(a4),
                 0,
                 0,
                 0,
@@ -499,7 +509,7 @@ impl SysCall {
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
                 *a1 as usize,
-                a2.bits(),
+                crate::get_bits(a2),
                 0,
                 0,
                 0,
@@ -520,7 +530,7 @@ impl SysCall {
                 SysCallNumber::UpdateMemoryFlags as usize,
                 a1.get(),
                 *a2 as usize,
-                a3.bits(),
+                crate::get_bits(a3),
                 0,
                 0,
                 0,
@@ -668,6 +678,24 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -697,7 +725,7 @@ impl SysCall {
                 MemoryAddress::new(a1),
                 MemoryAddress::new(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
-                MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::UnmapMemory => {
                 SysCall::UnmapMemory(MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?)
@@ -721,13 +749,13 @@ impl SysCall {
             SysCallNumber::ReadyThreads => SysCall::ReadyThreads(pid_from_usize(a1)?),
             SysCallNumber::IncreaseHeap => SysCall::IncreaseHeap(
                 a1 as usize,
-                MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a2).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1 as usize),
             SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 a2 as usize,
-                MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::SetMemRegion => SysCall::SetMemRegion(
                 pid_from_usize(a1)?,
@@ -867,6 +895,8 @@ impl SysCall {
                 SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
             ),
             SysCallNumber::CreateServerId => SysCall::CreateServerId,
+            SysCallNumber::GetThreadId => SysCall::GetThreadId,
+            SysCallNumber::GetProcessId => SysCall::GetProcessId,
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1334,7 +1364,7 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by running it in its own thread
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub fn create_process_as_thread<F>(
     args: ProcessArgsAsThread<F>,
 ) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
@@ -1352,7 +1382,7 @@ where
 }
 
 /// Wait for a thread to finish
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
     crate::arch::wait_process_as_thread(joiner)
 }
@@ -1373,6 +1403,28 @@ pub fn create_process(
 /// Wait for a thread to finish
 pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
     crate::arch::wait_process(joiner)
+}
+
+/// Get the current process ID
+pub fn current_pid() -> SysCallResult {
+    rsyscall(SysCall::GetProcessId).and_then(|result| {
+        if let Result::ProcessID(pid) = result {
+            Ok(Result::ProcessID(pid))
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Get the current thread ID
+pub fn current_tid() -> SysCallResult {
+    rsyscall(SysCall::GetProcessId).and_then(|result| {
+        if let Result::ThreadID(tid) = result {
+            Ok(Result::ThreadID(tid))
+        } else {
+            Err(Error::InternalError)
+        }
+    })
 }
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {

@@ -115,6 +115,7 @@ pub struct MemoryRange {
     pub size: MemorySize,
 }
 
+#[cfg(feature = "bitflags")]
 bitflags! {
     /// Flags to be passed to the MapMemory struct.
     /// Note that it is an error to have memory be
@@ -137,6 +138,25 @@ bitflags! {
         /// Allow the CPU to execute from this page.
         const X         = 0b0000_1000;
     }
+}
+#[cfg(feature = "bitflags")]
+pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
+    bf.bits()
+}
+#[cfg(feature = "bitflags")]
+pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
+    MemoryFlags::from_bits(raw)
+}
+
+#[cfg(not(feature = "bitflags"))]
+pub type MemoryFlags = usize;
+#[cfg(not(feature = "bitflags"))]
+pub(crate) fn get_bits(bf: &MemoryFlags) -> usize {
+    *bf
+}
+#[cfg(not(feature = "bitflags"))]
+pub(crate) fn from_bits(raw: usize) -> Option<MemoryFlags> {
+    Some(raw)
 }
 
 pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {

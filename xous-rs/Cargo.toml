@@ -1,27 +1,39 @@
 [package]
 name = "xous"
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "System call interface for Xous"
 
 [dependencies]
-bitflags = "1"
+bitflags = {version = "1", optional = true }
 xous-macros = { path = "../macros", version = "0.1.0" }
 log = { version = "0.4", optional = true }
-rkyv = { version = "0.3.1", default_features = false }
+rkyv = { version = "0.3.1", default_features = false, optional = true }
+core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
+compiler_builtins = { version = '0.1.0', optional = true }
 
 [features]
+
 # If this is set, then the "Drop" feature of MemoryMessage structs
 # will not be implemented.  This should only be set by the kernel.
 forget-memory-messages = []
+
+# Enable using `bitflags`
+bit-flags = ["bitflags"]
+
+# Enable sending commands using `rkyv`
+archive = ["rkyv"]
 
 # `logging` causes this program to connect to a log server on startup
 # so you can run log commands such as `info!()`.
 logging = ["log"]
 
-default = []
+# This is being built as part of libstd
+rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
+
+default = ["bit-flags", "archive"]
 
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4"

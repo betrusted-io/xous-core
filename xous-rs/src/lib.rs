@@ -1,5 +1,6 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(any(target_os = "none", target_os = "xous"), no_std)]
 
+#[cfg(feature = "bitflags")]
 #[macro_use]
 extern crate bitflags;
 
@@ -12,27 +13,30 @@ pub mod arch;
 pub mod carton;
 pub mod definitions;
 mod messages;
-pub mod string;
+
 pub mod buffer;
-pub mod syscall;
 pub mod process;
+#[cfg(feature = "archive")]
+pub mod string;
+pub mod syscall;
 
 pub mod names;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
+pub use buffer::XousBuffer;
 pub use definitions::*;
 pub use messages::*;
+#[cfg(feature = "archive")]
 pub use string::*;
 pub use syscall::*;
-pub use buffer::XousBuffer;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use arch::ProcessArgsAsThread;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub fn init() {}
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub fn init() {
     use std::panic;
     panic::set_hook(Box::new(|arg| {
@@ -61,6 +65,7 @@ macro_rules! maybe_main {
         }
 
         fn main() {
+            #[cfg(not(target_os = "xous"))]
             xous::arch::ensure_connection().unwrap();
             unsafe { xous_entry() };
         }

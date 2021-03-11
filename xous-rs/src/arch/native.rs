@@ -174,12 +174,12 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    let stack = crate::map_memory(
-        None,
-        None,
-        131_072,
-        crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE,
-    )?;
+    #[cfg(feature = "bit-flags")]
+    let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
+    #[cfg(not(feature = "bit-flags"))]
+    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
+
+    let stack = crate::map_memory(None, None, 131_072, flags)?;
     let start = unsafe { core::mem::transmute(*f) };
     let arg = unsafe { core::mem::transmute(arg) };
     Ok(ThreadInit::new(start, stack, Some(arg), [0; 12]))
