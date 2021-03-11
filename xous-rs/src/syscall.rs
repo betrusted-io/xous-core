@@ -299,6 +299,12 @@ pub enum SysCall {
     /// disclosing SIDs.
     ConnectForProcess(PID, SID),
 
+    /// Get the current Thread ID
+    GetThreadId,
+
+    /// Get the current Process ID
+    GetProcessId,
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -336,6 +342,8 @@ pub enum SysCallNumber {
     CreateServer = 29,
     ConnectForProcess = 30,
     CreateServerId = 31,
+    GetThreadId = 32,
+    GetProcessId = 33,
     Invalid,
 }
 
@@ -373,6 +381,8 @@ impl SysCallNumber {
             29 => CreateServer,
             30 => ConnectForProcess,
             31 => CreateServerId,
+            32 => GetThreadId,
+            33 => GetProcessId,
             _ => Invalid,
         }
     }
@@ -668,6 +678,24 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -867,6 +895,8 @@ impl SysCall {
                 SID::from_u32(a2 as _, a3 as _, a4 as _, a5 as _),
             ),
             SysCallNumber::CreateServerId => SysCall::CreateServerId,
+            SysCallNumber::GetThreadId => SysCall::GetThreadId,
+            SysCallNumber::GetProcessId => SysCall::GetProcessId,
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1373,6 +1403,28 @@ pub fn create_process(
 /// Wait for a thread to finish
 pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
     crate::arch::wait_process(joiner)
+}
+
+/// Get the current process ID
+pub fn current_pid() -> SysCallResult {
+    rsyscall(SysCall::GetProcessId).and_then(|result| {
+        if let Result::ProcessID(pid) = result {
+            Ok(Result::ProcessID(pid))
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Get the current thread ID
+pub fn current_tid() -> SysCallResult {
+    rsyscall(SysCall::GetProcessId).and_then(|result| {
+        if let Result::ThreadID(tid) = result {
+            Ok(Result::ThreadID(tid))
+        } else {
+            Err(Error::InternalError)
+        }
+    })
 }
 
 pub fn rsyscall(call: SysCall) -> SysCallResult {
