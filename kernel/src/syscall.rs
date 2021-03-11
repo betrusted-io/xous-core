@@ -792,6 +792,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Shutdown => {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
         }
+        SysCall::GetProcessId => {
+            Ok(xous_kernel::Result::ProcessID(pid))
+        }
+        SysCall::GetThreadId => {
+            Ok(xous_kernel::Result::ThreadID(tid))
+        }
 
         SysCall::Connect(sid) => {
             let result = SystemServices::with_mut(|ss| {
