@@ -4,37 +4,47 @@ The GAM provides abstract UI primitives to other modules.
 
 The goal is to have this module work in close conjunction with the
 `graphics-server`, and all other modules would route abstract UI
-requests through this module.
+requests through this module. 
 
 ## Structure
+At a high level, you can think of the GAM as a firewall around the `graphics-server`. 
+The `graphics-server` has no concept of what pixel belongs where; it's happy
+to mutate a pixel that is anywhere within the physical hardware framebuffer.
+
+Giving processes direct access to `graphics-server` means that a less trusted
+program could draw into an OS-reserved area, thus presenting false information
+to a user. The GAM solves this problem by dividing the screen into `Canvas` objects.
 
 ### Canvas
 
 A `Canvas` is a minimal data structure that defines a physical region of the
 screen that will display a set of primitives. `Canvas` structures are domiciled
-in the UI server, and are considered trusted by default, although there is
+in the GAM server, and are considered trusted by default, although there is
 a flag that can be cleared to make everything within it untrusted.
 
 Each `Canvas` has a 128-bit GUID. Application processes that wish to draw
 something to the screen must refer to a `Canvas` by its 128-bit GUID; it is up
-to the GAM to not share secure GUIDs with insecure processes.
+to the GAM to not share secure GUIDs with insecure processes. Thus the security
+of a `Canvas` rests in the difficulty of guessing the 128-bit GUID, and also
+in the system not leaking GUIDs.
 
-The `Canvas` selection is modal on a per-connection basis. In other words,
-an application can request several `Canvas` objects to draw on, but it
-must first send a `SelectCanvas` command first to pick the right `Canvas`.
-By default, the last requested `Canvas` is the default `Canvas` for a
-given connection to the GAM.
+Every GAM drawing object includes the GUID of the `Canvas` to which it should be drawn. 
+Upon receiving a draw request, it validates that the GUID exists, and applies
+any other relevant rules (for example, a higher security process can use the
+GAM to prohibit all drawing of lower security processes by marking their
+`Canvas` as not drawable). 
 
-The region of the physical screen that can be drawn on by a `Canvas` is
-defined by a `clip_rect`. The coordinate space of the `clip_rect` is fixed
+All GAM drawing objects specify pixel offsets from a `(0,0)` top-left coordinate
+system. The GAM then handles translating these offsets from a virtual `(0,0)`
+Canvas offset to a physical region of a screen through the `clip_rect` 
+record within the `Canvas`. The coordinate space of the `clip_rect` is fixed
 to the screen's coordinates, that is, `(0,0)` in the top left, X increasing
 to the right, Y increasing down.
 
-A `Canvas` stores a `pan_offset`. If the pan offset is `(0,0)`, then the top left
-corner of the `clip_rect` corresponds to data drawn at location `(0,0)` inside
-the `Canvas`. The `pan_offset` is added to every coordinate inside the objects that
-refer to a `Canvas` at render time; this allows for easy implementation
-of panning and scrolling.
+A `Canvas` also stores a `pan_offset`. The `pan_offset` is added to every 
+coordinate inside the objects that refer to a `Canvas` and then the result
+is clipped with `clip_rect`; this allows for easy implementation
+of panning and scrolling. (Note: this feature is largely untested as of March 2021)
 
 A `Canvas` has a `trust_level` associated with it. Higher numbers are more
 trusted; 255 is the highest level of trust. Rules for drawing are as follows:
@@ -81,12 +91,22 @@ control over customizing their interfaces, and also helps introduce a layer
 of protection against phishing; however it also means that UX designers will not
 be able to have exquisite control over the "look and feel" of their applications.
 
-`TextView` objects are domiciled on the application process. Process-local API
-calls can "simulate" certain properties (such as figuring out the dynamic
-width or height of a text box based on the size of the string within) to assist
-with laying out `TextViews`. Once the layout is finalized, the `TextView` objects
-are then immutably lent to the GAM using an `rkyv` lend wrapper;
+`TextView` objects are domiciled on the application process. The application
+process is responsible for guiding the rough layout of where `TextView`s go
+in a canvas. Once the object is finalized, the `TextView` objects
+are then mutably lent to the GAM using an `rkyv` lend wrapper;
 the calling thread then blocks until the GAM completes the rendering operation.
+
+For layouts that need to adjust in height based on variable-length text strings,
+the calling application can use the `bounds_hint`/`TextBounds` to help manage this. 
+The bounds of a `TextView` can either be a fixed-sized rectangle, or a box that
+grows up and out from a point plus a width. So, for example, a `TextView` could have
+an anchor in the lower-right hand corner, plus a maximum width, and the height of the
+box will be computed based as the text is rendered. The height of text can't be
+known a-priori, because for example, emoji glyphs and hanzi characters will
+have a different height than latin characters. A `dry_run` option is also
+available for a `TextView` so one can simulate the rendering to determine the height
+without paying the compuational price. 
 
 One can think of a `TextView` as a text bubble, that can have rounded or square
 corners, and its content string can be rendered with a selection of options
@@ -95,16 +115,11 @@ aligment, and the size of the text bubble. The text bubble can either be of a
 fixed size (such that the string will show ellipses `...` if it overruns the
 bubble), or of a dynamically growable size based on its content.
 
+Thus, a typical "chat-style" app where text bubbles show a history of the chat
+going from the most recent at the bottom of the screen to the oldest at the top,
+would start by rendering variable-height text bubbles on the bottom, getting the
+returned value of the rendered height, and setting the height of the next bubble
+on top for rendering, and then rendering that. 
+
 `TextView` can both be directly rendered to a `Canvas`, or managed by secondary
 object such as a `Menu` or `List` to compose other UI elements.
-
-`TextView` supports a `draw_order` attribute, which allows multiple `TextViews`
-within a single application to be stacked on top of each other.
-Note that `draw_order` can only be respected within the context of a single application;
-if two applications are drawing to the same `Canvas`, then who gets the last
-draw depend on who sends the last update request. This might be fixable later
-on with a bit to "mutex" the drawing of other applications to enforce an order,
-but for MVP we simply avoid having multiple applications contend for access to
-the same `Canvas`.
-
-
