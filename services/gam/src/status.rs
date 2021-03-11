@@ -15,9 +15,9 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     if debug1{info!("GAM|status: registering GAM|status thread");}
     let status_sid = xous_names::register_name(xous::names::SERVER_NAME_STATUS).expect("GAM|status: can't register server");
 
+    let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
     let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("GAM|status: can't connect to COM");
-    let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
     if debug1{info!("GAM|status: getting screen size");}
     let screensize = gam::get_canvas_bounds(gam_conn, status_gid).expect("GAM|status: Couldn't get canvas size");

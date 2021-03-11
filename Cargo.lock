@@ -262,6 +262,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compiler_builtins"
+version = "0.1.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3748f82c7d366a0b4950257d19db685d4958d2fa27c6d164a3f069fec42b748b"
+dependencies = [
+ "rustc-std-workspace-core",
+]
+
+[[package]]
 name = "content-plugin-api"
 version = "0.1.0"
 dependencies = [
@@ -1029,6 +1038,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustc-std-workspace-core"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1956f5517128a2b6f23ab2dadf1a976f4f5b27962e7724c2bf3d45e539ec098c"
+
+[[package]]
 name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1539,10 +1554,12 @@ name = "xous"
 version = "0.1.2"
 dependencies = [
  "bitflags",
+ "compiler_builtins",
  "hex",
  "lazy_static",
  "log",
  "rkyv",
+ "rustc-std-workspace-core",
  "xous-macros",
 ]
 

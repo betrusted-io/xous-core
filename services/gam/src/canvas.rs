@@ -22,21 +22,21 @@ pub enum CanvasState {
 /// A rectangular region that defines a top-left zero relative offset for graphical items
 /// and a bottom-right point that defines a clipping area for things drawn inside.
 #[derive(Debug, Copy, Clone)]
-#[repr(C)]
 pub struct Canvas {
+    // unique, random identifier for the Canvas
+    gid: Gid,
+
     // screen coordinates of the clipping region
     clip_rect: Rectangle,
 
     // trust level, 255 is most trusted
     trust_level: u8,
 
-    state: CanvasState,
-
-    // unique, random identifier for the Canvas
-    gid: Gid,
-
     // enables scroll/pan of objects within a region
     pan_offset: Point,
+
+    // track the drawing state of the canvas
+    state: CanvasState,
 }
 
 #[allow(dead_code)]

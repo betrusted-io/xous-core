@@ -46,6 +46,9 @@ const TEXTVIEW_LEN: usize = 3072;
 
 #[derive(Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub struct TextView {
+    canvas: Gid, // GID of the canvas to draw on
+    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
     operation: TextOp,
@@ -62,7 +65,6 @@ pub struct TextView {
     pub dry_run: bool, // set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
-    pub text: xous::String::<3072>,
     pub cursor: Cursor,
     pub insertion: Option<i32>, // this is the insertion point offset, if it's to be drawn, on the string
     pub ellipsis: bool,
@@ -76,12 +78,12 @@ pub struct TextView {
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
 
-    canvas: Gid, // GID of the canvas to draw on
-    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+    pub text: xous::String::<3072>,
 }
 impl TextView {
     pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
         TextView {
+            canvas,
             operation: TextOp::Nop,
             untrusted: true,
             token: None,
@@ -99,7 +101,6 @@ impl TextView {
             rounded_border: None,
             margin: Point { x: 4, y: 4 },
             selected: None,
-            canvas,
             clear_area: true,
             overflow: None,
             dry_run: false,
@@ -116,6 +117,7 @@ impl TextView {
     pub fn clear_str(&mut self) { self.text.clear() }
 
     pub fn populate_from(&mut self, t: &TextView) {
+        self.canvas = t.canvas;
         self.operation = t.operation;
         self.untrusted = t.untrusted;
         self.token = t.token;
@@ -131,7 +133,6 @@ impl TextView {
         self.rounded_border = t.rounded_border;
         self.margin = t.margin;
         self.selected = t.selected;
-        self.canvas = t.canvas;
         self.overflow = t.overflow;
         self.clip_rect = t.clip_rect;
         self.dry_run = t.dry_run;

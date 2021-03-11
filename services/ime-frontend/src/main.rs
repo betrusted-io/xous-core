@@ -523,6 +523,7 @@ impl InputTracker {
                 }
             }
 
+            let debug_canvas = false;
             if valid_predictions == 0 {
                 let mut empty_tv = TextView::new(pc,
                     TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
@@ -530,6 +531,7 @@ impl InputTracker {
                 empty_tv.border_width = 1;
                 empty_tv.clear_area = true;
                 write!(empty_tv.text, "Ready for input...").expect("IMEF: couldn't set up empty TextView");
+                if debug_canvas { info!("IMEF: pc canvas {:?}", pc) }
                 gam::post_textview(self.gam_conn, &mut empty_tv).expect("IMEF: can't draw prediction TextView");
             } else if update_predictor  {
                 // alright, first, let's clear the area
@@ -578,7 +580,8 @@ impl InputTracker {
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;
-    let dbglistener = true;
+    let dbglistener = false;
+    let dbgcanvas = false;
     log_server::init_wait().unwrap();
     info!("IMEF: my PID is {}", xous::process::id());
 
@@ -601,11 +604,11 @@ fn xmain() -> ! {
         if let Ok(opcode) = ImefOpcode::try_from(&envelope.body) {
             match opcode {
                 ImefOpcode::SetInputCanvas(g) => {
-                    if debug1{info!("IMEF: got input canvas {:?}", g);}
+                    if debug1 || dbgcanvas {info!("IMEF: got input canvas {:?}", g);}
                     tracker.set_input_canvas(g);
                 },
                 ImefOpcode::SetPredictionCanvas(g) => {
-                    if debug1{info!("IMEF: got prediction canvas {:?}", g);}
+                    if debug1 || dbgcanvas {info!("IMEF: got prediction canvas {:?}", g);}
                     tracker.set_pred_canvas(g);
                 },
                 _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
