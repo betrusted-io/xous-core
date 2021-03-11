@@ -62,7 +62,6 @@ pub struct TextView {
     pub dry_run: bool, // set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
-    pub text: xous::String::<3072>,
     pub cursor: Cursor,
     pub insertion: Option<i32>, // this is the insertion point offset, if it's to be drawn, on the string
     pub ellipsis: bool,
@@ -78,6 +77,8 @@ pub struct TextView {
 
     canvas: Gid, // GID of the canvas to draw on
     pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+
+    pub text: xous::String::<3072>,
 }
 impl TextView {
     pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
