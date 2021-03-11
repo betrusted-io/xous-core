@@ -108,27 +108,3 @@ but for MVP we simply avoid having multiple applications contend for access to
 the same `Canvas`.
 
 
-
---------------------
-
-
-
-The problem is:
-1. you don't have access to the drawing objects; they are domiciled in the apps
-2. you don't want to just clear large regions of the FB; that will slow things down.
-You want to take advantage of dirty bits as much as possible for good performance.
-3. It would be nice to be able to have a more trusted "pop-up" on top of a less
-trusted app, and have it obscure the lower app.
-
-Options include:
-
-1. A bitmap that stores the drawable mask based on a trust level. This would have
-to be recalculated from the priority queue for each Canvas every time the queue
-is updated. This structure consumes 24kiB per canvas in this case...
-2. Coming up with an arbitrary polygonal region (that can also support holes) and
-then doing maths to figure out if a point may or may not be updated. This would
-be memory efficient but rather time and CPU-inefficient to compute.
-3. Disallowing overlapping Canvas features??
-4. Maintaining each Canvas with a bitmap that has the latest drawing on it,
-updating only that bitmap, and then doing compositing and dirty bit computation
-before sending off to the graphics engine?
