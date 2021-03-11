@@ -219,7 +219,7 @@ impl InputTracker {
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
             let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
-            let mut input_tv = TextView::new(ic, 255,
+            let mut input_tv = TextView::new(ic,
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
             input_tv.draw_border = false;
             input_tv.border_width = 1;
@@ -524,7 +524,7 @@ impl InputTracker {
             }
 
             if valid_predictions == 0 {
-                let mut empty_tv = TextView::new(pc, 255,
+                let mut empty_tv = TextView::new(pc,
                     TextBounds::BoundingBox(Rectangle::new(Point::new(0, 1), pc_bounds)));
                 empty_tv.draw_border = false;
                 empty_tv.border_width = 1;
@@ -554,7 +554,7 @@ impl InputTracker {
                             DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 1 }
                             )).expect("IMEF: couldn't draw dividing lines in prediction area");
                         }
-                        let mut p_tv = TextView::new(pc, 255,
+                        let mut p_tv = TextView::new(pc,
                             TextBounds::BoundingBox(p_clip));
                         p_tv.draw_border = false;
                         p_tv.border_width = 1;

@@ -25,7 +25,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
 
     if debug1{info!("GAM|status: building textview objects");}
     // build uptime text view: left half of status bar
-    let mut uptime_tv = TextView::new(status_gid, 0,
+    let mut uptime_tv = TextView::new(status_gid,
          TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
                  Point::new(screensize.x / 2, screensize.y - 1))));
     uptime_tv.untrusted = false;
@@ -37,7 +37,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     if debug1{info!("GAM|status: uptime initialized to '{:?}'", uptime_tv);}
 
     // build battstats text view: right half of status bar
-    let mut battstats_tv = TextView::new(status_gid, 0,
+    let mut battstats_tv = TextView::new(status_gid,
         TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0),
                Point::new(screensize.x, screensize.y - 1))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
