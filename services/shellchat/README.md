@@ -44,3 +44,8 @@ to the GAM, LLIO server or other resources required by your implementation.
 
 Once you've added your command to the directory, go to the `cmds.rs` file, and follow
 the four-step instructions embedded within the file, starting around line 40.
+
+## Things to Keep in Mind
+- Xous is currently `nostd`
+- When you're done adding your command, you should be able to do a `cargo xtask run` and it will fire up an emulated environment, like the one above
+- Type...very...slowly...and hold down keys when using the emulated environment.
