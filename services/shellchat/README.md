@@ -1,5 +1,7 @@
 # Shell Chat
 
+![screenshot](shellchat_screen1.png)
+
 `shellchat` is a baseline demo application for Xous. It uses a chat-client
 style interface (stacking bubbles of text, with user input right-aligned
 and shell feedback left-aligned) to facilitate interactions with the hardware.
