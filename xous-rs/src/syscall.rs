@@ -8,7 +8,7 @@ use core::convert::TryInto;
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 use crate::ProcessArgsAsThread;
 
 #[derive(Debug, PartialEq)]
@@ -405,7 +405,7 @@ impl SysCall {
                 a1.map(|x| x.get()).unwrap_or_default(),
                 a2.map(|x| x.get()).unwrap_or_default(),
                 a3.get(),
-                a4.bits(),
+                crate::get_bits(a4),
                 0,
                 0,
                 0,
@@ -509,7 +509,7 @@ impl SysCall {
             SysCall::IncreaseHeap(a1, a2) => [
                 SysCallNumber::IncreaseHeap as usize,
                 *a1 as usize,
-                a2.bits(),
+                crate::get_bits(a2),
                 0,
                 0,
                 0,
@@ -530,7 +530,7 @@ impl SysCall {
                 SysCallNumber::UpdateMemoryFlags as usize,
                 a1.get(),
                 *a2 as usize,
-                a3.bits(),
+                crate::get_bits(a3),
                 0,
                 0,
                 0,
@@ -725,7 +725,7 @@ impl SysCall {
                 MemoryAddress::new(a1),
                 MemoryAddress::new(a2),
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
-                MemoryFlags::from_bits(a4).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::UnmapMemory => {
                 SysCall::UnmapMemory(MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?)
@@ -749,13 +749,13 @@ impl SysCall {
             SysCallNumber::ReadyThreads => SysCall::ReadyThreads(pid_from_usize(a1)?),
             SysCallNumber::IncreaseHeap => SysCall::IncreaseHeap(
                 a1 as usize,
-                MemoryFlags::from_bits(a2).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a2).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::DecreaseHeap => SysCall::DecreaseHeap(a1 as usize),
             SysCallNumber::UpdateMemoryFlags => SysCall::UpdateMemoryFlags(
                 MemoryAddress::new(a1).ok_or(Error::InvalidSyscall)?,
                 a2 as usize,
-                MemoryFlags::from_bits(a3).ok_or(Error::InvalidSyscall)?,
+                crate::from_bits(a3).ok_or(Error::InvalidSyscall)?,
             ),
             SysCallNumber::SetMemRegion => SysCall::SetMemRegion(
                 pid_from_usize(a1)?,
@@ -1364,7 +1364,7 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by running it in its own thread
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub fn create_process_as_thread<F>(
     args: ProcessArgsAsThread<F>,
 ) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
@@ -1382,7 +1382,7 @@ where
 }
 
 /// Wait for a thread to finish
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
     crate::arch::wait_process_as_thread(joiner)
 }
