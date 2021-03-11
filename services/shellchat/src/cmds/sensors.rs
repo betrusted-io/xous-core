@@ -10,9 +10,10 @@ impl Sensors {
     }
 }
 
-const VERB: &str = "sensors";
 
 impl<'a> ShellCmdApi<'a> for Sensors {
+    cmd_api!(sensors);
+
     fn process(&mut self, _rest: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
@@ -28,17 +29,5 @@ impl<'a> ShellCmdApi<'a> for Sensors {
         ).unwrap();
 
         Ok(Some(ret))
-    }
-
-
-    fn verb(&self) -> &'static str {
-        VERB
-    }
-    fn matches(&self, verb: &str) -> bool {
-        if verb == VERB {
-            true
-        } else {
-            false
-        }
     }
 }

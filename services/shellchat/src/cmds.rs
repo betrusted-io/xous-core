@@ -2,13 +2,32 @@ use xous::String;
 use core::fmt::Write;
 
 pub trait ShellCmdApi<'a> {
-    // checks if the command matches the current verb in question
-    fn matches(&self, verb: &str) -> bool;
+    // user implemented:
     // called to process the command with the remainder of the string attached
     fn process(&mut self, rest: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+
+    // created with cmd_api! macro
+    // checks if the command matches the current verb in question
+    fn matches(&self, verb: &str) -> bool;
     // returns my verb
     fn verb(&self) -> &'static str;
 }
+// the argument to this macro is the command verb
+macro_rules! cmd_api {
+    ($verb:expr) => {
+        fn verb(&self) -> &'static str {
+            stringify!($verb)
+        }
+        fn matches(&self, verb: &str) -> bool {
+            if verb == stringify!($verb) {
+                true
+            } else {
+                false
+            }
+        }
+    };
+}
+
 
 /// extract the first token, as delimited by spaces
 /// modifies the incoming line by removing the token and returning the remainder
