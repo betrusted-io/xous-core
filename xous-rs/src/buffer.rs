@@ -1,4 +1,7 @@
-use crate::{Result, Error, MemoryMessage, MemoryRange, MemoryFlags, MemorySize, Message, CID, map_memory, send_message};
+use crate::{
+    map_memory, send_message, Error, MemoryMessage, MemoryRange, MemorySize, Message,
+    Result, CID,
+};
 
 #[derive(Debug)]
 pub struct XousBuffer<'a> {
@@ -11,16 +14,23 @@ pub struct XousBuffer<'a> {
 impl<'a> XousBuffer<'a> {
     #[allow(dead_code)]
     pub fn new(len: usize) -> Self {
-        let remainder =
-           if ((len & 0xFFF) == 0) && (len > 0) { 0 }
-           else { 0x1000 - (len & 0xFFF) };
+        let remainder = if ((len & 0xFFF) == 0) && (len > 0) {
+            0
+        } else {
+            0x1000 - (len & 0xFFF)
+        };
+
+        #[cfg(feature = "bit-flags")]
+        let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
+        #[cfg(not(feature = "bit-flags"))]
+        let flags = 0b0000_0010 | 0b0000_0100;
 
         let new_mem = map_memory(
             None,
             None,
             // Ensure our byte size is a multiple of 4096
             len + remainder,
-            MemoryFlags::R | MemoryFlags::W,
+            flags,
         )
         .expect("XousBuffer: error in new()/map_memory");
 
@@ -28,7 +38,9 @@ impl<'a> XousBuffer<'a> {
         valid.size = MemorySize::new(len + remainder).unwrap();
         XousBuffer {
             range: new_mem,
-            slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder) },
+            slice: unsafe {
+                core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len + remainder)
+            },
             valid,
             should_drop: true,
         }
@@ -46,11 +58,7 @@ impl<'a> XousBuffer<'a> {
 
     /// Perform a mutable lend of this Carton to the server.
     #[allow(dead_code)]
-    pub fn lend_mut(
-        &mut self,
-        connection: CID,
-        id: u32,
-    ) -> core::result::Result<Result, Error> {
+    pub fn lend_mut(&mut self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = MemoryMessage {
             id: id as usize,
             buf: self.valid,
@@ -61,11 +69,7 @@ impl<'a> XousBuffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn lend(
-        &self,
-        connection: CID,
-        id: u32
-    ) -> core::result::Result<Result, Error> {
+    pub fn lend(&self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = MemoryMessage {
             id: id as usize,
             buf: self.valid,
@@ -76,11 +80,7 @@ impl<'a> XousBuffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn send(
-        mut self,
-        connection: CID,
-        id: u32,
-    ) -> core::result::Result<Result, Error> {
+    pub fn send(mut self, connection: CID, id: u32) -> core::result::Result<Result, Error> {
         let msg = crate::MemoryMessage {
             id: id as usize,
             buf: self.valid,

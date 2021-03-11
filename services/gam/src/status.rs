@@ -15,9 +15,9 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     if debug1{info!("GAM|status: registering GAM|status thread");}
     let status_sid = xous_names::register_name(xous::names::SERVER_NAME_STATUS).expect("GAM|status: can't register server");
 
+    let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
     let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("GAM|status: can't connect to COM");
-    let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
 
     if debug1{info!("GAM|status: getting screen size");}
     let screensize = gam::get_canvas_bounds(gam_conn, status_gid).expect("GAM|status: Couldn't get canvas size");
@@ -25,7 +25,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
 
     if debug1{info!("GAM|status: building textview objects");}
     // build uptime text view: left half of status bar
-    let mut uptime_tv = TextView::new(status_gid, 0,
+    let mut uptime_tv = TextView::new(status_gid,
          TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
                  Point::new(screensize.x / 2, screensize.y - 1))));
     uptime_tv.untrusted = false;
@@ -37,7 +37,7 @@ pub fn status_thread(canvas_gid: [u32; 4]) {
     if debug1{info!("GAM|status: uptime initialized to '{:?}'", uptime_tv);}
 
     // build battstats text view: right half of status bar
-    let mut battstats_tv = TextView::new(status_gid, 0,
+    let mut battstats_tv = TextView::new(status_gid,
         TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0),
                Point::new(screensize.x, screensize.y - 1))));
     battstats_tv.style = blitstr::GlyphStyle::Small;

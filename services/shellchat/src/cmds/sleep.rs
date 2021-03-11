@@ -10,10 +10,10 @@ impl Sleep {
     }
 }
 
-const VERB: &str = "sleep";
-
 impl<'a> ShellCmdApi<'a> for Sleep {
-    fn process(&mut self, _rest: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    cmd_api!(sleep); // inserts boilerplate for command API
+
+    fn process(&mut self, _args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
@@ -39,18 +39,6 @@ impl<'a> ShellCmdApi<'a> for Sleep {
             }
             write!(ret, "Powerdown request denied").unwrap();
             Ok(Some(ret))
-        }
-    }
-
-
-    fn verb(&self) -> &'static str {
-        VERB
-    }
-    fn matches(&self, verb: &str) -> bool {
-        if verb == VERB {
-            true
-        } else {
-            false
         }
     }
 }

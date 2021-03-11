@@ -13,27 +13,15 @@ impl Test {
     }
 }
 
-const VERB: &str = "test";
-
 impl<'a> ShellCmdApi<'a> for Test {
-    fn matches(&self, verb: &str) -> bool {
-        if verb == VERB {
-            true
-        } else {
-            false
-        }
-    }
+    cmd_api!(test);
 
-    fn process(&mut self, _rest: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, _args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         self.state += 1;
         let mut ret = String::<1024>::new();
         write!(ret, "Test has run {} times.", self.state).unwrap();
         Ok(Some(ret))
-    }
-
-    fn verb(&self) -> &'static str {
-        VERB
     }
 }

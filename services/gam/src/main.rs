@@ -25,6 +25,7 @@ use heapless::consts::*;
 use rkyv::{Unarchive, archived_value, archived_value_mut};
 use core::pin::Pin;
 
+#[derive(Debug)]
 // GIDs of canvases that are used the "Chat" layout.
 struct ChatLayout {
     // a set of GIDs to track the elements of the chat layout
@@ -178,6 +179,7 @@ impl ModalCanvases {
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;  // debug level 1 - most general level
+    let debugc = false;
     log_server::init_wait().unwrap();
     info!("GAM: my PID is {}", xous::process::id());
 
@@ -194,7 +196,7 @@ fn xmain() -> ! {
 
     // a map of canvases accessable by Gid
     let mut canvases: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
-    let modallayout = ModalCanvases::init(trng_conn, &mut canvases).expect("GAM: can't add modal layouts");
+    // let modallayout = ModalCanvases::init(trng_conn, &mut canvases).expect("GAM: can't add modal layouts");
     let mut chatlayout = ChatLayout::init(gfx_conn, trng_conn, &mut canvases).expect("GAM: couldn't create chat layout");
     chatlayout.clear(&mut canvases).expect("GAM: couldn't clear initial chatlayout");
 
@@ -217,6 +219,7 @@ fn xmain() -> ! {
     // no content canvas initially, but keep a placeholder for one
     let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None};
 
+    if debugc{info!("GAM: chatlayout made st {:?} co {:?} pr {:?} in {:?}", chatlayout.status, chatlayout.content, chatlayout.predictive, chatlayout.input);}
     // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
@@ -327,7 +330,7 @@ fn xmain() -> ! {
                                             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
                                         }
                                     } else {
-                                        info!("GAM: bogus GID in TextView, not doing anything in response to draw request.");
+                                        info!("GAM: bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
                                         // silently fail if a bogus Gid is given???
                                     }
                                 },

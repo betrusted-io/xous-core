@@ -19,13 +19,12 @@ impl<'a> Carton<'a> {
         let remainder = bytes.len() & 4095;
         let size = bytes.len() + (4096 - remainder);
 
-        let new_mem = crate::map_memory(
-            None,
-            None,
-            size,
-            crate::MemoryFlags::R | crate::MemoryFlags::W,
-        )
-        .unwrap();
+        #[cfg(feature = "bit-flags")]
+        let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
+        #[cfg(not(feature = "bit-flags"))]
+        let flags = 0b0000_0010 | 0b0000_0100;
+
+        let new_mem = crate::map_memory(None, None, size, flags).unwrap();
 
         // NOTE: Remaining bytes are not zeroed. We assume the kernel has done this for us.
         unsafe {

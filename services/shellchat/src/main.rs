@@ -153,12 +153,12 @@ impl Repl{
         for h in self.history.iter().rev() {
             let mut bubble_tv =
                 if h.is_input {
-                    TextView::new(self.content, 255,
+                    TextView::new(self.content,
                     TextBounds::GrowableFromBr(
                         Point::new(self.screensize.x - self.margin.x, bubble_baseline),
                         self.bubble_width))
                 } else {
-                    TextView::new(self.content, 255,
+                    TextView::new(self.content,
                         TextBounds::GrowableFromBl(
                             Point::new(self.margin.x, bubble_baseline),
                             self.bubble_width))

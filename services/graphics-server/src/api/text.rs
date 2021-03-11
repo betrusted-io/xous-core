@@ -54,9 +54,6 @@ pub struct TextView {
     pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
     pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
 
-    // lower numbers are drawn last
-    pub draw_order: u32,
-
     // offsets for text drawing -- exactly one of the following options should be specified
     // note that the TextBounds coordinate system is local to the canvas, not the screen
     pub bounds_hint: TextBounds,
@@ -65,7 +62,6 @@ pub struct TextView {
     pub dry_run: bool, // set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
-    pub text: xous::String::<3072>,
     pub cursor: Cursor,
     pub insertion: Option<i32>, // this is the insertion point offset, if it's to be drawn, on the string
     pub ellipsis: bool,
@@ -81,15 +77,17 @@ pub struct TextView {
 
     canvas: Gid, // GID of the canvas to draw on
     pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+
+    pub text: xous::String::<3072>,
 }
 impl TextView {
-    pub fn new(canvas: Gid, draw_order: u32, bounds_hint: TextBounds) -> Self {
+    pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
         TextView {
+            canvas,
             operation: TextOp::Nop,
             untrusted: true,
             token: None,
             invert: false,
-            draw_order,
             clip_rect: None,
             bounds_hint,
             bounds_computed: None,
@@ -103,7 +101,6 @@ impl TextView {
             rounded_border: None,
             margin: Point { x: 4, y: 4 },
             selected: None,
-            canvas,
             clear_area: true,
             overflow: None,
             dry_run: false,
@@ -120,11 +117,11 @@ impl TextView {
     pub fn clear_str(&mut self) { self.text.clear() }
 
     pub fn populate_from(&mut self, t: &TextView) {
+        self.canvas = t.canvas;
         self.operation = t.operation;
         self.untrusted = t.untrusted;
         self.token = t.token;
         self.invert = t.invert;
-        self.draw_order = t.draw_order;
         self.bounds_hint = t.bounds_hint;
         self.bounds_computed = t.bounds_computed;
         self.style = t.style;
@@ -136,7 +133,6 @@ impl TextView {
         self.rounded_border = t.rounded_border;
         self.margin = t.margin;
         self.selected = t.selected;
-        self.canvas = t.canvas;
         self.overflow = t.overflow;
         self.clip_rect = t.clip_rect;
         self.dry_run = t.dry_run;
