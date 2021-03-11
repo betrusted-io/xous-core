@@ -8,19 +8,11 @@ use core::convert::TryFrom;
 
 use log::{error, info};
 
-use xous::CID;
-
 #[cfg(target_os = "none")]
 mod implementation {
     use crate::api::*;
     use log::{error, info};
-    use utra::info::GIT_GITEXTRA_GIT_GITEXTRA;
     use utralib::generated::*;
-    use xous::CID;
-    use ticktimer_server::*;
-
-    use heapless::Vec;
-    use heapless::consts::*;
 
     const STD_TIMEOUT: u32 = 100;
 
@@ -34,6 +26,7 @@ mod implementation {
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
+        xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer_conn: xous::CID,
         destruct_armed: bool,
     }
@@ -122,6 +115,13 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Seed CSR range");
+            let xadc_csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::trng::HW_TRNG_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
 
             let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
             let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
@@ -136,9 +136,12 @@ mod implementation {
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
+                xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer_conn,
                 destruct_armed: false,
             };
+            // setup the initial logging output
+            xl.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
 
             xous::claim_interrupt(
                 utra::btevents::BTEVENTS_IRQ,
@@ -236,8 +239,11 @@ mod implementation {
         }
         pub fn power_self(&mut self, power_on: bool) {
             if power_on {
+                info!("LLIO: setting self-power state to on");
                 self.power_csr.rmwf(utra::power::POWER_SELF, 1);
             } else {
+                info!("LLIO: setting self-power state to OFF");
+                self.power_csr.rmwf(utra::power::POWER_STATE, 0);
                 self.power_csr.rmwf(utra::power::POWER_SELF, 0);
             }
         }
@@ -257,7 +263,7 @@ mod implementation {
         }
         pub fn ec_reset(&mut self) {
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            ticktimer_server::sleep_ms(self.ticktimer_conn, 100);
+            ticktimer_server::sleep_ms(self.ticktimer_conn, 100).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
         }
         pub fn ec_power_on(&mut self) {
@@ -277,24 +283,51 @@ mod implementation {
             match pattern {
                 VibePattern::Short => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Long => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Double => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250);
+                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
             }
+        }
+        pub fn xadc_vbus(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) as u16
+        }
+        pub fn xadc_vccint(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCINT_XADC_VCCINT) as u16
+        }
+        pub fn xadc_vccaux(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCAUX_XADC_VCCAUX) as u16
+        }
+        pub fn xadc_vccbram(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_VCCBRAM_XADC_VCCBRAM) as u16
+        }
+        pub fn xadc_usbn(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_USB_N_XADC_USB_N) as u16
+        }
+        pub fn xadc_usbp(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_USB_P_XADC_USB_P) as u16
+        }
+        pub fn xadc_temperature(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_TEMPERATURE_XADC_TEMPERATURE) as u16
+        }
+        pub fn xadc_gpio5(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_GPIO5_XADC_GPIO5) as u16
+        }
+        pub fn xadc_gpio2(&self) -> u16 {
+            self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
         }
     }
 }
@@ -314,52 +347,82 @@ mod implementation {
             }
         }
 
-        pub fn reboot(_reboot_soc: bool) {}
-        pub fn set_rebot_vector(_vector: u32) {}
-        pub fn gpio_dout(_d: u32) {}
-        pub fn gpio_din() -> u32 { 0xDEAD_BEEF }
-        pub fn gpio_drive(_d: u32) {}
-        pub fn gpio_int_mask(_d: u32) {}
-        pub fn gpio_int_as_falling(_d: u32) {}
-        pub fn gpio_int_pending() -> u32 { 0x0 }
-        pub fn gpio_int_ena(_d: u32) {}
-        pub fn set_uart_mux(_mux: UartType) {}
-        pub fn get_info_dna() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_git() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_platform() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_target() ->  (usize, usize) { (0, 0) }
-        pub fn get_info_seed() ->  (usize, usize) { (0, 0) }
-        pub fn power_audio(_power_on: bool) {}
-        pub fn power_self(_power_on: bool) {}
-        pub fn power_boost_mode(_power_on: bool) {}
-        pub fn ec_snoop_allow(_power_on: bool) {}
-        pub fn ec_reset() {}
-        pub fn ec_power_on() {}
-        pub fn self_destruct(_code: u32) {}
-        pub fn vibe(_pattern: VibePattern) {}
+        pub fn reboot(&self, _reboot_soc: bool) {}
+        pub fn set_reboot_vector(&self, _vector: u32) {}
+        pub fn gpio_dout(&self, _d: u32) {}
+        pub fn gpio_din(&self, ) -> u32 { 0xDEAD_BEEF }
+        pub fn gpio_drive(&self, _d: u32) {}
+        pub fn gpio_int_mask(&self, _d: u32) {}
+        pub fn gpio_int_as_falling(&self, _d: u32) {}
+        pub fn gpio_int_pending(&self, ) -> u32 { 0x0 }
+        pub fn gpio_int_ena(&self, _d: u32) {}
+        pub fn set_uart_mux(&self, _mux: UartType) {}
+        pub fn get_info_dna(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_git(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn get_info_seed(&self, ) ->  (usize, usize) { (0, 0) }
+        pub fn power_audio(&self, _power_on: bool) {}
+        pub fn power_self(&self, _power_on: bool) {}
+        pub fn power_boost_mode(&self, _power_on: bool) {}
+        pub fn ec_snoop_allow(&self, _power_on: bool) {}
+        pub fn ec_reset(&self, ) {}
+        pub fn ec_power_on(&self, ) {}
+        pub fn self_destruct(&self, _code: u32) {}
+        pub fn vibe(&self, _pattern: VibePattern) {}
+
+
+        pub fn xadc_vbus(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccint(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccaux(&self) -> u16 {
+            0
+        }
+        pub fn xadc_vccbram(&self) -> u16 {
+            0
+        }
+        pub fn xadc_usbn(&self) -> u16 {
+            0
+        }
+        pub fn xadc_usbp(&self) -> u16 {
+            0
+        }
+        pub fn xadc_temperature(&self) -> u16 {
+            0
+        }
+        pub fn xadc_gpio5(&self) -> u16 {
+            0
+        }
+        pub fn xadc_gpio2(&self) -> u16 {
+            0
+        }
     }
 }
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    let debug1 = false;
     use crate::implementation::Llio;
-    use heapless::Vec;
-    use heapless::consts::*;
+    //use heapless::Vec;
+    //use heapless::consts::*;
 
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
 
     let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
-    info!("LLIO: registered with NS -- {:?}", llio_sid);
+    if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
 
     // Create a new com object
     let mut llio = Llio::new();
 
-    info!("LLIO: starting main loop");
+    if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;
     loop {
         let envelope = xous::receive_message(llio_sid).unwrap();
-        // info!("LLIO: Message: {:?}", envelope);
+        if debug1{info!("LLIO: Message: {:?}", envelope)};
         if let Ok(opcode) = Opcode::try_from(&envelope.body) {
             // info!("LLIO: Opcode: {:?}", opcode);
             // reset the reboot request if the very next opcode is not a confirm
@@ -415,9 +478,6 @@ fn xmain() -> ! {
                 Opcode::GpioIntEna(d) => {
                     llio.gpio_int_ena(d);
                 },
-                Opcode::GpioIntSubscribe(_Registration) => {
-                    todo!("LLIO: GPIO push interrupt events not yet implemented.");
-                },
                 Opcode::UartMux(mux) => {
                     llio.set_uart_mux(mux);
                 },
@@ -464,6 +524,33 @@ fn xmain() -> ! {
                 },
                 Opcode::Vibe(pattern) => {
                     llio.vibe(pattern);
+                },
+                Opcode::AdcVbus => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vbus() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccInt => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccint() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccAux => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccaux() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcVccBram => {
+                    xous::return_scalar(envelope.sender, llio.xadc_vccbram() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcUsbN => {
+                    xous::return_scalar(envelope.sender, llio.xadc_usbn() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcUsbP => {
+                    xous::return_scalar(envelope.sender, llio.xadc_usbp() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcTemperature => {
+                    xous::return_scalar(envelope.sender, llio.xadc_temperature() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcGpio5 => {
+                    xous::return_scalar(envelope.sender, llio.xadc_gpio5() as _).expect("LLIO: couldn't return Xadc");
+                },
+                Opcode::AdcGpio2 => {
+                    xous::return_scalar(envelope.sender, llio.xadc_gpio2() as _).expect("LLIO: couldn't return Xadc");
                 },
             _ => error!("LLIO: no handler for opcode"),
             }

@@ -17,6 +17,7 @@ mod op;
 use core::convert::TryFrom;
 
 mod logo;
+mod poweron;
 
 use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point};
 use blitstr_ref as blitstr;
@@ -24,7 +25,7 @@ use blitstr_ref as blitstr;
 mod fontmap;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
-    display.blit_screen(logo::LOGO_MAP);
+    display.blit_screen(poweron::LOGO_MAP);
 }
 
 #[cfg(target_os = "none")]
@@ -433,11 +434,11 @@ fn xmain() -> ! {
                     )
                     .expect("GFX: could not return QueryGlyphProps request");
                 }
-                /*
-                Opcode::TextView(tv) => {
-                    info!("GFX: got draw of '{:?}'", tv);
-                    op::textview(display.native_buffer(), tv);
-                }*/
+                Opcode::DrawSleepScreen => {
+                    display.blit_screen(logo::LOGO_MAP);
+                    display.update();
+                    display.redraw();
+                }
                 _ => panic!("GFX: received opcode scalar that is not handled")
             }
         } else {

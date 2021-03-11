@@ -313,6 +313,7 @@ fn reader_thread(mut output: implementation::OutputWriter) {
 
 #[xous::xous_main]
 fn some_main() -> ! {
+    /*
     #[cfg(baremetal)]
     {
         // use this to select which UART to monitor in the main loop
@@ -327,6 +328,7 @@ fn some_main() -> ! {
         let mut gpio = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
         gpio.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
     }
+    */
 
     let mut output = implementation::init();
     let writer = output.get_writer();

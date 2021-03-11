@@ -203,10 +203,6 @@ fn xmain() -> ! {
     // this is broken into two steps because of https://github.com/rust-lang/rust/issues/71126
     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // make a thread to manage the status bar
-    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
-    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
-
     // connect to the IME front end, and set its canvas
     info!("GAM: acquiring connection to IMEF...");
     let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
@@ -221,6 +217,11 @@ fn xmain() -> ! {
     // no content canvas initially, but keep a placeholder for one
     let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None};
 
+    // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
+    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
+    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
+
+    let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
@@ -252,10 +253,19 @@ fn xmain() -> ! {
                                         rect.br.into(),
                                     ).expect("GAM: couldn't return canvas bounds");
                                 },
-                                None => info!("GAM: attempt to get bounds on bogus canvas, ignored."),
+                                None => info!("GAM: attempt to get bounds on bogus canvas gid {:?}, {:?} ignored.", gid, envelope),
                             }
-                        }
+                        },
+                        Opcode::PowerDownRequest => {
+                            powerdown_requested = true;
+                            graphics_server::draw_sleepscreen(gfx_conn).expect("GAM: couldn't draw sleep screen");
+                            // a screen flush is part of the draw_sleepscreen abstraction
+                            xous::return_scalar(envelope.sender, 1).expect("GAM: couldn't confirm power down UI request");
+                        },
                         Opcode::Redraw => {
+                            if powerdown_requested {
+                                continue; // don't allow any redraws if a powerdown is requested
+                            }
                             if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
                                 if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
                                     last_time = elapsed_time;

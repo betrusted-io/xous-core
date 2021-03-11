@@ -646,6 +646,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1090,11 +1091,13 @@ dependencies = [
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
+ "com",
  "content-plugin-api",
  "gam",
  "graphics-server",
  "heapless",
  "ime-plugin-api",
+ "llio",
  "log",
  "log-server",
  "rkyv",

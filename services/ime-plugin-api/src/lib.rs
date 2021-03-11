@@ -229,10 +229,10 @@ pub enum ImefOpcode {
     SetPredictionCanvas(Gid),
 
     /// set prediction server. Must be a String of the name of a server that is loaded in the system.
-    SetPredictionServer(xous::String<256>),
+    SetPredictionServer(xous::String<64>),
 
     /// register a listener for finalized inputs
-    RegisterListener(xous::String<256>),
+    RegisterListener(xous::String<64>),
 
     /// this is the event opcode used by listeners
     GotInputLine(xous::String<4000>),
@@ -301,7 +301,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let mut server = xous::String::<256>::new();
+                let mut server = xous::String::<64>::new();
                 use core::fmt::Write;
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::SetPredictionServer(server);
@@ -319,7 +319,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn register_listener(&self, servername: &str) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let mut server = xous::String::<256>::new();
+                let mut server = xous::String::<64>::new();
                 use core::fmt::Write;
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::RegisterListener(server);

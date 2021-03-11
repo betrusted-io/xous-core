@@ -17,6 +17,8 @@ ime-plugin-api = {path="../ime-plugin-api"}
 content-plugin-api = {path="../content-plugin-api"} # all content canvas providers must provide this API
 log = "0.4"
 rkyv = { version = "0.3.1", default_features = false }
+com={path="../com"}
+llio={path="../llio"}
 
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]

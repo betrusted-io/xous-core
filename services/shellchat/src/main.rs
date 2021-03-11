@@ -50,7 +50,7 @@ struct Repl {
     // command environment
     env: CmdEnv,
 }
-impl Repl {
+impl Repl{
     fn new(my_server_name: &str) -> Self {
         let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("SHCH: can't connect to GAM");
         let content = gam::request_content_canvas(gam_conn, my_server_name).expect("SHCH: couldn't get content canvas");
@@ -66,7 +66,7 @@ impl Repl {
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
-            env: CmdEnv::new(),
+            env: CmdEnv::new(gam_conn),
         }
     }
 
@@ -89,7 +89,7 @@ impl Repl {
 
     /// update the loop, in response to various inputs
     fn update(&mut self) -> Result<(), xous::Error> {
-        let debug1 = true;
+        let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = self.input {
             let input_history = History {
