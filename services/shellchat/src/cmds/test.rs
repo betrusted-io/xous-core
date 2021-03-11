@@ -16,7 +16,7 @@ impl Test {
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
-    fn process(&mut self, _rest: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, _args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         self.state += 1;

@@ -13,7 +13,7 @@ impl Sleep {
 impl<'a> ShellCmdApi<'a> for Sleep {
     cmd_api!(sleep); // inserts boilerplate for command API
 
-    fn process(&mut self, _rest: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, _args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
