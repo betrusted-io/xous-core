@@ -1,5 +1,5 @@
-use minifb::{Key, Window, WindowOptions, KeyRepeat};
 use crate::api::Point;
+use minifb::{Key, Window, WindowOptions};
 
 const WIDTH: usize = 336;
 const HEIGHT: usize = 536;
@@ -16,13 +16,18 @@ pub struct XousDisplay {
     native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
     window: Window,
+}
+
+struct XousKeyboardHandler {
     kbd_conn: xous::CID,
+    left_shift: bool,
+    right_shift: bool,
 }
 
 impl XousDisplay {
     pub fn new() -> XousDisplay {
         let mut window = Window::new(
-            "Betrusted",
+            "Precursor",
             WIDTH,
             HEIGHT,
             WindowOptions {
@@ -45,17 +50,25 @@ impl XousDisplay {
             .update_with_buffer(&native_buffer, WIDTH, HEIGHT)
             .unwrap();
 
-        let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("GFX|hosted: can't connect to KBD for emulation");
+        let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD)
+            .expect("GFX|hosted: can't connect to KBD for emulation");
+        let keyboard_handler = Box::new(XousKeyboardHandler {
+            kbd_conn: kbd_conn,
+            left_shift: false,
+            right_shift: false,
+        });
+        window.set_input_callback(keyboard_handler);
 
         XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
-            kbd_conn,
         }
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(WIDTH as i16, HEIGHT as i16) }
+    pub fn screen_size(&self) -> Point {
+        Point::new(WIDTH as i16, HEIGHT as i16)
+    }
 
     pub fn blit_screen(&mut self, bmp: [u32; FB_SIZE]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
@@ -80,17 +93,16 @@ impl XousDisplay {
         if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
             std::process::exit(0);
         }
-
-        let pressed = self.window.get_keys_pressed(KeyRepeat::No);
-        if let Some(keys) = pressed {
-            for k in keys {
-                log::info!("GFX|hosted: sending key {:?}", k);
-                let c = self.decode_key(k);
-                if c != '\u{0000}' {
-                    xous::send_message(self.kbd_conn, keyboard::api::Opcode::HostModeInjectKey(c).into()).map(|_| ()).unwrap();
-                }
-            }
-        }
+        // let pressed = self.window.get_keys_pressed(KeyRepeat::No);
+        // if let Some(keys) = pressed {
+        //     for k in keys {
+        //         log::info!("GFX|hosted: sending key {:?}", k);
+        //         let c = self.decode_key(k);
+        //         if c != '\u{0000}' {
+        //             xous::send_message(self.kbd_conn, keyboard::api::Opcode::HostModeInjectKey(c).into()).map(|_| ()).unwrap();
+        //         }
+        //     }
+        // }
     }
 
     fn emulated_to_native(&mut self) {
@@ -110,122 +122,148 @@ impl XousDisplay {
             }
         }
     }
+}
 
+impl XousKeyboardHandler {
     fn decode_key(&mut self, k: Key) -> char {
-        let mut shift = false;
-        if self.window.is_key_pressed(Key::LeftShift, KeyRepeat::Yes) ||
-           self.window.is_key_pressed(Key::RightShift, KeyRepeat::Yes) {
-            shift = true;
-        }
-        let base: char =
-            if shift == false {
-                match k {
-                    Key::A => 'a',
-                    Key::B => 'b',
-                    Key::C => 'c',
-                    Key::D => 'd',
-                    Key::E => 'e',
-                    Key::F => 'f',
-                    Key::G => 'g',
-                    Key::H => 'h',
-                    Key::I => 'i',
-                    Key::J => 'j',
-                    Key::K => 'k',
-                    Key::L => 'l',
-                    Key::M => 'm',
-                    Key::N => 'n',
-                    Key::O => 'o',
-                    Key::P => 'p',
-                    Key::Q => 'q',
-                    Key::R => 'r',
-                    Key::S => 's',
-                    Key::T => 't',
-                    Key::U => 'u',
-                    Key::V => 'v',
-                    Key::W => 'w',
-                    Key::X => 'x',
-                    Key::Y => 'y',
-                    Key::Z => 'z',
-                    Key::Key0 => '0',
-                    Key::Key1 => '1',
-                    Key::Key2 => '2',
-                    Key::Key3 => '3',
-                    Key::Key4 => '4',
-                    Key::Key5 => '5',
-                    Key::Key6 => '6',
-                    Key::Key7 => '7',
-                    Key::Key8 => '8',
-                    Key::Key9 => '9',
-                    Key::Left => '←',
-                    Key::Right => '→',
-                    Key::Up => '↑',
-                    Key::Down => '↓',
-                    Key::Home => '∴',
-                    Key::Backspace => 0x8_u8.into(),
-                    Key::Delete => 0x8_u8.into(),
-                    Key::Enter => 0xd_u8.into(),
-                    Key::Space => ' ',
-                    Key::Comma => ',',
-                    Key::Period => '.',
-                    Key::F1 => 0x11_u8.into(),
-                    Key::F2 => 0x12_u8.into(),
-                    Key::F3 => 0x13_u8.into(),
-                    Key::F4 => 0x14_u8.into(),
-                    Key::F5 => '😃',
-                    Key::F6 => '福',
-                    _ => '\u{0000}',
-                }
-            } else {
-                match k {
-                    Key::A => 'A',
-                    Key::B => 'B',
-                    Key::C => 'C',
-                    Key::D => 'D',
-                    Key::E => 'E',
-                    Key::F => 'F',
-                    Key::G => 'G',
-                    Key::H => 'H',
-                    Key::I => 'I',
-                    Key::J => 'J',
-                    Key::K => 'K',
-                    Key::L => 'L',
-                    Key::M => 'M',
-                    Key::N => 'N',
-                    Key::O => 'O',
-                    Key::P => 'P',
-                    Key::Q => 'Q',
-                    Key::R => 'R',
-                    Key::S => 'S',
-                    Key::T => 'T',
-                    Key::U => 'U',
-                    Key::V => 'V',
-                    Key::W => 'W',
-                    Key::X => 'X',
-                    Key::Y => 'Y',
-                    Key::Z => 'Z',
-                    Key::Key0 => ')',
-                    Key::Key1 => '!',
-                    Key::Key2 => '@',
-                    Key::Key3 => '#',
-                    Key::Key4 => '$',
-                    Key::Key5 => '%',
-                    Key::Key6 => '^',
-                    Key::Key7 => '&',
-                    Key::Key8 => '*',
-                    Key::Key9 => '(',
-                    Key::Left => '←',
-                    Key::Right => '→',
-                    Key::Up => '↑',
-                    Key::Down => '↓',
-                    Key::Home => '∴',
-                    Key::Backspace => 0x8_u8.into(),
-                    Key::Delete => 0x8_u8.into(),
-                    Key::Space => ' ',
-                    Key::Comma => '<',
-                    Key::Period => '>',
-                    _ => '\u{0000}',
-                }
-            };
+        let shift = self.left_shift || self.right_shift;
+        let base: char = if shift == false {
+            match k {
+                Key::A => 'a',
+                Key::B => 'b',
+                Key::C => 'c',
+                Key::D => 'd',
+                Key::E => 'e',
+                Key::F => 'f',
+                Key::G => 'g',
+                Key::H => 'h',
+                Key::I => 'i',
+                Key::J => 'j',
+                Key::K => 'k',
+                Key::L => 'l',
+                Key::M => 'm',
+                Key::N => 'n',
+                Key::O => 'o',
+                Key::P => 'p',
+                Key::Q => 'q',
+                Key::R => 'r',
+                Key::S => 's',
+                Key::T => 't',
+                Key::U => 'u',
+                Key::V => 'v',
+                Key::W => 'w',
+                Key::X => 'x',
+                Key::Y => 'y',
+                Key::Z => 'z',
+                Key::Key0 => '0',
+                Key::Key1 => '1',
+                Key::Key2 => '2',
+                Key::Key3 => '3',
+                Key::Key4 => '4',
+                Key::Key5 => '5',
+                Key::Key6 => '6',
+                Key::Key7 => '7',
+                Key::Key8 => '8',
+                Key::Key9 => '9',
+                Key::Left => '←',
+                Key::Right => '→',
+                Key::Up => '↑',
+                Key::Down => '↓',
+                Key::Home => '∴',
+                Key::Backspace => 0x8_u8.into(),
+                Key::Delete => 0x8_u8.into(),
+                Key::Enter => 0xd_u8.into(),
+                Key::Space => ' ',
+                Key::Comma => ',',
+                Key::Period => '.',
+                Key::F1 => 0x11_u8.into(),
+                Key::F2 => 0x12_u8.into(),
+                Key::F3 => 0x13_u8.into(),
+                Key::F4 => 0x14_u8.into(),
+                Key::F5 => '😃',
+                Key::F6 => '福',
+                _ => '\u{0000}',
+            }
+        } else {
+            match k {
+                Key::A => 'A',
+                Key::B => 'B',
+                Key::C => 'C',
+                Key::D => 'D',
+                Key::E => 'E',
+                Key::F => 'F',
+                Key::G => 'G',
+                Key::H => 'H',
+                Key::I => 'I',
+                Key::J => 'J',
+                Key::K => 'K',
+                Key::L => 'L',
+                Key::M => 'M',
+                Key::N => 'N',
+                Key::O => 'O',
+                Key::P => 'P',
+                Key::Q => 'Q',
+                Key::R => 'R',
+                Key::S => 'S',
+                Key::T => 'T',
+                Key::U => 'U',
+                Key::V => 'V',
+                Key::W => 'W',
+                Key::X => 'X',
+                Key::Y => 'Y',
+                Key::Z => 'Z',
+                Key::Key0 => ')',
+                Key::Key1 => '!',
+                Key::Key2 => '@',
+                Key::Key3 => '#',
+                Key::Key4 => '$',
+                Key::Key5 => '%',
+                Key::Key6 => '^',
+                Key::Key7 => '&',
+                Key::Key8 => '*',
+                Key::Key9 => '(',
+                Key::Left => '←',
+                Key::Right => '→',
+                Key::Up => '↑',
+                Key::Down => '↓',
+                Key::Home => '∴',
+                Key::Backspace => 0x8_u8.into(),
+                Key::Delete => 0x8_u8.into(),
+                Key::Space => ' ',
+                Key::Comma => '<',
+                Key::Period => '>',
+                _ => '\u{0000}',
+            }
+        };
         base
+    }
+}
+
+impl minifb::InputCallback for XousKeyboardHandler {
+    fn add_char(&mut self, _uni_char: u32) {}
+
+    fn set_key_state(&mut self, key: minifb::Key, state: bool) {
+        if key == Key::LeftShift {
+            self.left_shift = state;
+            return;
+        }
+        if key == Key::RightShift {
+            self.right_shift = state;
+            return;
+        }
+        if !state {
+            return;
+        }
+
+        log::info!("GFX|hosted: sending key {:?}", key);
+        let c = self.decode_key(key);
+        if c != '\u{0000}' {
+            xous::send_message(
+                self.kbd_conn,
+                keyboard::api::Opcode::HostModeInjectKey(c).into(),
+            )
+            .map(|_| ())
+            .unwrap();
+        }
     }
 }
