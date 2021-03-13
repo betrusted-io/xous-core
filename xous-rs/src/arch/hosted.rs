@@ -397,6 +397,7 @@ fn xous_connect_impl(
         Ok(mut conn) => {
             conn.write_all(&key.0).unwrap(); // Send key to authenticate us as PID 1
             conn.flush().unwrap();
+            conn.set_nodelay(true).unwrap();
             let mut pid = [0u8];
             conn.read_exact(&mut pid).unwrap();
             PROCESS_ID.with(|process_id| *process_id.borrow_mut() = PID::new(pid[0]).unwrap());
@@ -456,7 +457,7 @@ pub fn _xous_syscall(
                     a6,
                     a7,
                     &call,
-                    &mut xsc_asmut.send.lock().unwrap(),
+                    xsc_asmut
                 );
                 _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
                 if *ret != Result::WouldBlock {
@@ -656,7 +657,7 @@ fn _xous_syscall_to(
     a6: usize,
     a7: usize,
     call: &crate::SysCall,
-    xsc: &mut TcpStream,
+    xsc: &mut ServerConnection,
 ) {
     // println!(
     //     "Making Syscall: {:?}",
@@ -677,9 +678,10 @@ fn _xous_syscall_to(
         pkt.extend_from_slice(data);
     }
 
-    if let Err(e) = xsc.write_all(&pkt) {
+    let mut stream = xsc.send.lock().unwrap();
+    if let Err(e) = stream.write_all(&pkt) {
         eprintln!("Server shut down: {}", e);
         std::process::exit(0);
     }
-    xsc.flush().unwrap();
+    // stream.flush().unwrap();
 }
