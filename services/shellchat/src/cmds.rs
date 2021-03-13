@@ -1,10 +1,15 @@
-use xous::String;
+use xous::{String, MessageEnvelope};
 use core::fmt::Write;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
     // called to process the command with the remainder of the string attached
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
+    // called to process incoming messages that may have been origniated by the most recently issued command
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        log::info!("SHCH: received unhandled message {:?}", msg);
+        Ok(None)
+    }
 
     // created with cmd_api! macro
     // checks if the command matches the current verb in question
@@ -27,6 +32,7 @@ macro_rules! cmd_api {
         }
     };
 }
+
 
 /////////////////////////// Command shell integration
 #[derive(Debug)]
@@ -55,14 +61,17 @@ mod echo;     use echo::*;
 mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
+mod callback; use callback::*;
 
 #[derive(Debug)]
 pub struct CmdEnv {
     common_env: CommonEnv,
+    lastverb: String::<256>,
     ///// 2. declare storage for your command here.
     test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
+    callback_cmd: CallBack,
 }
 impl CmdEnv {
     pub fn new(gam: xous::CID) -> CmdEnv {
@@ -74,14 +83,16 @@ impl CmdEnv {
                 ticktimer: xous::connect(ticktimer_server_id).unwrap(),
                 gam,
             },
+            lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             test_cmd: Test::new(),
             sleep_cmd: Sleep::new(),
             sensors_cmd: Sensors::new(),
+            callback_cmd: CallBack::new(),
         }
     }
 
-    pub fn dispatch(&mut self, cmdline: &mut String::<1024>) -> Result<Option<String::<1024>>, xous::Error> {
+    pub fn dispatch(&mut self, maybe_cmdline: Option<&mut String::<1024>>, maybe_callback: Option<&MessageEnvelope>) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
@@ -91,38 +102,59 @@ impl CmdEnv {
             &mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
+            &mut self.callback_cmd,
         ];
 
-        let maybe_verb = tokenize(cmdline);
+        if let Some(cmdline) = maybe_cmdline {
+            let maybe_verb = tokenize(cmdline);
 
-        let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
-        if let Some(verb_string) = maybe_verb {
-            let verb = verb_string.to_str();
+            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            if let Some(verb_string) = maybe_verb {
+                let verb = verb_string.to_str();
 
-            // search through the list of commands linearly until one matches,
-            // then run it.
-            let mut match_found = false;
-            for cmd in commands.iter_mut() {
-                if cmd.matches(verb) {
-                    match_found = true;
-                    cmd_ret = cmd.process(*cmdline, &mut self.common_env);
-                };
-            }
-
-            // if none match, create a list of available commands
-            if !match_found {
-                let mut first = true;
-                write!(ret, "Commands: ").unwrap();
-                for cmd in commands.iter() {
-                    if !first {
-                        ret.append(", ")?;
-                    }
-                    ret.append(cmd.verb())?;
-                    first = false;
+                // search through the list of commands linearly until one matches,
+                // then run it.
+                let mut match_found = false;
+                for cmd in commands.iter_mut() {
+                    if cmd.matches(verb) {
+                        match_found = true;
+                        cmd_ret = cmd.process(*cmdline, &mut self.common_env);
+                        self.lastverb.clear();
+                        write!(self.lastverb, "{}", verb).expect("SHCH: couldn't record last verb");
+                    };
                 }
-                Ok(Some(ret))
+
+                // if none match, create a list of available commands
+                if !match_found {
+                    let mut first = true;
+                    write!(ret, "Commands: ").unwrap();
+                    for cmd in commands.iter() {
+                        if !first {
+                            ret.append(", ")?;
+                        }
+                        ret.append(cmd.verb())?;
+                        first = false;
+                    }
+                    Ok(Some(ret))
+                } else {
+                    cmd_ret
+                }
             } else {
+                Ok(None)
+            }
+        } else if let Some(callback) = maybe_callback {
+            let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
+            if self.lastverb.len() > 0 {
+                let verb = self.lastverb.to_str();
+                for cmd in commands.iter_mut() {
+                    if cmd.matches(verb) {
+                        cmd_ret = cmd.callback(callback, &mut self.common_env);
+                        break;
+                    };
+                }
                 cmd_ret
+            } else {
+                Ok(None)
             }
         } else {
             Ok(None)
