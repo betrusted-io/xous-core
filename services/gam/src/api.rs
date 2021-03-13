@@ -30,9 +30,10 @@ pub struct ContentCanvasRequest {
     pub servername: xous::String<256>,
 }
 
+#[repr(C)]
 #[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
 // #[archive(derive(Copy, Clone))]
-pub enum Opcode {
+pub(crate) enum Opcode {
     // clears a canvas with a given GID
     ClearCanvas(Gid),
 

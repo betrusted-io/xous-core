@@ -1,9 +1,9 @@
-use crate::{CID, Error, MemoryMessage, Result};
+use crate::{Error, MemoryMessage, Result, CID};
 
-use rkyv::Write;
-use rkyv::Unarchive;
-use rkyv::archived_value;
 use core::pin::Pin;
+use rkyv::archived_value;
+use rkyv::Unarchive;
+use rkyv::Write;
 
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
@@ -17,6 +17,24 @@ impl<const N: usize> String<N> {
             bytes: [0; N],
             len: 0,
         }
+    }
+
+    pub fn from_str(src: &str) -> String<N> {
+        let mut s = Self::new();
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.bytes) {
+            *dest_byte = src_byte;
+        }
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        s.len = s.bytes.len().min(src.as_bytes().len()) as u32;
+
+        // If the string is not valid, set its length to 0.
+        if s.as_str().is_err() {
+            s.len = 0;
+        }
+
+        s
     }
 
     pub fn as_bytes(&self) -> [u8; N] {
@@ -37,13 +55,11 @@ impl<const N: usize> String<N> {
 
     /// Convert a `MemoryMessage` into a `String`
     pub fn from_message(
-        message: & mut MemoryMessage,
+        message: &mut MemoryMessage,
     ) -> core::result::Result<String<N>, core::str::Utf8Error> {
-        let buf = unsafe{ crate::XousBuffer::from_memory_message(message) };
+        let buf = unsafe { crate::XousBuffer::from_memory_message(message) };
         let bytes = Pin::new(buf.as_ref());
-        let value = unsafe {
-            archived_value::<String<N>>(&bytes, message.id as usize)
-        };
+        let value = unsafe { archived_value::<String<N>>(&bytes, message.id as usize) };
         let s = value.unarchive();
         Ok(s)
     }
@@ -60,9 +76,10 @@ impl<const N: usize> String<N> {
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-
-        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new( N ));
-        let pos = writer.archive(self).expect("xous::String -- couldn't archive self");
+        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(N));
+        let pos = writer
+            .archive(self)
+            .expect("xous::String -- couldn't archive self");
         let xous_buffer = writer.into_inner();
 
         // note that "id" is actually used as the position into the rkyv buffer
@@ -75,8 +92,11 @@ impl<const N: usize> String<N> {
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
-        let pos = writer.archive(&self).expect("xous::String -- couldn't archive self");
+        let mut writer =
+            rkyv::ArchiveBuffer::new(crate::XousBuffer::new(/*self.bytes.len()*/ 4096));
+        let pos = writer
+            .archive(&self)
+            .expect("xous::String -- couldn't archive self");
         let xous_buffer = writer.into_inner();
 
         xous_buffer.send(connection, pos as u32)
@@ -116,14 +136,12 @@ impl<const N: usize> String<N> {
                         Some(_thing) => {
                             self.push(c).unwrap(); // always succeeds because we're re-encoding our string
                             maybe_c = next_c;
-                        },
-                        None => {
-                            return next_c
                         }
+                        None => return next_c,
                     }
-                },
+                }
                 None => {
-                    return None // we should actually never get here because len() == 0 case already covered
+                    return None; // we should actually never get here because len() == 0 case already covered
                 }
             }
         }
@@ -139,7 +157,7 @@ impl<const N: usize> String<N> {
                 } else {
                     Err(Error::OutOfMemory)
                 }
-            },
+            }
             _ => {
                 let mut bytes: usize = 0;
                 let mut data: [u8; 4] = [0; 4];
@@ -154,7 +172,7 @@ impl<const N: usize> String<N> {
                 } else {
                     Err(Error::OutOfMemory)
                 }
-            },
+            }
         }
     }
 
@@ -164,7 +182,7 @@ impl<const N: usize> String<N> {
             if let Ok(bytes) = self.push(ch) {
                 bytes_added += bytes;
             } else {
-                return Err(Error::OutOfMemory)
+                return Err(Error::OutOfMemory);
             }
         }
         Ok(bytes_added)
@@ -205,48 +223,59 @@ impl<const N: usize> core::fmt::Debug for String<N> {
     }
 }
 
+#[repr(C)]
 pub struct ArchivedString {
     ptr: rkyv::RelPtr,
     len: u32,
 }
+
+impl ArchivedString {
+    // Provide a `str` view of an `ArchivedString`.
+    fn as_str(&self) -> &str {
+        unsafe {
+            // The as_ptr() function of RelPtr will get a pointer
+            // to its memory.
+            let bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
+            core::str::from_utf8_unchecked(bytes)
+        }
+    }
+}
+
 pub struct StringResolver {
     bytes_pos: usize,
 }
+
+// Turn a stream of bytes into an `ArchivedString`.
 impl<const N: usize> rkyv::Resolve<String<N>> for StringResolver {
     type Archived = ArchivedString;
 
     fn resolve(self, pos: usize, value: &String<N>) -> Self::Archived {
         Self::Archived {
             ptr: unsafe {
-                rkyv::RelPtr::new(
-                pos + rkyv::offset_of!(ArchivedString, ptr),
-                self.bytes_pos)
+                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedString, ptr), self.bytes_pos)
             },
             len: value.len() as u32,
         }
     }
 }
 
+/// Turn a `String` into an archived object
 impl<const N: usize> rkyv::Archive for String<N> {
     type Archived = ArchivedString;
     type Resolver = StringResolver;
 
-    fn archive<W: rkyv::Write + ?Sized>(&self, writer: &mut W) -> core::result::Result<Self::Resolver, W::Error> {
+    fn archive<W: rkyv::Write + ?Sized>(
+        &self,
+        writer: &mut W,
+    ) -> core::result::Result<Self::Resolver, W::Error> {
         let bytes_pos = writer.pos();
         writer.write(&self.bytes[0..self.len()])?;
         Ok(Self::Resolver { bytes_pos })
     }
 }
+
 impl<const N: usize> rkyv::Unarchive<String<N>> for ArchivedString {
     fn unarchive(&self) -> String<N> {
-        let mut s: String<N> = String::<N>::new();
-        unsafe {
-            let p = self.ptr.as_ptr() as *const u8;
-            for(i, val) in s.bytes.iter_mut().enumerate() {
-                *val = p.add(i).read();
-            }
-        };
-        s.len = self.len;
-        s
+        String::from_str(self.as_str())
     }
 }

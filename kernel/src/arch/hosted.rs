@@ -312,6 +312,7 @@ fn listen_thread(
         // Read the challenge access key from the client
         let mut access_key = [0u8; 16];
         conn.read_exact(&mut access_key).unwrap();
+        conn.set_nodelay(true).unwrap();
 
         // Spawn a new process. This process will start out in the "Allocated" state.
         chn.send(ThreadMessage::NewConnection(

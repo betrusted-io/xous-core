@@ -4,8 +4,9 @@
 #[macro_use]
 extern crate bitflags;
 
+#[cfg(not(feature = "rustc-dep-of-std"))]
 extern crate xous_macros as macros;
-
+#[cfg(not(feature = "rustc-dep-of-std"))]
 pub use macros::xous_main;
 
 pub mod arch;

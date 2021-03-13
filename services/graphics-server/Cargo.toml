@@ -13,14 +13,14 @@ keyboard = {path = "../keyboard"}
 log = "0.4"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
-rkyv = { version = "0.3.1", default_features = false }
+rkyv = { version = "0.3.1", default_features = false, features = ["strict"] }
 xous-names = {path = "../xous-names"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
-minifb = {version = "0.19.2", git = "https://github.com/xobs/rust_minifb.git", rev = "bbbfc07c059919fae700fabe771346a001226dbc"}
+minifb = {version = "0.19.2", git = "https://github.com/xobs/rust_minifb.git", rev = "ea25c2e4843abd130d6794b2045812907a24eab2"}
 
 [features]
 debugprint = []
