@@ -22,7 +22,7 @@ pub struct XousDisplay {
 impl XousDisplay {
     pub fn new() -> XousDisplay {
         let mut window = Window::new(
-            "Betrusted",
+            "Precursor",
             WIDTH,
             HEIGHT,
             WindowOptions {
