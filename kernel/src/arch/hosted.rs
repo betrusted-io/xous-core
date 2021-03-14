@@ -64,7 +64,7 @@ pub fn set_send_addr(send_addr: Sender<SocketAddr>) {
 
 #[cfg(not(test))]
 fn generate_pid_key() -> [u8; 16] {
-    use ::rand::{thread_rng, Rng};
+    use rand::{thread_rng, Rng};
     let mut process_key = [0u8; 16];
     let mut rng = thread_rng();
     for b in process_key.iter_mut() {
@@ -576,7 +576,12 @@ pub fn idle() -> bool {
                     crate::arch::process::set_current_pid(pid);
 
                     let mut process = Process::current();
-                    let mut response_vec = Vec::new();
+                    let mut capacity = 9 * core::mem::size_of::<usize>();
+                    if let Some(mem) = response.memory() {
+                        capacity += mem.len();
+                    }
+                    let mut response_vec = Vec::with_capacity(capacity);
+
                     response_vec.extend_from_slice(&thread_id.to_le_bytes());
                     for word in response.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());
