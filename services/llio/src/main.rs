@@ -16,6 +16,34 @@ mod implementation {
 
     const STD_TIMEOUT: u32 = 100;
 
+    #[derive(Debug)]
+    enum I2cMsg {
+        TxrxDone,
+        StartWrite(u8), // arg is the 7-bit I2C address
+        WriteByte(u8),
+        StartRead(u8), // arg is the 7-bit I2C address
+        ReadByte,
+    }
+    impl core::convert::TryFrom<& Message> for Opcode {
+        type Error = &'static str;
+        fn try_from(message: & Message) -> Result<Self, Self::Error> {
+            match message {
+                Message::Scalar(m) => match m.id {
+                    0 => Ok(I2cMsg::TxRxDone),
+                },
+                _ => Err("LLIO I2C: unhandled message type"),
+            }
+        }
+    }
+    impl Into<Message> for Opcode {
+        fn into(self) -> Message {
+            match self {
+                I2cMsg::TxRx => Message::Scalar(ScalarMessage {
+                    id: 0, arg1: 0, arg2: 0, arg3: 0, arg4: 0, }),
+            }
+        }
+    }
+
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
         crg_csr: utralib::CSR<u32>,
@@ -23,12 +51,31 @@ mod implementation {
         info_csr: utralib::CSR<u32>,
         identifier_csr: utralib::CSR<u32>,
         i2c_csr: utralib::CSR<u32>,
+        i2c_sid: xous::SID,
+        i2c_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer_conn: xous::CID,
         destruct_armed: bool,
+    }
+
+    fn i2c_thread(arg: *mut usize) {
+        let llio = unsafe {&mut *(arg as *mut Llio)};
+        // this connection is used by the IRQ responder to send me my done message
+        llio.i2c_conn = Some(xous::connect(llio.i2c_sid).expect("LLIO|i2c: couldn't create connection to I2C thread responder"));
+
+        loop {
+            let envelope = xous::receive_message(llio.i2c_sid).unwrap();
+            if let Ok(i2cmsg) =  I2cMsg::try_from(&envelope.body) {
+                // here we implement the core byte-wide read/write ops, and upon receipt of
+                // the interrupt from the hardware, we send a message to the main loop informing
+                // it that things had completed
+                // the main loop itself is responsible for keeping a copy of the I2C data array, managing
+                // a pointer, and sequencing the overall i2c transaction.
+            }
+        }
     }
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
@@ -43,9 +90,14 @@ mod implementation {
         xl.gpio_csr
             .wo(utra::gpio::EV_PENDING, xl.gpio_csr.r(utra::gpio::EV_PENDING));
     }
+    // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        // just clear the pending request for now and return
+        if let Some(conn) = xl.i2c_conn {
+            xous::try_send_message(xl.i2c_conn, I2cMsg::TxrxDone.into()).map(|_| ()).unwrap();
+        } else {
+            log::error!("LLIO|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
+        }
         xl.i2c_csr
             .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
     }
@@ -94,6 +146,7 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map I2C CSR range");
+            let i2c_sid = xous::create_server_id().expect("LLIO: couldn't get random server ID for I2C");
             let event_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::btevents::HW_BTEVENTS_BASE),
                 None,
@@ -133,6 +186,8 @@ mod implementation {
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
+                i2c_sid,
+                i2c_conn: None,
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
@@ -163,6 +218,15 @@ mod implementation {
                 (&mut xl) as *mut Llio as *mut usize,
             )
             .expect("couldn't claim I2C irq");
+
+            // initialize i2c
+            i2c_init(&mut xl, utralib::LITEX_CONFIG_CLOCK_FREQUENCY);
+            xous::create_thread_simple(i2c_thread, (&mut xl) as *mut Llio as *mut usize).expect("LLIO: couldn't make I2C handler thread");
+            // clear any interrupts pending, just in case
+            xl.i2c_csr
+            .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
+            // now enable interrupts
+            xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
 
             xl
         }
@@ -329,6 +393,109 @@ mod implementation {
         pub fn xadc_gpio2(&self) -> u16 {
             self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
         }
+
+
+        fn i2c_init(&mut self, clock_hz: u32) {
+            // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+            let clkcode: u32 = clock_hz / (5 * 100_000) - 1;
+            self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+
+            // enable the block
+            self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        }
+
+        // [FIXME] this is a stupid polled implementation of I2C transmission. Once we have
+        // threads and interurpts, this should be refactored to be asynchronous
+        /// Wait until a transaction in progress ends. [FIXME] would be good to yield here once threading is enabled.
+        fn i2c_tip_wait(p: &betrusted_pac::Peripherals, timeout_ms: u32) -> u32 {
+            let starttime: u32 = get_time_ms(p);
+        
+            // wait for TIP to go high
+            loop {
+                if p.I2C.status.read().tip().bit() == true {
+                    break;
+                }
+                if get_time_ms(p) > starttime + timeout_ms {
+                    unsafe{p.I2C.command.write( |w| {w.bits(0)}); }
+                    return 1;
+                }
+            }
+        
+            // wait for tip to go low
+            loop {
+                if p.I2C.status.read().tip().bit() == false {
+                    break;
+                }
+                if get_time_ms(p) > starttime + timeout_ms {
+                    unsafe{p.I2C.command.write( |w| {w.bits(0)}); }
+                    return 1;
+                }
+            }
+            unsafe{p.I2C.command.write( |w| {w.bits(0)}); }
+        
+            0
+        }
+        
+        /// The primary I2C interface call. This version currently blocks until the transaction is done.
+        pub fn i2c_controller(p: &betrusted_pac::Peripherals, addr: u8, txbuf: Option<&[u8]>, rxbuf: Option<&mut [u8]>, timeout_ms: u32) -> u32 {
+            let mut ret: u32 = 0;
+        
+            // write half
+            if txbuf.is_some() {
+                let txbuf_checked : &[u8] = txbuf.unwrap();
+                unsafe{ p.I2C.txr.write( |w| {w.bits( (addr << 1 | 0) as u32 )}); }
+                p.I2C.command.write( |w| {w.sta().bit(true).wr().bit(true)});
+        
+                ret += i2c_tip_wait(p, timeout_ms);
+        
+                let mut i: usize = 0;
+                loop {
+                    if i == txbuf_checked.len() as usize {
+                        break;
+                    }
+                    if p.I2C.status.read().rx_ack().bit() {
+                        ret += 1;
+                    }
+                    unsafe{ p.I2C.txr.write( |w| {w.bits( (txbuf_checked[i]) as u32 )}); }
+                    if i == txbuf_checked.len() - 1 && rxbuf.is_none() {
+                        p.I2C.command.write( |w| {w.wr().bit(true).sto().bit(true)});
+                    } else {
+                        p.I2C.command.write( |w| {w.wr().bit(true)});
+                    }
+                    ret += i2c_tip_wait(p, timeout_ms);
+                    i += 1;
+                }
+                if p.I2C.status.read().rx_ack().bit() {
+                    ret += 1;
+                }
+            }
+        
+            // read half
+            if rxbuf.is_some() {
+                let rxbuf_checked : &mut [u8] = rxbuf.unwrap();
+                unsafe{ p.I2C.txr.write( |w| {w.bits( (addr << 1 | 1) as u32 )}); }
+                p.I2C.command.write( |w| {w.sta().bit(true).wr().bit(true)});
+        
+                ret += i2c_tip_wait(p, timeout_ms);
+        
+                let mut i: usize = 0;
+                loop {
+                    if i == rxbuf_checked.len() as usize {
+                        break;
+                    }
+                    if i == rxbuf_checked.len() - 1 {
+                        p.I2C.command.write( |w| {w.rd().bit(true).ack().bit(true).sto().bit(true)});
+                    } else {
+                        p.I2C.command.write( |w| {w.rd().bit(true)});
+                    }
+                    ret += i2c_tip_wait(p, timeout_ms);
+                    rxbuf_checked[i] = p.I2C.rxr.read().bits() as u8;
+                    i += 1;
+                }
+            }
+        
+            ret
+        }        
     }
 }
 
@@ -554,6 +721,18 @@ fn xmain() -> ! {
                 },
             _ => error!("LLIO: no handler for opcode"),
             }
+        } else if let xous::Message::Move(m) = &envelope.body {
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<Opcode>(&bytes, m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<Opcode>::I2cWrite(rkyv_i2c) => {
+                    let i2c_write: I2cTransaction = rkyv_i2c.unarchive();
+                },
+                _ => panic!("LLIO: invalid Move memory message")
+            };
         } else {
             error!("LLIO: couldn't convert opcode");
         }

@@ -70,7 +70,7 @@ dependencies = [
  "graphics-server",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -83,7 +83,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "utralib",
  "xous",
  "xous-names",
@@ -124,7 +124,7 @@ version = "0.5.0"
 source = "git+https://github.com/betrusted-io/blitstr.git?rev=d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16#d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16"
 dependencies = [
  "log",
- "rkyv",
+ "rkyv 0.3.1",
 ]
 
 [[package]]
@@ -241,7 +241,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "typenum",
  "utralib",
@@ -276,7 +276,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv",
+ "rkyv 0.3.1",
  "xous",
  "xous-names",
 ]
@@ -415,7 +415,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -479,7 +479,7 @@ dependencies = [
  "log",
  "log-server",
  "minifb",
- "rkyv",
+ "rkyv 0.3.1",
  "utralib",
  "xous",
  "xous-names",
@@ -559,7 +559,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -572,7 +572,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv",
+ "rkyv 0.3.1",
  "xous",
  "xous-names",
 ]
@@ -585,7 +585,7 @@ dependencies = [
  "ime-plugin-api",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -613,7 +613,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -655,7 +655,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -834,6 +834,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0704ee1a7e00d7bb417d0770ea303c1bccbabf0ef1667dae92b5967f5f8a71"
 dependencies = [
  "unicode-xid 0.2.1",
+]
+
+[[package]]
+name = "ptr_meta"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aad980f4bb4053abd4733b1680024a8c71ffde345f6e584c6af9eb6f0067a198"
+dependencies = [
+ "ptr_meta_derive",
+]
+
+[[package]]
+name = "ptr_meta_derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bcd6232fa7d7fcd15703da5c07c9f10d203ee4fdf6ecf6d7ac5056db78089a3"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
 ]
 
 [[package]]
@@ -1016,7 +1036,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ba0dea2b9efaa468bc76d09a06741839d84c70a746edb1793d9653828532666"
 dependencies = [
  "memoffset",
- "rkyv_derive",
+ "rkyv_derive 0.3.1",
+]
+
+[[package]]
+name = "rkyv"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a6fdbe501948402e00ede914b4dc21d340105b2eff740ed47e3d45ac846f5c"
+dependencies = [
+ "memoffset",
+ "ptr_meta",
+ "rkyv_derive 0.4.0",
 ]
 
 [[package]]
@@ -1024,6 +1055,17 @@ name = "rkyv_derive"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddf04e93b51e6cfcc0eeee3bbf121d978303b83fbf2dc49085cff7855478fd4b"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
+]
+
+[[package]]
+name = "rkyv_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95a169f6bc5a81033e86ed39d0f4150e2608160b73d2b93c6e8e6a3efa873f14"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -1114,7 +1156,7 @@ dependencies = [
  "llio",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1551,7 +1593,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
- "rkyv",
+ "rkyv 0.3.1",
  "rustc-std-workspace-core",
  "xous-macros",
 ]
@@ -1575,7 +1617,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",

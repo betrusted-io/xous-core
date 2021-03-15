@@ -45,7 +45,7 @@ impl Into<u32> for UartType {
 /////////////////////// I2C
 use core::slice;
 use core::ops::{Deref, DerefMut};
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
 pub struct I2cTransaction {
     bus_addr: u8,
     // write address and read address are encoded in the packet field below
@@ -56,62 +56,6 @@ pub struct I2cTransaction {
 impl I2cTransaction {
     pub fn new() -> Self {
         I2cTransaction{ bus_addr: 0, packet: [0; 258], length: 0 }
-    }
-}
-impl Deref for I2cTransaction {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        unsafe {
-            slice::from_raw_parts(self as *const I2cTransaction as *const u8, core::mem::size_of::<I2cTransaction>())
-               as &[u8]
-        }
-    }
-}
-impl DerefMut for I2cTransaction {
-    fn deref_mut(&mut self) -> &mut[u8] {
-        unsafe {
-            slice::from_raw_parts_mut(self as *mut I2cTransaction as *mut u8, core::mem::size_of::<I2cTransaction>())
-               as &mut [u8]
-        }
-    }
-}
-pub struct ArchivedI2cTransaction {
-    ptr: rkyv::RelPtr,
-}
-pub struct I2cTransactionResolver {
-    bytes_pos: usize,
-}
-impl rkyv::Resolve<I2cTransaction> for I2cTransactionResolver {
-    type Archived = ArchivedI2cTransaction;
-    fn resolve(self, pos: usize, _value: &I2cTransaction) -> Self::Archived {
-        Self::Archived {
-            ptr: unsafe {
-                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedI2cTransaction, ptr), self.bytes_pos)
-            },
-        }
-    }
-}
-
-impl rkyv::Archive for I2cTransaction {
-    type Archived = ArchivedI2cTransaction;
-    type Resolver = I2cTransactionResolver;
-
-    fn archive<W: rkyv::Write + ?Sized>(&self, writer: &mut W) -> core::result::Result<Self::Resolver, W::Error> {
-        let bytes_pos = writer.pos();
-        writer.write(self.deref())?;
-        Ok(Self::Resolver { bytes_pos })
-    }
-}
-impl rkyv::Unarchive<I2cTransaction> for ArchivedI2cTransaction {
-    fn unarchive(&self) -> I2cTransaction {
-        let mut i2c: I2cTransaction = I2cTransaction::new();
-        unsafe {
-            let p = self.ptr.as_ptr() as *const u8;
-            for(i, val) in i2c.deref_mut().iter_mut().enumerate() {
-                *val = p.add(i).read();
-            }
-        };
-        i2c
     }
 }
 
@@ -166,7 +110,7 @@ impl Into<usize> for ClockMode {
 
 //////////////////////////////////// OPCODES
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
 pub enum Opcode {
     /// not tested - reboot
     RebootRequest,
@@ -225,9 +169,9 @@ pub enum Opcode {
 
     /// not tested - I2C functions
     I2cWrite(I2cTransaction), /// LEFT OFF HERE -- need rkyv sending of messages
-    I2cReadBlocking(I2cTransaction),
     I2cReadSubscribe(String<64>),
-    I2cReadNonBlocking(I2cTransaction),
+    I2cRead(I2cTransaction), // if this is issued without first subscribing to responses, the read is just "lost"
+    IrqI2cTxrxDone, // used internally by the I2C IRQ handler
 
     /// not tested -- events
     EventComSubscribe(String<64>),
