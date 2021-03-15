@@ -1,6 +1,6 @@
 use xous::{Message, ScalarMessage};
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TestStruct {
     pub challenge: [u32; 8],
 }
@@ -13,7 +13,7 @@ impl TestStruct {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     TestScalar(u32),
     TestMemory(TestStruct),

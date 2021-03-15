@@ -13,7 +13,7 @@ pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xo
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
     let pos = {
         use rkyv::ser::Serializer;
-        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cResponse");
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cResponse")
     };
     let buf = writer.into_inner();
     buf.lend(cid, pos as u32).expect("LLIO_API: I2cResponse operation failure");
@@ -26,7 +26,7 @@ pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStat
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
     let pos = {
         use rkyv::ser::Serializer;
-        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cTxRx");
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cTxRx")
     };
     let buf = writer.into_inner();
 
@@ -34,11 +34,9 @@ pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStat
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
-        let i2c_txrx: I2cTransaction = result.unarchive();
-        Ok(i2c_txrx.status)
+        Ok(result.status)
     } else {
-        let i2c_txrx = returned.unarchive();
-        log::info!("send_i2c_request saw an unhandled return type of {:?}", i2c_txrx);
+        log::info!("send_i2c_request saw an unhandled return type of {:?}", buf);
         Err(xous::Error::InternalError)
     }
 }

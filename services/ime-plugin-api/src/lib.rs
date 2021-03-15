@@ -3,7 +3,7 @@
 use xous::{Message, ScalarMessage, String, CID};
 use graphics_server::Gid;
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Prediction {
     pub index: u32,
     pub valid: bool,
@@ -43,7 +43,7 @@ impl From<usize> for PredictionTriggers {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
     Input(xous::String<4000>),
@@ -170,7 +170,7 @@ impl PredictionApi for PredictionPlugin {
 
     fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
         use rkyv::Write;
-        use rkyv::Unarchive;
+        use rkyv::Serialize, rkyv::Deserialize;
         let debug1 = false;
         match self.connection {
             Some(cid) => {
@@ -191,7 +191,7 @@ impl PredictionApi for PredictionPlugin {
                 if debug1{log::info!("IME|API: returned from get_prediction");}
                 let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
                 if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
-                    let pred_r: Prediction = result.unarchive();
+                    let pred_r: Prediction = result.deserialize();
                     if debug1{log::info!("IME|API: got {:?}", pred_r);}
                     if pred_r.valid {
                         let mut ret = xous::String::<4000>::new();
@@ -202,7 +202,7 @@ impl PredictionApi for PredictionPlugin {
                         Ok(None)
                     }
                 } else {
-                    let r = returned.unarchive();
+                    let r = returned.deserialize();
                     log::error!("IME: API get_prediction returned an invalid result {:?}", r);
                     Err(xous::Error::InvalidString)
                 }
@@ -220,7 +220,7 @@ impl PredictionApi for PredictionPlugin {
 // in this crate so we can break circular dependencies
 // between the IMEF, GAM, and graphics server
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ImefOpcode {
     /// informs me where my input canvas is
     SetInputCanvas(Gid),

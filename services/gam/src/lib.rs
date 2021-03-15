@@ -5,7 +5,7 @@ use api::*;
 
 use xous::send_message;
 use rkyv::Write;
-use rkyv::Unarchive;
+use rkyv::Serialize, rkyv::Deserialize;
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
@@ -43,11 +43,11 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::RenderTextView(result) = returned {
-            let tvr: TextView = result.unarchive();
+            let tvr: TextView = result.deserialize();
             tv.bounds_computed = tvr.bounds_computed;
             tv.cursor = tvr.cursor;
     } else {
-        let tvr = returned.unarchive();
+        let tvr = returned.deserialize();
         info!("got {:?}", tvr);
         panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled");
     }
@@ -129,10 +129,10 @@ pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRe
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::SetCanvasBounds(result) = returned {
-            let ret: SetCanvasBoundsRequest = result.unarchive();
+            let ret: SetCanvasBoundsRequest = result.deserialize();
             req.granted = ret.granted;
     } else {
-        let ret = returned.unarchive();
+        let ret = returned.deserialize();
         info!("got {:?}", ret);
         panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled");
     }
@@ -157,10 +157,10 @@ pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Resul
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::RequestContentCanvas(result) = returned {
-        let ret: ContentCanvasRequest = result.unarchive();
+        let ret: ContentCanvasRequest = result.deserialize();
         Ok(ret.canvas)
     } else {
-        let ret = returned.unarchive();
+        let ret = returned.deserialize();
         info!("got {:?}", ret);
         log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
         Err(xous::Error::InternalError)

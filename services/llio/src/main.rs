@@ -602,7 +602,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
-                    let i2c_txrx: I2cTransaction = rkyv_i2c.unarchive();
+                    let i2c_txrx: I2cTransaction = rkyv_i2c.deserialize();
 
                     let status = i2c_machine.initiate(i2c_txrx);
 

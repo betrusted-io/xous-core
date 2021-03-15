@@ -1,7 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use core::convert::TryInto;
-use rkyv::Write;
 
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
@@ -57,8 +56,11 @@ pub fn send_pds_line(cid: CID, s: &xous::String<512>) -> Result<(), Error> {
     let mut clone_s: xous::String<512> = xous::String::new();
     write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
     let request = api::Opcode::Wf200PdsLine(clone_s);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&request).expect("COM: couldn't archive PDS line request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&request).expect("COM: couldn't archive PDS line request")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("COM: PDS line request failure");
@@ -72,10 +74,13 @@ pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {
 
 // event relay request API
 pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    let s: xous_names::api::XousServerName = name.try_into()?;
+    let s = xous::String::<64>::from_str(name);
     let request = api::Opcode::RegisterBattStatsListener(s);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&request).expect("couldn't archive battstat request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&request).expect("COM: couldn't archive battstat request")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer

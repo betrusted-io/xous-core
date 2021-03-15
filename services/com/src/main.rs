@@ -277,8 +277,7 @@ fn xmain() -> ! {
                     battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
                 },
                 rkyv::Archived::<api::Opcode>::Wf200PdsLine(rkyv_l) => {
-                    use rkyv::Unarchive;
-                    let l: xous::String<512> = rkyv_l.unarchive();
+                    let l = xous::String::<512>::from_str(rkyv_l.as_str());
                     info!("COM: Wf200PdsLine got line {}", l);
                     let line = l.as_bytes();
                     let length = (l.len() + 0) as u16;

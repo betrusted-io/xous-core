@@ -11,7 +11,7 @@ use log::{error, info};
 use rkyv::archived_value_mut;
 use core::pin::Pin;
 use core::convert::TryInto;
-use rkyv::Unarchive;
+use rkyv::Serialize, rkyv::Deserialize;
 
 #[xous::xous_main]
 fn xmain() -> ! {

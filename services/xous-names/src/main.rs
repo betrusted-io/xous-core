@@ -32,7 +32,7 @@ fn xmain() -> ! {
 
     info!("NS: started");
     use core::pin::Pin;
-    use rkyv::{archived_value_mut, Unarchive};
+    use rkyv::archived_value_mut;
 
     loop {
         let envelope = xous::receive_message(name_server).unwrap();
@@ -44,8 +44,7 @@ fn xmain() -> ! {
             };
             let new_value = match &*value {
                 rkyv::Archived::<api::Request>::Register(registration_name) => {
-                    use rkyv::Unarchive;
-                    let name = registration_name.unarchive();
+                    let name = xous::String::<64>::from_str(registration_name.as_str());
                     if debug1{info!("NS: registration request for '{}'", name);}
                     if !name_table.contains_key(&name) {
                         let new_sid =
@@ -71,8 +70,8 @@ fn xmain() -> ! {
                     }
                 }
                 rkyv::Archived::<api::Request>::Lookup(lookup_name) => {
-                    if debug1{info!("NS: Lookup request for '{}'", lookup_name);}
-                    let name = lookup_name.unarchive();
+                    let name = xous::String::<64>::from_str(lookup_name.as_str());
+                    if debug1{info!("NS: Lookup request for '{}'", name);}
                     if let Some(server_sid) = name_table.get(&name) {
                         let sender_pid = envelope
                             .sender
@@ -88,7 +87,7 @@ fn xmain() -> ! {
                             _ => {
                                 info!(
                                     "NS: Can't find request '{}' in table, dumping table:",
-                                    lookup_name
+                                    name
                                 );
                                 for (key, val) in name_table.iter() {
                                     info!("NS: name: '{}', sid: '{:?}'", key, val);
@@ -99,7 +98,7 @@ fn xmain() -> ! {
                     } else {
                         info!(
                             "NS: Can't find request '{}' in table, dumping table:",
-                            lookup_name
+                            name
                         );
                         for (key, val) in name_table.iter() {
                             info!("NS: name: '{}', sid: '{:?}'", key, val);

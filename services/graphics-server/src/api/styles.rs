@@ -1,6 +1,6 @@
 use crate::api::Point;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum PixelColor {
     Dark,
     Light,
@@ -47,7 +47,7 @@ impl Into<usize> for PixelColor {
 }
 
 /// Style properties for an object
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct DrawStyle {
     /// Fill colour of the object
     pub fill_color: Option<PixelColor>,

@@ -3,7 +3,6 @@ use core::ops::Deref;
 use heapless::consts::*;
 use heapless::Vec;
 use xous::{Message, ScalarMessage};
-use rkyv::{RelPtr, Archive, Resolve, Write};
 use core::slice;
 use core::ops::DerefMut;
 
@@ -74,51 +73,58 @@ impl DerefMut for KeyRawStates {
     }
 }
 
-// warning: this rkyv code is totally untested
+// warning: this rkyv code is totallly untested
+use rkyv::SerializeUnsized;
+use rkyv::ArchiveUnsized;
 pub struct ArchivedKeyRawStates {
-    ptr: RelPtr,
-    len: u32,
+    myvec_ptr: rkyv::RelPtr<[u8]>,
 }
+
 #[allow(dead_code)]
 impl ArchivedKeyRawStates {
-    fn as_keyrawstates(&self) -> KeyRawStates {
-        let mut returned_krs: KeyRawStates = KeyRawStates::new();
-        let bytes: &[u8];
-        unsafe {
-            bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
-        }
-        for (dest, src) in returned_krs.deref_mut().iter_mut().zip(bytes.iter()) {
-            *dest = *src;
-        }
-        returned_krs
+    pub fn as_slice(&self) -> &[u8] {
+        unsafe { &*self.myvec_ptr.as_ptr() }
     }
 }
+
 pub struct KeyRawStatesResolver {
     bytes_pos: usize,
+    _metadata_resolver: rkyv::MetadataResolver<[u8]>,
 }
-impl Resolve<KeyRawStates> for KeyRawStatesResolver {
+
+impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for KeyRawStates {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        Ok(KeyRawStatesResolver {
+            bytes_pos: self.deref().serialize_unsized(serializer)?,
+            _metadata_resolver: self.deref().serialize_metadata(serializer)?,
+        })
+    }
+}
+
+impl rkyv::Archive for KeyRawStates
+{
     type Archived = ArchivedKeyRawStates;
-    fn resolve(self, pos: usize, value: &KeyRawStates) -> Self::Archived {
+    type Resolver = KeyRawStatesResolver;
+    fn resolve(&self, pos: usize, resolver: Self::Resolver) -> Self::Archived {
         Self::Archived {
-            ptr: unsafe {
-                rkyv::RelPtr::new(pos + rkyv::offset_of!(ArchivedKeyRawStates, ptr), self.bytes_pos)
+            myvec_ptr: unsafe {
+                self.deref().resolve_unsized(
+                    pos + rkyv::offset_of!(Self::Archived, myvec_ptr),
+                    resolver.bytes_pos,
+                    (),
+                )
             },
-            len: value.deref().len() as u32,
         }
     }
 }
-impl Archive for KeyRawStates {
-    type Archived = ArchivedKeyRawStates;
-    type Resolver = KeyRawStatesResolver;
 
-    fn archive<W: Write + ?Sized>(&self, writer: &mut W) -> Result<Self::Resolver, W::Error> {
-        let bytes_pos = writer.pos();
-        writer.write( self.deref())?;
-        Ok(Self::Resolver { bytes_pos })
+impl AsRef<[u8]> for ArchivedKeyRawStates {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { &*self.myvec_ptr.as_ptr() }
     }
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum KeyMap {
     Qwerty,
     Azerty,
@@ -153,16 +159,16 @@ impl Into<usize> for KeyMap {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// set which keyboard mapping is present
     SelectKeyMap(KeyMap),
 
     /// request interpreted ScanCodes to be sent
-    RegisterListener(xous_names::api::XousServerName),
+    RegisterListener(xous::String::<64>),
 
     /// request raw keyup/keydown events to be sent
-    RegisterRawListener(xous_names::api::XousServerName),
+    RegisterRawListener(xous::String::<64>),
 
     /// set repeat delay, rate; both in ms
     SetRepeat(u32, u32),

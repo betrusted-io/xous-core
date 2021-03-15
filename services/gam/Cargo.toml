@@ -8,7 +8,6 @@ description = "Graphical Abstraction Manager for Xous"
 [dependencies]
 bitflags = "1.2.1"
 xous = { path = "../../xous-rs" }
-rkyv = { version = "0.3.1", default_features = false }
 graphics-server = { path = "../graphics-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
@@ -22,6 +21,10 @@ blitstr-ref = { path = "../../imports/blitstr-ref" }
 ime-plugin-api = {path="../ime-plugin-api"}
 content-plugin-api = {path="../content-plugin-api"}
 
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+features = ["const_generics"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

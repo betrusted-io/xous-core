@@ -121,10 +121,9 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.5.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16#d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16"
 dependencies = [
  "log",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
 ]
 
 [[package]]
@@ -241,7 +240,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "typenum",
  "utralib",
@@ -415,7 +414,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -479,7 +478,7 @@ dependencies = [
  "log",
  "log-server",
  "minifb",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "utralib",
  "xous",
  "xous-names",
@@ -559,7 +558,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -572,7 +571,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "xous",
  "xous-names",
 ]
@@ -585,7 +584,7 @@ dependencies = [
  "ime-plugin-api",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -613,7 +612,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1590,10 +1589,12 @@ version = "0.1.2"
 dependencies = [
  "bitflags",
  "compiler_builtins",
+ "hash32",
+ "hash32-derive",
  "hex",
  "lazy_static",
  "log",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "rustc-std-workspace-core",
  "xous-macros",
 ]
@@ -1617,7 +1618,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",

@@ -15,7 +15,7 @@ use blitstr_ref as blitstr;
 use core::pin::Pin;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
-use rkyv::Unarchive;
+use rkyv::Serialize, rkyv::Deserialize;
 use rkyv::archived_value;
 
 use heapless::Vec;
@@ -621,14 +621,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.unarchive();
+                    let s: xous::String<256> = rkyv_s.deserialize();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.unarchive();
+                    let s: xous::String<256> = registration.deserialize();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
@@ -677,14 +677,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.unarchive();
+                    let s: xous::String<256> = rkyv_s.deserialize();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.unarchive();
+                    let s: xous::String<256> = registration.deserialize();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note first copy above, put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))

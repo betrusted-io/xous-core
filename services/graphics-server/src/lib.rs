@@ -10,9 +10,6 @@ pub mod op;
 
 use xous::{send_message, CID};
 use core::fmt::Write;
-use rkyv::Write as RkyvWrite;
-use rkyv::Unarchive;
-
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
     let m: xous::Message = api::Opcode::Line(line).into();
@@ -74,9 +71,11 @@ pub fn draw_string(cid: CID, s: &String<4096>) -> Result<(), xous::Error> {
     let mut clone_s: String<4096> = String::new();
     write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
     let request = api::Opcode::String(clone_s);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    use rkyv::Write;
-    let pos = writer.archive(&request).expect("GFX: couldn't archive String request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&request).expect("GFX: couldn't archive String request")
+    };
     let xous_buffer = writer.into_inner();
 
     //log::info!("GFX: draw_string message being sent");
@@ -124,21 +123,24 @@ pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Err
 
 pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
     let rkyv_tv = api::Opcode::DrawTextView(*tv);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv_tv).expect("couldn't archive textview");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&rkyv_tv).expect("couldn't archive textview")
+    };
     let mut xous_buffer = writer.into_inner();
 
     xous_buffer.lend_mut(cid, pos as u32).expect("draw_textview operation failure");
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
-        let tvr: TextView = result.unarchive();
+        let tvr: TextView = result.deserialize();
         //log::info!("draw_textview: got cursor of {:?}, bounds of {:?}", tvr.cursor, tvr.bounds_computed);
         tv.bounds_computed = tvr.bounds_computed;
         tv.cursor = tvr.cursor;
         Ok(())
     } else {
-        let tvr = returned.unarchive();
+        let tvr = returned.deserialize();
         log::info!("draw_textview saw an unhandled return type of {:?}", tvr);
         Err(xous::Error::InternalError)
     }
@@ -151,8 +153,11 @@ pub fn draw_line_clipped(cid: xous::CID, line: Line, clip: Rectangle) -> Result<
             clip: clip,
             obj: ClipObjectType::Line(line),
     });
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
@@ -166,8 +171,11 @@ pub fn draw_circle_clipped(cid: xous::CID, circ: Circle, clip: Rectangle) -> Res
             clip: clip,
             obj: ClipObjectType::Circ(circ),
     });
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
@@ -181,8 +189,11 @@ pub fn draw_rectangle_clipped(cid: xous::CID, rect: Rectangle, clip: Rectangle) 
             clip: clip,
             obj: ClipObjectType::Rect(rect),
     });
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
@@ -196,8 +207,11 @@ pub fn draw_rounded_rectangle_clipped(cid: xous::CID, rr: RoundedRectangle, clip
             clip: clip,
             obj: ClipObjectType::RoundRect(rr),
     });
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer.archive(&rkyv).expect("GFX_API: couldn't archive ClipObject");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
+    };
     let xous_buffer = writer.into_inner();
 
     xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");

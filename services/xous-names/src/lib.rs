@@ -2,26 +2,25 @@
 
 pub mod api;
 
-use core::convert::TryInto;
 use core::fmt::Write;
 
 pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
-    use rkyv::Write;
     // Ensure we have a connection to the nameserver. If one exists, this is a no-op.
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
     let ns_conn = xous::connect(ns_id).unwrap();
 
-    let mut registration_name = api::XousServerName::default();
-    write!(registration_name, "{}", name).unwrap();
+    let mut registration_name = xous::String::<64>::new();
+    write!(registration_name, "{}", name).expect("namserver: name probably too long");
     let request = api::Request::Register(registration_name);
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer
-        .archive(&request)
-        .expect("couldn't archive request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&request).expect("nameserver: couldn't archive name")
+    };
     let mut xous_buffer = writer.into_inner();
 
     xous_buffer
-        .lend_mut(ns_conn, pos.try_into().unwrap())
+        .lend_mut(ns_conn, pos as u32)
         .expect("nameserver registration failure");
 
     let archived = unsafe { rkyv::archived_value::<api::Request>(xous_buffer.as_ref(), pos) };
@@ -39,25 +38,22 @@ pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
 
 /// note: if this throws an AccessDenied error, you can retry with a request_authenticat_connection() call (to be written)
 pub fn request_connection(name: &str) -> Result<xous::CID, xous::Error> {
-    use rkyv::Write;
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
     let ns_conn = xous::connect(ns_id).unwrap();
 
-    let mut lookup_name = api::XousServerName::default();
-    write!(lookup_name, "{}", name).unwrap();
+    let mut lookup_name = xous::String::<64>::new();
+    write!(lookup_name, "{}", name).expect("nameserver: name problably too long");
     let request = api::Request::Lookup(lookup_name);
-    // let mut lookup = api::Lookup::default();
-    // write!(lookup.name, "{}", name).unwrap();
-    // let request = api::Request::Lookup(lookup);
 
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer
-        .archive(&request)
-        .expect("couldn't archive request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&request).expect("nameserver: couldn't archive name")
+    };
     let mut xous_buffer = writer.into_inner();
 
     xous_buffer
-        .lend_mut(ns_conn, pos.try_into().unwrap())
+        .lend_mut(ns_conn, pos as u32)
         .expect("nameserver lookup failure!");
 
     let archived = unsafe { rkyv::archived_value::<api::Request>(xous_buffer.as_ref(), pos) };

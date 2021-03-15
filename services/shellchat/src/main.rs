@@ -6,7 +6,7 @@ use log::info;
 use core::fmt::Write;
 use core::convert::TryFrom;
 
-use rkyv::Unarchive;
+use rkyv::Serialize, rkyv::Deserialize;
 use rkyv::archived_value;
 use core::pin::Pin;
 
@@ -239,7 +239,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ime_plugin_api::ImefOpcode>::GotInputLine(rkyv_s) => {
-                    let s: xous::String<4000> = rkyv_s.unarchive();
+                    let s: xous::String<4000> = rkyv_s.deserialize();
                     repl.input(s.as_str().expect("SHCH: couldn't convert incoming string")).expect("SHCH: REPL couldn't accept input string");
                     update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 },

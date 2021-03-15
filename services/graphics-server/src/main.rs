@@ -107,7 +107,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    let s: xous::String<4096> = rkyv_s.deserialize();
                     //info!("GFX: unarchived string: {:?}", s);
                     blitstr::paint_str(
                         display.native_buffer(),
@@ -123,7 +123,7 @@ fn xmain() -> ! {
                     //info!("GFX: string painted");
                 },
                 rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    let s: xous::String<4096> = rkyv_s.deserialize();
                     blitstr::paint_str(
                         display.native_buffer(),
                         current_string_clip.into(),
@@ -137,7 +137,7 @@ fn xmain() -> ! {
                     );
                 },
                 rkyv::Archived::<api::Opcode>::DrawClipObject(rco) => {
-                    let obj: ClipObject = rco.unarchive();
+                    let obj: ClipObject = rco.deserialize();
                     if debug1{info!("GFX: DrawClipObject {:?}", obj);}
                     match obj.obj {
                         ClipObjectType::Line(line) => {
@@ -164,7 +164,7 @@ fn xmain() -> ! {
             let debugtv: bool = false;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
-                    let mut tv = rtv.unarchive();
+                    let mut tv = rtv.deserialize();
 
                     if tv.clip_rect.is_none() { continue } // if no clipping rectangle is specified, nothing to draw
                     let clip_rect = tv.clip_rect.unwrap(); // this is the clipping rectangle of the canvas
