@@ -2,7 +2,7 @@ use xous::{Message, ScalarMessage};
 use xous::String;
 
 /////////////////////// UART TYPE
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum UartType {
     Kernel,
     Log,
@@ -43,24 +43,48 @@ impl Into<u32> for UartType {
 }
 
 /////////////////////// I2C
-use core::slice;
-use core::ops::{Deref, DerefMut};
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+// a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
+pub enum I2cStatus {
+    /// used only as the default, should always be set to one of the below before sending
+    Uninitialized,
+    /// used by a managing process to indicate a request
+    RequestIncoming,
+    /// everything was OK, request in progress
+    ResponseInProgress,
+    /// we tried to process your request, but there was a timeout
+    ResponseTimeout,
+    /// I2C had a NACK on the request
+    ResponseNack,
+    /// the I2C bus is currently busy and your request was ignored
+    ResponseBusy,
+    /// the request was malformed
+    ResponseFormatError,
+    /// everything is OK, data here should be valid
+    ResponseReadOk,
+    /// everything is OK, write finished. data fields have no meaning
+    ResponseWriteOk,
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive)]
 pub struct I2cTransaction {
     bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    packet: [u8; 258], // up to 258 bytes total packet length; note cost is "same" b/c these are sent via 4kiB page remaps
-    length: u8,
-    // read or write type is encoded in the opcode
+    txbuf: Option<[u8; 258]>, // up to 258 bytes total packet length; note cost is "same" b/c these are sent via 4kiB page remaps
+    txlen: u32,
+    rxbuf: Option<[u8; 258]>,
+    rxlen: u32,
+    timeout_ms: u32,
+    // response field to the calling server
+    status: I2cStatus,
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, packet: [0; 258], length: 0 }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized }
     }
 }
 
 ////////////////////////////////// VIBE
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum VibePattern {
     Short,
     Long,
@@ -86,7 +110,7 @@ impl Into<usize> for VibePattern {
 }
 
 //////////////////////////////// CLOCK GATING (placeholder)
-#[derive(Debug)]
+#[derive(Debug, rkyv::Archive)]
 pub enum ClockMode {
     Low,
     AllOn,
@@ -109,8 +133,7 @@ impl Into<usize> for ClockMode {
 }
 
 //////////////////////////////////// OPCODES
-#[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive)]
 pub enum Opcode {
     /// not tested - reboot
     RebootRequest,
@@ -168,10 +191,12 @@ pub enum Opcode {
     AdcGpio2,
 
     /// not tested - I2C functions
-    I2cWrite(I2cTransaction), /// LEFT OFF HERE -- need rkyv sending of messages
-    I2cReadSubscribe(String<64>),
-    I2cRead(I2cTransaction), // if this is issued without first subscribing to responses, the read is just "lost"
-    IrqI2cTxrxDone, // used internally by the I2C IRQ handler
+    I2cTxRx(I2cTransaction), // type (tx or rx) encoded in struct
+    // callback repsonses from the I2C engine -- I2C callers must decode these opcodes
+    I2cSubscribe(String<64>), // if TxRx is issued without first subscribing to responses, the read data is just "lost"
+    I2cResponse(I2cTransaction), // for writes, just the status field is valid; for reads, the read data is in the read buffer
+    // used internally by the I2C IRQ handler, not for external use
+    IrqI2cTxrxDone,
 
     /// not tested -- events
     EventComSubscribe(String<64>),
@@ -238,6 +263,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 19 => Ok(Opcode::SelfDestruct(m.arg1 as u32)),
                 20 => Ok(Opcode::Vibe(m.arg1.into())),
                 // note 21 is used for RebootCpuConfirm
+                22 => Ok(Opcode::IrqI2cTxrxDone),
                 _ => Err("LLIO api: unknown Scalar ID"),
             },
             Message::BlockingScalar(m) => match m.id {
@@ -406,6 +432,10 @@ impl Into<Message> for Opcode {
                 arg1: pattern as usize, arg2: 0, arg3: 0, arg4: 0,
             }),
             // note 21 is used by RebootCpuConfirm
+            Opcode::IrqI2cTxrxDone => Message::Scalar(ScalarMessage {
+                id: 22,
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            }),
 
             // blocking scalars
             Opcode::GpioDataIn => Message::BlockingScalar(ScalarMessage {

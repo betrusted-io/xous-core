@@ -3,8 +3,45 @@
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
 pub mod api;
+use api::*;
 
 use xous::{send_message, CID};
+
+// used by the LLIO to send a response to other servers
+pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xous::Error> {
+    let op = api::Opcode::I2cResponse(transaction);
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cResponse");
+    };
+    let buf = writer.into_inner();
+    buf.lend(cid, pos as u32).expect("LLIO_API: I2cResponse operation failure");
+
+    Ok(())
+}
+// used by other servers to request an I2C transaction
+pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
+    let op = api::Opcode::I2cTxRx(transaction);
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cTxRx");
+    };
+    let buf = writer.into_inner();
+
+    buf.lend_mut(cid, pos as u32).expect("LLIO_API: I2cTxRx operation failure");
+
+    let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
+    if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
+        let i2c_txrx: I2cTransaction = result.unarchive();
+        Ok(i2c_txrx.status)
+    } else {
+        let i2c_txrx = returned.unarchive();
+        log::info!("send_i2c_request saw an unhandled return type of {:?}", i2c_txrx);
+        Err(xous::Error::InternalError)
+    }
+}
 
 pub fn allow_power_off(cid: CID, allow: bool) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::PowerSelf(!allow).into()).map(|_| ())
