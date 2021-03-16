@@ -84,6 +84,9 @@ impl Authenticate {
     }
 }
 
+// note to self: keep around the implementation for the key-able version of the String
+// structure, but we can lose the rkyv-able version for the external API
+
 // --------------------- Taken from rkyv docs https://docs.rs/rkyv/0.3.0/rkyv/trait.Archive.html //
 #[derive(Debug, Copy, Clone)]
 pub struct XousServerName {
