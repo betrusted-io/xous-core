@@ -360,17 +360,18 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use crate::api::*;
+    use llio::api::*;
     use log::{error, info};
 
     pub struct Llio {
     }
 
     impl Llio {
-        pub fn new() -> Llio {
+        pub fn new(_handler_conn: xous::CID) -> Llio {
             Llio {
             }
         }
+        pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
 
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
