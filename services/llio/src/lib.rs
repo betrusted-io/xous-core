@@ -34,7 +34,9 @@ pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStat
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
-        Ok(result.status)
+        use core::ops::DerefMut;
+        transaction.deref_mut() = result.as_slice();
+        Ok(transaction.status)
     } else {
         log::info!("send_i2c_request saw an unhandled return type of {:?}", buf);
         Err(xous::Error::InternalError)

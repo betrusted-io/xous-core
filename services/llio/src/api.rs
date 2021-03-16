@@ -75,13 +75,34 @@ pub struct I2cTransaction {
     rxlen: u32,
     timeout_ms: u32,
     // response field to the calling server
-    pub status: I2cStatus,
+    status: I2cStatus,
 }
 impl I2cTransaction {
     pub fn new() -> Self {
         I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized }
     }
+    pub fn status(&self) -> I2cStatus { self.status }
 }
+use core::ops::{DerefMut, Deref};
+impl Deref for I2cTransaction {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self as *const I2cTransaction as *const u8, core::mem::size_of::<I2cTransaction>())
+                as &[u8]
+        }
+    }
+}
+impl DerefMut for I2cTransaction {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self as *mut I2cTransaction as *mut u8, core::mem::size_of::<I2cTransaction>())
+                as &mut [u8]
+        }
+    }
+}
+
+
 
 ////////////////////////////////// VIBE
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

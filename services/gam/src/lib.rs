@@ -47,8 +47,6 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
             tv.bounds_computed = tvr.bounds_computed;
             tv.cursor = tvr.cursor;
     } else {
-        let tvr = returned.deserialize();
-        info!("got {:?}", tvr);
         panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled");
     }
 
@@ -132,8 +130,6 @@ pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRe
             let ret: SetCanvasBoundsRequest = result.deserialize();
             req.granted = ret.granted;
     } else {
-        let ret = returned.deserialize();
-        info!("got {:?}", ret);
         panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled");
     }
     Ok(())
@@ -160,8 +156,6 @@ pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Resul
         let ret: ContentCanvasRequest = result.deserialize();
         Ok(ret.canvas)
     } else {
-        let ret = returned.deserialize();
-        info!("got {:?}", ret);
         log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
         Err(xous::Error::InternalError)
     }
