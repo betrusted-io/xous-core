@@ -1,15 +1,17 @@
 use heapless::Vec;
 use heapless::consts::*;
 
-use crate::api::*;
+use llio::api::*;
+use llio::send_i2c_response;
 use utralib::*;
 
+#[derive(Eq, PartialEq)]
 enum I2cState {
     Idle,
     Write,
     Read,
 }
-struct I2cStateMachine {
+pub struct I2cStateMachine {
     transaction: I2cTransaction,
     state: I2cState,
     index: u32,  // index of the current buffer in the state machine
@@ -19,13 +21,13 @@ struct I2cStateMachine {
     listeners: Vec<xous::CID, U32>,
 }
 impl I2cStateMachine {
-    pub fn new(ticktimer: xous::CID, i2c_csr: utralib::CSR<u32>) -> Self {
+    pub fn new(ticktimer: xous::CID, i2c_base: *mut u32) -> Self {
         I2cStateMachine {
             transaction: I2cTransaction::new(),
             state: I2cState::Idle,
             timestamp: ticktimer_server::elapsed_ms(ticktimer).unwrap(),
             ticktimer,
-            i2c_csr,
+            i2c_csr: CSR::new(i2c_base),
             index: 0,
             listeners: Vec::new(),
         }
@@ -36,8 +38,8 @@ impl I2cStateMachine {
             return I2cStatus::ResponseFormatError
         }
 
-        let now = ticktimer_server::elapsed_ms(ticktimer).unwrap();
-        if self.state != I2cState::Idle && ((now - self.timestamp) < self.transaction.timeout_ms) {
+        let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+        if self.state != I2cState::Idle && ((now - self.timestamp) < self.transaction.timeout_ms as u64) {
             // we're in a transaction that hadn't timed out, can't accept a new one
             I2cStatus::ResponseBusy
         } else {
@@ -55,7 +57,8 @@ impl I2cStateMachine {
             if self.transaction.status == I2cStatus::RequestIncoming {
                 self.transaction.status = I2cStatus::ResponseInProgress;
                 // now do the BusAddr stuff, so that the we can get the irq response
-                if let Some(txbuf) = self.transaction.txbuf {
+                if let Some(_txbuf) = self.transaction.txbuf {
+                    // initiate bus address with write bit set
                     self.state = I2cState::Write;
                     self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 0) as u32);
                     self.index = 0;
@@ -64,7 +67,8 @@ impl I2cStateMachine {
                         self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
                     );
                     I2cStatus::ResponseInProgress
-                } else if let Some(rxbuf) = self.transaction.rxbuf {
+                } else if let Some(_rxbuf) = self.transaction.rxbuf {
+                    // initiate bus address with read bit set
                     self.state = I2cState::Read;
                     self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 1) as u32);
                     self.index = 0;
@@ -79,6 +83,8 @@ impl I2cStateMachine {
                     self.transaction = I2cTransaction::new();
                     I2cStatus::ResponseFormatError
                 }
+            } else {
+                I2cStatus::ResponseFormatError  // the status field was not formatted correctly to accept the transaction
             }
         }
     }
@@ -86,14 +92,14 @@ impl I2cStateMachine {
         // report the NACK situation to all the listeners
         let mut nack = I2cTransaction::new();
         nack.status = I2cStatus::ResponseNack;
-        for listener in self.listeners {
+        for &listener in self.listeners.iter() {
             send_i2c_response(listener, nack).expect("LLIO|I2C: couldn't send NACK to listeners");
         }
     }
     fn report_timeout(&mut self) {
         let mut timeout = I2cTransaction::new();
         timeout.status = I2cStatus::ResponseTimeout;
-        for listener in self.listeners {
+        for &listener in self.listeners.iter() {
             send_i2c_response(listener, timeout).expect("LLIO|I2c: couldn't send timeout error to liseners");
         }
     }
@@ -101,14 +107,14 @@ impl I2cStateMachine {
         // report the end of a write-only transaction to all the listeners
         let mut ack = I2cTransaction::new();
         ack.status = I2cStatus::ResponseWriteOk;
-        for listener in self.listeners {
+        for &listener in self.listeners.iter() {
             send_i2c_response(listener, ack).expect("LLIO|I2C: couldn't send write ACK to listeners");
         }
     }
     fn report_read_done(&mut self) {
         // report the result of a read transaction to all the listeners
         self.transaction.status = I2cStatus::ResponseReadOk;
-        for listener in self.listeners {
+        for &listener in self.listeners.iter() {
             send_i2c_response(listener, self.transaction).expect("LLIO|I2C: couldn't send read response to listeners");
         }
     }
@@ -117,8 +123,8 @@ impl I2cStateMachine {
     }
     pub fn handler(&mut self) {
         // check if the transaction had actually timed out
-        let now = ticktimer_server::elapsed_ms(ticktimer).unwrap();
-        if now - self.timestamp > self.transaction.timeout_ms {
+        let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+        if now - self.timestamp > self.transaction.timeout_ms as u64 {
             // previous transaction had timed out...
             self.report_timeout();
             // reset our state parameter
@@ -152,7 +158,8 @@ impl I2cStateMachine {
                         }
                         self.index += 1;
                     } else {
-                        if let Some(rxbuf) = self.transaction.rxbuf {
+                        if let Some(_rxbuf) = self.transaction.rxbuf {
+                            // initiate bus address with read bit set
                             self.state = I2cState::Read;
                             self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 1) as u32);
                             self.index = 0;
@@ -171,10 +178,10 @@ impl I2cStateMachine {
                 }
             },
             I2cState::Read => {
-                if let Some(rxbuf) = self.transaction.rxbuf {
+                if let Some(mut rxbuf) = self.transaction.rxbuf {
                     if self.index > 0 {
                         // we are re-entering from a previous call, store the read value from the previous call
-                        rxbuf[index - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
+                        rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
                     }
                     if self.index < self.transaction.rxlen {
                         if self.index == (self.transaction.rxlen - 1) {

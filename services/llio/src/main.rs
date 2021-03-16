@@ -2,21 +2,22 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
+use llio::api::*;
 mod i2c;
 use i2c::*;
 
 use core::convert::TryFrom;
+use core::pin::Pin;
+use rkyv::archived_value;
+use rkyv::Unarchive;
 
 use log::{error, info};
 
 #[cfg(target_os = "none")]
 mod implementation {
-    use crate::api::*;
+    use llio::api::*;
     use log::{error, info};
     use utralib::generated::*;
-
-    const STD_TIMEOUT: u32 = 100;
 
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
@@ -25,7 +26,7 @@ mod implementation {
         info_csr: utralib::CSR<u32>,
         identifier_csr: utralib::CSR<u32>,
         i2c_csr: utralib::CSR<u32>,
-        handler_conn: xous::CID,
+        handler_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
@@ -49,8 +50,8 @@ mod implementation {
     // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        if let Some(conn) = xl.i2c_conn {
-            xous::try_send_message(xl.handler_conn, Opcode::IrqI2cTxrxDone.into()).map(|_| ()).unwrap();
+        if let Some(conn) = xl.handler_conn {
+            xous::try_send_message(conn, Opcode::IrqI2cTxrxDone.into()).map(|_| ()).unwrap();
         } else {
             log::error!("LLIO|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
         }
@@ -59,7 +60,9 @@ mod implementation {
     }
 
     impl Llio {
-        pub fn new(local_conn: xous::CID) -> Llio {
+        pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
+
+        pub fn new(handler_conn: xous::CID) -> Llio {
             let reboot_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::reboot::HW_REBOOT_BASE),
                 None,
@@ -102,7 +105,6 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map I2C CSR range");
-            let i2c_sid = xous::create_server_id().expect("LLIO: couldn't get random server ID for I2C");
             let event_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::btevents::HW_BTEVENTS_BASE),
                 None,
@@ -142,7 +144,7 @@ mod implementation {
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
-                handler_conn, // connection for messages from IRQ handler
+                handler_conn: Some(handler_conn), // connection for messages from IRQ handler
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
@@ -176,8 +178,12 @@ mod implementation {
             )
             .expect("couldn't claim I2C irq");
 
-            // initialize i2c
-            i2c_init(&mut xl, utralib::LITEX_CONFIG_CLOCK_FREQUENCY);
+            // initialize i2c clocks
+            // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+            let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+            xl.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+            // enable the block
+            xl.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
             // clear any interrupts pending, just in case something went pear-shaped during initialization
             xl.i2c_csr.wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
             // now enable interrupts
@@ -348,16 +354,6 @@ mod implementation {
         pub fn xadc_gpio2(&self) -> u16 {
             self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
         }
-
-
-        fn i2c_init(&mut self, clock_hz: u32) {
-            // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
-            let clkcode: u32 = clock_hz / (5 * 100_000) - 1;
-            self.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
-
-            // enable the block
-            self.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
-        }
     }
 }
 
@@ -435,8 +431,6 @@ mod implementation {
 fn xmain() -> ! {
     let debug1 = false;
     use crate::implementation::Llio;
-    //use heapless::Vec;
-    //use heapless::consts::*;
 
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
@@ -452,7 +446,7 @@ fn xmain() -> ! {
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
     // create an i2c state machine handler
-    let mut i2c_machine = I2cStateMachine::new(ticktimer_conn, llio.i2c_csr);
+    let mut i2c_machine = I2cStateMachine::new(ticktimer_conn, llio.get_i2c_base());
 
     if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;
@@ -590,7 +584,7 @@ fn xmain() -> ! {
                 },
                 Opcode::IrqI2cTxrxDone => {
                     // I2C state machine handler irq received
-                    ic2_machine.handler();
+                    i2c_machine.handler();
                 },
             _ => error!("LLIO: no handler for opcode"),
             }
@@ -602,7 +596,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
-                    let i2c_txrx: I2cTransaction = rkyv_i2c.unarchive();
+                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.unarchive();
 
                     let status = i2c_machine.initiate(i2c_txrx);
 
@@ -610,19 +604,20 @@ fn xmain() -> ! {
                     // pack our data back into the buffer to return
                     use rkyv::Write;
                     let mut writer = rkyv::ArchiveBuffer::new(buf);
-                    writer.archive(&api::Opcode::I2cTxRx(i2c_txrx)).expect("LLIO: couldn't re-archive return value to I2cTxRx");
+                    writer.archive(&Opcode::I2cTxRx(i2c_txrx)).expect("LLIO: couldn't re-archive return value to I2cTxRx");
                 },
                 _ => panic!("LLIO: invalid MutableBorrow memory message")
             };
         } else if let xous::Message::Borrow(m) = &envelope.body {
-            let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
                 archived_value::<api::Opcode>(&bytes, m.id as usize)
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
-                    let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
+                    let reg: xous::String::<64> = registration.unarchive();
+                    let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                     i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
                 },
                 _ => panic!("LLIO: invalid Borrow memory message"),

@@ -36,7 +36,7 @@ pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStat
     if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
         use rkyv::Unarchive;
         let i2c_txrx: I2cTransaction = result.unarchive();
-        Ok(i2c_txrx.status())
+        Ok(i2c_txrx.status)
     } else {
         use rkyv::Unarchive;
         let i2c_txrx = returned.unarchive();
