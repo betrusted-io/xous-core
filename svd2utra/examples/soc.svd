@@ -1328,10 +1328,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``d77dca2f``, so this value is 3615345199, which should be enough to check out
+``2a2abe5e``, so this value is 707444318, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xd77dca2f</resetValue>
+                    <resetValue>0x2a2abe5e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1348,7 +1348,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x0d</resetValue>
+                    <resetValue>0x0e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1362,7 +1362,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x01</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3056,7 +3056,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x508efbe6</resetValue>
+                    <resetValue>0x1a7a2a66</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3071,7 +3071,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x1f1cd099</resetValue>
+                    <resetValue>0x4b326b1e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
