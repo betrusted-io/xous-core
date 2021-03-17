@@ -2,8 +2,9 @@
 
 use xous::{Message, ScalarMessage, String, CID};
 use graphics_server::Gid;
+use rkyv::ser::Serializer;
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Prediction {
     pub index: u32,
     pub valid: bool,
@@ -43,7 +44,7 @@ impl From<usize> for PredictionTriggers {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
     Input(xous::String<4000>),
@@ -137,12 +138,12 @@ impl PredictionApi for PredictionPlugin {
     }
 
     fn set_input(&self, s: String<4000>) -> Result<(), xous::Error> {
-        use rkyv::Write;
         match self.connection {
             Some(cid) => {
                 let rkyv_input = Opcode::Input(s);
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&rkyv_input).expect("IME|API: couldn't archive input string");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                let pos = writer.serialize_value(&rkyv_input).expect("IME|API: couldn't archive input string");
                 let xous_buffer = writer.into_inner();
 
                 xous_buffer.lend(cid, pos as u32).expect("IME|API: set_input operation failure");
@@ -153,12 +154,12 @@ impl PredictionApi for PredictionPlugin {
     }
 
     fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error> {
-        use rkyv::Write;
         match self.connection {
             Some(cid) => {
                 let rkyv_picked = Opcode::Picked(s);
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&rkyv_picked).expect("IME|API: couldn't archive picked string");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                let pos = writer.serialize_value(&rkyv_picked).expect("IME|API: couldn't archive picked string");
                 let xous_buffer = writer.into_inner();
 
                 xous_buffer.lend(cid, pos as u32).expect("IME|API: feedback_picked operation failure");
@@ -169,8 +170,7 @@ impl PredictionApi for PredictionPlugin {
     }
 
     fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
-        use rkyv::Write;
-        use rkyv::Unarchive;
+        use rkyv::Deserialize;
         let debug1 = false;
         match self.connection {
             Some(cid) => {
@@ -181,8 +181,9 @@ impl PredictionApi for PredictionPlugin {
                     valid: false,
                 };
                 let pred_op = Opcode::Prediction(prediction);
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&pred_op).expect("IME|API: couldn't archive prediction request");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                let pos = writer.serialize_value(&pred_op).expect("IME|API: couldn't archive prediction request");
                 let mut xous_buffer = writer.into_inner();
                 if debug1{log::info!("IME|API: lending Prediction with pos {}", pos);}
 
@@ -191,7 +192,7 @@ impl PredictionApi for PredictionPlugin {
                 if debug1{log::info!("IME|API: returned from get_prediction");}
                 let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
                 if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
-                    let pred_r: Prediction = result.unarchive();
+                    let pred_r: Prediction = result.deserialize(&mut xous::XousDeserializer).unwrap();
                     if debug1{log::info!("IME|API: got {:?}", pred_r);}
                     if pred_r.valid {
                         let mut ret = xous::String::<4000>::new();
@@ -202,7 +203,7 @@ impl PredictionApi for PredictionPlugin {
                         Ok(None)
                     }
                 } else {
-                    let r = returned.unarchive();
+                    let r = returned.deserialize(&mut xous::XousDeserializer).unwrap();
                     log::error!("IME: API get_prediction returned an invalid result {:?}", r);
                     Err(xous::Error::InvalidString)
                 }
@@ -220,7 +221,7 @@ impl PredictionApi for PredictionPlugin {
 // in this crate so we can break circular dependencies
 // between the IMEF, GAM, and graphics server
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ImefOpcode {
     /// informs me where my input canvas is
     SetInputCanvas(Gid),
@@ -306,9 +307,9 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::SetPredictionServer(server);
 
-                use rkyv::Write as ArchiveWrite;
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                let pos = writer.serialize_value(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
                 writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredictionServer request failure");
                 Ok(())
             },
@@ -324,9 +325,9 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::RegisterListener(server);
 
-                use rkyv::Write as ArchiveWrite;
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                let pos = writer.serialize_value(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
                 writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredicitonServer request failure");
                 Ok(())
             },

@@ -6,17 +6,16 @@ use log::info;
 use core::fmt::Write;
 use core::convert::TryFrom;
 
-use rkyv::Unarchive;
+use rkyv::Deserialize;
 use rkyv::archived_value;
 use core::pin::Pin;
 
 use ime_plugin_api::{ImeFrontEndApi, ImeFrontEnd};
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
+use xous::MessageEnvelope;
 
 use heapless::spsc::Queue;
 use heapless::consts::U16;
-
-use xous::MessageEnvelope;
 
 mod cmds;
 use cmds::*;
@@ -239,7 +238,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ime_plugin_api::ImefOpcode>::GotInputLine(rkyv_s) => {
-                    let s: xous::String<4000> = rkyv_s.unarchive();
+                    let s: xous::String<4000> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     repl.input(s.as_str().expect("SHCH: couldn't convert incoming string")).expect("SHCH: REPL couldn't accept input string");
                     update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 },

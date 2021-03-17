@@ -2,7 +2,7 @@ use xous::{Message, ScalarMessage};
 use xous::String;
 
 /////////////////////// UART TYPE
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum UartType {
     Kernel,
     Log,
@@ -44,7 +44,7 @@ impl Into<u32> for UartType {
 
 /////////////////////// I2C
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
     /// used only as the default, should always be set to one of the below before sending
     Uninitialized,
@@ -65,13 +65,13 @@ pub enum I2cStatus {
     /// everything is OK, write finished. data fields have no meaning
     ResponseWriteOk,
 }
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    pub txbuf: Option<[u8; 31]>, // limited by trait types available in Rkyv
+    pub txbuf: Option<[u8; 258]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
-    pub rxbuf: Option<[u8; 31]>,
+    pub rxbuf: Option<[u8; 258]>,
     pub rxlen: u32,
     pub timeout_ms: u32,
     // response field to the calling server
@@ -81,10 +81,11 @@ impl I2cTransaction {
     pub fn new() -> Self {
         I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized }
     }
+    pub fn status(&self) -> I2cStatus { self.status }
 }
 
 ////////////////////////////////// VIBE
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum VibePattern {
     Short,
     Long,
@@ -110,7 +111,7 @@ impl Into<usize> for VibePattern {
 }
 
 //////////////////////////////// CLOCK GATING (placeholder)
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum ClockMode {
     Low,
     AllOn,
@@ -133,7 +134,7 @@ impl Into<usize> for ClockMode {
 }
 
 //////////////////////////////////// OPCODES
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// not tested - reboot
     RebootRequest,

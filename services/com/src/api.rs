@@ -6,7 +6,7 @@ use xous::{Message, ScalarMessage};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-#[derive(Debug, Default, Copy, Clone, rkyv::Archive)]
+#[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
     /// instantaneous voltage in mV
     pub voltage: u16,
@@ -39,7 +39,7 @@ impl Into<[usize; 2]> for BattStats {
     }
 }
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// Battery stats
     BattStats,
@@ -102,7 +102,7 @@ pub enum Opcode {
     RxStatsAgent,
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener(xous_names::api::XousServerName),
+    RegisterBattStatsListener(xous::String<64>),
 }
 
 impl core::convert::TryFrom<& Message> for Opcode {

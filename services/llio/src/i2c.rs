@@ -3,6 +3,8 @@ use heapless::consts::*;
 
 use llio::api::*;
 use llio::send_i2c_response;
+
+#[cfg(target_os = "none")]
 use utralib::*;
 
 #[derive(Eq, PartialEq)]
@@ -11,6 +13,25 @@ enum I2cState {
     Write,
     Read,
 }
+
+#[cfg(not(target_os = "none"))]
+pub struct I2cStateMachine {
+}
+#[cfg(not(target_os = "none"))]
+impl I2cStateMachine {
+    pub fn new(_ticktimer: xous::CID, _i2c_base: *mut u32) -> Self {
+        I2cStateMachine {}
+    }
+    pub fn initiate(&mut self, _transaction: I2cTransaction ) -> I2cStatus {
+        I2cStatus::ResponseInProgress
+    }
+    pub fn register_listener(&mut self, _listener: xous::CID) -> Result<(), xous::CID> {
+        Ok(())
+    }
+    pub fn handler(&mut self) {
+    }
+}
+#[cfg(target_os = "none")]
 pub struct I2cStateMachine {
     transaction: I2cTransaction,
     state: I2cState,
@@ -20,6 +41,7 @@ pub struct I2cStateMachine {
     i2c_csr: utralib::CSR<u32>,
     listeners: Vec<xous::CID, U32>,
 }
+#[cfg(target_os = "none")]
 impl I2cStateMachine {
     pub fn new(ticktimer: xous::CID, i2c_base: *mut u32) -> Self {
         I2cStateMachine {
@@ -33,8 +55,8 @@ impl I2cStateMachine {
         }
     }
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
-        // sanity-check the bounds limits, currently imposed by trait implementations available in rkyv
-        if transaction.txlen > 31 || transaction.rxlen > 31 {
+        // sanity-check the bounds limits
+        if transaction.txlen > 258 || transaction.rxlen > 258 {
             return I2cStatus::ResponseFormatError
         }
 

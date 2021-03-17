@@ -8,7 +8,8 @@ use log::{error, info};
 use heapless::spsc::Queue;
 use heapless::consts::U4;
 
-use rkyv::Unarchive;
+use rkyv::Deserialize;
+use rkyv::ser::Serializer;
 use core::pin::Pin;
 use rkyv::{archived_value, archived_value_mut};
 
@@ -59,7 +60,7 @@ fn xmain() -> ! {
                     // the picked results
                 },
                 rkyv::Archived::<Opcode>::Picked(rkyv_s) => {
-                    let s: xous::String<4000> = rkyv_s.unarchive();
+                    let s: xous::String<4000> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     let mut local_s: xous::String<64> = xous::String::new();
                     use core::fmt::Write;
                     write!(local_s, "{:32}", s).expect("IME_SH: overflowed history variable");
@@ -79,7 +80,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::Prediction(pred_r) => {
-                    let mut prediction: Prediction = pred_r.unarchive();
+                    let mut prediction: Prediction = pred_r.deserialize(&mut xous::XousDeserializer).unwrap();
                     if debug1{info!("IME_SH: querying prediction index {}", prediction.index);}
                     if debug1{info!("IME_SH: {:?}", prediction);}
                     if history.len() > 0 && ((prediction.index as usize) < history.len()) {
@@ -131,10 +132,9 @@ fn xmain() -> ! {
                     if debug1{info!("IME_SH: returning index {} string {:?}", prediction.index, prediction.string);}
 
                     // pack our data back into the buffer to return
-                    use rkyv::Write;
                     let ret_op = Opcode::Prediction(prediction);
-                    let mut writer = rkyv::ArchiveBuffer::new(buf);
-                    let _pos = writer.archive(&ret_op).expect("IME_SH: Prediction query couldn't re-archive return value");
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    let _pos = writer.serialize_value(&ret_op).expect("IME_SH: Prediction query couldn't re-archive return value");
                     if debug1{info!("IME_SH: archived with pos {}", _pos);}
                 },
                 _ => error!("IME_SH: Got invalid MutableBorrow")

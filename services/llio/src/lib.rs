@@ -4,17 +4,18 @@
 /// are calling these functions inside a different process.
 pub mod api;
 use api::*;
+use rkyv::Deserialize;
 
-use xous::{send_message, CID};
+use xous::{send_message, CID, XousDeserializer};
 
 // used by the LLIO to send a response to other servers
 pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xous::Error> {
     let op = api::Opcode::I2cResponse(transaction);
-    use rkyv::Write;
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer
-        .archive(&op)
-        .expect("couldn't archive request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cResponse")
+    };
     let buf = writer.into_inner();
     buf.lend(cid, pos as u32).expect("LLIO_API: I2cResponse operation failure");
 
@@ -23,24 +24,21 @@ pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xo
 // used by other servers to request an I2C transaction
 pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
     let op = api::Opcode::I2cTxRx(transaction);
-    use rkyv::Write;
-    let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-    let pos = writer
-        .archive(&op)
-        .expect("couldn't archive request");
+    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    let pos = {
+        use rkyv::ser::Serializer;
+        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cTxRx")
+    };
     let mut buf = writer.into_inner();
 
     buf.lend_mut(cid, pos as u32).expect("LLIO_API: I2cTxRx operation failure");
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
-        use rkyv::Unarchive;
-        let i2c_txrx: I2cTransaction = result.unarchive();
-        Ok(i2c_txrx.status)
+        let transaction = result.deserialize(&mut XousDeserializer).expect("LLIO_API: Can't deserialize result in send_i2c_request");
+        Ok(transaction.status())
     } else {
-        use rkyv::Unarchive;
-        let i2c_txrx = returned.unarchive();
-        log::info!("send_i2c_request saw an unhandled return type of {:?}", i2c_txrx);
+        log::info!("send_i2c_request saw an unhandled return type of {:?}", buf);
         Err(xous::Error::InternalError)
     }
 }

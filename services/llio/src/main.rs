@@ -9,7 +9,8 @@ use i2c::*;
 use core::convert::TryFrom;
 use core::pin::Pin;
 use rkyv::archived_value;
-use rkyv::Unarchive;
+use rkyv::ser::Serializer;
+use rkyv::Deserialize;
 
 use log::{error, info};
 
@@ -360,17 +361,18 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use crate::api::*;
+    use llio::api::*;
     use log::{error, info};
 
     pub struct Llio {
     }
 
     impl Llio {
-        pub fn new() -> Llio {
+        pub fn new(_handler_conn: xous::CID) -> Llio {
             Llio {
             }
         }
+        pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
 
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
@@ -596,15 +598,16 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
-                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.unarchive();
+                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.deserialize(&mut xous::XousDeserializer).unwrap();
 
                     let status = i2c_machine.initiate(i2c_txrx);
 
                     i2c_txrx.status = status;
                     // pack our data back into the buffer to return
-                    use rkyv::Write;
-                    let mut writer = rkyv::ArchiveBuffer::new(buf);
-                    writer.archive(&Opcode::I2cTxRx(i2c_txrx)).expect("LLIO: couldn't re-archive return value to I2cTxRx");
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    let pos = writer
+                        .serialize_value(&Opcode::I2cTxRx(i2c_txrx))
+                        .expect("LLIO: couldn't archive self");
                 },
                 _ => panic!("LLIO: invalid MutableBorrow memory message")
             };
@@ -616,7 +619,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
-                    let reg: xous::String::<64> = registration.unarchive();
+                    let reg: xous::String::<64> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
                     let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                     i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
                 },

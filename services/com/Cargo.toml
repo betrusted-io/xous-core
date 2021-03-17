@@ -7,7 +7,6 @@ description = "COM interface to the EC"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-rkyv = { version = "0.3.1", default_features = false }
 heapless = "0.5"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
@@ -15,6 +14,11 @@ xous-names = { path = "../xous-names" }
 log = "0.4"
 com_rs-ref = { path = "../../imports/com_rs-ref" }
 typenum = "1.12"
+
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+features = ["const_generics"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

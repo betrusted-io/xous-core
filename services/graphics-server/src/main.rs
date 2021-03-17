@@ -7,7 +7,9 @@ mod api;
 use api::{Opcode, ClipObject, ClipObjectType};
 
 use core::pin::Pin;
-use rkyv::{archived_value, Unarchive, archived_value_mut};
+use rkyv::{archived_value, archived_value_mut};
+use rkyv::Deserialize;
+use rkyv::ser::Serializer;
 
 mod backend;
 use backend::XousDisplay;
@@ -107,7 +109,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    let s: xous::String<4096> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     //info!("GFX: unarchived string: {:?}", s);
                     blitstr::paint_str(
                         display.native_buffer(),
@@ -123,7 +125,7 @@ fn xmain() -> ! {
                     //info!("GFX: string painted");
                 },
                 rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.unarchive();
+                    let s: xous::String<4096> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     blitstr::paint_str(
                         display.native_buffer(),
                         current_string_clip.into(),
@@ -137,7 +139,7 @@ fn xmain() -> ! {
                     );
                 },
                 rkyv::Archived::<api::Opcode>::DrawClipObject(rco) => {
-                    let obj: ClipObject = rco.unarchive();
+                    let obj: ClipObject = rco.deserialize(&mut xous::XousDeserializer).unwrap();
                     if debug1{info!("GFX: DrawClipObject {:?}", obj);}
                     match obj.obj {
                         ClipObjectType::Line(line) => {
@@ -164,7 +166,7 @@ fn xmain() -> ! {
             let debugtv: bool = false;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
-                    let mut tv = rtv.unarchive();
+                    let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
 
                     if tv.clip_rect.is_none() { continue } // if no clipping rectangle is specified, nothing to draw
                     let clip_rect = tv.clip_rect.unwrap(); // this is the clipping rectangle of the canvas
@@ -367,9 +369,8 @@ fn xmain() -> ! {
                     if debugtv{info!("GFX(TV): returning cursor of {:?}", tv.cursor);}
 
                     // pack our data back into the buffer to return
-                    use rkyv::Write;
-                    let mut writer = rkyv::ArchiveBuffer::new(buf);
-                    writer.archive(&api::Opcode::DrawTextView(tv)).expect("GFX: couldn't re-archive return value");
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    writer.serialize_value(&api::Opcode::DrawTextView(tv)).expect("GFX: couldn't re-archive return value");
                 },
                 _ => panic!("GFX: invalid mutable borrow message"),
             };

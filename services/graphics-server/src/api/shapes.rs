@@ -4,7 +4,7 @@ use blitstr_ref as blitstr;
 use blitstr::{ClipRect};
 use core::{cmp::{max, min}};
 
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Rectangle {
     /// Top left point of the rect
     pub tl: Point,
@@ -205,7 +205,7 @@ impl Into<ClipRect> for Rectangle {
 
 //////////////////////////// LINE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Line {
     pub start: Point,
     pub end: Point,
@@ -238,7 +238,7 @@ impl Line {
 
 //////////////////////////// CIRCLE
 
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Circle {
     pub center: Point,
     pub radius: i16,
@@ -268,7 +268,7 @@ impl Circle {
 }
 
 //////////////////////// Rounded Rectangle
-#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct RoundedRectangle {
     pub border: Rectangle, // drawstyle is inherited from the Rectangle
     pub radius: i16,
