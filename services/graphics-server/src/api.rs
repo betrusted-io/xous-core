@@ -31,7 +31,7 @@ use hash32::{Hash, Hasher};
 
 //////////////// OS APIs
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Gid {
     /// a 128-bit random identifier for graphical objects
     gid: [u32; 4],
@@ -49,7 +49,7 @@ impl hash32::Hash for Gid {
     }
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// Flush the buffer to the screen
     Flush,
@@ -276,7 +276,7 @@ impl Into<Message> for Opcode {
 }
 
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum ClipObjectType {
     Line(Line),
     Circ(Circle),
@@ -284,7 +284,7 @@ pub enum ClipObjectType {
     RoundRect(RoundedRectangle),
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ClipObject {
     pub clip: Rectangle,
     pub obj: ClipObjectType,

@@ -13,8 +13,12 @@ keyboard = {path = "../keyboard"}
 log = "0.4"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
-rkyv = { version = "0.3.1", default_features = false, features = ["strict"] }
 xous-names = {path = "../xous-names"}
+
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+features = ["const_generics"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}

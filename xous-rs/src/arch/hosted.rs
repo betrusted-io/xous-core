@@ -665,7 +665,12 @@ fn _xous_syscall_to(
     // );
 
     // Send the packet to the server
-    let mut pkt = vec![];
+    let mut capacity = 9 * core::mem::size_of::<usize>();
+    if let Some(mem) = call.memory() {
+        capacity += mem.len();
+    }
+
+    let mut pkt = Vec::with_capacity(capacity);
     THREAD_ID.with(|tid| pkt.extend_from_slice(&tid.borrow().to_le_bytes()));
     for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
         pkt.extend_from_slice(&word.to_le_bytes());

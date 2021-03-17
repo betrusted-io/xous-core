@@ -16,7 +16,7 @@ use log::{error, info};
 
 use core::pin::Pin;
 use xous::buffer;
-use rkyv::{archived_value, Write};
+use rkyv::archived_value;
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
@@ -899,8 +899,11 @@ fn xmain() -> ! {
                         }
                     }
                 }
-                let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                let pos = writer.archive(&rs).expect("couldn't archive request");
+                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+                let pos = {
+                    use rkyv::ser::Serializer;
+                    writer.serialize_value(&rs).expect("KBD: couldn't archive request")
+                };
                 let xous_buffer = writer.into_inner();
                 xous_buffer.send(*conn, pos as u32).expect("KBD: can't send raw code");
             }

@@ -7,13 +7,17 @@ description = ""
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-rkyv = { version = "0.3.1", default_features = false }
 heapless = "0.5"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 log = "0.4"
 hash32 = "0.1.0"
 hash32-derive = "0.1.0"
+
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+features = ["const_generics"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

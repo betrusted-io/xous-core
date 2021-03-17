@@ -34,12 +34,12 @@ checksum = "afddf7f520a80dbf76e6f50a35bca42a2331ef227a28b3b6dc5c2e2338d114b1"
 
 [[package]]
 name = "as-slice"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb4d1c23475b74e3672afa8c2be22040b8b7783ad9b461021144ed10a46bb0e6"
+checksum = "45403b49e3954a4b8428a0ac21a4b7afadccf92bfd96273f1a58cd4812496ae0"
 dependencies = [
- "generic-array 0.12.3",
- "generic-array 0.13.2",
+ "generic-array 0.12.4",
+ "generic-array 0.13.3",
  "generic-array 0.14.4",
  "stable_deref_trait",
 ]
@@ -70,7 +70,7 @@ dependencies = [
  "graphics-server",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -83,7 +83,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "utralib",
  "xous",
  "xous-names",
@@ -121,10 +121,9 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.5.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16#d4516b0a6fa3ae6d29e5e323513158c4cd6b8b16"
 dependencies = [
  "log",
- "rkyv",
+ "rkyv 0.4.1",
 ]
 
 [[package]]
@@ -241,7 +240,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "typenum",
  "utralib",
@@ -276,7 +275,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv",
+ "rkyv 0.3.1",
  "xous",
  "xous-names",
 ]
@@ -415,7 +414,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -425,18 +424,18 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.12.3"
+version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c68f0274ae0e023facc3c97b2e00f076be70e254bc851d972503b328db79b2ec"
+checksum = "ffdf9f34f1447443d37393cc6c2b8313aebddcd96906caf34e54c68d8e57d7bd"
 dependencies = [
  "typenum",
 ]
 
 [[package]]
 name = "generic-array"
-version = "0.13.2"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ed1e761351b56f54eb9dcd0cfaca9fd0daecf93918e1cfc01c8a3d26ee7adcd"
+checksum = "f797e67af32588215eaaab8327027ee8e71b9dd0b2b26996aedf20c030fce309"
 dependencies = [
  "typenum",
 ]
@@ -479,7 +478,7 @@ dependencies = [
  "log",
  "log-server",
  "minifb",
- "rkyv",
+ "rkyv 0.4.1",
  "utralib",
  "xous",
  "xous-names",
@@ -512,7 +511,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74911a68a1658cfcfb61bc0ccfbd536e3b6e906f8c2f7883ee50157e3e2184f1"
 dependencies = [
  "as-slice",
- "generic-array 0.13.2",
+ "generic-array 0.13.3",
  "hash32",
  "stable_deref_trait",
 ]
@@ -559,7 +558,7 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -572,7 +571,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv",
+ "rkyv 0.4.1",
  "xous",
  "xous-names",
 ]
@@ -585,7 +584,7 @@ dependencies = [
  "ime-plugin-api",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -613,7 +612,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -655,7 +654,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -834,6 +833,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0704ee1a7e00d7bb417d0770ea303c1bccbabf0ef1667dae92b5967f5f8a71"
 dependencies = [
  "unicode-xid 0.2.1",
+]
+
+[[package]]
+name = "ptr_meta"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aad980f4bb4053abd4733b1680024a8c71ffde345f6e584c6af9eb6f0067a198"
+dependencies = [
+ "ptr_meta_derive",
+]
+
+[[package]]
+name = "ptr_meta_derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bcd6232fa7d7fcd15703da5c07c9f10d203ee4fdf6ecf6d7ac5056db78089a3"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
 ]
 
 [[package]]
@@ -1016,7 +1035,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ba0dea2b9efaa468bc76d09a06741839d84c70a746edb1793d9653828532666"
 dependencies = [
  "memoffset",
- "rkyv_derive",
+ "rkyv_derive 0.3.1",
+]
+
+[[package]]
+name = "rkyv"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a6fdbe501948402e00ede914b4dc21d340105b2eff740ed47e3d45ac846f5c"
+dependencies = [
+ "memoffset",
+ "ptr_meta",
+ "rkyv_derive 0.4.0",
 ]
 
 [[package]]
@@ -1024,6 +1054,17 @@ name = "rkyv_derive"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddf04e93b51e6cfcc0eeee3bbf121d978303b83fbf2dc49085cff7855478fd4b"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
+]
+
+[[package]]
+name = "rkyv_derive"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95a169f6bc5a81033e86ed39d0f4150e2608160b73d2b93c6e8e6a3efa873f14"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -1114,7 +1155,7 @@ dependencies = [
  "llio",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1551,7 +1592,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
- "rkyv",
+ "rkyv 0.4.1",
  "rustc-std-workspace-core",
  "xous-macros",
 ]
@@ -1575,7 +1616,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv",
+ "rkyv 0.4.1",
  "ticktimer-server",
  "utralib",
  "xous",

@@ -10,9 +10,15 @@ description = "System call interface for Xous"
 bitflags = {version = "1", optional = true }
 xous-macros = { path = "../macros", version = "0.1.0", optional = true }
 log = { version = "0.4", optional = true }
-rkyv = { version = "0.3.1", default_features = false, optional = true }
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
 compiler_builtins = { version = '0.1.0', optional = true }
+
+# for sending strings
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+optional = true
+features = ["const_generics"]
 
 [features]
 

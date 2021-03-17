@@ -1,7 +1,7 @@
 use xous::{Message, ScalarMessage};
 use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle, Point};
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum GamObjectType {
     Line(Line),
     Circ(Circle),
@@ -9,20 +9,20 @@ pub enum GamObjectType {
     RoundRect(RoundedRectangle),
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct GamObject {
     pub canvas: Gid,
     pub obj: GamObjectType,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SetCanvasBoundsRequest {
     pub canvas: Gid,
     pub requested: Point,
     pub granted: Option<Point>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct ContentCanvasRequest {
     // return value of the canvas Gid
     pub canvas: Gid,
@@ -31,7 +31,7 @@ pub struct ContentCanvasRequest {
 }
 
 #[repr(C)]
-#[derive(Debug, rkyv::Archive, rkyv::Unarchive, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 // #[archive(derive(Copy, Clone))]
 pub(crate) enum Opcode {
     // clears a canvas with a given GID

@@ -3,7 +3,7 @@ use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
 
 /// coordinates are local to the canvas, not absolute to the screen
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum TextBounds {
     // fixed width and height in a rectangle
     BoundingBox(Rectangle),
@@ -15,7 +15,7 @@ pub enum TextBounds {
     GrowableFromBl(Point, u16),
 }
 
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Unarchive, PartialEq)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq)]
 // operations that may be requested of a TextView when sent to GAM
 pub enum TextOp {
     Nop,
@@ -44,7 +44,7 @@ impl From<usize> for TextOp {
 // roughly 168 bytes to represent the rest of the struct, and we want to fill out the 4096 byte page with text
 const TEXTVIEW_LEN: usize = 3072;
 
-#[derive(Copy, Clone, rkyv::Archive, rkyv::Unarchive)]
+#[derive(Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.

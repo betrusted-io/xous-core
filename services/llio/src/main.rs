@@ -2,19 +2,23 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
+use llio::api::*;
+mod i2c;
+use i2c::*;
 
 use core::convert::TryFrom;
+use core::pin::Pin;
+use rkyv::archived_value;
+use rkyv::ser::Serializer;
+use rkyv::Deserialize;
 
 use log::{error, info};
 
 #[cfg(target_os = "none")]
 mod implementation {
-    use crate::api::*;
+    use llio::api::*;
     use log::{error, info};
     use utralib::generated::*;
-
-    const STD_TIMEOUT: u32 = 100;
 
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
@@ -23,6 +27,7 @@ mod implementation {
         info_csr: utralib::CSR<u32>,
         identifier_csr: utralib::CSR<u32>,
         i2c_csr: utralib::CSR<u32>,
+        handler_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
@@ -43,15 +48,22 @@ mod implementation {
         xl.gpio_csr
             .wo(utra::gpio::EV_PENDING, xl.gpio_csr.r(utra::gpio::EV_PENDING));
     }
+    // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        // just clear the pending request for now and return
+        if let Some(conn) = xl.handler_conn {
+            xous::try_send_message(conn, Opcode::IrqI2cTxrxDone.into()).map(|_| ()).unwrap();
+        } else {
+            log::error!("LLIO|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
+        }
         xl.i2c_csr
             .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
     }
 
     impl Llio {
-        pub fn new() -> Llio {
+        pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
+
+        pub fn new(handler_conn: xous::CID) -> Llio {
             let reboot_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::reboot::HW_REBOOT_BASE),
                 None,
@@ -133,6 +145,7 @@ mod implementation {
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
+                handler_conn: Some(handler_conn), // connection for messages from IRQ handler
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
@@ -157,12 +170,25 @@ mod implementation {
             )
             .expect("couldn't claim GPIO irq");
 
+            // disable interrupt, just in case it's enabled from e.g. a warm boot
+            xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
             xous::claim_interrupt(
                 utra::i2c::I2C_IRQ,
                 handle_i2c_irq,
                 (&mut xl) as *mut Llio as *mut usize,
             )
             .expect("couldn't claim I2C irq");
+
+            // initialize i2c clocks
+            // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+            let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+            xl.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+            // enable the block
+            xl.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+            // clear any interrupts pending, just in case something went pear-shaped during initialization
+            xl.i2c_csr.wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
+            // now enable interrupts
+            xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
 
             xl
         }
@@ -335,17 +361,18 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use crate::api::*;
+    use llio::api::*;
     use log::{error, info};
 
     pub struct Llio {
     }
 
     impl Llio {
-        pub fn new() -> Llio {
+        pub fn new(_handler_conn: xous::CID) -> Llio {
             Llio {
             }
         }
+        pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
 
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
@@ -406,8 +433,6 @@ mod implementation {
 fn xmain() -> ! {
     let debug1 = false;
     use crate::implementation::Llio;
-    //use heapless::Vec;
-    //use heapless::consts::*;
 
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
@@ -415,8 +440,15 @@ fn xmain() -> ! {
     let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
     if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
 
-    // Create a new com object
-    let mut llio = Llio::new();
+    // Create a new llio object
+    let handler_conn = xous::connect(llio_sid).expect("LLIO: can't create IRQ handler connection");
+    let mut llio = Llio::new(handler_conn);
+
+    // ticktimer is a well-known server
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    // create an i2c state machine handler
+    let mut i2c_machine = I2cStateMachine::new(ticktimer_conn, llio.get_i2c_base());
 
     if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;
@@ -552,8 +584,47 @@ fn xmain() -> ! {
                 Opcode::AdcGpio2 => {
                     xous::return_scalar(envelope.sender, llio.xadc_gpio2() as _).expect("LLIO: couldn't return Xadc");
                 },
+                Opcode::IrqI2cTxrxDone => {
+                    // I2C state machine handler irq received
+                    i2c_machine.handler();
+                },
             _ => error!("LLIO: no handler for opcode"),
             }
+        } else if let xous::Message::MutableBorrow(m) = &envelope.body {
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<Opcode>(&bytes, m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
+                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.deserialize(&mut xous::XousDeserializer).unwrap();
+
+                    let status = i2c_machine.initiate(i2c_txrx);
+
+                    i2c_txrx.status = status;
+                    // pack our data back into the buffer to return
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    let pos = writer
+                        .serialize_value(&Opcode::I2cTxRx(i2c_txrx))
+                        .expect("LLIO: couldn't archive self");
+                },
+                _ => panic!("LLIO: invalid MutableBorrow memory message")
+            };
+        } else if let xous::Message::Borrow(m) = &envelope.body {
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<api::Opcode>(&bytes, m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
+                    let reg: xous::String::<64> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
+                    i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
+                },
+                _ => panic!("LLIO: invalid Borrow memory message"),
+            };
         } else {
             error!("LLIO: couldn't convert opcode");
         }

@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
-use hash32::{Hash, Hasher};
 use xous::CID;
-
-use core::cmp::Eq;
+use hash32::{Hash, Hasher};
 
 // bottom 16 bits are reserved for structure re-use by other servers
 pub const ID_REGISTER_NAME: u32 = 0x1_0000;
@@ -12,13 +10,13 @@ pub const ID_AUTHENTICATE: u32 = 0x3_0000;
 
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
-#[derive(rkyv::Archive, Debug)]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 pub(crate) enum Request {
     /// Create a new server with the given name and return its SID.
-    Register(XousServerName),
+    Register(xous::String::<64>),
 
     /// Create a connection to the target server.
-    Lookup(XousServerName),
+    Lookup(xous::String::<64>),
 
     /// Create an authenticated connection to the target server.
     AuthenticatedLookup(AuthenticatedLookup),
@@ -38,42 +36,21 @@ pub(crate) enum Request {
     CID(CID),
 }
 
-#[derive(Debug, Default, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Lookup {
-    pub name: XousServerName,
+    pub name: xous::String::<64>,
 }
 
-#[derive(Debug, Default, rkyv::Archive)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticatedLookup {
-    pub name: XousServerName,
+    pub name: xous::String::<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
     pub challenge: [u32; 8],
 }
 
-impl core::convert::TryFrom<&str> for XousServerName {
-    type Error = xous::Error;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let mut s = XousServerName::default();
-        use core::fmt::Write;
-        write!(s, "{}", value).map_err(|_| xous::Error::AccessDenied)?;
-        Ok(s)
-    }
-}
-// impl Lookup {
-//     pub fn new() -> Self {
-//         Lookup {
-//             cid: 0,
-//             name: Default::default(),
-//             authenticate_request: false,
-//             pubkey_id: [0; 20],
-//             challenge: [0; 8],
-//         }
-//     }
-// }
-
 #[derive(Debug)]
 pub struct Authenticate {
-    pub name: XousServerName,
+    pub name: xous::String::<64>,
     pub success: bool,
     pub response_to_challenge: [u32; 8],
 }
@@ -83,6 +60,9 @@ impl Authenticate {
         ID_AUTHENTICATE as u32
     }
 }
+
+// We keep XousServerName around because want to be able to index off the server name, without
+// burdening the Kernel String type with the Hash32 methods
 
 // --------------------- Taken from rkyv docs https://docs.rs/rkyv/0.3.0/rkyv/trait.Archive.html //
 #[derive(Debug, Copy, Clone)]
@@ -107,70 +87,51 @@ impl XousServerName {
         })
         .unwrap()
     }
-}
-
-pub struct ArchivedXousServerName {
-    // This will be a relative pointer to the bytes of our string.
-    ptr: rkyv::RelPtr,
-    // The length of the archived version must be explicitly sized for
-    // 32/64-bit compatibility. Archive is not implemented for usize and
-    // isize to help you avoid making this mistake.
-    len: u32,
-}
-
-impl ArchivedXousServerName {
-    // This will help us get the bytes of our type as a str again.
-    pub fn as_str(&self) -> &str {
-        unsafe {
-            // The as_ptr() function of RelPtr will get a pointer
-            // to its memory.
-            let bytes = core::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize);
-            core::str::from_utf8_unchecked(bytes)
+    pub fn new() -> XousServerName {
+        XousServerName {
+            value: [0; 64],
+            length: 0,
         }
     }
-}
 
-pub struct XousServerNameResolver {
-    // This will be the position that the bytes of our string are stored at.
-    // We'll use this to make the relative pointer of our ArchivedXousServerName.
-    bytes_pos: usize,
-}
-
-impl rkyv::Resolve<XousServerName> for XousServerNameResolver {
-    // This is essentially the output type of the resolver. It must match
-    // the Archived associated type in our impl of Archive for XousServerName.
-    type Archived = ArchivedXousServerName;
-
-    // The resolve function consumes the resolver and produces the archived
-    // value at the given position.
-    fn resolve(self, pos: usize, value: &XousServerName) -> Self::Archived {
-        Self::Archived {
-            // We have to be careful to add the offset of the ptr field,
-            // otherwise we'll be using the position of the ArchivedXousServerName
-            // instead of the position of the ptr. That's the reason why
-            // RelPtr::new is unsafe.
-            ptr: unsafe {
-                rkyv::RelPtr::new(
-                    pos + rkyv::offset_of!(ArchivedXousServerName, ptr),
-                    self.bytes_pos,
-                )
-            },
-            len: value.length,
+    pub fn from_str(src: &str) -> XousServerName {
+        let mut s = Self::new();
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.value) {
+            *dest_byte = src_byte;
         }
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        s.length = s.value.len().min(src.as_bytes().len()) as u32;
+
+        // If the string is not valid, set its length to 0.
+        if s.as_str().is_err() {
+            s.length = 0;
+        }
+
+        s
     }
-}
 
-impl rkyv::Archive for XousServerName {
-    type Archived = ArchivedXousServerName;
-    /// This is the resolver we'll return from archive.
-    type Resolver = XousServerNameResolver;
+    pub fn as_bytes(&self) -> [u8; 64] {
+        self.value
+    }
 
-    fn archive<W: rkyv::Write + ?Sized>(&self, writer: &mut W) -> Result<Self::Resolver, W::Error> {
-        // This is where we want to write the bytes of our string and return
-        // a resolver that knows where those bytes were written.
-        let bytes_pos = writer.pos();
-        writer.write(&self.value[0..(self.length as usize)])?;
-        Ok(Self::Resolver { bytes_pos })
+    pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(&self.value[0..self.length as usize])
+    }
+
+    pub fn len(&self) -> usize {
+        self.length as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    /// Clear the contents and set the length to 0
+    pub fn clear(&mut self) {
+        self.length = 0;
+        self.value = [0; 64];
     }
 }
 
@@ -222,49 +183,5 @@ impl Eq for XousServerName {}
 impl core::fmt::Display for XousServerName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.to_str())
-    }
-}
-
-// Allow a `&XousServerName` to be printed out
-impl core::fmt::Display for ArchivedXousServerName {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-// Allow a `&XousServerName` to be used anywhere that expects a `&str`
-impl AsRef<str> for ArchivedXousServerName {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-impl PartialEq for ArchivedXousServerName {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_str() == other.as_str()
-    }
-}
-
-impl Eq for ArchivedXousServerName {}
-
-impl hash32::Hash for ArchivedXousServerName {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        Hash::hash(&self.as_str(), state)
-    }
-}
-
-impl rkyv::Unarchive<XousServerName> for ArchivedXousServerName {
-    fn unarchive(&self) -> XousServerName {
-        let mut s: XousServerName = Default::default();
-        unsafe {
-            let p = self.ptr.as_ptr() as *const u8;
-            for (i, val) in s.value.iter_mut().enumerate() {
-                *val = p.add(i).read();
-            }
-        };
-        s.length = self.len;
-        s
     }
 }

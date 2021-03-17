@@ -22,7 +22,9 @@ use core::convert::TryFrom;
 use heapless::FnvIndexMap;
 use heapless::consts::*;
 
-use rkyv::{Unarchive, archived_value, archived_value_mut};
+use rkyv::{archived_value, archived_value_mut};
+use rkyv::Deserialize;
+use rkyv::ser::Serializer;
 use core::pin::Pin;
 
 #[derive(Debug)]
@@ -291,7 +293,7 @@ fn xmain() -> ! {
                     };
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
-                            let mut tv = rtv.unarchive();
+                            let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
                             if debug1{info!("GAM: rendertextview {:?}", tv);}
                             match tv.get_op() {
                                 TextOp::Nop => (),
@@ -322,9 +324,8 @@ fn xmain() -> ! {
                                             tv.bounds_computed = tv_clone.bounds_computed;
 
                                             // pack our data back into the buffer to return
-                                            use rkyv::Write;
-                                            let mut writer = rkyv::ArchiveBuffer::new(buf);
-                                            writer.archive(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
+                                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                                            writer.serialize_value(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
                                             canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
                                         } else {
                                             info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
@@ -337,7 +338,7 @@ fn xmain() -> ! {
                             };
                         },
                         rkyv::Archived::<api::Opcode>::SetCanvasBounds(rcb) => {
-                            let mut cb: SetCanvasBoundsRequest = rcb.unarchive();
+                            let mut cb: SetCanvasBoundsRequest = rcb.deserialize(&mut xous::XousDeserializer).unwrap();
                             if debug1{info!("GAM: SetCanvasBoundsRequest {:?}", cb);}
                             // ASSUME:
                             // very few canvases allow dynamic resizing, so we special case these
@@ -353,12 +354,11 @@ fn xmain() -> ! {
                                 cb.granted = None;
                             }
                             // pack our data back into the buffer to return
-                            use rkyv::Write;
-                            let mut writer = rkyv::ArchiveBuffer::new(buf);
-                            writer.archive(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
+                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                            writer.serialize_value(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
                         },
                         rkyv::Archived::<api::Opcode>::RequestContentCanvas(rcc) => {
-                            let mut req: ContentCanvasRequest = rcc.unarchive();
+                            let mut req: ContentCanvasRequest = rcc.deserialize(&mut xous::XousDeserializer).unwrap();
                             if debug1{info!("GAM: RequestContentCanvas {:?}", req);}
                             // for now, we do nothing with the incoming gid value; but, in the future, we can use it
                             // as an authentication token perhaps to control access
@@ -373,9 +373,8 @@ fn xmain() -> ! {
 
                             req.canvas = chatlayout.content;
                             // pack our data back into the buffer to return
-                            use rkyv::Write;
-                            let mut writer = rkyv::ArchiveBuffer::new(buf);
-                            writer.archive(&api::Opcode::RequestContentCanvas(req)).expect("GAM: RequestContentCanvas couldn't re-archive return value");
+                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                            writer.serialize_value(&api::Opcode::RequestContentCanvas(req)).expect("GAM: RequestContentCanvas couldn't re-archive return value");
                         },
                         _ => panic!("GAM: invalid mutable borrow message"),
                     };
@@ -387,7 +386,7 @@ fn xmain() -> ! {
                     };
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
-                            let obj: GamObject = rtv.unarchive();
+                            let obj: GamObject = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
                             if debug1{info!("GAM: renderobject {:?}", obj);}
                             if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                                 // first, figure out if we should even be drawing to this canvas.
