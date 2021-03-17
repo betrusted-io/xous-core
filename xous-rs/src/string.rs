@@ -274,6 +274,7 @@ impl<S: rkyv::ser::Serializer + ?Sized, const N: usize> rkyv::Serialize<S> for S
         })
     }
 }
+// Turn an `ArchivedString` back into a String
 use rkyv::Fallible;
 impl<D: Fallible + ?Sized, const N: usize> rkyv::Deserialize<String<N>, D> for ArchivedString {
     fn deserialize(&self, _deserializer: &mut D) -> core::result::Result<String<N>, D::Error> {

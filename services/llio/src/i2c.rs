@@ -55,8 +55,8 @@ impl I2cStateMachine {
         }
     }
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
-        // sanity-check the bounds limits, currently imposed by trait implementations available in rkyv
-        if transaction.txlen > 31 || transaction.rxlen > 31 {
+        // sanity-check the bounds limits
+        if transaction.txlen > 258 || transaction.rxlen > 258 {
             return I2cStatus::ResponseFormatError
         }
 

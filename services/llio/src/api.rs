@@ -69,9 +69,9 @@ pub enum I2cStatus {
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    pub txbuf: Option<[u8; 31]>, // limited by trait types available in Rkyv
+    pub txbuf: Option<[u8; 258]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
-    pub rxbuf: Option<[u8; 31]>,
+    pub rxbuf: Option<[u8; 258]>,
     pub rxlen: u32,
     pub timeout_ms: u32,
     // response field to the calling server
@@ -83,26 +83,6 @@ impl I2cTransaction {
     }
     pub fn status(&self) -> I2cStatus { self.status }
 }
-use core::ops::{DerefMut, Deref};
-impl Deref for I2cTransaction {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        unsafe {
-            core::slice::from_raw_parts(self as *const I2cTransaction as *const u8, core::mem::size_of::<I2cTransaction>())
-                as &[u8]
-        }
-    }
-}
-impl DerefMut for I2cTransaction {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe {
-            core::slice::from_raw_parts_mut(self as *mut I2cTransaction as *mut u8, core::mem::size_of::<I2cTransaction>())
-                as &mut [u8]
-        }
-    }
-}
-
-
 
 ////////////////////////////////// VIBE
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
