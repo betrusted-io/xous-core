@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use xous::CID;
+use hash32::{Hash, Hasher};
 
 // bottom 16 bits are reserved for structure re-use by other servers
 pub const ID_REGISTER_NAME: u32 = 0x1_0000;
@@ -85,6 +86,52 @@ impl XousServerName {
             core::slice::from_raw_parts(self.value.as_ptr(), self.length as usize)
         })
         .unwrap()
+    }
+    pub fn new() -> XousServerName {
+        XousServerName {
+            value: [0; 64],
+            length: 0,
+        }
+    }
+
+    pub fn from_str(src: &str) -> XousServerName {
+        let mut s = Self::new();
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.value) {
+            *dest_byte = src_byte;
+        }
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        s.length = s.value.len().min(src.as_bytes().len()) as u32;
+
+        // If the string is not valid, set its length to 0.
+        if s.as_str().is_err() {
+            s.length = 0;
+        }
+
+        s
+    }
+
+    pub fn as_bytes(&self) -> [u8; 64] {
+        self.value
+    }
+
+    pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(&self.value[0..self.length as usize])
+    }
+
+    pub fn len(&self) -> usize {
+        self.length as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    /// Clear the contents and set the length to 0
+    pub fn clear(&mut self) {
+        self.length = 0;
+        self.value = [0; 64];
     }
 }
 

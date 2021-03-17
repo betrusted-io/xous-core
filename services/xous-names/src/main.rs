@@ -4,6 +4,7 @@
 extern crate hash32_derive;
 
 mod api;
+use api::*;
 use xous::buffer;
 
 // use heapless::String;
@@ -44,7 +45,7 @@ fn xmain() -> ! {
             };
             let new_value = match &*value {
                 rkyv::Archived::<api::Request>::Register(registration_name) => {
-                    let name = xous::String::<64>::from_str(registration_name.as_str());
+                    let name = XousServerName::from_str(registration_name.as_str());
                     if debug1{info!("NS: registration request for '{}'", name);}
                     if !name_table.contains_key(&name) {
                         let new_sid =
@@ -70,7 +71,7 @@ fn xmain() -> ! {
                     }
                 }
                 rkyv::Archived::<api::Request>::Lookup(lookup_name) => {
-                    let name = xous::String::<64>::from_str(lookup_name.as_str());
+                    let name = XousServerName::from_str(lookup_name.as_str());
                     if debug1{info!("NS: Lookup request for '{}'", name);}
                     if let Some(server_sid) = name_table.get(&name) {
                         let sender_pid = envelope

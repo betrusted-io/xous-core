@@ -274,6 +274,12 @@ impl<S: rkyv::ser::Serializer + ?Sized, const N: usize> rkyv::Serialize<S> for S
         })
     }
 }
+use rkyv::Fallible;
+impl<D: Fallible + ?Sized, const N: usize> rkyv::Deserialize<String<N>, D> for ArchivedString {
+    fn deserialize(&self, _deserializer: &mut D) -> core::result::Result<String<N>, D::Error> {
+        Ok(String::<N>::from_str(self.as_str()))
+    }
+}
 
 impl<const N: usize> PartialEq for String<N> {
     fn eq(&self, other: &Self) -> bool {
@@ -283,3 +289,10 @@ impl<const N: usize> PartialEq for String<N> {
 }
 
 impl<const N: usize> Eq for String<N> {}
+
+// a "no-op" deserializer for in-place data, required for rkyv 0.4.1
+// perhaps in rkyv 0.5 this will go away, see https://github.com/djkoloski/rkyv/issues/67
+pub struct XousDeserializer;
+impl rkyv::Fallible for XousDeserializer {
+    type Error = crate::Error;
+}

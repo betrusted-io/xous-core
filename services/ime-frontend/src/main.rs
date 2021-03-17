@@ -15,7 +15,7 @@ use blitstr_ref as blitstr;
 use core::pin::Pin;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
-use rkyv::Serialize, rkyv::Deserialize;
+use rkyv::Deserialize;
 use rkyv::archived_value;
 
 use heapless::Vec;
@@ -621,14 +621,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize();
+                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize();
+                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
@@ -677,14 +677,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize();
+                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize();
+                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note first copy above, put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
@@ -700,10 +700,11 @@ fn xmain() -> ! {
                     if let Some(line) = tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses") {
                         if dbglistener{info!("IMEF: sending listeners {:?}", line);}
                         for &conn in listeners.iter() {
-                            use rkyv::Write;
                             let op = ImefOpcode::GotInputLine(line);
-                            let mut writer = rkyv::ArchiveBuffer::new(xous::XousBuffer::new(4096));
-                            let pos = writer.archive(&op).expect("IMEF: couldn't archive line for sending");
+                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+
+                            use rkyv::ser::Serializer;
+                            let pos = writer.serialize_value(&op).expect("IMEF: couldn't archive line for sending");
                             if dbglistener{info!("IMEF: sending to conn {:?}", conn);}
                             writer.into_inner().lend(conn, pos as u32).expect("IMEF: couldn't send input line to listener");
                         }

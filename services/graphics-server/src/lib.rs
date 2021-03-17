@@ -8,7 +8,8 @@ pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 use xous::String;
 pub mod op;
 
-use xous::{send_message, CID};
+use xous::{send_message, CID, XousDeserializer};
+use rkyv::Deserialize;
 use core::fmt::Write;
 
 pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
@@ -134,13 +135,13 @@ pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
-        let tvr: TextView = result.deserialize();
+        let tvr: TextView = result.deserialize(&mut XousDeserializer).expect("draw_textview couldn't deserialize result");
         //log::info!("draw_textview: got cursor of {:?}, bounds of {:?}", tvr.cursor, tvr.bounds_computed);
         tv.bounds_computed = tvr.bounds_computed;
         tv.cursor = tvr.cursor;
         Ok(())
     } else {
-        let tvr = returned.deserialize();
+        let tvr = returned.deserialize(&mut XousDeserializer).expect("draw_textview couldn't deserialize result");
         log::info!("draw_textview saw an unhandled return type of {:?}", tvr);
         Err(xous::Error::InternalError)
     }

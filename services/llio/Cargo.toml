@@ -12,7 +12,11 @@ log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
-rkyv = { version = "0.3.1", default_features = false }
+
+[dependencies.rkyv]
+version = "0.4.1"
+default-features = false
+features = ["const_generics"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

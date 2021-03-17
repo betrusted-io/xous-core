@@ -11,7 +11,8 @@ use log::{error, info};
 use rkyv::archived_value_mut;
 use core::pin::Pin;
 use core::convert::TryInto;
-use rkyv::Serialize, rkyv::Deserialize;
+use rkyv::{Serialize, Deserialize};
+use rkyv::ser::Serializer;
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -44,8 +45,8 @@ fn xmain() -> ! {
                     ret.challenge[0] = reg.challenge[0] + 1;
 
                     let retop = Opcode::TestMemory(ret);
-                    let mut writer = rkyv::ArchiveBuffer::new(buf);
-                    let pos = writer.archive(&retop).expect("couldn't archive return value");
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    let pos = writer.serialize_value(&retop).expect("couldn't archive return value");
                     unsafe{ rkyv::archived_value::<api::Opcode>(writer.into_inner().as_ref(), pos) };
                 }
                 _ => panic!("Invalid response from server -- corruption occurred"),
