@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use log::{error, info};
+use log::info;
 
 use core::fmt::Write;
 use core::convert::TryFrom;
@@ -12,6 +12,7 @@ use core::pin::Pin;
 
 use ime_plugin_api::{ImeFrontEndApi, ImeFrontEnd};
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
+use xous::MessageEnvelope;
 
 use heapless::spsc::Queue;
 use heapless::consts::U16;
@@ -32,7 +33,8 @@ struct Repl {
     // optional structures that indicate new input to the Repl loop per iteration
     // an input string
     input: Option<xous::String<1024>>,
-    // examples of future inputs: returned values via other services
+    // messages from other servers
+    msg: Option<MessageEnvelope>,
 
     // record our input history
     history: Queue<History, U16>,
@@ -57,6 +59,7 @@ impl Repl{
         let screensize = gam::get_canvas_bounds(gam_conn, content).expect("SHCH: couldn't get dimensions of content canvas");
         Repl {
             input: None,
+            msg: None,
             history: Queue::new(),
             content,
             gam: gam_conn,
@@ -78,6 +81,10 @@ impl Repl{
         self.input = Some(local);
 
         Ok(())
+    }
+
+    fn msg(&mut self, message: MessageEnvelope) {
+        self.msg = Some(message);
     }
 
     fn circular_push(&mut self, item: History) {
@@ -108,7 +115,17 @@ impl Repl{
 
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(mut local) = self.input {
-            if let Some(res) = self.env.dispatch(&mut local).expect("SHCH: command dispatch failed") {
+            if let Some(res) = self.env.dispatch(Some(&mut local), None).expect("SHCH: command dispatch failed") {
+                let mut response = xous::String::<1024>::new();
+                write!(response, "{}", res).expect("SHCH: can't copy result to history");
+                let output_history = History {
+                    text: response,
+                    is_input: false
+                };
+                self.circular_push(output_history);
+            }
+        } else if let Some(msg) = &self.msg {
+            if let Some(res) = self.env.dispatch(None, Some(msg)).expect("SCHC: callback failed") {
                 let mut response = xous::String::<1024>::new();
                 write!(response, "{}", res).expect("SHCH: can't copy result to history");
                 let output_history = History {
@@ -121,6 +138,7 @@ impl Repl{
 
         // clear all the inputs to the loop, so we don't process them twice
         self.input = None;
+        self.msg = None;
         // redraw UI now that we've responded
         self.redraw().expect("SHCH: can't redraw");
 
@@ -233,7 +251,8 @@ fn xmain() -> ! {
                 }
             }
         } else {
-            error!("SHCH: couldn't convert message");
+            repl.msg(envelope);
+            update_repl = true;
         }
 
         if update_repl {
