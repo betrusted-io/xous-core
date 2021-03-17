@@ -21,6 +21,7 @@ const USER_AREA_END: usize = 0xff00_0000;
 // and therefore are limited to 4 MB.
 const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
 const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
+const KERNEL_STACK_PAGE_COUNT: usize = 1;
 const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
 
 const FLG_VALID: usize = 0x1;
@@ -421,7 +422,7 @@ impl ProgramDescription {
         allocator.change_owner(pid as XousPid, pt_addr as usize);
 
         // Allocate stack pages.
-        for i in 0..STACK_PAGE_COUNT {
+        for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT} else { STACK_PAGE_COUNT } {
             let sp_page = allocator.alloc() as usize;
             allocator.map_page(
                 satp,

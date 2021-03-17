@@ -44,7 +44,7 @@ impl Into<u32> for UartType {
 
 /////////////////////// I2C
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
     /// used only as the default, should always be set to one of the below before sending
     Uninitialized,
@@ -67,15 +67,15 @@ pub enum I2cStatus {
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct I2cTransaction {
-    bus_addr: u8,
+    pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    txbuf: Option<[u8; 258]>, // up to 258 bytes total packet length; note cost is "same" b/c these are sent via 4kiB page remaps
-    txlen: u32,
-    rxbuf: Option<[u8; 258]>,
-    rxlen: u32,
-    timeout_ms: u32,
+    pub txbuf: Option<[u8; 31]>, // limited by trait types available in Rkyv
+    pub txlen: u32,
+    pub rxbuf: Option<[u8; 31]>,
+    pub rxlen: u32,
+    pub timeout_ms: u32,
     // response field to the calling server
-    status: I2cStatus,
+    pub status: I2cStatus,
 }
 impl I2cTransaction {
     pub fn new() -> Self {

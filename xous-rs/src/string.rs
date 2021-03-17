@@ -5,7 +5,6 @@ use rkyv::ser::Serializer;
 use rkyv::archived_value;
 use rkyv::ArchiveUnsized;
 use rkyv::SerializeUnsized;
-use hash32::{Hash, Hasher};
 
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
@@ -273,17 +272,6 @@ impl<S: rkyv::ser::Serializer + ?Sized, const N: usize> rkyv::Serialize<S> for S
             bytes_pos: self.as_str().unwrap().serialize_unsized(serializer)?,
             _metadata_resolver: self.as_str().unwrap().serialize_metadata(serializer)?,
         })
-    }
-}
-
-
-impl<const N: usize> hash32::Hash for String<N> {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        Hash::hash(&self.bytes[..self.len as usize], state);
-        Hash::hash(&self.len, state)
     }
 }
 

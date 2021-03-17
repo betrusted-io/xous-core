@@ -576,7 +576,12 @@ pub fn idle() -> bool {
                     crate::arch::process::set_current_pid(pid);
 
                     let mut process = Process::current();
-                    let mut response_vec = Vec::new();
+                    let mut capacity = 9 * core::mem::size_of::<usize>();
+                    if let Some(mem) = response.memory() {
+                        capacity += mem.len();
+                    }
+                    let mut response_vec = Vec::with_capacity(capacity);
+
                     response_vec.extend_from_slice(&thread_id.to_le_bytes());
                     for word in response.to_args().iter_mut() {
                         response_vec.extend_from_slice(&word.to_le_bytes());

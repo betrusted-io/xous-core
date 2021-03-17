@@ -59,3 +59,82 @@ impl Authenticate {
         ID_AUTHENTICATE as u32
     }
 }
+
+// We keep XousServerName around because want to be able to index off the server name, without
+// burdening the Kernel String type with the Hash32 methods
+
+// --------------------- Taken from rkyv docs https://docs.rs/rkyv/0.3.0/rkyv/trait.Archive.html //
+#[derive(Debug, Copy, Clone)]
+pub struct XousServerName {
+    value: [u8; 64],
+    length: u32,
+}
+
+impl Default for XousServerName {
+    fn default() -> Self {
+        XousServerName {
+            value: [0u8; 64],
+            length: 0,
+        }
+    }
+}
+
+impl XousServerName {
+    pub fn to_str(&self) -> &str {
+        core::str::from_utf8(unsafe {
+            core::slice::from_raw_parts(self.value.as_ptr(), self.length as usize)
+        })
+        .unwrap()
+    }
+}
+
+// Allow using the `write!()` macro to write into a `&XousServerName`
+impl core::fmt::Write for XousServerName {
+    fn write_str(&mut self, s: &str) -> core::result::Result<(), core::fmt::Error> {
+        self.length = 0;
+        let b = s.bytes();
+
+        // Ensure the length is acceptable
+        if b.len() > self.value.len() {
+            Err(core::fmt::Error)?;
+        }
+        self.length = b.len() as u32;
+
+        // Copy the string into this variable
+        for (dest, src) in self.value.iter_mut().zip(s.bytes()) {
+            *dest = src;
+        }
+
+        // Attempt to convert the string to UTF-8 to validate it's correct UTF-8
+        core::str::from_utf8(unsafe {
+            core::slice::from_raw_parts(self.value.as_ptr(), self.length as usize)
+        })
+        .map_err(|_| core::fmt::Error)?;
+        Ok(())
+    }
+}
+
+impl hash32::Hash for XousServerName {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        Hash::hash(&self.value[..self.length as usize], state);
+        Hash::hash(&self.length, state)
+    }
+}
+
+impl PartialEq for XousServerName {
+    fn eq(&self, other: &Self) -> bool {
+        self.value[..self.length as usize] == other.value[..other.length as usize]
+            && self.length == other.length
+    }
+}
+
+impl Eq for XousServerName {}
+
+impl core::fmt::Display for XousServerName {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.to_str())
+    }
+}

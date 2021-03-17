@@ -654,7 +654,7 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
- "rkyv 0.4.1",
+ "rkyv 0.3.1",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1589,8 +1589,6 @@ version = "0.1.2"
 dependencies = [
  "bitflags",
  "compiler_builtins",
- "hash32",
- "hash32-derive",
  "hex",
  "lazy_static",
  "log",
