@@ -349,14 +349,16 @@ fn xmain() -> ! {
                     .expect("TickTimer: couldn't return time request");
                     //info!("TickTimer: done returning value");
                 }
-                Opcode::SleepMs(ms) => recalculate_sleep(
-                    &mut ticktimer,
-                    &mut sleep_heap,
-                    Some(SleepResponse {
-                        msec: ms,
-                        sender: envelope.sender,
-                    }),
-                ),
+                Opcode::SleepMs(ms) => {
+                    recalculate_sleep(
+                        &mut ticktimer,
+                        &mut sleep_heap,
+                        Some(SleepResponse {
+                            msec: ms,
+                            sender: envelope.sender,
+                        }),
+                    );
+                }
                 Opcode::RecalculateSleep => {
                     recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
                     //info!("TickTimer: Done recalculating");

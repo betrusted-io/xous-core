@@ -12,7 +12,7 @@ pub fn callback_thread(_: u32) {
         if CB_RUN.load(Ordering::Relaxed) {
 
             CB_RUN.store(false, Ordering::Relaxed);
-            ticktimer_server::sleep_ms(ticktimer_conn, 2000).unwrap();
+            ticktimer_server::sleep_ms(ticktimer_conn, 10000).unwrap();
             // just send a bogus message
             xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
                 id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
@@ -38,7 +38,7 @@ impl CallBack {
 }
 
 impl<'a> ShellCmdApi<'a> for CallBack {
-    cmd_api!(callback);
+    cmd_api!(cb);
 
     fn process(&mut self, _args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;

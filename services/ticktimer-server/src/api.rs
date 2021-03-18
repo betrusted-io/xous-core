@@ -1,6 +1,11 @@
 use xous::{Message, ScalarMessage};
 
 #[derive(Debug)]
+pub struct TimerToken {
+    token: u64, // this field is 48 bits wide, random number
+}
+
+#[derive(Debug)]
 pub enum Opcode {
     /// Reset the timer
     // Reset,  // This is a bad idea, in retrospect.
@@ -13,6 +18,24 @@ pub enum Opcode {
 
     /// Recalculate the sleep time
     RecalculateSleep,
+/*
+    ////////// new APIs
+    /// Subscribe to wakeup alarms. Takes in the server name that's subcribed, returns a Token to refer to the subscription.
+    SubscribeWakeup(xous::String::<64>),
+
+    /// set an alarm in milliseconds, which is returned via the SubscribeWakeup registration token
+    WakeupAlarm(u16, TimerToken),
+
+    /// The generic message that gets sent to other servers, at the alarm time
+    WakeupMessage,
+
+    /// Request a blocking, in-line delay server -- returns a CID that can be used to send the BlockingDelayMs message
+    /// each request consumes a thread in the ticktimer that tracks & responds to a blockingdelay
+    RequestBlockingDelay,
+
+    /// Do a blocking delay. Responds with the current ElapsedMs by default.
+    BlockingDelayMs(u32),
+    */
 }
 
 impl<'a> core::convert::TryFrom<&'a Message> for Opcode {
