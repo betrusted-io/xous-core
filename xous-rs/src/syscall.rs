@@ -461,8 +461,9 @@ impl SysCall {
                     0,
                 ]
             }
-            SysCall::CreateServerId =>
-                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::CreateServerId => {
+                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0]
+            }
             SysCall::ReturnToParent(a1, a2) => [
                 SysCallNumber::ReturnToParent as usize,
                 a1.get() as usize,
@@ -678,24 +679,8 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -905,7 +890,10 @@ impl SysCall {
     pub fn has_memory(&self) -> bool {
         match self {
             SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
-                matches!(msg, Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_))
+                matches!(
+                    msg,
+                    Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_)
+                )
             }
             SysCall::ReturnMemory(_, _) => true,
             _ => false,
@@ -963,13 +951,16 @@ impl SysCall {
 
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
-        matches!(self, SysCall::TrySendMessage(_, _)
-            | SysCall::TryConnect(_)
-            | SysCall::TryReceiveMessage(_)
-            | SysCall::ReturnToParent(_, _)
-            | SysCall::ReturnScalar2(_, _, _)
-            | SysCall::ReturnScalar1(_, _)
-            | SysCall::ReturnMemory(_, _))
+        matches!(
+            self,
+            SysCall::TrySendMessage(_, _)
+                | SysCall::TryConnect(_)
+                | SysCall::TryReceiveMessage(_)
+                | SysCall::ReturnToParent(_, _)
+                | SysCall::ReturnScalar2(_, _, _)
+                | SysCall::ReturnScalar1(_, _)
+                | SysCall::ReturnMemory(_, _)
+        )
     }
 }
 
