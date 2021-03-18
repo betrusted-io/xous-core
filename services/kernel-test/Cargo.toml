@@ -7,10 +7,12 @@ description = "Program to test various aspects of the kernel"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+log = "0.4"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
 [features]
-logging = []  # adding this allocates the UART for logging of Xous
-default = ["logging"]
+default = []
