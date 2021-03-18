@@ -1,0 +1,22 @@
+[package]
+name = "rtc"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "RTC server"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+heapless = "0.5.6"
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+bitflags = "1.2.1"
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+debugprint = []
+default = [] # "debugprint"
