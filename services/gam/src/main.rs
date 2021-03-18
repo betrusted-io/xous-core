@@ -181,7 +181,7 @@ impl ModalCanvases {
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;  // debug level 1 - most general level
-    let debugc = false;
+    let debugc = true;
     log_server::init_wait().unwrap();
     info!("GAM: my PID is {}", xous::process::id());
 
@@ -230,222 +230,211 @@ fn xmain() -> ! {
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
     info!("GAM: entering main loop");
     loop {
-        let maybe_env = xous::try_receive_message(gam_sid).unwrap();
-        if debug1 { if maybe_env.is_some() {info!("GAM: Message: {:?}", maybe_env);} }
-        match maybe_env {
-            Some(envelope) => {
-                if debug1 {info!("GAM: Message: {:?}", envelope); }
-                if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-                    if debug1 {info!("GAM: Opcode: {:?}", opcode);}
-                    match opcode {
-                        Opcode::ClearCanvas(gid) => {
-                            match canvases.get(&gid) {
-                                Some(c) => {
-                                    let mut rect = c.clip_rect();
-                                    rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
-                                    graphics_server::draw_rectangle(gfx_conn, rect).expect("GAM: can't clear canvas");
-                                },
-                                None => info!("GAM: attempt to clear bogus canvas, ignored."),
-                            }
+        let envelope = xous::receive_message(gam_sid).unwrap();
+        if debug1 { info!("GAM: Message: {:?}", envelope);}
+        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
+            if debug1 {info!("GAM: Opcode: {:?}", opcode);}
+            match opcode {
+                Opcode::ClearCanvas(gid) => {
+                    match canvases.get(&gid) {
+                        Some(c) => {
+                            let mut rect = c.clip_rect();
+                            rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
+                            graphics_server::draw_rectangle(gfx_conn, rect).expect("GAM: can't clear canvas");
                         },
-                        Opcode::GetCanvasBounds(gid) => {
-                            match canvases.get(&gid) {
-                                Some(c) => {
-                                    let mut rect = c.clip_rect();
-                                    rect.normalize(); // normalize to 0,0 coordinates
-                                    xous::return_scalar2(envelope.sender,
-                                        rect.tl.into(),
-                                        rect.br.into(),
-                                    ).expect("GAM: couldn't return canvas bounds");
-                                },
-                                None => info!("GAM: attempt to get bounds on bogus canvas gid {:?}, {:?} ignored.", gid, envelope),
-                            }
-                        },
-                        Opcode::PowerDownRequest => {
-                            powerdown_requested = true;
-                            graphics_server::draw_sleepscreen(gfx_conn).expect("GAM: couldn't draw sleep screen");
-                            // a screen flush is part of the draw_sleepscreen abstraction
-                            xous::return_scalar(envelope.sender, 1).expect("GAM: couldn't confirm power down UI request");
-                        },
-                        Opcode::Redraw => {
-                            if powerdown_requested {
-                                continue; // don't allow any redraws if a powerdown is requested
-                            }
-                            if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-                                if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
-                                    last_time = elapsed_time;
-
-                                    deface(gfx_conn, &mut canvases);
-                                    graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
-                                    /* // this throws errors right now because deface() doesn't work.
-                                    for (_, c) in canvases.iter_mut() {
-                                        c.do_flushed();
-                                    }*/
-                                }
-                            }
-                        },
-                        _ => todo!("GAM: opcode not yet implemented"),
+                        None => info!("GAM: attempt to clear bogus canvas, ignored."),
                     }
-                } else if let xous::Message::MutableBorrow(m) = &envelope.body {
-                    let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-                    let value = unsafe {
-                        archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
-                    };
-                    match &*value {
-                        rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
-                            let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
-                            if debug1{info!("GAM: rendertextview {:?}", tv);}
-                            match tv.get_op() {
-                                TextOp::Nop => (),
-                                TextOp::Render | TextOp::ComputeBounds => {
-                                    if debug1{info!("GAM: render request for {:?}", tv);}
-                                    if tv.get_op() == TextOp::ComputeBounds {
-                                        tv.dry_run = true;
-                                    } else {
-                                        tv.dry_run = false;
-                                    }
-
-                                    if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
-                                        // first, figure out if we should even be drawing to this canvas.
-                                        if canvas.is_drawable() {
-                                            // set the clip rectangle according to the canvas' location
-                                            tv.clip_rect = Some(canvas.clip_rect().into());
-
-                                            // you have to clone the tv object, because if you don't the same block of
-                                            // memory gets passed on to the graphics_server(). Which is efficient, but,
-                                            // the call will automatically Drop() the memory, which causes a panic when
-                                            // this routine returns.
-                                            let mut tv_clone = tv.clone();
-                                            // issue the draw command
-                                            graphics_server::draw_textview(gfx_conn, &mut tv_clone).expect("GAM: text view draw could not complete.");
-                                            // copy back the fields that we want to be mutable
-                                            if debug1{info!("GAM: got computed cursor of {:?}", tv_clone.cursor);}
-                                            tv.cursor = tv_clone.cursor;
-                                            tv.bounds_computed = tv_clone.bounds_computed;
-
-                                            // pack our data back into the buffer to return
-                                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
-                                            writer.serialize_value(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
-                                            canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
-                                        } else {
-                                            info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
-                                        }
-                                    } else {
-                                        info!("GAM: bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
-                                        // silently fail if a bogus Gid is given???
-                                    }
-                                },
-                            };
+                },
+                Opcode::GetCanvasBounds(gid) => {
+                    match canvases.get(&gid) {
+                        Some(c) => {
+                            let mut rect = c.clip_rect();
+                            rect.normalize(); // normalize to 0,0 coordinates
+                            xous::return_scalar2(envelope.sender,
+                                rect.tl.into(),
+                                rect.br.into(),
+                            ).expect("GAM: couldn't return canvas bounds");
                         },
-                        rkyv::Archived::<api::Opcode>::SetCanvasBounds(rcb) => {
-                            let mut cb: SetCanvasBoundsRequest = rcb.deserialize(&mut xous::XousDeserializer).unwrap();
-                            if debug1{info!("GAM: SetCanvasBoundsRequest {:?}", cb);}
-                            // ASSUME:
-                            // very few canvases allow dynamic resizing, so we special case these
-                            if cb.canvas == chatlayout.input {
-                                let newheight = chatlayout.resize_input(cb.requested.y, &mut canvases).expect("GAM: SetCanvasBoundsRequest couldn't recompute input canvas height");
-                                cb.granted = Some(newheight);
-                                canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+                        None => info!("GAM: attempt to get bounds on bogus canvas gid {:?}, {:?} ignored.", gid, envelope),
+                    }
+                },
+                Opcode::PowerDownRequest => {
+                    powerdown_requested = true;
+                    graphics_server::draw_sleepscreen(gfx_conn).expect("GAM: couldn't draw sleep screen");
+                    // a screen flush is part of the draw_sleepscreen abstraction
+                    xous::return_scalar(envelope.sender, 1).expect("GAM: couldn't confirm power down UI request");
+                },
+                Opcode::Redraw => {
+                    if powerdown_requested {
+                        continue; // don't allow any redraws if a powerdown is requested
+                    }
+                    if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+                        if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
+                            last_time = elapsed_time;
 
-                                if ccc.connection.is_some() {
-                                    ccc.redraw_canvas().expect("GAM: couldn't issue redraw to content canvas");
-                                }
+                            deface(gfx_conn, &mut canvases);
+                            graphics_server::flush(gfx_conn).expect("GAM: couldn't flush buffer to screen");
+                            /* // this throws errors right now because deface() doesn't work.
+                            for (_, c) in canvases.iter_mut() {
+                                c.do_flushed();
+                            }*/
+                        }
+                    }
+                },
+                _ => todo!("GAM: opcode not yet implemented"),
+            }
+        } else if let xous::Message::MutableBorrow(m) = &envelope.body {
+            let mut buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let value = unsafe {
+                archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
+                    let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
+                    if debug1{info!("GAM: rendertextview {:?}", tv);}
+                    match tv.get_op() {
+                        TextOp::Nop => (),
+                        TextOp::Render | TextOp::ComputeBounds => {
+                            if debug1{info!("GAM: render request for {:?}", tv);}
+                            if tv.get_op() == TextOp::ComputeBounds {
+                                tv.dry_run = true;
                             } else {
-                                cb.granted = None;
+                                tv.dry_run = false;
                             }
-                            // pack our data back into the buffer to return
-                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
-                            writer.serialize_value(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
-                        },
-                        rkyv::Archived::<api::Opcode>::RequestContentCanvas(rcc) => {
-                            let mut req: ContentCanvasRequest = rcc.deserialize(&mut xous::XousDeserializer).unwrap();
-                            if debug1{info!("GAM: RequestContentCanvas {:?}", req);}
-                            // for now, we do nothing with the incoming gid value; but, in the future, we can use it
-                            // as an authentication token perhaps to control access
 
-                            //// here make a connection back to the requesting server, so that we can tell it to redraw if the layout has changed, etc.
-                            if let Ok(cc) = xous_names::request_connection_blocking(req.servername.as_str().expect("GAM: malformed server name in content canvas request")) {
-                                ccc.connection = Some(cc);
-                            } else {
-                                log::error!("GAM: content requestor gave us a bogus canvas result, aborting");
-                                continue;
-                            };
-
-                            req.canvas = chatlayout.content;
-                            // pack our data back into the buffer to return
-                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
-                            writer.serialize_value(&api::Opcode::RequestContentCanvas(req)).expect("GAM: RequestContentCanvas couldn't re-archive return value");
-                        },
-                        _ => panic!("GAM: invalid mutable borrow message"),
-                    };
-                } else if let xous::Message::Borrow(m) = &envelope.body {
-                    let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-                    let bytes = Pin::new(buf.as_ref());
-                    let value = unsafe {
-                        archived_value::<api::Opcode>(&bytes, m.id as usize)
-                    };
-                    match &*value {
-                        rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
-                            let obj: GamObject = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
-                            if debug1{info!("GAM: renderobject {:?}", obj);}
-                            if let Some(canvas) = canvases.get_mut(&obj.canvas) {
+                            if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
                                 // first, figure out if we should even be drawing to this canvas.
                                 if canvas.is_drawable() {
-                                    match obj.obj {
-                                        GamObjectType::Line(mut line) => {
-                                            line.translate(canvas.clip_rect().tl);
-                                            line.translate(canvas.pan_offset());
-                                            graphics_server::draw_line_clipped(gfx_conn,
-                                                line,
-                                                canvas.clip_rect(),
-                                            ).expect("GAM: couldn't draw line");
-                                        },
-                                        GamObjectType::Circ(mut circ) => {
-                                            circ.translate(canvas.clip_rect().tl);
-                                            circ.translate(canvas.pan_offset());
-                                            graphics_server::draw_circle_clipped(gfx_conn,
-                                                circ,
-                                                canvas.clip_rect(),
-                                            ).expect("GAM: couldn't draw circle");
-                                        },
-                                        GamObjectType::Rect(mut rect) => {
-                                            rect.translate(canvas.clip_rect().tl);
-                                            rect.translate(canvas.pan_offset());
-                                            graphics_server::draw_rectangle_clipped(gfx_conn,
-                                                rect,
-                                                canvas.clip_rect(),
-                                            ).expect("GAM: couldn't draw rectangle");
-                                        },
-                                        GamObjectType::RoundRect(mut rr) => {
-                                            rr.translate(canvas.clip_rect().tl);
-                                            rr.translate(canvas.pan_offset());
-                                            graphics_server::draw_rounded_rectangle_clipped(gfx_conn,
-                                                rr,
-                                                canvas.clip_rect(),
-                                            ).expect("GAM: couldn't draw rounded rectangle");
-                                        }
-                                    }
+                                    // set the clip rectangle according to the canvas' location
+                                    tv.clip_rect = Some(canvas.clip_rect().into());
+
+                                    // you have to clone the tv object, because if you don't the same block of
+                                    // memory gets passed on to the graphics_server(). Which is efficient, but,
+                                    // the call will automatically Drop() the memory, which causes a panic when
+                                    // this routine returns.
+                                    let mut tv_clone = tv.clone();
+                                    // issue the draw command
+                                    graphics_server::draw_textview(gfx_conn, &mut tv_clone).expect("GAM: text view draw could not complete.");
+                                    // copy back the fields that we want to be mutable
+                                    if debug1{info!("GAM: got computed cursor of {:?}", tv_clone.cursor);}
+                                    tv.cursor = tv_clone.cursor;
+                                    tv.bounds_computed = tv_clone.bounds_computed;
+
+                                    // pack our data back into the buffer to return
+                                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                                    writer.serialize_value(&api::Opcode::RenderTextView(tv)).expect("GAM: couldn't re-archive return value");
                                     canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
                                 } else {
-                                    info!("GAM: attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                                    info!("GAM: attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
                                 }
                             } else {
-                                info!("GAM: bogus GID in Object, not doing anything in response to draw request.");
+                                info!("GAM: bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
+                                // silently fail if a bogus Gid is given???
                             }
-                            if debug1{info!("GAM: leaving RenderObject");}
                         },
-                        _ => panic!("GAM: invalid borrow message"),
                     };
-                } else {
-                    panic!("GAM: unhandled message {:?}", envelope);
-                }
-                // /*
-            },
-            _ => xous::yield_slice(),
-            // envelope implements Drop(), which includes a call to syscall::return_memory(self.sender, message.buf)
-        }
+                },
+                rkyv::Archived::<api::Opcode>::SetCanvasBounds(rcb) => {
+                    let mut cb: SetCanvasBoundsRequest = rcb.deserialize(&mut xous::XousDeserializer).unwrap();
+                    if debug1{info!("GAM: SetCanvasBoundsRequest {:?}", cb);}
+                    // ASSUME:
+                    // very few canvases allow dynamic resizing, so we special case these
+                    if cb.canvas == chatlayout.input {
+                        let newheight = chatlayout.resize_input(cb.requested.y, &mut canvases).expect("GAM: SetCanvasBoundsRequest couldn't recompute input canvas height");
+                        cb.granted = Some(newheight);
+                        canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-        // auto-redraw code used to be here, but I think it's a bad idea....causes more
-        // graphics traffic than necessary? Trying out redraw-on-demand by clients.
+                        if ccc.connection.is_some() {
+                            ccc.redraw_canvas().expect("GAM: couldn't issue redraw to content canvas");
+                        }
+                    } else {
+                        cb.granted = None;
+                    }
+                    // pack our data back into the buffer to return
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    writer.serialize_value(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
+                },
+                rkyv::Archived::<api::Opcode>::RequestContentCanvas(rcc) => {
+                    let mut req: ContentCanvasRequest = rcc.deserialize(&mut xous::XousDeserializer).unwrap();
+                    if debug1{info!("GAM: RequestContentCanvas {:?}", req);}
+                    // for now, we do nothing with the incoming gid value; but, in the future, we can use it
+                    // as an authentication token perhaps to control access
+
+                    //// here make a connection back to the requesting server, so that we can tell it to redraw if the layout has changed, etc.
+                    if let Ok(cc) = xous_names::request_connection_blocking(req.servername.as_str().expect("GAM: malformed server name in content canvas request")) {
+                        ccc.connection = Some(cc);
+                    } else {
+                        log::error!("GAM: content requestor gave us a bogus canvas result, aborting");
+                        continue;
+                    };
+
+                    req.canvas = chatlayout.content;
+                    // pack our data back into the buffer to return
+                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
+                    writer.serialize_value(&api::Opcode::RequestContentCanvas(req)).expect("GAM: RequestContentCanvas couldn't re-archive return value");
+                },
+                _ => panic!("GAM: invalid mutable borrow message"),
+            };
+        } else if let xous::Message::Borrow(m) = &envelope.body {
+            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let bytes = Pin::new(buf.as_ref());
+            let value = unsafe {
+                archived_value::<api::Opcode>(&bytes, m.id as usize)
+            };
+            match &*value {
+                rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
+                    let obj: GamObject = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
+                    if debug1{info!("GAM: renderobject {:?}", obj);}
+                    if let Some(canvas) = canvases.get_mut(&obj.canvas) {
+                        // first, figure out if we should even be drawing to this canvas.
+                        if canvas.is_drawable() {
+                            match obj.obj {
+                                GamObjectType::Line(mut line) => {
+                                    line.translate(canvas.clip_rect().tl);
+                                    line.translate(canvas.pan_offset());
+                                    graphics_server::draw_line_clipped(gfx_conn,
+                                        line,
+                                        canvas.clip_rect(),
+                                    ).expect("GAM: couldn't draw line");
+                                },
+                                GamObjectType::Circ(mut circ) => {
+                                    circ.translate(canvas.clip_rect().tl);
+                                    circ.translate(canvas.pan_offset());
+                                    graphics_server::draw_circle_clipped(gfx_conn,
+                                        circ,
+                                        canvas.clip_rect(),
+                                    ).expect("GAM: couldn't draw circle");
+                                },
+                                GamObjectType::Rect(mut rect) => {
+                                    rect.translate(canvas.clip_rect().tl);
+                                    rect.translate(canvas.pan_offset());
+                                    graphics_server::draw_rectangle_clipped(gfx_conn,
+                                        rect,
+                                        canvas.clip_rect(),
+                                    ).expect("GAM: couldn't draw rectangle");
+                                },
+                                GamObjectType::RoundRect(mut rr) => {
+                                    rr.translate(canvas.clip_rect().tl);
+                                    rr.translate(canvas.pan_offset());
+                                    graphics_server::draw_rounded_rectangle_clipped(gfx_conn,
+                                        rr,
+                                        canvas.clip_rect(),
+                                    ).expect("GAM: couldn't draw rounded rectangle");
+                                }
+                            }
+                            canvas.do_drawn().expect("GAM: couldn't set canvas to drawn");
+                        } else {
+                            info!("GAM: attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                        }
+                    } else {
+                        info!("GAM: bogus GID in Object, not doing anything in response to draw request.");
+                    }
+                    if debug1{info!("GAM: leaving RenderObject");}
+                },
+                _ => panic!("GAM: invalid borrow message"),
+            };
+        } else {
+            panic!("GAM: unhandled message {:?}", envelope);
+        }
     }
 }
