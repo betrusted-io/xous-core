@@ -1,7 +1,7 @@
 use crate::{
     pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
-    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID,
+    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
 use core::convert::TryInto;
 
@@ -1406,10 +1406,10 @@ pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
 }
 
 /// Get the current process ID
-pub fn current_pid() -> SysCallResult {
+pub fn current_pid() -> core::result::Result<PID, Error> {
     rsyscall(SysCall::GetProcessId).and_then(|result| {
         if let Result::ProcessID(pid) = result {
-            Ok(Result::ProcessID(pid))
+            Ok(pid)
         } else {
             Err(Error::InternalError)
         }
@@ -1417,10 +1417,10 @@ pub fn current_pid() -> SysCallResult {
 }
 
 /// Get the current thread ID
-pub fn current_tid() -> SysCallResult {
-    rsyscall(SysCall::GetProcessId).and_then(|result| {
+pub fn current_tid() -> core::result::Result<TID, Error> {
+    rsyscall(SysCall::GetThreadId).and_then(|result| {
         if let Result::ThreadID(tid) = result {
-            Ok(Result::ThreadID(tid))
+            Ok(tid)
         } else {
             Err(Error::InternalError)
         }
