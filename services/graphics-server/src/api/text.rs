@@ -49,6 +49,8 @@ pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
     operation: TextOp,
+    canvas: Gid, // GID of the canvas to draw on
+    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
 
     pub untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
     pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
@@ -74,9 +76,6 @@ pub struct TextView {
 
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
-
-    canvas: Gid, // GID of the canvas to draw on
-    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
 
     pub text: xous::String::<3072>,
 }
