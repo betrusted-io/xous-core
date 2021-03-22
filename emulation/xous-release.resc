@@ -22,10 +22,11 @@ machine LoadPlatformDescription @betrusted.repl
 machine StartGdbServer 3333 true
 showAnalyzer uart
 showAnalyzer uartconsole
-showAnalyzer uartserver0
-showAnalyzer memlcd
+# showAnalyzer uartserver0
+# showAnalyzer memlcd
 
 logLevel -1 kbd
+# logLevel -1 ticktimer
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
