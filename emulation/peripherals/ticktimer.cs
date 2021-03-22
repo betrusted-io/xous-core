@@ -47,12 +47,16 @@ namespace Antmicro.Renode.Peripherals.Timers
 
         private void UpdateInterrupts()
         {
-            if (this.irqStatus && this.irqEnabled.Value)
+            if ((Interlocked.Read(ref this.tickValue) >= (long)this.msleepTarget) && this.irqEnabled.Value)
             {
                 this.irqPending.Value = true;
             }
-            this.Log(LogLevel.Noisy, "Setting IRQ: {0}", irqPending.Value);
-            IRQ.Set(irqPending.Value && irqEnabled.Value);
+            this.Log(LogLevel.Noisy, "Setting IRQ: {0} because tickValue {1} >= msleepTarget {2} ({3}) and irqEnabled = {4}",
+                    irqPending.Value && this.irqEnabled.Value,
+                    this.tickValue,
+                    this.msleepTarget,
+                    this.tickValue >= (long)this.msleepTarget, this.irqEnabled.Value);
+            IRQ.Set(this.irqPending.Value && this.irqEnabled.Value);
         }
 
         public long Size { get { return 0x20; } }
@@ -88,7 +92,7 @@ namespace Antmicro.Renode.Peripherals.Timers
                 .WithValueField(0, 32, name: "MsleepTarget1", writeCallback: (_, value) =>
                 {
                     this.msleepTarget = (this.msleepTarget & 0x00000000ffffffff) | (value << 32);
-                    this.Log(LogLevel.Noisy, "Setting sleep target 1: {0}, sleep target now: {1}", value, this.msleepTarget);
+                    this.Log(LogLevel.Noisy, "Setting MsleepTarget1: {0}, sleep target now: {1}", value, this.msleepTarget);
                 },
                 valueProviderCallback: _ =>
                 {
@@ -101,7 +105,7 @@ namespace Antmicro.Renode.Peripherals.Timers
                 writeCallback: (_, value) =>
                 {
                     this.msleepTarget = (this.msleepTarget & 0xffffffff00000000) | (value & 0xffffffff);
-                    this.Log(LogLevel.Noisy, "Setting sleep target 0: {0}, sleep target now: {1}", value, this.msleepTarget);
+                    this.Log(LogLevel.Noisy, "Setting MsleepTarget0: {0}, sleep target now: {1}", value, this.msleepTarget);
                 },
                 valueProviderCallback: _ =>
                 {
