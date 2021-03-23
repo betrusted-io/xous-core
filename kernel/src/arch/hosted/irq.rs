@@ -3,14 +3,6 @@
 
 use xous_kernel::{TID, PID};
 
-pub fn disable_all_irqs() {
-    // There are no IRQs in a hosted environment, so there's nothing to do.
-}
-
-pub fn enable_all_irqs() {
-    // There are no IRQs in a hosted environment, so there's nothing to do.
-}
-
 pub fn enable_irq(_irq_no: usize) {
     unimplemented!();
 }
