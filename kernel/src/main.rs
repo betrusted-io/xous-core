@@ -153,9 +153,7 @@ pub extern "C" fn kmain() {
     }
 
     loop {
-        arch::irq::disable_all_irqs();
         pid = next_pid_to_run(pid);
-        arch::irq::enable_all_irqs();
 
         match pid {
             Some(pid) => {
