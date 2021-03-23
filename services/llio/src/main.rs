@@ -60,10 +60,25 @@ mod implementation {
             .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
     }
 
+    pub fn log_init() -> *mut u32 {
+        let gpio_base = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map GPIO CSR range");
+        let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
+        // setup the initial logging output
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
+
+        gpio_base.as_mut_ptr() as *mut u32
+    }
+
     impl Llio {
         pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
 
-        pub fn new(handler_conn: xous::CID) -> Llio {
+        pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
             let reboot_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::reboot::HW_REBOOT_BASE),
                 None,
@@ -78,13 +93,6 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map CRG CSR range");
-            let gpio_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::gpio::HW_GPIO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map GPIO CSR range");
             let info_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::info::HW_INFO_BASE),
                 None,
@@ -141,7 +149,7 @@ mod implementation {
             let mut xl = Llio {
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
                 crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
-                gpio_csr: CSR::new(gpio_csr.as_mut_ptr() as *mut u32),
+                gpio_csr: CSR::new(gpio_base),
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
@@ -153,8 +161,6 @@ mod implementation {
                 ticktimer_conn,
                 destruct_armed: false,
             };
-            // setup the initial logging output
-            xl.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
 
             xous::claim_interrupt(
                 utra::btevents::BTEVENTS_IRQ,
@@ -366,9 +372,10 @@ mod implementation {
 
     pub struct Llio {
     }
+    pub fn log_init() -> *mut u32 { 0 as *mut u32 }
 
     impl Llio {
-        pub fn new(_handler_conn: xous::CID) -> Llio {
+        pub fn new(_handler_conn: xous::CID, _gpio_base: *mut u32) -> Llio {
             Llio {
             }
         }
@@ -434,6 +441,9 @@ fn xmain() -> ! {
     let debug1 = false;
     use crate::implementation::Llio;
 
+    // very early on map in the GPIO base so we can have the right logging enabled
+    let gpio_base = crate::implementation::log_init();
+
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
 
@@ -442,7 +452,7 @@ fn xmain() -> ! {
 
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("LLIO: can't create IRQ handler connection");
-    let mut llio = Llio::new(handler_conn);
+    let mut llio = Llio::new(handler_conn, gpio_base);
 
     // ticktimer is a well-known server
     let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
