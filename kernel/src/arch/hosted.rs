@@ -443,6 +443,7 @@ pub fn idle() -> bool {
     };
     let pid1 = SystemServices::with_mut(|ss| ss.create_process(pid1_init)).unwrap();
     assert_eq!(pid1.get(), 1);
+    let _tid1 = SystemServices::with_mut(|ss| ss.create_thread(pid1, ThreadInit {})).unwrap();
 
     let listen_addr = env::var("XOUS_LISTEN_ADDR")
         .map(|s| {
