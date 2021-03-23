@@ -53,7 +53,6 @@ pub fn interrupt_claim(
     // Unsafe is required since we're accessing a static mut array.
     // However, we disable interrupts to prevent contention on this array.
     unsafe {
-        arch::irq::disable_all_irqs();
         let result = if irq > IRQ_HANDLERS.len() {
             Err(xous_kernel::Error::InterruptNotFound)
         } else if IRQ_HANDLERS[irq].is_some() {
@@ -63,7 +62,6 @@ pub fn interrupt_claim(
             arch::irq::enable_irq(irq);
             Ok(())
         };
-        arch::irq::enable_all_irqs();
         result
     }
 }
