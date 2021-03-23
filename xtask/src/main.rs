@@ -74,7 +74,7 @@ fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
-        Some("renode-test") => renode_image(false, &["kernel-test"])?,
+        Some("renode-test") => renode_image(false, &["ticktimer-server", "log-server", "xous-names", "kernel-test"])?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,

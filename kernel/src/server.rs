@@ -387,17 +387,26 @@ impl Server {
             }
         }
         *current_val = QueuedMessage::Empty;
-        self.queue_tail += 1;
-        if self.queue_tail >= self.queue.len() {
-            self.queue_tail = 0;
+        if idx == self.queue_tail {
+            self.queue_tail += 1;
+            if self.queue_tail >= self.queue.len() {
+                self.queue_tail = 0;
+            }
+            // Advance the pointer in case we have a long string of Empty messages.
+            while self.queue_tail != self.queue_head && self.queue[self.queue_tail] == QueuedMessage::Empty {
+                self.queue_tail += 1;
+                if self.queue_tail >= self.queue.len() {
+                    self.queue_tail = 0;
+                }
+            }
         }
 
         // Destructure the PID and context ID from the `pid_tid` field
-        klog!(
-            "taking waiting message and returning to pid: {} tid: {}",
-            pid,
-            tid
-        );
+        // klog!(
+        //     "taking waiting message and returning to pid: {} tid: {}",
+        //     pid,
+        //     tid
+        // );
 
         if !is_memory {
             return Ok(WaitingMessage::ScalarMessage(
@@ -442,219 +451,259 @@ impl Server {
     /// * **None**: There are no waiting messages
     /// ***Some(MessageEnvelope): This message is queued.
     pub fn take_next_message(&mut self, sidx: usize) -> Option<xous_kernel::MessageEnvelope> {
-        // println!(
+        // klog!(
         //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}  CID: ((({})))",
-        //     self.queue_head, self.queue_tail, self.queue[self.queue_tail], sidx
+        //     self.queue_head,
+        //     self.queue_tail,
+        //     self.queue[self.queue_tail],
+        //     sidx
         // );
         use core::convert::TryInto;
-        let mut sender = SenderID::new(sidx, self.queue_tail, None);
-        let (result, response) = match self.queue[self.queue_tail] {
-            QueuedMessage::Empty => return None,
-            QueuedMessage::WaitingReturnMemory(_, _, _, _, _) => return None,
-            QueuedMessage::WaitingForget(_, _, _, _, _) => return None,
-            QueuedMessage::WaitingReturnScalar(_, _, _) => return None,
-            QueuedMessage::MemoryMessageROLend(
-                pid,
-                tid,
-                client_addr,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                (
-                    xous_kernel::MessageEnvelope {
-                        sender: sender.into(),
-                        body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
-                            id,
-                            buf: MemoryRange::new(buf, buf_size).ok()?,
-                            offset: MemorySize::new(offset),
-                            valid: MemorySize::new(valid),
-                        }),
-                    },
-                    QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
-                )
-            }
-            QueuedMessage::MemoryMessageRWLend(
-                pid,
-                tid,
-                client_addr,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                (
-                    xous_kernel::MessageEnvelope {
-                        sender: sender.into(),
-                        body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
-                            id,
-                            buf: MemoryRange::new(buf, buf_size).ok()?,
-                            offset: MemorySize::new(offset),
-                            valid: MemorySize::new(valid),
-                        }),
-                    },
-                    QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
-                )
-            }
-            QueuedMessage::MemoryMessageROLendTerminated(
-                pid,
-                tid,
-                client_addr,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                (
-                    xous_kernel::MessageEnvelope {
-                        sender: sender.into(),
-                        body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
-                            id,
-                            buf: MemoryRange::new(buf, buf_size).ok()?,
-                            offset: MemorySize::new(offset),
-                            valid: MemorySize::new(valid),
-                        }),
-                    },
-                    QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
-                )
-            }
-            QueuedMessage::MemoryMessageRWLendTerminated(
-                pid,
-                tid,
-                client_addr,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                (
-                    xous_kernel::MessageEnvelope {
-                        sender: sender.into(),
-                        body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
-                            id,
-                            buf: MemoryRange::new(buf, buf_size).ok()?,
-                            offset: MemorySize::new(offset),
-                            valid: MemorySize::new(valid),
-                        }),
-                    },
-                    QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
-                )
-            }
+        let mut queue_idx = self.queue_tail;
+        while queue_idx != self.queue_head {
+            let mut sender = SenderID::new(sidx, queue_idx, None);
+            // klog!("Message @ server.queue[{}]: {:?}", queue_idx, self.queue[queue_idx]);
+            let (result, response) = match self.queue[queue_idx] {
+                QueuedMessage::Empty => {
+                    queue_idx += 1;
+                    if queue_idx >= self.queue.len() {
+                        queue_idx = 0;
+                    }
+                    continue;
+                }
+                QueuedMessage::WaitingReturnMemory(_, _, _, _, _) => {
+                    queue_idx += 1;
+                    if queue_idx >= self.queue.len() {
+                        queue_idx = 0;
+                    }
+                    continue;
+                }
+                QueuedMessage::WaitingForget(_, _, _, _, _) => {
+                    queue_idx += 1;
+                    if queue_idx >= self.queue.len() {
+                        queue_idx = 0;
+                    }
+                    continue;
+                }
+                QueuedMessage::WaitingReturnScalar(_, _, _) => {
+                    queue_idx += 1;
+                    if queue_idx >= self.queue.len() {
+                        queue_idx = 0;
+                    }
+                    continue;
+                }
+                QueuedMessage::MemoryMessageROLend(
+                    pid,
+                    tid,
+                    client_addr,
+                    id,
+                    buf,
+                    buf_size,
+                    offset,
+                    valid,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    (
+                        xous_kernel::MessageEnvelope {
+                            sender: sender.into(),
+                            body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
+                                id,
+                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                offset: MemorySize::new(offset),
+                                valid: MemorySize::new(valid),
+                            }),
+                        },
+                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                    )
+                }
+                QueuedMessage::MemoryMessageRWLend(
+                    pid,
+                    tid,
+                    client_addr,
+                    id,
+                    buf,
+                    buf_size,
+                    offset,
+                    valid,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    (
+                        xous_kernel::MessageEnvelope {
+                            sender: sender.into(),
+                            body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
+                                id,
+                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                offset: MemorySize::new(offset),
+                                valid: MemorySize::new(valid),
+                            }),
+                        },
+                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                    )
+                }
+                QueuedMessage::MemoryMessageROLendTerminated(
+                    pid,
+                    tid,
+                    client_addr,
+                    id,
+                    buf,
+                    buf_size,
+                    offset,
+                    valid,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    (
+                        xous_kernel::MessageEnvelope {
+                            sender: sender.into(),
+                            body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
+                                id,
+                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                offset: MemorySize::new(offset),
+                                valid: MemorySize::new(valid),
+                            }),
+                        },
+                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                    )
+                }
+                QueuedMessage::MemoryMessageRWLendTerminated(
+                    pid,
+                    tid,
+                    client_addr,
+                    id,
+                    buf,
+                    buf_size,
+                    offset,
+                    valid,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    (
+                        xous_kernel::MessageEnvelope {
+                            sender: sender.into(),
+                            body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
+                                id,
+                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                offset: MemorySize::new(offset),
+                                valid: MemorySize::new(valid),
+                            }),
+                        },
+                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                    )
+                }
 
-            QueuedMessage::BlockingScalarMessage(
-                pid,
-                tid,
-                client_addr,
-                id,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                (
-                    xous_kernel::MessageEnvelope {
+                QueuedMessage::BlockingScalarMessage(
+                    pid,
+                    tid,
+                    client_addr,
+                    id,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    (
+                        xous_kernel::MessageEnvelope {
+                            sender: sender.into(),
+                            body: xous_kernel::Message::BlockingScalar(
+                                xous_kernel::ScalarMessage {
+                                    id,
+                                    arg1,
+                                    arg2,
+                                    arg3,
+                                    arg4,
+                                },
+                            ),
+                        },
+                        QueuedMessage::WaitingReturnScalar(pid, tid, client_addr),
+                    )
+                }
+                QueuedMessage::MemoryMessageSend(
+                    pid,
+                    _tid,
+                    _reserved,
+                    id,
+                    buf,
+                    buf_size,
+                    offset,
+                    valid,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    let msg = xous_kernel::MessageEnvelope {
                         sender: sender.into(),
-                        body: xous_kernel::Message::BlockingScalar(xous_kernel::ScalarMessage {
+                        body: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
+                            id,
+                            buf: MemoryRange::new(buf, buf_size).ok()?,
+                            offset: MemorySize::new(offset),
+                            valid: MemorySize::new(valid),
+                        }),
+                    };
+                    self.queue[queue_idx] = QueuedMessage::Empty;
+                    if queue_idx == self.queue_tail {
+                        self.queue_tail += 1;
+                        if self.queue_tail >= self.queue.len() {
+                            self.queue_tail = 0;
+                        }
+                    }
+                    return Some(msg);
+                }
+
+                // Scalar messages have nothing to return, so they can go straight to the `Free` state
+                QueuedMessage::ScalarMessage(pid, _tid, _reserved, id, arg1, arg2, arg3, arg4) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    let msg = xous_kernel::MessageEnvelope {
+                        sender: sender.into(),
+                        body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
                             id,
                             arg1,
                             arg2,
                             arg3,
                             arg4,
                         }),
-                    },
-                    QueuedMessage::WaitingReturnScalar(pid, tid, client_addr),
-                )
-            }
-            QueuedMessage::MemoryMessageSend(
-                pid,
-                _tid,
-                _reserved,
-                id,
-                buf,
-                buf_size,
-                offset,
-                valid,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                let msg = xous_kernel::MessageEnvelope {
-                    sender: sender.into(),
-                    body: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
-                        id,
-                        buf: MemoryRange::new(buf, buf_size).ok()?,
-                        offset: MemorySize::new(offset),
-                        valid: MemorySize::new(valid),
-                    }),
-                };
-                self.queue[self.queue_tail] = QueuedMessage::Empty;
-                self.queue_tail += 1;
-                if self.queue_tail >= self.queue.len() {
-                    self.queue_tail = 0;
+                    };
+                    self.queue[queue_idx] = QueuedMessage::Empty;
+                    if queue_idx == self.queue_tail {
+                        self.queue_tail += 1;
+                        if self.queue_tail >= self.queue.len() {
+                            self.queue_tail = 0;
+                        }
+                    }
+                    return Some(msg);
                 }
-                return Some(msg);
-            }
+                QueuedMessage::BlockingScalarTerminated(
+                    pid,
+                    _tid,
+                    _reserved,
+                    id,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                ) => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    let msg = xous_kernel::MessageEnvelope {
+                        sender: sender.into(),
+                        body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                            id,
+                            arg1,
+                            arg2,
+                            arg3,
+                            arg4,
+                        }),
+                    };
+                    self.queue[queue_idx] = QueuedMessage::Empty;
+                    if queue_idx == self.queue_tail {
+                        self.queue_tail += 1;
+                        if self.queue_tail >= self.queue.len() {
+                            self.queue_tail = 0;
+                        }
+                    }
+                    return Some(msg);
+                }
+            };
 
-            // Scalar messages have nothing to return, so they can go straight to the `Free` state
-            QueuedMessage::ScalarMessage(pid, _tid, _reserved, id, arg1, arg2, arg3, arg4) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                let msg = xous_kernel::MessageEnvelope {
-                    sender: sender.into(),
-                    body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
-                        id,
-                        arg1,
-                        arg2,
-                        arg3,
-                        arg4,
-                    }),
-                };
-                self.queue[self.queue_tail] = QueuedMessage::Empty;
-                self.queue_tail += 1;
-                if self.queue_tail >= self.queue.len() {
-                    self.queue_tail = 0;
-                }
-                return Some(msg);
-            }
-            QueuedMessage::BlockingScalarTerminated(
-                pid,
-                _tid,
-                _reserved,
-                id,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-            ) => {
-                sender.pid = PID::new(pid.try_into().unwrap());
-                let msg = xous_kernel::MessageEnvelope {
-                    sender: sender.into(),
-                    body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
-                        id,
-                        arg1,
-                        arg2,
-                        arg3,
-                        arg4,
-                    }),
-                };
-                self.queue[self.queue_tail] = QueuedMessage::Empty;
-                self.queue_tail += 1;
-                if self.queue_tail >= self.queue.len() {
-                    self.queue_tail = 0;
-                }
-                return Some(msg);
-            }
-        };
-
-        self.queue[self.queue_tail] = response;
-        Some(result)
+            self.queue[queue_idx] = response;
+            return Some(result);
+        }
+        None
     }
 
     /// Add the given message to this server's queue.
@@ -669,7 +718,12 @@ impl Server {
         message: xous_kernel::Message,
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous_kernel::Error> {
-        // println!("Queueing message: {:?} for pid: {}  tid: {}", message, pid.get(), context);
+        // klog!(
+        //     "Queueing message: {:?} for pid: {}  tid: {}",
+        //     message,
+        //     pid.get(),
+        //     context
+        // );
         if self.queue[self.queue_head] != QueuedMessage::Empty {
             return Err(xous_kernel::Error::ServerQueueFull);
         }
@@ -732,6 +786,11 @@ impl Server {
         if self.queue_head >= self.queue.len() {
             self.queue_head = 0;
         }
+        // klog!(
+        //     "queue head: {}  queue_tail: {}",
+        //     self.queue_head,
+        //     self.queue_tail
+        // );
         Ok(idx)
     }
 

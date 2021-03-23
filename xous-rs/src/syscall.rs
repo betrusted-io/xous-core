@@ -1,7 +1,7 @@
 use crate::{
     pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
-    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID,
+    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
 use core::convert::TryInto;
 
@@ -461,8 +461,9 @@ impl SysCall {
                     0,
                 ]
             }
-            SysCall::CreateServerId =>
-                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::CreateServerId => {
+                [SysCallNumber::CreateServerId as usize, 0, 0, 0, 0, 0, 0, 0]
+            }
             SysCall::ReturnToParent(a1, a2) => [
                 SysCallNumber::ReturnToParent as usize,
                 a1.get() as usize,
@@ -678,24 +679,8 @@ impl SysCall {
                 0,
                 0,
             ],
-            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
-            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ],
+            SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -905,7 +890,10 @@ impl SysCall {
     pub fn has_memory(&self) -> bool {
         match self {
             SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => {
-                matches!(msg, Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_))
+                matches!(
+                    msg,
+                    Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_)
+                )
             }
             SysCall::ReturnMemory(_, _) => true,
             _ => false,
@@ -963,13 +951,16 @@ impl SysCall {
 
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
-        matches!(self, SysCall::TrySendMessage(_, _)
-            | SysCall::TryConnect(_)
-            | SysCall::TryReceiveMessage(_)
-            | SysCall::ReturnToParent(_, _)
-            | SysCall::ReturnScalar2(_, _, _)
-            | SysCall::ReturnScalar1(_, _)
-            | SysCall::ReturnMemory(_, _))
+        matches!(
+            self,
+            SysCall::TrySendMessage(_, _)
+                | SysCall::TryConnect(_)
+                | SysCall::TryReceiveMessage(_)
+                | SysCall::ReturnToParent(_, _)
+                | SysCall::ReturnScalar2(_, _, _)
+                | SysCall::ReturnScalar1(_, _)
+                | SysCall::ReturnMemory(_, _)
+        )
     }
 }
 
@@ -1406,10 +1397,10 @@ pub fn wait_process(joiner: crate::arch::ProcessHandle) -> SysCallResult {
 }
 
 /// Get the current process ID
-pub fn current_pid() -> SysCallResult {
+pub fn current_pid() -> core::result::Result<PID, Error> {
     rsyscall(SysCall::GetProcessId).and_then(|result| {
         if let Result::ProcessID(pid) = result {
-            Ok(Result::ProcessID(pid))
+            Ok(pid)
         } else {
             Err(Error::InternalError)
         }
@@ -1417,10 +1408,10 @@ pub fn current_pid() -> SysCallResult {
 }
 
 /// Get the current thread ID
-pub fn current_tid() -> SysCallResult {
-    rsyscall(SysCall::GetProcessId).and_then(|result| {
+pub fn current_tid() -> core::result::Result<TID, Error> {
+    rsyscall(SysCall::GetThreadId).and_then(|result| {
         if let Result::ThreadID(tid) = result {
-            Ok(Result::ThreadID(tid))
+            Ok(tid)
         } else {
             Err(Error::InternalError)
         }

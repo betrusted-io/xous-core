@@ -64,7 +64,6 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         let sidx = ss
             .sidx_from_cid(cid)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        // ::debug_here::debug_here!();
 
         let server_pid = ss
             .server_from_sidx(sidx)
@@ -140,20 +139,21 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             }
         };
 
-        // If the server has an available context to receive the message,
+        // If the server has an available thread to receive the message,
         // transfer it right away.
         if let Some(server_tid) = ss
             .server_from_sidx_mut(sidx)
             .expect("server couldn't be located")
             .take_available_thread()
         {
-            klog!(
-                "there are contexts available to handle this message -- marking PID {} as Ready",
-                server_pid
-            );
+            // klog!(
+            //     "there are threads available in PID {} to handle this message -- marking as Ready",
+            //     server_pid
+            // );
             let sender_idx = if message.is_blocking() {
                 ss.remember_server_message(sidx, pid, thread, &message, client_address)
                     .map_err(|e| {
+                        klog!("error remembering server message: {:?}", e);
                         ss.server_from_sidx_mut(sidx)
                             .expect("server couldn't be located")
                             .return_available_thread(thread);
@@ -184,12 +184,12 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             })?;
 
             if blocking && cfg!(baremetal) {
-                // println!("Activating Server context and switching away from Client");
+                klog!("Activating Server context and switching away from Client");
                 ss.activate_process_thread(thread, server_pid, server_tid, !blocking)
                     .map(|_| Ok(xous_kernel::Result::Message(envelope)))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
-                // println!("Blocking client, since it sent a blocking message");
+                klog!("Blocking client, since it sent a blocking message");
                 ss.switch_from_thread(pid, thread)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
                 ss.set_thread_result(
@@ -199,7 +199,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )
                 .map(|_| xous_kernel::Result::BlockedProcess)
             } else if cfg!(baremetal) {
-                // println!("Setting the return value of the Server and returning to Client");
+                klog!("Setting the return value of the Server ({}:{}) to {:?} and returning to Client",
+                    server_pid, server_tid, envelope);
                 ss.set_thread_result(
                     server_pid,
                     server_tid,
@@ -223,7 +224,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             }
         } else {
             klog!(
-                "no threads available in PID {} to handle this message, so blocking",
+                "no threads available in PID {} to handle this message, so queueing",
                 server_pid
             );
             // Add this message to the queue.  If the queue is full, this
@@ -734,15 +735,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             Ok(xous_kernel::Result::ResumeProcess)
         }
         SysCall::ReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::Blocking),
-        SysCall::TryReceiveMessage(sid) => receive_message(pid, tid, sid, ExecutionType::NonBlocking),
+        SysCall::TryReceiveMessage(sid) => {
+            receive_message(pid, tid, sid, ExecutionType::NonBlocking)
+        }
         SysCall::WaitEvent => SystemServices::with_mut(|ss| {
             let process = ss.get_process(pid).expect("Can't get current process");
             let ppid = process.ppid;
             unsafe { SWITCHTO_CALLER = None };
             // TODO: Advance thread
-            ss.activate_process_thread(tid, ppid, 0, false)
-                .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            if cfg!(baremetal) {
+                ss.activate_process_thread(tid, ppid, 0, false)
+                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            } else {
+                Ok(xous_kernel::Result::Ok)
+            }
         }),
         SysCall::CreateThread(thread_init) => SystemServices::with_mut(|ss| {
             ss.create_thread(pid, thread_init).map(|new_tid| {
@@ -767,7 +774,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }),
         SysCall::CreateServerId => SystemServices::with_mut(|ss| {
             ss.create_server_id()
-            .map(|sid| xous_kernel::Result::ServerID(sid))
+                .map(|sid| xous_kernel::Result::ServerID(sid))
         }),
         SysCall::TryConnect(sid) => SystemServices::with_mut(|ss| {
             ss.connect_to_server(sid)
@@ -792,12 +799,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Shutdown => {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
         }
-        SysCall::GetProcessId => {
-            Ok(xous_kernel::Result::ProcessID(pid))
-        }
-        SysCall::GetThreadId => {
-            Ok(xous_kernel::Result::ThreadID(tid))
-        }
+        SysCall::GetProcessId => Ok(xous_kernel::Result::ProcessID(pid)),
+        SysCall::GetThreadId => Ok(xous_kernel::Result::ThreadID(tid)),
 
         SysCall::Connect(sid) => {
             let result = SystemServices::with_mut(|ss| {

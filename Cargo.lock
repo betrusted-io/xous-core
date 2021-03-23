@@ -602,6 +602,9 @@ checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 name = "kernel-test"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "log-server",
+ "ticktimer-server",
  "utralib",
  "xous",
 ]
@@ -1070,6 +1073,20 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
  "syn 1.0.60",
+]
+
+[[package]]
+name = "rtc"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "heapless",
+ "log",
+ "log-server",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]

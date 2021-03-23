@@ -38,7 +38,7 @@ pub fn init() {
     ))
     .expect("timer: couldn't claim interrupt");
 
-    let ms = 100; // tick every 100 ms
+    let ms = 10; // tick every 10 ms
     en(false);
     load((SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
     reload((SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);

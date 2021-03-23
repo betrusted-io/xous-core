@@ -6,9 +6,6 @@ use core::fmt::{Error, Write};
 #[cfg(baremetal)]
 use utralib::generated::*;
 
-#[allow(dead_code)]  // this is unused in hosted mode, kill the warning
-static mut INITIALIZED: bool = false;
-
 #[macro_use]
 #[cfg(all(
     not(test),
@@ -66,6 +63,11 @@ macro_rules! println
 pub struct Uart {
     // pub base: *mut usize,
 }
+#[cfg(baremetal)]
+static mut INITIALIZED: bool = false;
+
+#[cfg(all(baremetal, feature = "wrap-print"))]
+static mut CHAR_COUNT: usize = 0;
 
 #[cfg(baremetal)]
 impl Uart {
@@ -85,6 +87,23 @@ impl Uart {
         // Wait until TXFULL is `0`
         while uart_csr.r(utra::uart::TXFULL) != 0 {
             ()
+        }
+        #[cfg(feature = "wrap-print")]
+        unsafe {
+            if c == b'\n' {
+                CHAR_COUNT = 0;
+            } else if CHAR_COUNT > 80 {
+                CHAR_COUNT = 0;
+                self.putc(b'\n');
+                self.putc(b'\r');
+                self.putc(b' ');
+                self.putc(b' ');
+                self.putc(b' ');
+                self.putc(b' ');
+            }
+            else {
+                CHAR_COUNT += 1;
+            }
         }
         uart_csr.wfo(utra::uart::RXTX_RXTX, c as u32);
     }

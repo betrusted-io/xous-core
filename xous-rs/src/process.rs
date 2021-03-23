@@ -1,5 +1,5 @@
 pub fn id() -> u32 {
-    if let Ok(crate::Result::ProcessID(pid)) = crate::syscall::current_pid() {
+    if let Ok(pid) = crate::syscall::current_pid() {
         pid.get() as u32
     } else {
         0

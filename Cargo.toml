@@ -27,6 +27,7 @@ members = [
     "services/ime-plugin-api",
     "services/content-plugin-api",
     "services/llio",
+    "services/rtc",
     "services/trng-tester",
 ]
 default-members = [
@@ -50,6 +51,7 @@ default-members = [
     "services/content-plugin-api",
     "services/shellchat",
     "services/llio",
+    "services/rtc",
     "services/trng-tester",
 ]
 
