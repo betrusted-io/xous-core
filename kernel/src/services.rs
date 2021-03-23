@@ -717,7 +717,7 @@ impl SystemServices {
     /// If the current process is not running.
     pub fn switch_from_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
-        // println!(
+        // klog!(
         //     "switch_from_thread({}:{}): Old state was {:?}",
         //     pid, tid, process.state
         // );
@@ -750,7 +750,7 @@ impl SystemServices {
                 );
             },
         };
-        // println!(
+        // klog!(
         //     "switch_from_thread({}:{}): New state is {:?}",
         //     pid, tid, process.state
         // );
@@ -810,14 +810,12 @@ impl SystemServices {
     ) -> Result<TID, xous_kernel::Error> {
         let previous_pid = self.current_pid();
 
-        let debug = false;
-        if debug {
-            println!(
-                "\n\r   KERNEL({},{}): Activating process {} thread {}",
-                previous_pid, previous_tid, new_pid, new_tid
-            );
-            //ArchProcess::with_current(|current| current.print_thread());
+        if new_tid != 0 {
+            klog!("Activating process {} thread {}", new_pid, new_tid);
+        } else {
+            klog!("Activating process {} thread ANY", new_pid);
         }
+        //ArchProcess::with_current(|current| current.print_thread());
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
@@ -876,8 +874,8 @@ impl SystemServices {
             // if we encounter an error.
             new.mapping.activate()?;
 
-            // Set up the new process, if necessary.  Remove the new context from
-            // the list of ready contexts.
+            // Set up the new process, if necessary.  Remove the new thread from
+            // the list of ready threads.
             new.state = match new.state {
                 ProcessState::Setup(thread_init) => {
                     // println!("Setting up new process...");
@@ -904,14 +902,16 @@ impl SystemServices {
             let previous = self
                 .get_process_mut(previous_pid)
                 .expect("couldn't get previous pid");
-            let _oldstate = previous.state;  // for tracking state in the debug print after the following closure
+            let _oldstate = previous.state; // for tracking state in the debug print after the following closure
             previous.state = match previous.state {
                 // If the previous process had exactly one thread that can be
                 // run, then the Running thread list will be 0.  In that case,
                 // we will either need to Sleep this process, or mark it as
                 // being Ready to run.
                 ProcessState::Running(x) if x == 0 => {
-                    if can_resume /*|| advance_thread*/ {
+                    if can_resume
+                    /*|| advance_thread*/
+                    {
                         ProcessState::Ready(1 << previous_tid)
                     } else {
                         ProcessState::Sleeping
@@ -932,17 +932,18 @@ impl SystemServices {
                     previous_pid, other
                 ),
             };
-            if debug {println!("   KERNEL|STATE: state change from {:?} -> {:?}", _oldstate, previous.state);}
-        // if advance_thread {
-        //     previous.current_thread += 1;
-        //     if previous.current_thread as TID > arch::process::MAX_CONTEXT {
-        //         previous.current_thread = 0;
-        //     }
-        // }
-        // println!(
-        //     "Set previous process PID {} state to {:?} (with can_resume = {})",
-        //     previous_pid, previous.state, can_resume
-        // );
+            klog!(
+                "PID {:?} state change from {:?} -> {:?}",
+                previous_pid,
+                _oldstate,
+                previous.state
+            );
+            // klog!(
+            //     "Set previous process PID {} state to {:?} (with can_resume = {})",
+            //     previous_pid,
+            //     previous.state,
+            //     can_resume
+            // );
         } else {
             let new = self.get_process_mut(new_pid)?;
 
@@ -978,7 +979,9 @@ impl SystemServices {
                 }
                 // Mark the previous TID as being runnable, and remove the new TID
                 // from the list of threads that can be run.
-                ProcessState::Running(x & !(1 << new_tid) | if can_resume { 1 << previous_tid } else { 0 })
+                ProcessState::Running(
+                    x & !(1 << new_tid) | if can_resume { 1 << previous_tid } else { 0 },
+                )
             } else {
                 panic!(
                     "PID {} invalid process state (not Running): {:?}",
@@ -1392,23 +1395,34 @@ impl SystemServices {
     ///   queue.
     /// * **ServerNotFound**: The server queue was full and a free slot could not
     ///   be found.
-    pub fn create_server(
-        &mut self,
-        pid: PID,
-    ) -> Result<(SID, CID), xous_kernel::Error> {
-        let sid = SID::from_u32(arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32());
+    pub fn create_server(&mut self, pid: PID) -> Result<(SID, CID), xous_kernel::Error> {
+        let sid = SID::from_u32(
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+        );
         self.create_server_with_address(pid, sid)
     }
 
     /// Generate a random server ID and return it to the caller. Doesn't create
     /// any processes.
     pub fn create_server_id(&mut self) -> Result<SID, xous_kernel::Error> {
-        let sid = SID::from_u32(arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32(), arch::rand::get_u32());
+        let sid = SID::from_u32(
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+            arch::rand::get_u32(),
+        );
         Ok(sid)
     }
 
     /// Connect to a server on behalf of another process.
-    pub fn connect_process_to_server(&mut self, target_pid: PID, sid: SID)  -> Result<CID, xous_kernel::Error>{
+    pub fn connect_process_to_server(
+        &mut self,
+        target_pid: PID,
+        sid: SID,
+    ) -> Result<CID, xous_kernel::Error> {
         let original_pid = crate::arch::process::current_pid();
 
         let process = self.get_process_mut(target_pid)?;
