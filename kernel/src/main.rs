@@ -168,8 +168,10 @@ pub extern "C" fn kmain() {
 
                 #[cfg(feature = "debug-print")]
                 SystemServices::with(|system_services| {
-                    for test_idx in 0..system_services.processes.len() {
-                        println!("{:?}", system_services.processes[test_idx]);
+                    for (test_idx, process) in system_services.processes.iter().enumerate() {
+                        if ! process.free() {
+                            println!("PID {}: {:?}", test_idx + 1, process);
+                        }
                     }
                 });
 
