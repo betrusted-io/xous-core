@@ -1,23 +1,24 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "Provide high-resolution, non-rollover system time"
+edition = "2018"
 name = "ticktimer-server"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "Provide high-resolution, non-rollover system time"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
 heapless = "0.5"
-log-server = { path = "../log-server" }
 log = "0.4"
+log-server = {path = "../log-server"}
+xous = {path = "../../xous-rs"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
-debugprint = []
-disablewatchdog = []
+debug-print = []
+watchdog = []
 # generally you want to disable watchdog if you're doing development.
-default = ["disablewatchdog"] # "debugprint"
+default = ["watchdog"]
+# default = ["debug-print"]
