@@ -854,13 +854,15 @@ impl SystemServices {
                             }
                         }
                         new.current_thread = new_tid as _;
-                        // println!(" -- picked thread {}", new_tid);
+                        klog!("picked thread ID {}", new_tid);
                     } else if x & (1 << new_tid) == 0 {
                         // println!(
                         //     "thread is {:?}, which is not valid for new thread {}",
                         //     new.state, new_tid
                         // );
                         return Err(xous_kernel::Error::ProcessNotFound);
+                    } else {
+                        new.current_thread = new_tid as _;
                     }
                 }
                 ProcessState::Sleeping => {
