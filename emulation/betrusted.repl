@@ -71,4 +71,4 @@ flash_mem: Memory.MappedMemory @ {
 
 sysbus:
     init:
-        Tag <0xF0000000 0x1000> "CTRL"
+        ApplySVD @renode.svd
