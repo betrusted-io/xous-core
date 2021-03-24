@@ -28,12 +28,6 @@ pub struct SystemServices {
 
     /// A table of all servers in the system
     servers: [Option<Server>; MAX_SERVER_COUNT],
-
-    /// A log of the currently-active syscall depth
-    _syscall_stack: [(usize, usize); 3],
-
-    /// How many entries there are on the syscall stack
-    _syscall_depth: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -224,8 +218,6 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
     servers: filled_array![None; 32],
-    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    _syscall_depth: 0,
 }));
 
 #[cfg(baremetal)]
@@ -241,8 +233,6 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
     servers: filled_array![None; 32],
-    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    _syscall_depth: 0,
 };
 
 impl core::fmt::Debug for Process {
