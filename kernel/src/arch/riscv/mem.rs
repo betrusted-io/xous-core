@@ -483,13 +483,15 @@ pub fn lend_page_inner(
 
     // If we try to share a page that's not ours, that's just wrong.
     if *entry & MMUFlags::VALID.bits() == 0 {
-        return Err(xous_kernel::Error::ShareViolation);
+        // klog!("Not valid");
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // If we try to share a page that's already shared, that's a sharing
     // violation.
     if *entry & MMUFlags::S.bits() != 0 {
-        return Err(xous_kernel::Error::ShareViolation);
+        // klog!("Already shared");
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // Strip the `VALID` flag, and set the `SHARED` flag.
