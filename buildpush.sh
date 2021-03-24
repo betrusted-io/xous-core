@@ -10,7 +10,7 @@ FPGA_IMAGE=../betrusted-soc/build/gateware/encrypted.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
 LOADER_IMAGE=target/riscv32imac-unknown-none-elf/release/loader.bin
 CSR_CSV=../betrusted-soc/build/csr.csv.1
-USE_IDENITY=0
+USE_IDENTITY=0
 USE_NIGHTLY=
 
 POSITIONAL=()
