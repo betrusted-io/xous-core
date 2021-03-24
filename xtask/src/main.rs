@@ -50,7 +50,7 @@ fn try_main() -> Result<(), DynError> {
         "keyboard",
         "trng",
         "llio",
-        "kernel-test",
+        //"kernel-test",
     ];
     let fcc_pkgs = [
         "shell",
@@ -72,6 +72,14 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "trng",
     ];
+    let minimal_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "xous-names",
+        "trng",
+        "llio",
+        "kernel-test",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
@@ -90,6 +98,7 @@ fn try_main() -> Result<(), DynError> {
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
+        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs)?,
         Some("debug") => run(true)?,
         _ => print_help(),
     }
