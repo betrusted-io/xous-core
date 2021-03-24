@@ -6,9 +6,9 @@ fn sleep_loop(sleep_ms: usize) {
     let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
     let tid = xous::current_tid().unwrap();
     let sleep_ms = match tid {
-        4 => 50,
-        2 => 10,
-        3 => 20,
+        4 => 500,
+        2 => 100,
+        3 => 200,
         _ => panic!("Unknown TID"),
     };
     // log::info!("My thread number is {}, sleeping 0x{:08x} ({}) ms", tid, sleep_ms, sleep_ms);

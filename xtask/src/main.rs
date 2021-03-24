@@ -50,6 +50,7 @@ fn try_main() -> Result<(), DynError> {
         "keyboard",
         "trng",
         "llio",
+        "kernel-test",
     ];
     let fcc_pkgs = [
         "shell",
