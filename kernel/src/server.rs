@@ -5,6 +5,39 @@ pub use crate::arch::process::Thread;
 use core::mem;
 use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, MessageSender, PID, SID, TID};
 
+/// A pointer to resolve a server ID to a particular process
+#[derive(PartialEq, Debug)]
+pub struct Server {
+    /// A randomly-generated ID
+    pub sid: SID,
+
+    /// The process that owns this server
+    pub pid: PID,
+
+    /// Where messages should be inserted
+    queue_head: usize,
+
+    /// The index that the server is currently reading from
+    queue_tail: usize,
+
+    /// An increasing number that indicates where the server is reading.
+    head_generation: u8,
+
+    /// An increasing (but wrapping number) that indicates where clients are writing.
+    tail_generation: u8,
+
+    /// Where data will appear
+    #[cfg(baremetal)]
+    queue: &'static mut [QueuedMessage],
+    #[cfg(not(baremetal))]
+    queue: Vec<QueuedMessage>,
+
+    /// The `context mask` is a bitfield of contexts that are able to handle
+    /// this message. If there are no available contexts, then messages will
+    /// need to be queued.
+    ready_threads: usize,
+}
+
 pub struct SenderID {
     /// The index of the server within the SystemServices table
     pub sidx: usize,
@@ -76,7 +109,8 @@ enum QueuedMessage {
     Empty,
     BlockingScalarMessage(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* server return address */
         usize, /* id */
         usize, /* arg1 */
@@ -86,7 +120,8 @@ enum QueuedMessage {
     ),
     ScalarMessage(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* server return address */
         usize, /* id */
         usize, /* arg1 */
@@ -96,7 +131,8 @@ enum QueuedMessage {
     ),
     MemoryMessageSend(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* reserved */
         usize, /* id */
         usize, /* buf */
@@ -106,7 +142,8 @@ enum QueuedMessage {
     ),
     MemoryMessageROLend(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* id */
         usize, /* buf */
@@ -116,7 +153,8 @@ enum QueuedMessage {
     ),
     MemoryMessageRWLend(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* id */
         usize, /* buf */
@@ -129,7 +167,8 @@ enum QueuedMessage {
     /// we could receive the message.
     MemoryMessageROLendTerminated(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* id */
         usize, /* buf */
@@ -142,7 +181,8 @@ enum QueuedMessage {
     /// we could receive the message.
     MemoryMessageRWLendTerminated(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* id */
         usize, /* buf */
@@ -155,7 +195,8 @@ enum QueuedMessage {
     /// we could receive the message.
     BlockingScalarTerminated(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* server return address */
         usize, /* id */
         usize, /* arg1 */
@@ -170,7 +211,8 @@ enum QueuedMessage {
     /// sending process.
     WaitingReturnMemory(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* client base address */
         usize, /* Range size */
@@ -180,7 +222,8 @@ enum QueuedMessage {
     /// to the previous process.
     WaitingForget(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* address of memory base in server */
         usize, /* client base address */
         usize, /* Range size */
@@ -190,35 +233,10 @@ enum QueuedMessage {
     /// page.
     WaitingReturnScalar(
         u16,   /* client PID */
-        u16,   /* client TID */
+        u8,    /* client TID */
+        u8,    /* message index */
         usize, /* server return address */
     ),
-}
-
-/// A pointer to resolve a server ID to a particular process
-#[derive(PartialEq, Debug)]
-pub struct Server {
-    /// A randomly-generated ID
-    pub sid: SID,
-
-    /// The process that owns this server
-    pub pid: PID,
-
-    /// An index into the queue
-    queue_head: usize,
-
-    queue_tail: usize,
-
-    /// Where data will appear
-    #[cfg(baremetal)]
-    queue: &'static mut [QueuedMessage],
-    #[cfg(not(baremetal))]
-    queue: Vec<QueuedMessage>,
-
-    /// The `context mask` is a bitfield of contexts that are able to handle
-    /// this message. If there are no available contexts, then messages will
-    /// need to be queued.
-    ready_threads: usize,
 }
 
 impl Server {
@@ -242,7 +260,7 @@ impl Server {
         let queue = unsafe {
             core::slice::from_raw_parts_mut(
                 _backing.as_mut_ptr() as *mut QueuedMessage,
-                _backing.len() / mem::size_of::<QueuedMessage>(),
+               _backing.len() / mem::size_of::<QueuedMessage>(),
             )
         };
 
@@ -262,6 +280,8 @@ impl Server {
             pid,
             queue_head: 0,
             queue_tail: 0,
+            head_generation: 0,
+            tail_generation: 0,
             queue,
             ready_threads: 0,
         });
@@ -297,6 +317,7 @@ impl Server {
                 QueuedMessage::MemoryMessageROLend(
                     msg_pid,
                     tid,
+                    idx,
                     arg1,
                     arg2,
                     arg3,
@@ -306,13 +327,14 @@ impl Server {
                 ) => {
                     if msg_pid == pid.get() as _ {
                         *entry = QueuedMessage::MemoryMessageROLendTerminated(
-                            msg_pid, tid, arg1, arg2, arg3, arg4, arg5, arg6,
+                            msg_pid, tid, idx, arg1, arg2, arg3, arg4, arg5, arg6,
                         );
                     }
                 }
                 QueuedMessage::MemoryMessageRWLend(
                     msg_pid,
                     tid,
+                    idx,
                     arg1,
                     arg2,
                     arg3,
@@ -322,13 +344,14 @@ impl Server {
                 ) => {
                     if msg_pid == pid.get() as _ {
                         *entry = QueuedMessage::MemoryMessageRWLendTerminated(
-                            msg_pid, tid, arg1, arg2, arg3, arg4, arg5, arg6,
+                            msg_pid, tid, idx, arg1, arg2, arg3, arg4, arg5, arg6,
                         );
                     }
                 }
                 QueuedMessage::BlockingScalarMessage(
                     msg_pid,
                     tid,
+                    idx,
                     arg1,
                     arg2,
                     arg3,
@@ -338,7 +361,7 @@ impl Server {
                 ) => {
                     if msg_pid == pid.get() as _ {
                         *entry = QueuedMessage::BlockingScalarTerminated(
-                            msg_pid, tid, arg1, arg2, arg3, arg4, arg5, arg6,
+                            msg_pid, tid, idx, arg1, arg2, arg3, arg4, arg5, arg6,
                         );
                     }
                 }
@@ -356,23 +379,28 @@ impl Server {
     /// message that's waiting a response, that's acceptable.
     pub fn take_waiting_message(
         &mut self,
-        idx: usize,
+        message_index: usize,
         buf: Option<&MemoryRange>,
     ) -> Result<WaitingMessage, xous_kernel::Error> {
+        // klog!("head generation: {}  tail generation: {}", self.head_generation, self.tail_generation);
+        // if self.tail_generation == self.head_generation {
+        //     Err(xous_kernel::Error::BadAddress)?;
+        // }
+
         let current_val = self
             .queue
-            .get_mut(idx)
+            .get_mut(message_index)
             .ok_or(xous_kernel::Error::BadAddress)?;
-        klog!("memory in queue[{}]: {:?}", idx, current_val);
-        let (pid, tid, server_addr, client_addr, len, forget, is_memory) = match *current_val {
-            QueuedMessage::WaitingReturnMemory(pid, tid, server_addr, client_addr, len) => {
-                (pid, tid, server_addr, client_addr, len, false, true)
+        // klog!("memory in queue[{}]: {:?}", message_index, current_val);
+        let (pid, tid, _idx, server_addr, client_addr, len, forget, is_memory) = match *current_val {
+            QueuedMessage::WaitingReturnMemory(pid, tid, idx, server_addr, client_addr, len) => {
+                (pid, tid, idx, server_addr, client_addr, len, false, true)
             }
-            QueuedMessage::WaitingForget(pid, tid, server_addr, client_addr, len) => {
-                (pid, tid, server_addr, client_addr, len, true, true)
+            QueuedMessage::WaitingForget(pid, tid, idx, server_addr, client_addr, len) => {
+                (pid, tid, idx, server_addr, client_addr, len, true, true)
             }
-            QueuedMessage::WaitingReturnScalar(pid, tid, return_address) => {
-                (pid, tid, return_address, 0, 0, true, false)
+            QueuedMessage::WaitingReturnScalar(pid, tid, idx, return_address) => {
+                (pid, tid, idx, return_address, 0, 0, true, false)
             }
             _ => return Ok(WaitingMessage::None),
         };
@@ -382,18 +410,20 @@ impl Server {
         if is_memory && cfg!(baremetal) {
             let buf = buf.expect("memory message expected but no buffer passed!");
             if server_addr != buf.as_ptr() as usize || len != buf.len() {
-                // println!("KERNEL: Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
+                // klog!("Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
                 Err(xous_kernel::Error::BadAddress)?;
             }
         }
         *current_val = QueuedMessage::Empty;
-        if idx == self.queue_tail {
+        if message_index == self.queue_tail {
             self.queue_tail += 1;
             if self.queue_tail >= self.queue.len() {
                 self.queue_tail = 0;
             }
             // Advance the pointer in case we have a long string of Empty messages.
-            while self.queue_tail != self.queue_head && self.queue[self.queue_tail] == QueuedMessage::Empty {
+            while self.queue_tail != self.queue_head
+                && self.queue[self.queue_tail] == QueuedMessage::Empty
+            {
                 self.queue_tail += 1;
                 if self.queue_tail >= self.queue.len() {
                     self.queue_tail = 0;
@@ -452,56 +482,38 @@ impl Server {
     /// ***Some(MessageEnvelope): This message is queued.
     pub fn take_next_message(&mut self, sidx: usize) -> Option<xous_kernel::MessageEnvelope> {
         // klog!(
-        //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}  CID: ((({})))",
+        //     "queue_head: ((({})))  queue_tail: ((({}))): {:?}  CID: ((({})))  head_gen: {}  tail_gen: {}",
         //     self.queue_head,
         //     self.queue_tail,
         //     self.queue[self.queue_tail],
-        //     sidx
+        //     sidx,
+        //     self.head_generation,
+        //     self.tail_generation,
         // );
+
+        // If the reading head and tail generations are the same, the queue is empty.
+        if self.tail_generation == self.head_generation {
+            // klog!("self.tail_generation {} == self.head_generation {}", self.tail_generation, self.head_generation);
+            return None;
+        }
+
         use core::convert::TryInto;
         let mut queue_idx = self.queue_tail;
-        while queue_idx != self.queue_head {
+        loop {
             let mut sender = SenderID::new(sidx, queue_idx, None);
             // klog!("Message @ server.queue[{}]: {:?}", queue_idx, self.queue[queue_idx]);
             let (result, response) = match self.queue[queue_idx] {
-                QueuedMessage::Empty => {
-                    queue_idx += 1;
-                    if queue_idx >= self.queue.len() {
-                        queue_idx = 0;
-                    }
-                    continue;
-                }
-                QueuedMessage::WaitingReturnMemory(_, _, _, _, _) => {
-                    queue_idx += 1;
-                    if queue_idx >= self.queue.len() {
-                        queue_idx = 0;
-                    }
-                    continue;
-                }
-                QueuedMessage::WaitingForget(_, _, _, _, _) => {
-                    queue_idx += 1;
-                    if queue_idx >= self.queue.len() {
-                        queue_idx = 0;
-                    }
-                    continue;
-                }
-                QueuedMessage::WaitingReturnScalar(_, _, _) => {
-                    queue_idx += 1;
-                    if queue_idx >= self.queue.len() {
-                        queue_idx = 0;
-                    }
-                    continue;
-                }
                 QueuedMessage::MemoryMessageROLend(
                     pid,
                     tid,
+                    idx,
                     client_addr,
                     id,
                     buf,
                     buf_size,
                     offset,
                     valid,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     (
                         xous_kernel::MessageEnvelope {
@@ -513,19 +525,27 @@ impl Server {
                                 valid: MemorySize::new(valid),
                             }),
                         },
-                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                        QueuedMessage::WaitingReturnMemory(
+                            pid,
+                            tid,
+                            idx,
+                            buf,
+                            client_addr,
+                            buf_size,
+                        ),
                     )
                 }
                 QueuedMessage::MemoryMessageRWLend(
                     pid,
                     tid,
+                    idx,
                     client_addr,
                     id,
                     buf,
                     buf_size,
                     offset,
                     valid,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     (
                         xous_kernel::MessageEnvelope {
@@ -537,19 +557,27 @@ impl Server {
                                 valid: MemorySize::new(valid),
                             }),
                         },
-                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                        QueuedMessage::WaitingReturnMemory(
+                            pid,
+                            tid,
+                            idx,
+                            buf,
+                            client_addr,
+                            buf_size,
+                        ),
                     )
                 }
                 QueuedMessage::MemoryMessageROLendTerminated(
                     pid,
                     tid,
+                    idx,
                     client_addr,
                     id,
                     buf,
                     buf_size,
                     offset,
                     valid,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     (
                         xous_kernel::MessageEnvelope {
@@ -561,19 +589,27 @@ impl Server {
                                 valid: MemorySize::new(valid),
                             }),
                         },
-                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                        QueuedMessage::WaitingReturnMemory(
+                            pid,
+                            tid,
+                            idx,
+                            buf,
+                            client_addr,
+                            buf_size,
+                        ),
                     )
                 }
                 QueuedMessage::MemoryMessageRWLendTerminated(
                     pid,
                     tid,
+                    idx,
                     client_addr,
                     id,
                     buf,
                     buf_size,
                     offset,
                     valid,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     (
                         xous_kernel::MessageEnvelope {
@@ -585,20 +621,28 @@ impl Server {
                                 valid: MemorySize::new(valid),
                             }),
                         },
-                        QueuedMessage::WaitingReturnMemory(pid, tid, buf, client_addr, buf_size),
+                        QueuedMessage::WaitingReturnMemory(
+                            pid,
+                            tid,
+                            idx,
+                            buf,
+                            client_addr,
+                            buf_size,
+                        ),
                     )
                 }
 
                 QueuedMessage::BlockingScalarMessage(
                     pid,
                     tid,
+                    idx,
                     client_addr,
                     id,
                     arg1,
                     arg2,
                     arg3,
                     arg4,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     (
                         xous_kernel::MessageEnvelope {
@@ -613,19 +657,20 @@ impl Server {
                                 },
                             ),
                         },
-                        QueuedMessage::WaitingReturnScalar(pid, tid, client_addr),
+                        QueuedMessage::WaitingReturnScalar(pid, tid, idx, client_addr),
                     )
                 }
                 QueuedMessage::MemoryMessageSend(
                     pid,
                     _tid,
+                    idx,
                     _reserved,
                     id,
                     buf,
                     buf_size,
                     offset,
                     valid,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     let msg = xous_kernel::MessageEnvelope {
                         sender: sender.into(),
@@ -643,41 +688,22 @@ impl Server {
                             self.queue_tail = 0;
                         }
                     }
+                    self.head_generation = self.head_generation.wrapping_add(1);
                     return Some(msg);
                 }
 
                 // Scalar messages have nothing to return, so they can go straight to the `Free` state
-                QueuedMessage::ScalarMessage(pid, _tid, _reserved, id, arg1, arg2, arg3, arg4) => {
-                    sender.pid = PID::new(pid.try_into().unwrap());
-                    let msg = xous_kernel::MessageEnvelope {
-                        sender: sender.into(),
-                        body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
-                            id,
-                            arg1,
-                            arg2,
-                            arg3,
-                            arg4,
-                        }),
-                    };
-                    self.queue[queue_idx] = QueuedMessage::Empty;
-                    if queue_idx == self.queue_tail {
-                        self.queue_tail += 1;
-                        if self.queue_tail >= self.queue.len() {
-                            self.queue_tail = 0;
-                        }
-                    }
-                    return Some(msg);
-                }
-                QueuedMessage::BlockingScalarTerminated(
+                QueuedMessage::ScalarMessage(
                     pid,
                     _tid,
+                    idx,
                     _reserved,
                     id,
                     arg1,
                     arg2,
                     arg3,
                     arg4,
-                ) => {
+                ) if idx == self.head_generation => {
                     sender.pid = PID::new(pid.try_into().unwrap());
                     let msg = xous_kernel::MessageEnvelope {
                         sender: sender.into(),
@@ -696,14 +722,64 @@ impl Server {
                             self.queue_tail = 0;
                         }
                     }
+                    self.head_generation = self.head_generation.wrapping_add(1);
                     return Some(msg);
+                }
+                QueuedMessage::BlockingScalarTerminated(
+                    pid,
+                    _tid,
+                    idx,
+                    _reserved,
+                    id,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                ) if idx == self.head_generation => {
+                    sender.pid = PID::new(pid.try_into().unwrap());
+                    let msg = xous_kernel::MessageEnvelope {
+                        sender: sender.into(),
+                        body: xous_kernel::Message::Scalar(xous_kernel::ScalarMessage {
+                            id,
+                            arg1,
+                            arg2,
+                            arg3,
+                            arg4,
+                        }),
+                    };
+                    self.queue[queue_idx] = QueuedMessage::Empty;
+                    if queue_idx == self.queue_tail {
+                        self.queue_tail += 1;
+                        if self.queue_tail >= self.queue.len() {
+                            self.queue_tail = 0;
+                        }
+                    }
+                    self.head_generation = self.head_generation.wrapping_add(1);
+                    return Some(msg);
+                }
+                _ => {
+                    queue_idx += 1;
+                    if queue_idx >= self.queue.len() {
+                        queue_idx = 0;
+                    }
+                    if queue_idx == self.queue_tail {
+                        // panic!("Couldn't find the message in the queue! Queue contents: {:?}", self.queue);
+                        return None;
+                    }
+                    continue;
                 }
             };
 
+            if queue_idx == self.queue_tail {
+                self.queue_tail += 1;
+                if self.queue_tail >= self.queue.len() {
+                    self.queue_tail = 0;
+                }
+            }
             self.queue[queue_idx] = response;
+            self.head_generation = self.head_generation.wrapping_add(1);
             return Some(result);
         }
-        None
     }
 
     /// Add the given message to this server's queue.
@@ -714,7 +790,7 @@ impl Server {
     pub fn queue_message(
         &mut self,
         pid: PID,
-        context: TID,
+        tid: TID,
         message: xous_kernel::Message,
         original_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous_kernel::Error> {
@@ -722,16 +798,40 @@ impl Server {
         //     "Queueing message: {:?} for pid: {}  tid: {}",
         //     message,
         //     pid.get(),
-        //     context
+        //     tid
         // );
-        if self.queue[self.queue_head] != QueuedMessage::Empty {
-            return Err(xous_kernel::Error::ServerQueueFull);
+        // If the head and the tail generations will end up the same, then
+        // the queue is full.
+        if self.tail_generation == self.head_generation.wrapping_sub(1) {
+            Err(xous_kernel::Error::ServerQueueFull)?;
         }
 
-        self.queue[self.queue_head] = match message {
+        // Look through the queue, beginning at the queue head, for an empty slot.
+        let mut discovered_index = None;
+        for queue_idx in self.queue_head..self.queue.len() {
+            if self.queue[queue_idx] == QueuedMessage::Empty {
+                discovered_index = Some(queue_idx);
+                break;
+            }
+        }
+        if discovered_index.is_none() {
+            for queue_idx in 0..self.queue_head {
+                if self.queue[queue_idx] == QueuedMessage::Empty {
+                    discovered_index = Some(queue_idx);
+                    break;
+                }
+            }
+        }
+        if discovered_index.is_none() {
+            Err(xous_kernel::Error::ServerQueueFull)?;
+        }
+        let queue_idx = discovered_index.unwrap();
+        let queue_entry = &mut self.queue[queue_idx];
+        *queue_entry = match message {
             xous_kernel::Message::Scalar(msg) => QueuedMessage::ScalarMessage(
                 pid.get() as _,
-                context as _,
+                tid as _,
+                self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
                 msg.arg1,
@@ -741,7 +841,8 @@ impl Server {
             ),
             xous_kernel::Message::BlockingScalar(msg) => QueuedMessage::BlockingScalarMessage(
                 pid.get() as _,
-                context as _,
+                tid as _,
+                self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
                 msg.arg1,
@@ -751,7 +852,8 @@ impl Server {
             ),
             xous_kernel::Message::Move(msg) => QueuedMessage::MemoryMessageSend(
                 pid.get() as _,
-                context as _,
+                tid as _,
+                self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
                 msg.buf.addr.get(),
@@ -761,7 +863,8 @@ impl Server {
             ),
             xous_kernel::Message::MutableBorrow(msg) => QueuedMessage::MemoryMessageRWLend(
                 pid.get() as _,
-                context as _,
+                tid as _,
+                self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
                 msg.buf.addr.get(),
@@ -771,7 +874,8 @@ impl Server {
             ),
             xous_kernel::Message::Borrow(msg) => QueuedMessage::MemoryMessageROLend(
                 pid.get() as _,
-                context as _,
+                tid as _,
+                self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
                 msg.buf.addr.get(),
@@ -781,35 +885,50 @@ impl Server {
             ),
         };
 
-        let idx = self.queue_head;
-        self.queue_head += 1;
-        if self.queue_head >= self.queue.len() {
-            self.queue_head = 0;
+        // Advance the tail generation, which is used for incoming messages to keep
+        // them in sequence.
+        self.tail_generation = self.tail_generation.wrapping_add(1);
+        if queue_idx == self.queue_head {
+            self.queue_head += 1;
+            if self.queue_head >= self.queue.len() {
+                self.queue_head = 0;
+            }
         }
         // klog!(
         //     "queue head: {}  queue_tail: {}",
         //     self.queue_head,
         //     self.queue_tail
         // );
-        Ok(idx)
+        Ok(queue_idx)
     }
 
     pub fn queue_response(
         &mut self,
         pid: PID,
-        context: TID,
+        tid: TID,
         message: &Message,
         client_address: Option<MemoryAddress>,
     ) -> core::result::Result<usize, xous_kernel::Error> {
-        // println!("Queueing address message: {:?} (pid: {} tid: {})", message, pid.get(), context);
-        if self.queue[self.queue_head] != QueuedMessage::Empty {
-            return Err(xous_kernel::Error::ServerQueueFull);
+        // klog!("Queueing address message: {:?} (pid: {} tid: {}) tail_gen: {}  head_gen: {}", message, pid.get(), tid, self.tail_generation, self.head_generation);
+        let mut queue_idx = self.queue_head;
+        loop {
+            if self.queue[queue_idx] == QueuedMessage::Empty {
+                break;
+            }
+            queue_idx += 1;
+            if queue_idx >= self.queue.len() {
+                queue_idx = 0;
+            }
+            if queue_idx == self.queue_head {
+                return Err(xous_kernel::Error::ServerQueueFull);
+            }
         }
-        self.queue[self.queue_head] = match message {
+        self.queue[queue_idx] = match message {
             xous_kernel::Message::Scalar(_) | xous_kernel::Message::BlockingScalar(_) => {
                 QueuedMessage::WaitingReturnScalar(
                     pid.get() as _,
-                    context as _,
+                    tid as _,
+                    0,
                     client_address.map(|x| x.get()).unwrap_or(0),
                 )
             }
@@ -818,7 +937,8 @@ impl Server {
                 let len = msg.buf.size.get();
                 QueuedMessage::WaitingForget(
                     pid.get() as _,
-                    context as _,
+                    tid as _,
+                    0,
                     server_address,
                     client_address.map(|x| x.get()).unwrap_or(0),
                     len,
@@ -829,19 +949,21 @@ impl Server {
                 let len = msg.buf.size.get();
                 QueuedMessage::WaitingReturnMemory(
                     pid.get() as _,
-                    context as _,
+                    tid as _,
+                    0,
                     server_address,
                     client_address.map(|x| x.get()).unwrap_or(0),
                     len,
                 )
             }
         };
-        let idx = self.queue_head;
-        self.queue_head += 1;
-        if self.queue_head >= self.queue.len() {
-            self.queue_head = 0;
+        if queue_idx == self.queue_head {
+            self.queue_head += 1;
+            if self.queue_head >= self.queue.len() {
+                self.queue_head = 0;
+            }
         }
-        Ok(idx)
+        Ok(queue_idx)
     }
     // assert!(
     //     mem::size_of::<QueuedMessage>() == 32,

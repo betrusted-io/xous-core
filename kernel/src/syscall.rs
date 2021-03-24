@@ -156,7 +156,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                         klog!("error remembering server message: {:?}", e);
                         ss.server_from_sidx_mut(sidx)
                             .expect("server couldn't be located")
-                            .return_available_thread(thread);
+                            .return_available_thread(server_tid);
                         e
                     })?
             } else {
@@ -179,7 +179,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             ss.ready_thread(server_pid, server_tid).map_err(|e| {
                 ss.server_from_sidx_mut(sidx)
                     .expect("server couldn't be located")
-                    .return_available_thread(thread);
+                    .return_available_thread(server_tid);
                 e
             })?;
 

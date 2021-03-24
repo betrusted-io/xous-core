@@ -28,12 +28,6 @@ pub struct SystemServices {
 
     /// A table of all servers in the system
     servers: [Option<Server>; MAX_SERVER_COUNT],
-
-    /// A log of the currently-active syscall depth
-    _syscall_stack: [(usize, usize); 3],
-
-    /// How many entries there are on the syscall stack
-    _syscall_depth: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -224,8 +218,6 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
     servers: filled_array![None; 32],
-    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    _syscall_depth: 0,
 }));
 
 #[cfg(baremetal)]
@@ -241,8 +233,6 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
     servers: filled_array![None; 32],
-    _syscall_stack: [(0, 0), (0, 0), (0, 0)],
-    _syscall_depth: 0,
 };
 
 impl core::fmt::Debug for Process {
@@ -1152,6 +1142,7 @@ impl SystemServices {
                 .find_virtual_address(dest_virt, len, xous_kernel::MemoryType::Messages)
                 .or_else(|e| {
                     src_mapping.activate().unwrap();
+                    // klog!("Couldn't find a virtual address");
                     Err(e)
                 })?;
             src_mapping.activate().unwrap();
@@ -1172,10 +1163,23 @@ impl SystemServices {
                 )
                 .unwrap_or_else(|e| {
                     error = Some(e);
+                    // klog!(
+                    //     "Couldn't lend page {:08x} -> {:08x}",
+                    //     src_virt.wrapping_add(offset) as usize,
+                    //     dest_virt.wrapping_add(offset) as usize
+                    // );
                     0
                 });
             }
-            error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to lend: {:?}", e))
+            error.map_or_else(
+                || Ok(dest_virt),
+                |e| {
+                    panic!(
+                        "unable to lend {:08x} in pid {} to {:08x} in pid {}: {:?}",
+                        src_virt as usize, current_pid, dest_virt as usize, dest_pid, e
+                    )
+                },
+            )
         })
     }
 
@@ -1213,17 +1217,28 @@ impl SystemServices {
         len: usize,
         _buf: MemoryRange,
     ) -> Result<*mut u8, xous_kernel::Error> {
+        // klog!(
+        //     "Returning from {}:{} to {}:{}",
+        //     self.current_pid(),
+        //     _src_tid,
+        //     dest_pid,
+        //     _dest_tid
+        // );
         if len == 0 {
-            return Err(xous_kernel::Error::BadAddress);
+            // klog!("No len");
+            Err(xous_kernel::Error::BadAddress)?;
         }
         if len & 0xfff != 0 {
-            return Err(xous_kernel::Error::BadAddress);
+            // klog!("len not aligned");
+            Err(xous_kernel::Error::BadAddress)?;
         }
         if src_virt as usize & 0xfff != 0 {
-            return Err(xous_kernel::Error::BadAddress);
+            // klog!("Src virt not aligned");
+            Err(xous_kernel::Error::BadAddress)?;
         }
         if dest_virt as usize & 0xfff != 0 {
-            return Err(xous_kernel::Error::BadAddress);
+            // klog!("dest virt not aligned");
+            Err(xous_kernel::Error::BadAddress)?;
         }
 
         let current_pid = self.current_pid();
@@ -1245,6 +1260,12 @@ impl SystemServices {
                     dest_virt.wrapping_add(offset),
                 )
                 .unwrap_or_else(|e| {
+                    // panic!(
+                    //     "Couldn't unlend {:08x} from {:08x}: {:?}",
+                    //     src_virt.wrapping_add(offset) as usize,
+                    //     dest_virt.wrapping_add(offset) as usize,
+                    //     e
+                    // );
                     error = Some(e);
                     0
                 });

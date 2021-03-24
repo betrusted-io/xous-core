@@ -69,6 +69,31 @@ mod implementation {
         connection: xous::CID,
     }
 
+    fn handle_wdt(_irq_no: usize, arg: *mut usize) {
+        let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
+        // disarm the WDT -- do it in an interrupt context, to make sure we aren't interrupted while doing this.
+
+        // why do we have this weird interlock dance?
+        //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
+        //    (so you can't defeat the WDT by just pausing the external clock sourc)
+        //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
+        //  - the CPU runs at 100MHz with a tight tolerance
+        //  - thus we have to confirm the write of the watchdog data before moving to the next state
+        if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
+            if xtt.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
+                while xtt.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
+                    xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
+                }
+                xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+                while xtt.wdt.rf(utra::wdt::STATE_ARMED2) == 1 {
+                    xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
+                }
+            }
+        }
+        // Clear the interrupt
+        xtt.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
+    }
+
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
         // println!("In IRQ, connection: {}", xtt.connection);
@@ -123,6 +148,16 @@ mod implementation {
                 (&mut xtt) as *mut XousTickTimer as *mut usize,
             )
             .expect("couldn't claim irq");
+
+            xous::claim_interrupt(
+                utra::wdt::WDT_IRQ,
+                handle_wdt,
+                (&mut xtt) as *mut XousTickTimer as *mut usize,
+            )
+            .expect("couldn't claim irq");
+
+            #[cfg(feature = "watchdog")]
+            xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
 
             xtt
         }
@@ -196,25 +231,9 @@ mod implementation {
 
         #[cfg(feature = "watchdog")]
         pub fn reset_wdt(&mut self) {
-            // disarm the WDT
-
-            // why do we have this weird interlock dance?
-            //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
-            //    (so you can't defeat the WDT by just pausing the external clock sourc)
-            //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
-            //  - the CPU runs at 100MHz with a tight tolerance
-            //  - thus we have to confirm the write of the watchdog data before moving to the next state
-            if self.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
-                if self.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
-                    while self.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
-                        self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-                    }
-                    self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-                    while self.wdt.rf(utra::wdt::STATE_ARMED2) == 1 {
-                        self.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-                    }
-                }
-            }
+            // this triggers an interrupt, and the handler of the interrupt does the actual reset
+            // this is done because we don't want the WDT reset to be interrupted
+            self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
         }
     }
 }
