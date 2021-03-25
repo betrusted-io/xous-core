@@ -241,7 +241,7 @@ fn handle_connection(
                                     | xous_kernel::Message::BlockingScalar(_) => (),
                                 }
                             }
-                            SysCall::ReturnMemory(ref _sender, ref mut buf) => {
+                            SysCall::ReturnMemory(ref _sender, ref mut buf, ref _offset, ref _valid) => {
                                 let sliced_data = data.into_boxed_slice();
                                 assert_eq!(
                                     sliced_data.len(),
