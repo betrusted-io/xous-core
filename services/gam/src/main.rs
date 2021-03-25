@@ -224,7 +224,8 @@ fn xmain() -> ! {
     if debugc{info!("GAM: chatlayout made st {:?} co {:?} pr {:?} in {:?}", chatlayout.status, chatlayout.content, chatlayout.predictive, chatlayout.input);}
     // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
-    xous::create_thread_simple(status_thread, chatlayout.status.gid()).expect("GAM: couldn't create status thread");
+    let gid = chatlayout.status.gid();
+    xous::create_thread_4(status_thread, gid[0] as _, gid[1] as _, gid[2] as _, gid[3] as _).expect("GAM: couldn't create status thread");
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
