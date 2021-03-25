@@ -66,7 +66,7 @@ fn test_main() -> ! {
     xous::create_thread_0(sleep_loop_0).unwrap();
     xous::create_thread_1(sleep_loop_1, 4 * pid).unwrap();
     xous::create_thread_2(sleep_loop_2, 10 * pid, ticktimer_conn as _).unwrap();
-    xous::create_thread_3(sleep_loop_3, 140 * pid, ticktimer_conn as _, pid).unwrap();
+    xous::create_thread_3(sleep_loop_3, 42 * pid, ticktimer_conn as _, pid).unwrap();
     xous::create_thread_4(sleep_loop_4, 180 * pid, ticktimer_conn as _, pid, EXTRA_KEY).unwrap();
 
     loop {
