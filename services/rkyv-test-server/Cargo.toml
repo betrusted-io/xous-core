@@ -1,0 +1,19 @@
+[package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Program to test various aspects of the kernel"
+edition = "2018"
+name = "rkyv-test-server"
+version = "0.1.0"
+
+[dependencies]
+log = "0.4"
+log-server = {path = "../log-server"}
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+ticktimer-server = {path = "../ticktimer-server"}
+xous = {path = "../../xous-rs"}
+xous-names = {path = "../xous-names"}
+
+[features]
+default = []
