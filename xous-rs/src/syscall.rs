@@ -1314,6 +1314,10 @@ pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
 
+#[deprecated(
+    since = "0.2",
+    note = "Please use create_thread_n() or create_thread()"
+)]
 pub fn create_thread_simple<T, U>(
     f: fn(T) -> U,
     arg: T,
@@ -1326,6 +1330,96 @@ where
     rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
         if let Result::ThreadID(thread_id) = result {
             crate::arch::create_thread_simple_post(f, arg, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_0<T>(
+    f: fn() -> T,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_0_pre(&f)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_0_post(f, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_1<T>(
+    f: fn(usize) -> T,
+    arg1: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_1_pre(&f, &arg1)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_1_post(f, arg1, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_2<T>(
+    f: fn(usize) -> T,
+    arg1: usize,
+    arg2: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_2_pre(&f, &arg1, &arg2)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_2_post(f, arg1, arg2, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_3<T>(
+    f: fn(usize) -> T,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_3_pre(&f, &arg1, &arg2, &arg3)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_3_post(f, arg1, arg2, arg3, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_4<T>(
+    f: fn(usize) -> T,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_4_pre(&f, &arg1, &arg2, &arg3, &arg4)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_4_post(f, arg1, arg2, arg3, arg4, thread_id)
         } else {
             Err(Error::InternalError)
         }
