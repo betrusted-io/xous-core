@@ -452,6 +452,7 @@ impl SystemServices {
             // Activate the current context
             let mut arch_process = crate::arch::process::Process::current();
             arch_process.set_thread(tid)?;
+            process.current_thread = tid;
         }
         // self.pid = pid;
         Ok(())
@@ -606,7 +607,7 @@ impl SystemServices {
                 p.setup_thread(INITIAL_TID, setup)?;
                 p.set_thread(INITIAL_TID)?;
                 ArchProcess::with_inner_mut(|process_inner| process_inner.pid = pid);
-                // process.current_thread = INITIAL_TID as u8;
+                process.current_thread = INITIAL_TID as _;
 
                 // Mark the current proces state as "running, and no waiting contexts"
                 ProcessState::Running(0)
@@ -641,7 +642,7 @@ impl SystemServices {
                 // FIXME: What happens if this fails? We're currently in the new process
                 // but without a context to switch to.
                 p.set_thread(new_thread)?;
-                // process.current_thread = new_context as u8;
+                process.current_thread = new_thread as _;
 
                 // Remove the new context from the available context list
                 ProcessState::Running(x & !(1 << new_thread))
@@ -668,15 +669,15 @@ impl SystemServices {
                         }
                         new_thread
                     }
-                    Some(ctx) => {
+                    Some(tid) => {
                         // Ensure the specified context is ready to run, or is
                         // currently running.
-                        if ready_threads & (1 << ctx) == 0
+                        if ready_threads & (1 << tid) == 0
                         /*&& ctx != current_thread*/
                         {
                             return Err(xous_kernel::Error::InvalidThread);
                         }
-                        ctx
+                        tid
                     }
                 };
 
@@ -686,6 +687,7 @@ impl SystemServices {
                 // Activate this process on this CPU
                 process.activate()?;
                 p.set_thread(new_thread)?;
+                process.current_thread = new_thread as _;
                 ProcessState::Running(new_mask)
             }
         };
@@ -941,10 +943,14 @@ impl SystemServices {
 
             // If we wanted to switch to a "new" thread, and it's the same
             // as the one we just switched from, do nothing.
-            if new.current_thread == new_tid {
+            if previous_tid == new_tid {
                 if !can_resume {
-                    panic!("tried to switch to our own context without resume");
+                    panic!("tried to switch to our own thread without resume (current_thread: {}  previous_tid: {}  new_tid: {})",
+                            new.current_thread, previous_tid, new_tid);
                 }
+                let mut process = crate::arch::process::Process::current();
+                process.set_thread(new_tid).unwrap();
+                new.current_thread = new_tid;
                 return Ok(new_tid);
             }
 
