@@ -185,7 +185,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
             if blocking && cfg!(baremetal) {
                 klog!("Activating Server context and switching away from Client");
-                ss.activate_process_thread(thread, server_pid, server_tid, !blocking)
+                ss.activate_process_thread(thread, server_pid, server_tid, false)
                     .map(|_| Ok(xous_kernel::Result::Message(envelope)))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else if blocking && !cfg!(baremetal) {
@@ -239,7 +239,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     let process = ss.get_process(pid).expect("Can't get current process");
                     let ppid = process.ppid;
                     unsafe { SWITCHTO_CALLER = None };
-                    ss.activate_process_thread(thread, ppid, 0, !blocking)
+                    ss.activate_process_thread(thread, ppid, 0, false)
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 } else {
