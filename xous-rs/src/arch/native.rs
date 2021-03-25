@@ -202,7 +202,7 @@ where
 }
 
 pub fn create_thread_2_pre<U>(
-    f: &fn(usize) -> U,
+    f: &fn(usize, usize) -> U,
     arg1: &usize,
     arg2: &usize,
 ) -> core::result::Result<ThreadInit, crate::Error>
@@ -214,7 +214,7 @@ where
 }
 
 pub fn create_thread_2_post<U>(
-    f: fn(usize) -> U,
+    f: fn(usize, usize) -> U,
     arg1: usize,
     arg2: usize,
     thread_id: TID,
@@ -227,7 +227,7 @@ where
 }
 
 pub fn create_thread_3_pre<U>(
-    f: &fn(usize) -> U,
+    f: &fn(usize, usize, usize) -> U,
     arg1: &usize,
     arg2: &usize,
     arg3: &usize,
@@ -240,7 +240,7 @@ where
 }
 
 pub fn create_thread_3_post<U>(
-    f: fn(usize) -> U,
+    f: fn(usize, usize, usize) -> U,
     arg1: usize,
     arg2: usize,
     arg3: usize,
@@ -254,7 +254,7 @@ where
 }
 
 pub fn create_thread_4_pre<U>(
-    f: &fn(usize) -> U,
+    f: &fn(usize, usize, usize, usize) -> U,
     arg1: &usize,
     arg2: &usize,
     arg3: &usize,
@@ -268,7 +268,7 @@ where
 }
 
 pub fn create_thread_4_post<U>(
-    f: fn(usize) -> U,
+    f: fn(usize, usize, usize, usize) -> U,
     arg1: usize,
     arg2: usize,
     arg3: usize,

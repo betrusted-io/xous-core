@@ -1336,9 +1336,7 @@ where
     })
 }
 
-pub fn create_thread_0<T>(
-    f: fn() -> T,
-) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+pub fn create_thread_0<T>(f: fn() -> T) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
 where
     T: Send + 'static,
 {
@@ -1370,7 +1368,7 @@ where
 }
 
 pub fn create_thread_2<T>(
-    f: fn(usize) -> T,
+    f: fn(usize, usize) -> T,
     arg1: usize,
     arg2: usize,
 ) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
@@ -1388,7 +1386,7 @@ where
 }
 
 pub fn create_thread_3<T>(
-    f: fn(usize) -> T,
+    f: fn(usize, usize, usize) -> T,
     arg1: usize,
     arg2: usize,
     arg3: usize,
@@ -1407,7 +1405,7 @@ where
 }
 
 pub fn create_thread_4<T>(
-    f: fn(usize) -> T,
+    f: fn(usize, usize, usize, usize) -> T,
     arg1: usize,
     arg2: usize,
     arg3: usize,
