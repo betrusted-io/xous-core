@@ -3,7 +3,7 @@ use xous::{String, MessageEnvelope, Message, ScalarMessage};
 
 use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
-pub fn callback_thread(_: u32) {
+pub fn callback_thread() {
     let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
     let callback_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELLCHAT).unwrap();
 
@@ -29,7 +29,7 @@ pub struct CallBack {
 }
 impl CallBack {
     pub fn new() -> Self {
-        xous::create_thread_simple(callback_thread, 0).expect("SHCH: couldn't create callback generator thread");
+        xous::create_thread_0(callback_thread).expect("SHCH: couldn't create callback generator thread");
         CallBack {
             state: 0,
             callbacks: 0
