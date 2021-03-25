@@ -522,11 +522,13 @@ pub fn idle() -> bool {
                 // Switch to this process immediately, which moves it from `Setup(_)` to `Running(0)`.
                 // Note that in this system, multiple processes can be active at once. This is
                 // similar to having one core for each process
-                SystemServices::with_mut(|ss| {
-                    ss.create_thread(new_pid, ThreadInit {})?;
-                    ss.switch_to_thread(new_pid, None)
-                })
-                .unwrap();
+                if new_pid != PID::new(1).unwrap() {
+                    SystemServices::with_mut(|ss| {
+                        ss.create_thread(new_pid, ThreadInit {})?;
+                        ss.switch_to_thread(new_pid, None)
+                    })
+                    .unwrap();
+                }
             }
             ThreadMessage::SysCall(pid, thread_id, call) => {
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);
