@@ -385,11 +385,20 @@ impl Message {
     }
 
     pub fn memory(&self) -> Option<&MemoryRange> {
+        self.memory_message().map(|msg| &msg.buf)
+    }
+
+    pub fn memory_message(&self) -> Option<&MemoryMessage> {
         match self {
-            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => {
-                Some(&mem.buf)
-            }
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => Some(&mem),
             Message::BlockingScalar(_) | Message::Scalar(_) => None,
+        }
+    }
+
+    pub fn memory_message_mut(&mut self) -> Option<&mut MemoryMessage> {
+        match self {
+            Message::MutableBorrow(mem) | Message::Move(mem) => Some(mem),
+            Message::BlockingScalar(_) | Message::Scalar(_) | Message::Borrow(_) => None,
         }
     }
 
