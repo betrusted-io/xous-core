@@ -414,14 +414,16 @@ impl Message {
 
 impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
     type Error = ();
-    fn try_from(value: (usize, usize, usize, usize, usize, usize)) -> core::result::Result<Self, Self::Error> {
+    fn try_from(
+        value: (usize, usize, usize, usize, usize, usize),
+    ) -> core::result::Result<Self, Self::Error> {
         match value.0 {
             1 => Ok(Message::MutableBorrow(MemoryMessage {
-                    id: value.1,
-                    buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
-                    offset: MemoryAddress::new(value.4),
-                    valid: MemorySize::new(value.5),
-                })),
+                id: value.1,
+                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                offset: MemoryAddress::new(value.4),
+                valid: MemorySize::new(value.5),
+            })),
             2 => Ok(Message::Borrow(MemoryMessage {
                 id: value.1,
                 buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
@@ -433,14 +435,14 @@ impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
                 buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
-                })),
+            })),
             4 => Ok(Message::Scalar(ScalarMessage {
-                    id: value.1,
-                    arg1: value.2,
-                    arg2: value.3,
-                    arg3: value.4,
-                    arg4: value.5,
-                })),
+                id: value.1,
+                arg1: value.2,
+                arg2: value.3,
+                arg3: value.4,
+                arg4: value.5,
+            })),
             5 => Ok(Message::BlockingScalar(ScalarMessage {
                 id: value.1,
                 arg1: value.2,
@@ -616,6 +618,12 @@ pub enum Result {
     /// The message was successful but no value was returned.
     None,
 
+    /// Memory was returned, and more information is available.
+    MemoryReturned(
+        Option<MemorySize>, /* offset */
+        Option<MemorySize>, /* valid */
+    ),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -662,6 +670,16 @@ impl Result {
             }
             Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::None => [17, 0, 0, 0, 0, 0, 0, 0],
+            Result::MemoryReturned(offset, valid) => [
+                18,
+                offset.map(|o| o.get()).unwrap_or_default(),
+                valid.map(|v| v.get()).unwrap_or_default(),
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -737,6 +755,7 @@ impl Result {
             ),
             16 => Result::WouldBlock,
             17 => Result::None,
+            18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }

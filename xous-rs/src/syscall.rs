@@ -3,7 +3,7 @@ use crate::{
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
     Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
-use core::convert::{TryInto, TryFrom};
+use core::convert::{TryFrom, TryInto};
 
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
@@ -253,7 +253,12 @@ pub enum SysCall {
     TrySendMessage(CID, Message),
 
     /// Return a Borrowed memory region to the sender
-    ReturnMemory(MessageSender, MemoryRange),
+    ReturnMemory(
+        MessageSender,      /* source of this message */
+        MemoryRange,        /* address of range */
+        Option<MemorySize>, /* offset */
+        Option<MemorySize>, /* valid */
+    ),
 
     /// Return a scalar to the sender
     ReturnScalar1(MessageSender, usize),
@@ -597,13 +602,13 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(sender, buf) => [
+            SysCall::ReturnMemory(sender, buf, offset, valid) => [
                 SysCallNumber::ReturnMemory as usize,
                 sender.to_usize(),
                 buf.as_ptr() as usize,
                 buf.len(),
-                0,
-                0,
+                offset.map(|o| o.get()).unwrap_or_default(),
+                valid.map(|v| v.get()).unwrap_or_default(),
                 0,
                 0,
             ],
@@ -758,9 +763,12 @@ impl SysCall {
             SysCallNumber::SendMessage => Message::try_from((a2, a3, a4, a5, a6, a7))
                 .map(|m| SysCall::SendMessage(a1.try_into().unwrap(), m))
                 .unwrap_or_else(|_| SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7)),
-            SysCallNumber::ReturnMemory => {
-                SysCall::ReturnMemory(MessageSender::from_usize(a1), MemoryRange::new(a2, a3)?)
-            }
+            SysCallNumber::ReturnMemory => SysCall::ReturnMemory(
+                MessageSender::from_usize(a1),
+                MemoryRange::new(a2, a3)?,
+                MemorySize::new(a4),
+                MemorySize::new(a5),
+            ),
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -848,7 +856,7 @@ impl SysCall {
                     Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_)
                 )
             }
-            SysCall::ReturnMemory(_, _) => true,
+            SysCall::ReturnMemory(_, _, _, _) => true,
             _ => false,
         }
     }
@@ -885,7 +893,7 @@ impl SysCall {
 
     /// Returns `true` if the associated syscall is returning memory
     pub fn is_return_memory(&self) -> bool {
-        matches!(self, SysCall::ReturnMemory(_, _))
+        matches!(self, SysCall::ReturnMemory(_, _, _, _))
     }
 
     /// If the syscall has memory attached to it, return the memory
@@ -897,7 +905,7 @@ impl SysCall {
                 | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
                 _ => None,
             },
-            SysCall::ReturnMemory(_, range) => Some(*range),
+            SysCall::ReturnMemory(_, range, _, _) => Some(*range),
             _ => None,
         }
     }
@@ -912,7 +920,7 @@ impl SysCall {
                 | SysCall::ReturnToParent(_, _)
                 | SysCall::ReturnScalar2(_, _, _)
                 | SysCall::ReturnScalar1(_, _)
-                | SysCall::ReturnMemory(_, _)
+                | SysCall::ReturnMemory(_, _, _, _)
         )
     }
 }
@@ -986,7 +994,24 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
 pub fn return_memory(sender: MessageSender, mem: MemoryRange) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender, mem))?;
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem, None, None))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn return_memory_offset(
+    sender: MessageSender,
+    mem: MemoryRange,
+    offset: Option<MemorySize>,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem, offset, None))?;
     if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -1206,6 +1231,7 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
@@ -1247,6 +1273,7 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
