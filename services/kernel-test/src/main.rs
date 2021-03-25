@@ -1,18 +1,14 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-fn sleep_loop(sleep_ms: usize) {
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+const EXTRA_KEY: usize = 42;
+
+fn sleep_loop_4(sleep_ms: usize, conn: usize, pid: usize, extra: usize) {
     let tid = xous::current_tid().unwrap();
-    let pid = xous::current_pid().unwrap().get();
-    let sleep_ms = match tid {
-        2 => 3000,
-        3 => 7000,
-        4 => 12000,
-        _ => panic!("Unknown TID/PID"),
-    };
-    // log::info!("My thread number is {}, sleeping 0x{:08x} ({}) ms", tid, sleep_ms, sleep_ms);
+    let conn = conn as _;
+    // let pid = xous::current_pid().unwrap().get();
+    log::info!("My thread number is {}, sleeping 0x{:08x} ({}) ms and EXTRA: {}", tid, sleep_ms, sleep_ms, extra);
+    assert_eq!(extra, EXTRA_KEY, "extra key in arg 4 didn't match -- was {}, not {}", extra, EXTRA_KEY);
 
     let mut loop_count = 0;
     loop {
@@ -22,9 +18,9 @@ fn sleep_loop(sleep_ms: usize) {
         //     sleep_ms,
         //     loop_count
         // );
-        let start_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-        ticktimer_server::sleep_ms(ticktimer_conn, sleep_ms).unwrap();
-        let end_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+        let start_time = ticktimer_server::elapsed_ms(conn).unwrap();
+        ticktimer_server::sleep_ms(conn, sleep_ms).unwrap();
+        let end_time = ticktimer_server::elapsed_ms(conn).unwrap();
         log::info!(
             "TEST THREAD {}:{}: target {}ms, {} loops: Sleep finished (uptime: {}, took {} ms)",
             pid,
@@ -38,20 +34,42 @@ fn sleep_loop(sleep_ms: usize) {
     }
 }
 
+fn sleep_loop_3(sleep_ms: usize, conn: usize, pid: usize) {
+    sleep_loop_4(sleep_ms, conn, pid, EXTRA_KEY);
+}
+
+fn sleep_loop_2(sleep_ms: usize, conn: usize) {
+    sleep_loop_3(sleep_ms, conn, xous::current_pid().unwrap().get() as _);
+}
+
+fn sleep_loop_1(sleep_ms: usize) {
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    sleep_loop_2(sleep_ms, ticktimer_conn as _);
+}
+
+fn sleep_loop_0() {
+    let sleep_ms = (xous::current_pid().unwrap().get() as usize) * (xous::current_tid().unwrap() as usize);
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    sleep_loop_2(sleep_ms, ticktimer_conn as _);
+}
+
 #[xous::xous_main]
 fn test_main() -> ! {
-    log_server::init_wait().unwrap();
-    xous::create_thread_simple(sleep_loop, 10).unwrap();
-    xous::create_thread_simple(sleep_loop, 5).unwrap();
-    if xous::current_pid().unwrap().get() == 6 {
-        xous::create_thread_simple(sleep_loop, 2).unwrap();
-    }
+    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
 
-    // let mut ms_count = 1;
+    log_server::init_wait().unwrap();
+    let pid = xous::current_pid().unwrap().get() as usize;
+
+    xous::create_thread_0(sleep_loop_0).unwrap();
+    xous::create_thread_1(sleep_loop_1, 4 * pid).unwrap();
+    xous::create_thread_2(sleep_loop_2, 10 * pid, ticktimer_conn as _).unwrap();
+    xous::create_thread_3(sleep_loop_3, 140 * pid, ticktimer_conn as _, pid).unwrap();
+    xous::create_thread_4(sleep_loop_4, 180 * pid, ticktimer_conn as _, pid, EXTRA_KEY).unwrap();
+
     loop {
         xous::wait_event();
-        // log::info!("Loop {}", ms_count);
-        // sleep_ms(ticktimer_conn, 1).unwrap();
-        // ms_count += 1;
     }
 }
