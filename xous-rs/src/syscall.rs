@@ -3,7 +3,7 @@ use crate::{
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
     Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
-use core::convert::TryInto;
+use core::convert::{TryInto, TryFrom};
 
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
@@ -755,56 +755,9 @@ impl SysCall {
             SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            SysCallNumber::SendMessage => match a2 {
-                1 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::MutableBorrow(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                2 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Borrow(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                3 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Move(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                4 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Scalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
-                ),
-                5 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::BlockingScalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
-                ),
-                _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
-            },
+            SysCallNumber::SendMessage => Message::try_from((a2, a3, a4, a5, a6, a7))
+                .map(|m| SysCall::SendMessage(a1.try_into().unwrap(), m))
+                .unwrap_or_else(|_| SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7)),
             SysCallNumber::ReturnMemory => {
                 SysCall::ReturnMemory(MessageSender::from_usize(a1), MemoryRange::new(a2, a3)?)
             }
