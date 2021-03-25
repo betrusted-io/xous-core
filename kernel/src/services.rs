@@ -321,8 +321,10 @@ impl SystemServices {
                 process.state = ProcessState::Setup(ThreadInit::new(
                     unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
                     MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap(),
-                    MemoryAddress::new(pid),
-                    [0u8; 12],
+                    pid,
+                    0,
+                    0,
+                    0,
                 ));
             }
         }

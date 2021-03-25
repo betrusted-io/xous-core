@@ -224,7 +224,8 @@ fn handle_scalar(
     }
 }
 
-fn reader_thread(mut output: implementation::OutputWriter) {
+fn reader_thread(arg: usize) {
+    let mut output = unsafe { &mut *(arg as *mut implementation::OutputWriter) };
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
     writeln!(output, "LOG: ****************************************************************").unwrap();
@@ -331,10 +332,10 @@ fn some_main() -> ! {
     */
 
     let mut output = implementation::init();
-    let writer = output.get_writer();
+    let mut writer = output.get_writer();
     println!("LOG: my PID is {}", xous::process::id());
     println!("LOG: Creating the reader thread");
-    xous::create_thread_simple(reader_thread, writer).unwrap();
+    xous::create_thread_1(reader_thread, &mut writer as *mut implementation::OutputWriter as usize).unwrap();
     println!("LOG: Running the output");
     output.run();
     panic!("LOG: Exited");

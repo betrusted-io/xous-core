@@ -7,7 +7,8 @@ use core::convert::TryFrom;
 
 use blitstr_ref as blitstr;
 
-pub fn status_thread(canvas_gid: [u32; 4]) {
+pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usize, canvas_gid_3: usize) {
+    let canvas_gid = [canvas_gid_0 as u32, canvas_gid_1 as u32, canvas_gid_2 as u32, canvas_gid_3 as u32];
     let debug1 = false;
     let status_gid: Gid = Gid::new(canvas_gid);
     if debug1{info!("GAM|status: my canvas {:?}", status_gid)};

@@ -297,6 +297,117 @@ fn xous_address() -> SocketAddr {
         .unwrap_or_else(default_xous_address)
 }
 
+pub fn create_thread_0_pre<U>(
+    _f: &fn() -> U,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+pub fn create_thread_1_pre<U>(
+    _f: &fn(usize) -> U,
+    _arg1: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+pub fn create_thread_2_pre<U>(
+    _f: &fn(usize, usize) -> U,
+    _arg1: &usize,
+    _arg2: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+pub fn create_thread_3_pre<U>(
+    _f: &fn(usize, usize, usize) -> U,
+    _arg1: &usize,
+    _arg2: &usize,
+    _arg3: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+pub fn create_thread_4_pre<U>(
+    _f: &fn(usize, usize, usize, usize) -> U,
+    _arg1: &usize,
+    _arg2: &usize,
+    _arg3: &usize,
+    _arg4: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(ThreadInit {})
+}
+
+pub fn create_thread_0_post<U>(
+    f: fn() -> U,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    create_thread_post(move || f(), thread_id)
+}
+
+pub fn create_thread_1_post<U>(
+    f: fn(usize) -> U,
+    arg1: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    create_thread_post(move || f(arg1), thread_id)
+}
+
+pub fn create_thread_2_post<U>(
+    f: fn(usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    create_thread_post(move || f(arg1, arg2), thread_id)
+}
+
+pub fn create_thread_3_post<U>(
+    f: fn(usize, usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    create_thread_post(move || f(arg1, arg2, arg3), thread_id)
+}
+
+pub fn create_thread_4_post<U>(
+    f: fn(usize, usize, usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    create_thread_post(move || f(arg1, arg2, arg3, arg4), thread_id)
+}
+
 pub fn create_thread_simple_pre<T, U>(
     _f: &fn(T) -> U,
     _arg: &T,

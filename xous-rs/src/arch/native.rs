@@ -1,4 +1,4 @@
-use crate::{MemoryAddress, MemoryRange, PID, TID};
+use crate::{MemoryRange, PID, TID};
 use core::convert::TryInto;
 
 mod mem;
@@ -11,24 +11,34 @@ pub struct ProcessArgs {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
-    pub call: fn(data: usize) -> usize,
+    /// Function pointer that accepts 0-4 arguments
+    pub call: usize,
     pub stack: MemoryRange,
-    pub arg: Option<MemoryAddress>,
-    pub name: [u8; 12],
+    pub arg1: usize,
+    pub arg2: usize,
+    pub arg3: usize,
+    pub arg4: usize,
+    // pub name: [u8; 12],
 }
 
 impl ThreadInit {
     pub fn new(
-        call: fn(data: usize) -> usize,
+        call: usize,
         stack: MemoryRange,
-        arg: Option<MemoryAddress>,
-        name: [u8; 12],
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+        // name: [u8; 12],
     ) -> Self {
         ThreadInit {
             call,
             stack,
-            arg,
-            name,
+            arg1,
+            arg2,
+            arg3,
+            arg4,
+            // name,
         }
     }
 }
@@ -36,10 +46,13 @@ impl ThreadInit {
 impl Default for ThreadInit {
     fn default() -> Self {
         ThreadInit {
-            call: unsafe { core::mem::transmute::<usize, fn(data: usize) -> usize>(4) },
+            call: 1,
             stack: MemoryRange::new(4, 4).unwrap(),
-            arg: None,
-            name: [0; 12],
+            arg1: 0,
+            arg2: 0,
+            arg3: 0,
+            arg4: 0,
+            // name: [0; 12],
         }
     }
 }
@@ -60,16 +73,16 @@ pub struct ProcessInit {
 pub struct WaitHandle<T>(core::marker::PhantomData<T>);
 pub struct ProcessHandle(());
 
-pub fn thread_to_args(call: usize, init: &ThreadInit) -> [usize; 8] {
+pub fn thread_to_args(syscall: usize, init: &ThreadInit) -> [usize; 8] {
     [
-        call as usize,
-        init.call as usize,
+        syscall,
+        init.call,
         init.stack.as_ptr() as _,
         init.stack.len(),
-        init.arg.map(|x| x.get()).unwrap_or_default(),
-        0,
-        0,
-        0,
+        init.arg1,
+        init.arg2,
+        init.arg3,
+        init.arg4,
     ]
 }
 
@@ -81,18 +94,18 @@ pub fn args_to_thread(
     a2: usize,
     a3: usize,
     a4: usize,
-    _a5: usize,
-    _a6: usize,
-    _a7: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
 ) -> core::result::Result<ThreadInit, crate::Error> {
-    let call = unsafe { core::mem::transmute(a1) };
-    let stack = MemoryRange::new(a2, a3).map_err(|_| crate::Error::InvalidSyscall)?;
-    let arg = MemoryAddress::new(a4);
     Ok(ThreadInit {
-        call,
-        stack,
-        arg,
-        name: [0; 12],
+        call: a1,
+        stack: MemoryRange::new(a2, a3).map_err(|_| crate::Error::InvalidSyscall)?,
+        arg1: a4,
+        arg2: a5,
+        arg3: a6,
+        arg4: a7,
+        // name: [0; 12],
     })
 }
 
@@ -103,7 +116,6 @@ where
     T: Send + 'static,
 {
     todo!()
-    // Ok(ThreadInit {})
 }
 
 pub fn create_thread_post<F, T>(
@@ -116,29 +128,10 @@ where
     T: Send + 'static,
 {
     todo!()
-    // let server_address = xous_address();
-    // let server_connection =
-    //     XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
-    // let process_id = PROCESS_ID.with(|pid| *pid.borrow());
-    // Ok(std::thread::Builder::new()
-    //     .spawn(move || {
-    //         set_xous_address(server_address);
-    //         THREAD_ID.with(|tid| *tid.borrow_mut() = thread_id);
-    //         PROCESS_ID.with(|pid| *pid.borrow_mut() = process_id);
-    //         XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = Some(server_connection));
-    //         f()
-    //     })
-    //     .map(WaitHandle)
-    //     .map_err(|_| crate::Error::InternalError)?)
 }
 
 pub fn wait_thread<T>(_joiner: WaitHandle<T>) -> crate::SysCallResult {
     todo!()
-    // joiner
-    //     .0
-    //     .join()
-    //     .map(|_| Result::Ok)
-    //     .map_err(|_| crate::Error::InternalError)
 }
 
 pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
@@ -166,6 +159,129 @@ pub fn args_to_process(
     todo!()
 }
 
+pub fn create_thread_0_pre<U>(f: &fn() -> U) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(*f) };
+    create_thread_n_pre(start, &0, &0, &0, &0)
+}
+
+pub fn create_thread_0_post<U>(
+    f: fn() -> U,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(f) };
+    create_thread_n_post(start, 0, 0, 0, 0, thread_id)
+}
+
+pub fn create_thread_1_pre<U>(
+    f: &fn(usize) -> U,
+    arg1: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(*f) };
+    create_thread_n_pre(start, arg1, &0, &0, &0)
+}
+
+pub fn create_thread_1_post<U>(
+    f: fn(usize) -> U,
+    arg1: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(f) };
+    create_thread_n_post(start, arg1, 0, 0, 0, thread_id)
+}
+
+pub fn create_thread_2_pre<U>(
+    f: &fn(usize, usize) -> U,
+    arg1: &usize,
+    arg2: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(*f) };
+    create_thread_n_pre(start, arg1, arg2, &0, &0)
+}
+
+pub fn create_thread_2_post<U>(
+    f: fn(usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(f) };
+    create_thread_n_post(start, arg1, arg2, 0, 0, thread_id)
+}
+
+pub fn create_thread_3_pre<U>(
+    f: &fn(usize, usize, usize) -> U,
+    arg1: &usize,
+    arg2: &usize,
+    arg3: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(*f) };
+    create_thread_n_pre(start, arg1, arg2, arg3, &0)
+}
+
+pub fn create_thread_3_post<U>(
+    f: fn(usize, usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(f) };
+    create_thread_n_post(start, arg1, arg2, arg3, 0, thread_id)
+}
+
+pub fn create_thread_4_pre<U>(
+    f: &fn(usize, usize, usize, usize) -> U,
+    arg1: &usize,
+    arg2: &usize,
+    arg3: &usize,
+    arg4: &usize,
+) -> core::result::Result<ThreadInit, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(*f) };
+    create_thread_n_pre(start, arg1, arg2, arg3, arg4)
+}
+
+pub fn create_thread_4_post<U>(
+    f: fn(usize, usize, usize, usize) -> U,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+    thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    let start = unsafe { core::mem::transmute(f) };
+    create_thread_n_post(start, arg1, arg2, arg3, arg4, thread_id)
+}
+
 pub fn create_thread_simple_pre<T, U>(
     f: &fn(T) -> U,
     arg: &T,
@@ -174,27 +290,37 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    #[cfg(feature = "bit-flags")]
-    let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
-    #[cfg(not(feature = "bit-flags"))]
-    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
-
-    let stack = crate::map_memory(None, None, 131_072, flags)?;
-    let start = unsafe { core::mem::transmute(*f) };
-    let arg = unsafe { core::mem::transmute(arg) };
-    Ok(ThreadInit::new(start, stack, Some(arg), [0; 12]))
+    create_thread_n_pre(
+        unsafe { core::mem::transmute(*f) },
+        unsafe { core::mem::transmute(arg) },
+        &0,
+        &0,
+        &0,
+    )
 }
 
 pub fn create_thread_simple_post<T, U>(
-    _f: fn(T) -> U,
-    _arg: T,
-    _thread_id: TID,
+    f: fn(T) -> U,
+    arg: T,
+    thread_id: TID,
 ) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
     T: Send + 'static,
     U: Send + 'static,
 {
-    Ok(WaitHandle(core::marker::PhantomData))
+    create_thread_n_post(
+        unsafe { core::mem::transmute(f) },
+        unsafe { core::mem::transmute(&arg) },
+        0,
+        0,
+        0,
+        thread_id,
+    )
+    // If we succeeded, the variable will be moved into the caller. Drop it from here.
+    .and_then(|f| {
+        core::mem::forget(arg);
+        Ok(f)
+    })
 }
 
 /// If no connection exists, create a new connection to the server. This means
@@ -209,6 +335,36 @@ pub fn create_process_post(
     _pid: PID,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
     todo!()
+}
+
+pub fn create_thread_n_pre(
+    start: usize,
+    arg1: &usize,
+    arg2: &usize,
+    arg3: &usize,
+    arg4: &usize,
+) -> core::result::Result<ThreadInit, crate::Error> {
+    #[cfg(feature = "bit-flags")]
+    let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
+    #[cfg(not(feature = "bit-flags"))]
+    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
+
+    let stack = crate::map_memory(None, None, 131_072, flags)?;
+    Ok(ThreadInit::new(start, stack, *arg1, *arg2, *arg3, *arg4))
+}
+
+pub fn create_thread_n_post<U>(
+    _f: usize,
+    _arg1: usize,
+    _arg2: usize,
+    _arg3: usize,
+    _arg4: usize,
+    _thread_id: TID,
+) -> core::result::Result<WaitHandle<U>, crate::Error>
+where
+    U: Send + 'static,
+{
+    Ok(WaitHandle(core::marker::PhantomData))
 }
 
 pub fn wait_process(_joiner: ProcessHandle) -> crate::SysCallResult {

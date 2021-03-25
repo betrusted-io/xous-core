@@ -1,4 +1,4 @@
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 use core::num::{NonZeroU8, NonZeroUsize};
 
 pub type MemoryAddress = NonZeroUsize;
@@ -393,13 +393,64 @@ impl Message {
         }
     }
 
-    pub fn message_type(&self) -> usize {
+    pub(crate) fn message_type(&self) -> usize {
         match *self {
             Message::MutableBorrow(_) => 1,
             Message::Borrow(_) => 2,
             Message::Move(_) => 3,
             Message::Scalar(_) => 4,
             Message::BlockingScalar(_) => 5,
+        }
+    }
+
+    /// Return the ID of this message
+    pub fn id(&self) -> usize {
+        match &self {
+            &Message::MutableBorrow(mem) | &Message::Borrow(mem) | &Message::Move(mem) => mem.id,
+            &Message::Scalar(s) | &Message::BlockingScalar(s) => s.id,
+        }
+    }
+}
+
+impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
+    type Error = ();
+    fn try_from(
+        value: (usize, usize, usize, usize, usize, usize),
+    ) -> core::result::Result<Self, Self::Error> {
+        match value.0 {
+            1 => Ok(Message::MutableBorrow(MemoryMessage {
+                id: value.1,
+                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                offset: MemoryAddress::new(value.4),
+                valid: MemorySize::new(value.5),
+            })),
+            2 => Ok(Message::Borrow(MemoryMessage {
+                id: value.1,
+                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                offset: MemoryAddress::new(value.4),
+                valid: MemorySize::new(value.5),
+            })),
+            3 => Ok(Message::Move(MemoryMessage {
+                id: value.1,
+                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                offset: MemoryAddress::new(value.4),
+                valid: MemorySize::new(value.5),
+            })),
+            4 => Ok(Message::Scalar(ScalarMessage {
+                id: value.1,
+                arg1: value.2,
+                arg2: value.3,
+                arg3: value.4,
+                arg4: value.5,
+            })),
+            5 => Ok(Message::BlockingScalar(ScalarMessage {
+                id: value.1,
+                arg1: value.2,
+                arg2: value.3,
+                arg3: value.4,
+                arg4: value.5,
+            })),
+            _ => Err(()),
         }
     }
 }
@@ -567,6 +618,12 @@ pub enum Result {
     /// The message was successful but no value was returned.
     None,
 
+    /// Memory was returned, and more information is available.
+    MemoryReturned(
+        Option<MemorySize>, /* offset */
+        Option<MemorySize>, /* valid */
+    ),
+
     UnknownResult(usize, usize, usize, usize, usize, usize, usize),
 }
 
@@ -600,10 +657,29 @@ impl Result {
             Result::Scalar2(a, b) => [14, *a, *b, 0, 0, 0, 0, 0],
             Result::NewServerID(sid, cid) => {
                 let s = sid.to_u32();
-                [15, s.0 as _, s.1 as _, s.2 as _, s.3 as _, *cid as usize, 0, 0]
+                [
+                    15,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    *cid as usize,
+                    0,
+                    0,
+                ]
             }
             Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::None => [17, 0, 0, 0, 0, 0, 0, 0],
+            Result::MemoryReturned(offset, valid) => [
+                18,
+                offset.map(|o| o.get()).unwrap_or_default(),
+                valid.map(|v| v.get()).unwrap_or_default(),
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             Result::UnknownResult(arg1, arg2, arg3, arg4, arg5, arg6, arg7) => {
                 [usize::MAX, *arg1, *arg2, *arg3, *arg4, *arg5, *arg6, *arg7]
             }
@@ -679,6 +755,7 @@ impl Result {
             ),
             16 => Result::WouldBlock,
             17 => Result::None,
+            18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),
         }
     }

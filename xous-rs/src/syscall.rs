@@ -3,7 +3,7 @@ use crate::{
     MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
     Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
@@ -253,7 +253,12 @@ pub enum SysCall {
     TrySendMessage(CID, Message),
 
     /// Return a Borrowed memory region to the sender
-    ReturnMemory(MessageSender, MemoryRange),
+    ReturnMemory(
+        MessageSender,      /* source of this message */
+        MemoryRange,        /* address of range */
+        Option<MemorySize>, /* offset */
+        Option<MemorySize>, /* valid */
+    ),
 
     /// Return a scalar to the sender
     ReturnScalar1(MessageSender, usize),
@@ -597,13 +602,13 @@ impl SysCall {
                     sc.arg4,
                 ],
             },
-            SysCall::ReturnMemory(sender, buf) => [
+            SysCall::ReturnMemory(sender, buf, offset, valid) => [
                 SysCallNumber::ReturnMemory as usize,
                 sender.to_usize(),
                 buf.as_ptr() as usize,
                 buf.len(),
-                0,
-                0,
+                offset.map(|o| o.get()).unwrap_or_default(),
+                valid.map(|v| v.get()).unwrap_or_default(),
                 0,
                 0,
             ],
@@ -755,59 +760,15 @@ impl SysCall {
             SysCallNumber::Connect => {
                 SysCall::Connect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
-            SysCallNumber::SendMessage => match a2 {
-                1 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::MutableBorrow(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                2 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Borrow(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                3 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Move(MemoryMessage {
-                        id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
-                        offset: MemoryAddress::new(a6),
-                        valid: MemorySize::new(a7),
-                    }),
-                ),
-                4 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::Scalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
-                ),
-                5 => SysCall::SendMessage(
-                    a1.try_into().unwrap(),
-                    Message::BlockingScalar(ScalarMessage {
-                        id: a3,
-                        arg1: a4,
-                        arg2: a5,
-                        arg3: a6,
-                        arg4: a7,
-                    }),
-                ),
-                _ => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
-            },
-            SysCallNumber::ReturnMemory => {
-                SysCall::ReturnMemory(MessageSender::from_usize(a1), MemoryRange::new(a2, a3)?)
-            }
+            SysCallNumber::SendMessage => Message::try_from((a2, a3, a4, a5, a6, a7))
+                .map(|m| SysCall::SendMessage(a1.try_into().unwrap(), m))
+                .unwrap_or_else(|_| SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7)),
+            SysCallNumber::ReturnMemory => SysCall::ReturnMemory(
+                MessageSender::from_usize(a1),
+                MemoryRange::new(a2, a3)?,
+                MemorySize::new(a4),
+                MemorySize::new(a5),
+            ),
             SysCallNumber::CreateThread => {
                 SysCall::CreateThread(crate::arch::args_to_thread(a1, a2, a3, a4, a5, a6, a7)?)
             }
@@ -895,7 +856,7 @@ impl SysCall {
                     Message::Move(_) | Message::Borrow(_) | Message::MutableBorrow(_)
                 )
             }
-            SysCall::ReturnMemory(_, _) => true,
+            SysCall::ReturnMemory(_, _, _, _) => true,
             _ => false,
         }
     }
@@ -932,7 +893,7 @@ impl SysCall {
 
     /// Returns `true` if the associated syscall is returning memory
     pub fn is_return_memory(&self) -> bool {
-        matches!(self, SysCall::ReturnMemory(_, _))
+        matches!(self, SysCall::ReturnMemory(_, _, _, _))
     }
 
     /// If the syscall has memory attached to it, return the memory
@@ -944,7 +905,7 @@ impl SysCall {
                 | Message::MutableBorrow(memory_message) => Some(memory_message.buf),
                 _ => None,
             },
-            SysCall::ReturnMemory(_, range) => Some(*range),
+            SysCall::ReturnMemory(_, range, _, _) => Some(*range),
             _ => None,
         }
     }
@@ -959,7 +920,7 @@ impl SysCall {
                 | SysCall::ReturnToParent(_, _)
                 | SysCall::ReturnScalar2(_, _, _)
                 | SysCall::ReturnScalar1(_, _)
-                | SysCall::ReturnMemory(_, _)
+                | SysCall::ReturnMemory(_, _, _, _)
         )
     }
 }
@@ -1033,7 +994,24 @@ pub fn unmap_memory(range: MemoryRange) -> core::result::Result<(), Error> {
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
 pub fn return_memory(sender: MessageSender, mem: MemoryRange) -> core::result::Result<(), Error> {
-    let result = rsyscall(SysCall::ReturnMemory(sender, mem))?;
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem, None, None))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
+pub fn return_memory_offset(
+    sender: MessageSender,
+    mem: MemoryRange,
+    offset: Option<MemorySize>,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem, offset, None))?;
     if let crate::Result::Ok = result {
         Ok(())
     } else if let Result::Error(e) = result {
@@ -1253,6 +1231,7 @@ pub fn try_send_message(connection: CID, message: Message) -> core::result::Resu
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
@@ -1294,6 +1273,7 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
         Ok(Result::Ok) => Ok(Result::Ok),
         Ok(Result::Scalar1(a)) => Ok(Result::Scalar1(a)),
         Ok(Result::Scalar2(a, b)) => Ok(Result::Scalar2(a, b)),
+        Ok(Result::MemoryReturned(offset, valid)) => Ok(Result::MemoryReturned(offset, valid)),
         Err(e) => Err(e),
         v => panic!("Unexpected return value: {:?}", v),
     }
@@ -1314,6 +1294,10 @@ pub fn wait_event() {
     rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
 }
 
+#[deprecated(
+    since = "0.2",
+    note = "Please use create_thread_n() or create_thread()"
+)]
 pub fn create_thread_simple<T, U>(
     f: fn(T) -> U,
     arg: T,
@@ -1326,6 +1310,94 @@ where
     rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
         if let Result::ThreadID(thread_id) = result {
             crate::arch::create_thread_simple_post(f, arg, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_0<T>(f: fn() -> T) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_0_pre(&f)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_0_post(f, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_1<T>(
+    f: fn(usize) -> T,
+    arg1: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_1_pre(&f, &arg1)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_1_post(f, arg1, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_2<T>(
+    f: fn(usize, usize) -> T,
+    arg1: usize,
+    arg2: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_2_pre(&f, &arg1, &arg2)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_2_post(f, arg1, arg2, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_3<T>(
+    f: fn(usize, usize, usize) -> T,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_3_pre(&f, &arg1, &arg2, &arg3)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_3_post(f, arg1, arg2, arg3, thread_id)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn create_thread_4<T>(
+    f: fn(usize, usize, usize, usize) -> T,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+) -> core::result::Result<crate::arch::WaitHandle<T>, Error>
+where
+    T: Send + 'static,
+{
+    let thread_info = crate::arch::create_thread_4_pre(&f, &arg1, &arg2, &arg3, &arg4)?;
+    rsyscall(SysCall::CreateThread(thread_info)).and_then(|result| {
+        if let Result::ThreadID(thread_id) = result {
+            crate::arch::create_thread_4_post(f, arg1, arg2, arg3, arg4, thread_id)
         } else {
             Err(Error::InternalError)
         }

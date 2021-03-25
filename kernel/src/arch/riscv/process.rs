@@ -125,9 +125,7 @@ impl Process {
         let pid = unsafe { PROCESS_TABLE.current };
         let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
         assert!((pid.get() as usize) == hardware_pid);
-        Process {
-            pid,
-        }
+        Process { pid }
     }
 
     /// Mark this process as running on the current core
@@ -299,7 +297,10 @@ impl Process {
 
         thread.sepc = unsafe { core::mem::transmute::<_, usize>(thread_init.call) };
         thread.registers[1] = thread_init.stack.as_ptr() as usize + thread_init.stack.len();
-        thread.registers[9] = thread_init.arg.map(|x| x.get()).unwrap_or_default();
+        thread.registers[9] = thread_init.arg1;
+        thread.registers[10] = thread_init.arg2;
+        thread.registers[11] = thread_init.arg3;
+        thread.registers[12] = thread_init.arg4;
 
         #[cfg(any(feature = "debug-print", feature = "print-panics"))]
         {
@@ -331,7 +332,11 @@ impl Process {
         Ok(())
     }
 
-    pub fn setup_thread(&mut self, new_tid: TID, setup: ThreadInit) -> Result<(), xous_kernel::Error> {
+    pub fn setup_thread(
+        &mut self,
+        new_tid: TID,
+        setup: ThreadInit,
+    ) -> Result<(), xous_kernel::Error> {
         let entrypoint = unsafe { core::mem::transmute::<_, usize>(setup.call) };
         // Create the new context and set it to run in the new address space.
         let pid = self.pid.get();
@@ -343,7 +348,7 @@ impl Process {
             entrypoint,
             setup.stack.as_ptr() as usize + setup.stack.len(),
             EXIT_THREAD,
-            &[setup.arg.map(|x| x.get() as usize).unwrap_or_default()],
+            &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
         );
         Ok(())
     }
@@ -364,27 +369,45 @@ impl Process {
         );
         println!(
             "T3:{:08x}   T4:{:08x}   T5:{:08x}   T6:{:08x}",
-            _thread.registers[27], _thread.registers[28], _thread.registers[29], _thread.registers[30]
+            _thread.registers[27],
+            _thread.registers[28],
+            _thread.registers[29],
+            _thread.registers[30]
         );
         println!(
             "S0:{:08x}   S1:{:08x}   S2:{:08x}   S3:{:08x}",
-            _thread.registers[7], _thread.registers[8], _thread.registers[17], _thread.registers[18]
+            _thread.registers[7],
+            _thread.registers[8],
+            _thread.registers[17],
+            _thread.registers[18]
         );
         println!(
             "S4:{:08x}   S5:{:08x}   S6:{:08x}   S7:{:08x}",
-            _thread.registers[19], _thread.registers[20], _thread.registers[21], _thread.registers[22]
+            _thread.registers[19],
+            _thread.registers[20],
+            _thread.registers[21],
+            _thread.registers[22]
         );
         println!(
             "S8:{:08x}   S9:{:08x}  S10:{:08x}  S11:{:08x}",
-            _thread.registers[23], _thread.registers[24], _thread.registers[25], _thread.registers[26]
+            _thread.registers[23],
+            _thread.registers[24],
+            _thread.registers[25],
+            _thread.registers[26]
         );
         println!(
             "A0:{:08x}   A1:{:08x}   A2:{:08x}   A3:{:08x}",
-            _thread.registers[9], _thread.registers[10], _thread.registers[11], _thread.registers[12]
+            _thread.registers[9],
+            _thread.registers[10],
+            _thread.registers[11],
+            _thread.registers[12]
         );
         println!(
             "A4:{:08x}   A5:{:08x}   A6:{:08x}   A7:{:08x}",
-            _thread.registers[13], _thread.registers[14], _thread.registers[15], _thread.registers[16]
+            _thread.registers[13],
+            _thread.registers[14],
+            _thread.registers[15],
+            _thread.registers[16]
         );
     }
 
