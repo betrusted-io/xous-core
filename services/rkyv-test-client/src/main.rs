@@ -24,7 +24,11 @@ fn rkyv_test_client() -> ! {
     rkyv_test_server::hook_log_messages(print_log_messages);
 
     let mut idx = 0;
-    let double_src = xous::String::<256>::from_str("12345678");
+
+    // This is just some number. It should change width, ensuring our padding
+    // is working and we're not overwriting the buffer weirdly.
+    let mut some_number = 98653i32;
+    let mut double_src = xous::String::<256>::new();
 
     let mut message_string = xous::String::<64>::new();
     loop {
@@ -32,10 +36,15 @@ fn rkyv_test_client() -> ! {
         ticktimer_server::sleep_ms(ticktimer_conn, 500).ok();
 
         message_string.clear();
-        write!(message_string, "I'm at loop # {:^4}", idx);
+        write!(message_string, "I'm at loop # {:^4} (some numer: {})", idx, some_number).unwrap();
+        some_number = some_number.wrapping_mul(53);
         rkyv_test_server::log_message("prefix", message_string);
+
+        double_src.clear();
+        write!(double_src, "12345678 Loop {} 🎉 你好", idx).unwrap();
         log::info!("Doubling string {}", double_src);
         log::info!("Doubled string: {}", rkyv_test_server::double_string(&double_src));
         idx += 1;
     }
 }
+
