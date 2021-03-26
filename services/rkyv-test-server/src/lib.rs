@@ -85,10 +85,12 @@ pub fn divide(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
     do_op(api::MathOperation::Divide(arg1, arg2))
 }
 
-pub fn log_message(prefix: &str, message: &str) {
+/// Log the given message to the server.
+/// We accept any two parameters that can be treated as strings.
+pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix),
-        message: xous::String::from_str(message),
+        prefix: xous::String::from_str(prefix.as_ref()),
+        message: xous::String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
