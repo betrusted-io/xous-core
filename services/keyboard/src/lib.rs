@@ -1,11 +1,12 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use core::convert::TryInto;
+use xous_ipc::String;
 
 pub mod api;
 
 pub fn request_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    let s = xous::String::<64>::from_str(name);
+    let s = String::<64>::from_str(name);
     let request = api::Opcode::RegisterListener(s);
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
     let pos = {
@@ -18,7 +19,7 @@ pub fn request_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, x
 }
 
 pub fn request_raw_events(name: &str, kbd_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    let s = xous::String::<64>::from_str(name);
+    let s = String::<64>::from_str(name);
     let request = api::Opcode::RegisterRawListener(s);
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
     let pos = {

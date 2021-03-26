@@ -6,6 +6,8 @@ mod buffer;
 use core::sync::atomic::{AtomicU32, Ordering};
 use num_traits::{FromPrimitive, ToPrimitive};
 
+use xous_ipc::String;
+
 // Note that connection IDs are never 0, so this is invalid, and could map to `None`.
 static SERVER_CID: AtomicU32 = AtomicU32::new(0);
 
@@ -89,8 +91,8 @@ pub fn divide(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
 /// We accept any two parameters that can be treated as strings.
 pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix.as_ref()),
-        message: xous::String::from_str(message.as_ref()),
+        prefix: String::from_str(prefix.as_ref()),
+        message: String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
@@ -110,8 +112,8 @@ pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
 /// We accept any two parameters that can be treated as strings.
 pub fn log_message_send<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix.as_ref()),
-        message: xous::String::from_str(message.as_ref()),
+        prefix: String::from_str(prefix.as_ref()),
+        message: String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
@@ -187,9 +189,9 @@ pub fn hook_log_messages(cb: fn(&str, &str)) {
     }
 }
 
-pub fn double_string<const N: usize>(value: &xous::String<N>) -> xous::String<N> {
+pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     let op = api::StringDoubler {
-        value: xous::String::from_str(value.as_str().unwrap()),
+        value: String::from_str(value.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
@@ -204,5 +206,5 @@ pub fn double_string<const N: usize>(value: &xous::String<N>) -> xous::String<N>
     )
     .unwrap();
 
-    xous::String::from_str(buf.try_into::<api::StringDoubler, _>().unwrap().value.as_str())
+    String::from_str(buf.try_into::<api::StringDoubler, _>().unwrap().value.as_str())
 }

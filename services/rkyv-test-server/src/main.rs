@@ -4,6 +4,7 @@
 mod api;
 mod buffer;
 use num_traits::{FromPrimitive, ToPrimitive};
+use xous_ipc::String;
 
 fn value_or(val: Option<i32>, default: api::MathResult) -> api::MathResult {
     val.map(|v| api::MathResult::Value(v)).unwrap_or(default)
@@ -78,7 +79,7 @@ fn double_string(mem: &mut xous::MemoryMessage) {
     use core::fmt::Write;
     let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
     let mut response = api::StringDoubler {
-        value: xous::String::new(),
+        value: String::new(),
     };
     for ch in buffer
         .try_into::<api::StringDoubler, _>()

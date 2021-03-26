@@ -1,32 +1,33 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "COM interface to the EC"
+edition = "2018"
 name = "com"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "COM interface to the EC"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
+com_rs-ref = {path = "../../imports/com_rs-ref"}
 heapless = "0.5"
-log-server = { path = "../log-server" }
-ticktimer-server = { path = "../ticktimer-server" }
-xous-names = { path = "../xous-names" }
 log = "0.4"
-com_rs-ref = { path = "../../imports/com_rs-ref" }
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
 typenum = "1.12"
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 
 [features]
 debugprint = []
-fccagent = []
 default = [] # "debugprint"
+fccagent = []
 #default = ["debugprint"] # , "fccagent"

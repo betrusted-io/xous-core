@@ -246,6 +246,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -420,6 +421,7 @@ dependencies = [
  "trng",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -482,6 +484,7 @@ dependencies = [
  "rkyv 0.4.3",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -563,6 +566,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -574,6 +578,7 @@ dependencies = [
  "log",
  "rkyv 0.4.3",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -589,6 +594,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -620,6 +626,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -662,6 +669,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -682,6 +690,7 @@ dependencies = [
  "utralib",
  "vergen",
  "xous",
+ "xous-ipc",
 ]
 
 [[package]]
@@ -1086,6 +1095,7 @@ dependencies = [
  "rkyv 0.4.3",
  "ticktimer-server",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1213,6 +1223,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1646,9 +1657,17 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
- "rkyv 0.4.3",
  "rustc-std-workspace-core",
  "xous-macros",
+]
+
+[[package]]
+name = "xous-ipc"
+version = "0.4.0"
+dependencies = [
+ "bitflags",
+ "rkyv 0.4.3",
+ "xous",
 ]
 
 [[package]]
@@ -1674,6 +1693,7 @@ dependencies = [
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
 ]
 
 [[package]]

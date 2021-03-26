@@ -1,30 +1,31 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "IME front end"
+edition = "2018"
 name = "ime-frontend"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "IME front end"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
-heapless = "0.5.6"
-log-server = { path = "../log-server" }
-ticktimer-server = { path = "../ticktimer-server" }
-xous-names = { path = "../xous-names" }
-graphics-server = {path = "../graphics-server"}
 blitstr-ref = {path = "../../imports/blitstr-ref"}
-gam = {path="../gam"}
+gam = {path = "../gam"}
+graphics-server = {path = "../graphics-server"}
+heapless = "0.5.6"
+ime-plugin-api = {path = "../ime-plugin-api"}
+keyboard = {path = "../keyboard"}
 log = "0.4"
-keyboard = {path="../keyboard"}
-ime-plugin-api = {path="../ime-plugin-api"}
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []

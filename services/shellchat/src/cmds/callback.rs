@@ -1,5 +1,6 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous::{String, MessageEnvelope, Message, ScalarMessage};
+use xous::{MessageEnvelope, Message, ScalarMessage};
+use xous_ipc::String;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);

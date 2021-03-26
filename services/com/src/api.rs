@@ -1,10 +1,11 @@
 use xous::{Message, ScalarMessage};
+use xous_ipc::String;
 
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
-use com_rs_ref as com_rs;
 use com_rs::*;
+use com_rs_ref as com_rs;
 
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
@@ -96,18 +97,18 @@ pub enum Opcode {
     Wf200Rev,
 
     /// Send a line of PDS data
-    Wf200PdsLine(xous::String<512>),
+    Wf200PdsLine(String<512>),
 
     /// Send Rx stats to fcc-agent
     RxStatsAgent,
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener(xous::String<64>),
+    RegisterBattStatsListener(String<64>),
 }
 
-impl core::convert::TryFrom<& Message> for Opcode {
+impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
+    fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => {
                 if m.id as u16 == ComState::CHG_BOOST_ON.verb {
@@ -141,7 +142,7 @@ impl core::convert::TryFrom<& Message> for Opcode {
                 } else {
                     Err("unrecognized opcode")
                 }
-            },
+            }
             _ => Err("unhandled message type"),
         }
     }
@@ -208,15 +209,30 @@ impl Into<Message> for Opcode {
                     arg3: 0,
                     arg4: 0,
                 })
-            },
+            }
             Opcode::Wf200Rev => Message::BlockingScalar(ScalarMessage {
-                id: ComState::WFX_FW_REV_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::WFX_FW_REV_GET.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             Opcode::EcGitRev => Message::BlockingScalar(ScalarMessage {
-                id: ComState::EC_GIT_REV.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
+                id: ComState::EC_GIT_REV.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
             // Wf200PdsLine() uses the direct string "lend" API
             Opcode::RxStatsAgent => Message::Scalar(ScalarMessage {
-                id: ComState::WFX_RXSTAT_GET.verb as _, arg1: 0, arg2: 0, arg3: 0, arg4: 0 }),
-            _ => panic!("opcode not handled -- maybe you meant to use one of the direct APIs")
+                id: ComState::WFX_RXSTAT_GET.verb as _,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
+            _ => panic!("opcode not handled -- maybe you meant to use one of the direct APIs"),
         }
     }
 }

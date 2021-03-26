@@ -1,17 +1,18 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "IME Plugin Common APIs"
+edition = "2018"
 name = "ime-plugin-api"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "IME Plugin Common APIs"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
-graphics-server = { path="../graphics-server"} # this is used by the IMEF portion of the API
-xous-names = {path="../xous-names"} # used by the IMEF for registering listeners
+graphics-server = {path = "../graphics-server"}# this is used by the IMEF portion of the API
 log = "0.4"
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}# used by the IMEF for registering listeners
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"

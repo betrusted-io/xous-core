@@ -13,6 +13,7 @@ use rkyv::ser::Serializer;
 use rkyv::Deserialize;
 
 use log::{error, info};
+use xous_ipc::String;
 
 #[cfg(target_os = "none")]
 mod implementation {
@@ -608,7 +609,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
-                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
 
                     let status = i2c_machine.initiate(i2c_txrx);
 
@@ -622,14 +623,14 @@ fn xmain() -> ! {
                 _ => panic!("LLIO: invalid MutableBorrow memory message")
             };
         } else if let xous::Message::Borrow(m) = &envelope.body {
-            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
+            let buf = unsafe { xous_ipc::Buffer::from_memory_message(m) };
             let bytes = Pin::new(buf.as_ref());
             let value = unsafe {
                 archived_value::<api::Opcode>(&bytes, m.id as usize)
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
-                    let reg: xous::String::<64> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let reg: String::<64> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                     i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
                 },

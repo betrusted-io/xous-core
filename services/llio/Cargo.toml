@@ -1,25 +1,26 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "Low level IO"
+edition = "2018"
 name = "llio"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "Low level IO"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
 heapless = "0.5"
-log-server = { path = "../log-server" }
-ticktimer-server = { path = "../ticktimer-server" }
-xous-names = { path = "../xous-names" }
 log = "0.4"
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 

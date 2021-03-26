@@ -24,6 +24,8 @@ mod poweron;
 use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point};
 use blitstr_ref as blitstr;
 
+use xous_ipc::String;
+
 mod fontmap;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
@@ -109,7 +111,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::String(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<4096> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     //info!("GFX: unarchived string: {:?}", s);
                     blitstr::paint_str(
                         display.native_buffer(),
@@ -125,7 +127,7 @@ fn xmain() -> ! {
                     //info!("GFX: string painted");
                 },
                 rkyv::Archived::<api::Opcode>::StringXor(rkyv_s) => {
-                    let s: xous::String<4096> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<4096> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     blitstr::paint_str(
                         display.native_buffer(),
                         current_string_clip.into(),
@@ -139,7 +141,7 @@ fn xmain() -> ! {
                     );
                 },
                 rkyv::Archived::<api::Opcode>::DrawClipObject(rco) => {
-                    let obj: ClipObject = rco.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let obj: ClipObject = rco.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("GFX: DrawClipObject {:?}", obj);}
                     match obj.obj {
                         ClipObjectType::Line(line) => {
@@ -166,7 +168,7 @@ fn xmain() -> ! {
             let debugtv: bool = false;
             match &*value {
                 rkyv::Archived::<api::Opcode>::DrawTextView(rtv) => {
-                    let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut tv = rtv.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
 
                     if tv.clip_rect.is_none() { continue } // if no clipping rectangle is specified, nothing to draw
                     let clip_rect = tv.clip_rect.unwrap(); // this is the clipping rectangle of the canvas

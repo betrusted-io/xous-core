@@ -8,6 +8,7 @@ pub mod api;
 
 use api::BattStats;
 use xous::{send_message, Error, CID};
+use xous_ipc::String;
 
 pub fn power_off_soc(cid: CID) -> Result<(), xous::Error> {
     send_message(cid, api::Opcode::PowerOffSoc.into()).map(|_| ())
@@ -51,9 +52,9 @@ pub fn get_ec_git_rev(cid: CID) -> Result<(u32, bool), Error> {
     }
 }
 
-pub fn send_pds_line(cid: CID, s: &xous::String<512>) -> Result<(), Error> {
+pub fn send_pds_line(cid: CID, s: &String<512>) -> Result<(), Error> {
     use core::fmt::Write;
-    let mut clone_s: xous::String<512> = xous::String::new();
+    let mut clone_s: String<512> = String::new();
     write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
     let request = api::Opcode::Wf200PdsLine(clone_s);
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
@@ -74,7 +75,7 @@ pub fn get_rx_stats_agent(cid: CID) -> Result<(), Error> {
 
 // event relay request API
 pub fn request_battstat_events(name: &str, com_conn: xous::CID) -> Result<xous::Result, xous::Error> {
-    let s = xous::String::<64>::from_str(name);
+    let s = String::<64>::from_str(name);
     let request = api::Opcode::RegisterBattStatsListener(s);
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
     let pos = {

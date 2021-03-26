@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous::{Message, ScalarMessage, String, CID};
+use xous::{Message, ScalarMessage, CID};
+use xous_ipc::String;
 use graphics_server::Gid;
 use rkyv::ser::Serializer;
 
@@ -47,10 +48,10 @@ impl From<usize> for PredictionTriggers {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
-    Input(xous::String<4000>),
+    Input(String<4000>),
 
     /// feed back to the IME plugin as to what was picked, so predictions can be updated
-    Picked(xous::String<4000>),
+    Picked(String<4000>),
 
     /// Undo the last Picked value. To be used when a user hits backspace after picking a prediction
     /// note that repeated calls to Unpick will have an implementation-defined behavior
@@ -103,7 +104,7 @@ pub trait PredictionApi {
     fn unpick(&self) -> Result<(), xous::Error>;
     fn set_input(&self, s: String<4000>) -> Result<(), xous::Error>;
     fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error>;
-    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error>;
+    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error>;
 }
 
 // provide a convenience version of the API for generic/standard calls
@@ -169,7 +170,7 @@ impl PredictionApi for PredictionPlugin {
         }
     }
 
-    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
+    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error> {
         use rkyv::Deserialize;
         let debug1 = false;
         match self.connection {
@@ -192,10 +193,10 @@ impl PredictionApi for PredictionPlugin {
                 if debug1{log::info!("IME|API: returned from get_prediction");}
                 let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
                 if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
-                    let pred_r: Prediction = result.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let pred_r: Prediction = result.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{log::info!("IME|API: got {:?}", pred_r);}
                     if pred_r.valid {
-                        let mut ret = xous::String::<4000>::new();
+                        let mut ret = String::<4000>::new();
                         use core::fmt::Write as CoreWrite;
                         write!(ret, "{}", core::str::from_utf8(&pred_r.string[0..pred_r.len as usize]).unwrap()).unwrap();
                         Ok(Some(ret))
@@ -203,7 +204,7 @@ impl PredictionApi for PredictionPlugin {
                         Ok(None)
                     }
                 } else {
-                    let r = returned.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let r = returned.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     log::error!("IME: API get_prediction returned an invalid result {:?}", r);
                     Err(xous::Error::InvalidString)
                 }
@@ -230,13 +231,13 @@ pub enum ImefOpcode {
     SetPredictionCanvas(Gid),
 
     /// set prediction server. Must be a String of the name of a server that is loaded in the system.
-    SetPredictionServer(xous::String<64>),
+    SetPredictionServer(String<64>),
 
     /// register a listener for finalized inputs
-    RegisterListener(xous::String<64>),
+    RegisterListener(String<64>),
 
     /// this is the event opcode used by listeners
-    GotInputLine(xous::String<4000>),
+    GotInputLine(String<4000>),
 }
 
 impl core::convert::TryFrom<& Message> for ImefOpcode {
@@ -302,7 +303,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let mut server = xous::String::<64>::new();
+                let mut server = String::<64>::new();
                 use core::fmt::Write;
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::SetPredictionServer(server);
@@ -320,7 +321,7 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn register_listener(&self, servername: &str) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let mut server = xous::String::<64>::new();
+                let mut server = String::<64>::new();
                 use core::fmt::Write;
                 write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
                 let ime_op = ImefOpcode::RegisterListener(server);

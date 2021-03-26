@@ -1,26 +1,27 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = ""
+edition = "2018"
 name = "xous-names"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = ""
 
 [dependencies]
-xous = { path = "../../xous-rs" }
-heapless = "0.5"
-log-server = { path = "../log-server" }
-ticktimer-server = { path = "../ticktimer-server" }
-log = "0.4"
 hash32 = "0.1.0"
 hash32-derive = "0.1.0"
+heapless = "0.5"
+log = "0.4"
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [target.'cfg(any(windows,unix))'.dependencies]
 

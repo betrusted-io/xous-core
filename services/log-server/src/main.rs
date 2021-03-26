@@ -6,7 +6,7 @@
 mod debug;
 
 use core::fmt::Write;
-use xous::String;
+use xous_ipc::String;
 
 #[cfg(not(target_os = "none"))]
 mod implementation {

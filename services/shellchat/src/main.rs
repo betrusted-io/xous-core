@@ -13,6 +13,7 @@ use core::pin::Pin;
 use ime_plugin_api::{ImeFrontEndApi, ImeFrontEnd};
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
 use xous::MessageEnvelope;
+use xous_ipc::String;
 
 use heapless::spsc::Queue;
 use heapless::consts::U16;
@@ -23,7 +24,7 @@ use cmds::*;
 #[derive(Debug)]
 struct History {
     // the history record
-    pub text: xous::String<1024>,
+    pub text: String<1024>,
     // if true, this was input from the user; if false, it's a response from the shell
     pub is_input: bool,
 }
@@ -32,7 +33,7 @@ struct History {
 struct Repl {
     // optional structures that indicate new input to the Repl loop per iteration
     // an input string
-    input: Option<xous::String<1024>>,
+    input: Option<String<1024>>,
     // messages from other servers
     msg: Option<MessageEnvelope>,
 
@@ -75,7 +76,7 @@ impl Repl{
 
     /// accept a new input string
     fn input(&mut self, line: &str) -> Result<(), xous::Error> {
-        let mut local = xous::String::<1024>::new();
+        let mut local = String::<1024>::new();
         write!(local, "{}", line).expect("SHCH: line too long for history buffer");
 
         self.input = Some(local);
@@ -116,7 +117,7 @@ impl Repl{
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(mut local) = self.input {
             if let Some(res) = self.env.dispatch(Some(&mut local), None).expect("SHCH: command dispatch failed") {
-                let mut response = xous::String::<1024>::new();
+                let mut response = String::<1024>::new();
                 write!(response, "{}", res).expect("SHCH: can't copy result to history");
                 let output_history = History {
                     text: response,
@@ -126,7 +127,7 @@ impl Repl{
             }
         } else if let Some(msg) = &self.msg {
             if let Some(res) = self.env.dispatch(None, Some(msg)).expect("SCHC: callback failed") {
-                let mut response = xous::String::<1024>::new();
+                let mut response = String::<1024>::new();
                 write!(response, "{}", res).expect("SHCH: can't copy result to history");
                 let output_history = History {
                     text: response,
@@ -238,7 +239,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ime_plugin_api::ImefOpcode>::GotInputLine(rkyv_s) => {
-                    let s: xous::String<4000> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<4000> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     repl.input(s.as_str().expect("SHCH: couldn't convert incoming string")).expect("SHCH: REPL couldn't accept input string");
                     update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
                 },

@@ -4,6 +4,7 @@ pub mod api;
 use api::*;
 
 use xous::send_message;
+use xous_ipc::String;
 use rkyv::Deserialize;
 use rkyv::ser::Serializer;
 use graphics_server::api::{TextOp, TextView};
@@ -44,7 +45,7 @@ pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::RenderTextView(result) = returned {
-            let tvr: TextView = result.deserialize(&mut xous::XousDeserializer).unwrap();
+            let tvr: TextView = result.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
             tv.bounds_computed = tvr.bounds_computed;
             tv.cursor = tvr.cursor;
     } else {
@@ -133,7 +134,7 @@ pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRe
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::SetCanvasBounds(result) = returned {
-            let ret: SetCanvasBoundsRequest = result.deserialize(&mut xous::XousDeserializer).unwrap();
+            let ret: SetCanvasBoundsRequest = result.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
             req.granted = ret.granted;
     } else {
         panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled");
@@ -142,7 +143,7 @@ pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRe
 }
 
 pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Result<Gid, xous::Error> {
-    let mut server = xous::String::<256>::new();
+    let mut server = String::<256>::new();
     use core::fmt::Write;
     write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
     let req = ContentCanvasRequest {
@@ -160,7 +161,7 @@ pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Resul
     // recover the mutable values and mirror the ones we care about back into our local structure
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::RequestContentCanvas(result) = returned {
-        let ret: ContentCanvasRequest = result.deserialize(&mut xous::XousDeserializer).unwrap();
+        let ret: ContentCanvasRequest = result.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
         Ok(ret.canvas)
     } else {
         log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");

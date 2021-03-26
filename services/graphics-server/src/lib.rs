@@ -5,10 +5,11 @@ pub mod api;
 pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle, ClipObject, ClipObjectType};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
-use xous::String;
+use xous_ipc::String;
 pub mod op;
 
-use xous::{send_message, CID, XousDeserializer};
+use xous::{send_message, CID};
+use xous_ipc::XousDeserializer;
 use rkyv::Deserialize;
 use core::fmt::Write;
 

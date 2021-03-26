@@ -13,10 +13,10 @@ pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has t
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 pub(crate) enum Request {
     /// Create a new server with the given name and return its SID.
-    Register(xous::String::<64>),
+    Register(xous_ipc::String::<64>),
 
     /// Create a connection to the target server.
-    Lookup(xous::String::<64>),
+    Lookup(xous_ipc::String::<64>),
 
     /// Create an authenticated connection to the target server.
     AuthenticatedLookup(AuthenticatedLookup),
@@ -38,19 +38,19 @@ pub(crate) enum Request {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Lookup {
-    pub name: xous::String::<64>,
+    pub name: xous_ipc::String::<64>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticatedLookup {
-    pub name: xous::String::<64>,
+    pub name: xous_ipc::String::<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
     pub challenge: [u32; 8],
 }
 
 #[derive(Debug)]
 pub struct Authenticate {
-    pub name: xous::String::<64>,
+    pub name: xous_ipc::String::<64>,
     pub success: bool,
     pub response_to_challenge: [u32; 8],
 }

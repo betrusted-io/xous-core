@@ -13,13 +13,6 @@ log = { version = "0.4", optional = true }
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
 compiler_builtins = { version = '0.1.0', optional = true }
 
-# for sending strings
-[dependencies.rkyv]
-version = "0.4.1"
-default-features = false
-optional = true
-features = ["const_generics"]
-
 [features]
 
 # If this is set, then the "Drop" feature of MemoryMessage structs
@@ -29,9 +22,6 @@ forget-memory-messages = []
 # Enable using `bitflags`
 bit-flags = ["bitflags"]
 
-# Enable sending commands using `rkyv`
-archive = ["rkyv"]
-
 # `logging` causes this program to connect to a log server on startup
 # so you can run log commands such as `info!()`.
 logging = ["log"]
@@ -39,7 +29,7 @@ logging = ["log"]
 # This is being built as part of libstd
 rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 
-default = ["bit-flags", "archive", "xous-macros"]
+default = ["bit-flags", "xous-macros"]
 
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4"

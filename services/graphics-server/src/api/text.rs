@@ -1,6 +1,7 @@
 use crate::api::{Point, Rectangle, Gid};
 use blitstr_ref as blitstr;
 use blitstr::{GlyphStyle, Cursor};
+use xous_ipc::String;
 
 /// coordinates are local to the canvas, not absolute to the screen
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -77,7 +78,7 @@ pub struct TextView {
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
 
-    pub text: xous::String::<3072>,
+    pub text: String::<3072>,
 }
 impl TextView {
     pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
@@ -91,7 +92,7 @@ impl TextView {
             bounds_hint,
             bounds_computed: None,
             style: GlyphStyle::Regular,
-            text: xous::String::<3072>::new(),
+            text: String::<3072>::new(),
             cursor: Cursor::new(0,0,0),
             insertion: None,
             ellipsis: false,

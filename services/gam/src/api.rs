@@ -1,5 +1,6 @@
 use xous::{Message, ScalarMessage};
 use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle, Point};
+use xous_ipc::String;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum GamObjectType {
@@ -27,7 +28,7 @@ pub struct ContentCanvasRequest {
     // return value of the canvas Gid
     pub canvas: Gid,
     // name of the server requesting the content canvas
-    pub servername: xous::String<256>,
+    pub servername: String<256>,
 }
 
 #[repr(C)]

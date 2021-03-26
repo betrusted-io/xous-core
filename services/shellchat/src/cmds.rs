@@ -1,4 +1,5 @@
-use xous::{String, MessageEnvelope};
+use xous::{MessageEnvelope};
+use xous_ipc::String;
 use core::fmt::Write;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {

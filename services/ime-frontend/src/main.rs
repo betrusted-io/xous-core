@@ -20,6 +20,7 @@ use rkyv::archived_value;
 
 use heapless::Vec;
 use heapless::consts::*;
+use xous_ipc::String;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
@@ -41,13 +42,13 @@ struct InputTracker {
     /// set if we're in a state where a backspace should trigger an unpredict
     can_unpick: bool, // note: untested as of Mar 7 2021
     /// the predictor string -- this is different from the input line, because it can be broken up by spaces and punctuatino
-    pred_phrase: xous::String::<4000>, // note: untested as of Mar 7 2021
+    pred_phrase: String::<4000>, // note: untested as of Mar 7 2021
     /// character position of the last prediction trigger -- this is where the prediction overwrite starts
     /// if None, it means we were unable to determine the trigger (e.g., we went back and edited text manually)
     last_trigger_char: Option<usize>,
 
     /// track the progress of our input line
-    line: xous::String::<4000>,
+    line: String::<4000>,
     /// length of the line in *characters*, not bytes (which is what .len() returns), used to index char_locs
     characters: usize,
     /// the insertion point, 0 is inserting characters before the first, 1 inserts characters after the first, etc.
@@ -58,7 +59,7 @@ struct InputTracker {
     was_grown: bool,
 
     /// render the predictions
-    pred_options: [Option<xous::String::<4000>>; MAX_PREDICTION_OPTIONS],
+    pred_options: [Option<String::<4000>>; MAX_PREDICTION_OPTIONS],
 }
 
 impl InputTracker {
@@ -70,9 +71,9 @@ impl InputTracker {
             predictor: None,
             pred_triggers: None,
             can_unpick: false,
-            pred_phrase: xous::String::<4000>::new(),
+            pred_phrase: String::<4000>::new(),
             last_trigger_char: Some(0),
-            line: xous::String::<4000>::new(),
+            line: String::<4000>::new(),
             characters: 0,
             insertion: 0,
             last_height: 0,
@@ -212,10 +213,10 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<xous::String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
-        let mut retstring: Option<xous::String::<4000>> = None;
+        let mut retstring: Option<String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("IMEF: updating input area");}
             let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
@@ -338,7 +339,7 @@ impl InputTracker {
                         }
                     }
                     '\u{000d}' => { // carriage return
-                        let mut ret = xous::String::<4000>::new();
+                        let mut ret = String::<4000>::new();
                         write!(ret, "{}", self.line.as_str().expect("IMEF: couldn't convert input line")).expect("IMEF: couldn't copy input ilne to output");
                         retstring = Some(ret);
 
@@ -621,14 +622,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<256> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<256> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
@@ -677,14 +678,14 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<256> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
                         Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                         _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
                     }
                 },
                 rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let s: String<256> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note first copy above, put in early-init because we're likely to get these requests early on
                     let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))

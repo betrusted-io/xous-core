@@ -3,6 +3,7 @@ use core::ops::Deref;
 use heapless::consts::*;
 use heapless::Vec;
 use xous::{Message, ScalarMessage};
+use xous_ipc::String;
 use core::slice;
 use core::ops::DerefMut;
 
@@ -165,10 +166,10 @@ pub enum Opcode {
     SelectKeyMap(KeyMap),
 
     /// request interpreted ScanCodes to be sent
-    RegisterListener(xous::String::<64>),
+    RegisterListener(String::<64>),
 
     /// request raw keyup/keydown events to be sent
-    RegisterRawListener(xous::String::<64>),
+    RegisterRawListener(String::<64>),
 
     /// set repeat delay, rate; both in ms
     SetRepeat(u32, u32),

@@ -291,7 +291,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::RenderTextView(rtv) => {
-                    let mut tv = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut tv = rtv.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("GAM: rendertextview {:?}", tv);}
                     match tv.get_op() {
                         TextOp::Nop => (),
@@ -336,7 +336,7 @@ fn xmain() -> ! {
                     };
                 },
                 rkyv::Archived::<api::Opcode>::SetCanvasBounds(rcb) => {
-                    let mut cb: SetCanvasBoundsRequest = rcb.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut cb: SetCanvasBoundsRequest = rcb.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("GAM: SetCanvasBoundsRequest {:?}", cb);}
                     // ASSUME:
                     // very few canvases allow dynamic resizing, so we special case these
@@ -356,7 +356,7 @@ fn xmain() -> ! {
                     writer.serialize_value(&api::Opcode::SetCanvasBounds(cb)).expect("GAM: SetCanvasBoundsRequest couldn't re-archive return value");
                 },
                 rkyv::Archived::<api::Opcode>::RequestContentCanvas(rcc) => {
-                    let mut req: ContentCanvasRequest = rcc.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut req: ContentCanvasRequest = rcc.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("GAM: RequestContentCanvas {:?}", req);}
                     // for now, we do nothing with the incoming gid value; but, in the future, we can use it
                     // as an authentication token perhaps to control access
@@ -384,7 +384,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::RenderObject(rtv) => {
-                    let obj: GamObject = rtv.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let obj: GamObject = rtv.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("GAM: renderobject {:?}", obj);}
                     if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                         // first, figure out if we should even be drawing to this canvas.

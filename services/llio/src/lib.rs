@@ -6,7 +6,8 @@ pub mod api;
 use api::*;
 use rkyv::Deserialize;
 
-use xous::{send_message, CID, XousDeserializer};
+use xous::{send_message, CID};
+use xous_ipc::XousDeserializer;
 
 // used by the LLIO to send a response to other servers
 pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xous::Error> {
@@ -35,7 +36,7 @@ pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStat
 
     let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
     if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
-        let transaction = result.deserialize(&mut XousDeserializer).expect("LLIO_API: Can't deserialize result in send_i2c_request");
+        let transaction = result.deserialize(&mut XousDeserializer {}).expect("LLIO_API: Can't deserialize result in send_i2c_request");
         Ok(transaction.status())
     } else {
         log::info!("send_i2c_request saw an unhandled return type of {:?}", buf);

@@ -1,10 +1,4 @@
-use crate::{Error, MemoryMessage, Result, CID};
-
-use core::pin::Pin;
-use rkyv::ser::Serializer;
-use rkyv::archived_value;
-use rkyv::ArchiveUnsized;
-use rkyv::SerializeUnsized;
+use crate::Error;
 
 #[derive(Copy, Clone)]
 pub struct String<const N: usize> {
@@ -20,7 +14,10 @@ impl<const N: usize> String<N> {
         }
     }
 
-    pub fn from_str<T>(src: T) -> String<N> where T: AsRef<str> {
+    pub fn from_str<T>(src: T) -> String<N>
+    where
+        T: AsRef<str>,
+    {
         let src = src.as_ref();
         let mut s = Self::new();
         // Copy the string into our backing store.
@@ -53,54 +50,6 @@ impl<const N: usize> String<N> {
 
     pub fn is_empty(&self) -> bool {
         self.len == 0
-    }
-
-    /// Convert a `MemoryMessage` into a `String`
-    pub fn from_message(
-        message: &mut MemoryMessage,
-    ) -> core::result::Result<String<N>, core::str::Utf8Error> {
-        let buf = unsafe { crate::XousBuffer::from_memory_message(message) };
-        let bytes = Pin::new(buf.as_ref());
-        let value = unsafe { archived_value::<String<N>>(&bytes, message.id as usize) };
-        let s = String::<N>::from_str(value.as_str());
-        Ok(s)
-    }
-
-    /// Perform an immutable lend of this String to the specified server.
-    /// This function will block until the server returns.
-    /// Note that this convenience should only be used if the server only ever
-    /// expects to deal with one type of String, ever. Otherwise, this should be
-    /// implemented in the API and wrapped in an Enum to help decorate the functional
-    /// target of the string. An example of a server that uses this convencience function
-    /// is the logger.
-    pub fn lend(
-        &self,
-        connection: CID,
-        // id: crate::MessageId,
-    ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::XousBuffer::new(N));
-        let pos = writer
-            .serialize_value(self)
-            .expect("xous::String -- couldn't archive self");
-        let xous_buffer = writer.into_inner();
-
-        // note that "id" is actually used as the position into the rkyv buffer
-        xous_buffer.lend(connection, pos as u32)
-    }
-
-    /// Move this string from the client into the server.
-    pub fn send(
-        self,
-        connection: CID,
-        // id: crate::MessageId,
-    ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::XousBuffer::new(N));
-        let pos = writer
-            .serialize_value(&self)
-            .expect("xous::String -- couldn't archive self");
-        let xous_buffer = writer.into_inner();
-
-        xous_buffer.send(connection, pos as u32)
     }
 
     /// Clear the contents of this String and set the length to 0
@@ -230,65 +179,6 @@ impl<const N: usize> core::convert::AsRef<str> for String<N> {
     }
 }
 
-#[repr(C)]
-pub struct ArchivedString {
-    ptr: rkyv::RelPtr<str>,
-}
-
-impl ArchivedString {
-    // Provide a `str` view of an `ArchivedString`.
-    pub fn as_str(&self) -> &str {
-        unsafe {
-            // The as_ptr() function of RelPtr will get a pointer
-            // to its memory.
-            &*self.ptr.as_ptr()
-        }
-    }
-}
-
-pub struct StringResolver {
-    bytes_pos: usize,
-    _metadata_resolver: rkyv::MetadataResolver<str>,
-}
-
-/// Turn a `String` into an archived object
-impl<const N: usize> rkyv::Archive for String<N> {
-    type Archived = ArchivedString;
-    type Resolver = StringResolver;
-
-    fn resolve(&self, pos: usize, resolver: Self::Resolver) -> Self::Archived {
-        Self::Archived {
-            ptr: unsafe {
-                self.as_str().unwrap().resolve_unsized(
-                    pos + rkyv::offset_of!(Self::Archived, ptr),
-                    resolver.bytes_pos,
-                    (),
-                )
-            },
-        }
-    }
-}
-
-// Turn a stream of bytes into an `ArchivedString`.
-impl<S: rkyv::ser::Serializer + ?Sized, const N: usize> rkyv::Serialize<S> for String<N> {
-    fn serialize(&self, serializer: &mut S) -> core::result::Result<Self::Resolver, S::Error> {
-        // This is where we want to write the bytes of our string and return
-        // a resolver that knows where those bytes were written.
-        // We also need to serialize the metadata for our str.
-        Ok(StringResolver {
-            bytes_pos: self.as_str().unwrap().serialize_unsized(serializer)?,
-            _metadata_resolver: self.as_str().unwrap().serialize_metadata(serializer)?,
-        })
-    }
-}
-// Turn an `ArchivedString` back into a String
-use rkyv::Fallible;
-impl<D: Fallible + ?Sized, const N: usize> rkyv::Deserialize<String<N>, D> for ArchivedString {
-    fn deserialize(&self, _deserializer: &mut D) -> core::result::Result<String<N>, D::Error> {
-        Ok(String::<N>::from_str(self.as_str()))
-    }
-}
-
 impl<const N: usize> PartialEq for String<N> {
     fn eq(&self, other: &Self) -> bool {
         self.bytes[..self.len as usize] == other.bytes[..other.len as usize]
@@ -297,10 +187,3 @@ impl<const N: usize> PartialEq for String<N> {
 }
 
 impl<const N: usize> Eq for String<N> {}
-
-// a "no-op" deserializer for in-place data, required for rkyv 0.4.1
-// perhaps in rkyv 0.5 this will go away, see https://github.com/djkoloski/rkyv/issues/67
-pub struct XousDeserializer;
-impl rkyv::Fallible for XousDeserializer {
-    type Error = crate::Error;
-}

@@ -12,6 +12,7 @@ use rkyv::Deserialize;
 use rkyv::ser::Serializer;
 use core::pin::Pin;
 use rkyv::{archived_value, archived_value_mut};
+use xous_ipc::String;
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -22,18 +23,18 @@ fn xmain() -> ! {
     let ime_sh_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IME_SH: can't register server");
     if debug1{info!("IME_SH: registered with NS -- {:?}", ime_sh_sid);}
 
-    let mut history: Queue<xous::String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
+    let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
     let history_max = 4;
 
     if false { // loads defaults into the predictor array to test things
         use core::fmt::Write as CoreWriter;
-        let mut test1: xous::String::<64> = xous::String::new();
+        let mut test1: String::<64> = String::new();
         write!(test1, "This〰should overflow the box").unwrap();
         history.enqueue(test1).unwrap();
-        let mut test2: xous::String::<64> = xous::String::new();
+        let mut test2: String::<64> = String::new();
         write!(test2, "Another string too long").unwrap();
         history.enqueue(test2).unwrap();
-        let mut test3: xous::String::<64> = xous::String::new();
+        let mut test3: String::<64> = String::new();
         write!(test3, "未雨绸缪").unwrap();
         history.enqueue(test3).unwrap();
     }
@@ -60,8 +61,8 @@ fn xmain() -> ! {
                     // the picked results
                 },
                 rkyv::Archived::<Opcode>::Picked(rkyv_s) => {
-                    let s: xous::String<4000> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
-                    let mut local_s: xous::String<64> = xous::String::new();
+                    let s: String<4000> = rkyv_s.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
+                    let mut local_s: String<64> = String::new();
                     use core::fmt::Write;
                     write!(local_s, "{:32}", s).expect("IME_SH: overflowed history variable");
                     if debug1{info!("IME_SH: storing history value | {}", s);}
@@ -80,7 +81,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<Opcode>::Prediction(pred_r) => {
-                    let mut prediction: Prediction = pred_r.deserialize(&mut xous::XousDeserializer).unwrap();
+                    let mut prediction: Prediction = pred_r.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if debug1{info!("IME_SH: querying prediction index {}", prediction.index);}
                     if debug1{info!("IME_SH: {:?}", prediction);}
                     if history.len() > 0 && ((prediction.index as usize) < history.len()) {

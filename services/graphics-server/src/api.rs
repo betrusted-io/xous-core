@@ -27,6 +27,7 @@ use blitstr_ref as blitstr;
 use blitstr::{ClipRect, Cursor, GlyphStyle};
 
 use xous::{Message, ScalarMessage};
+use xous_ipc::String;
 use hash32::{Hash, Hasher};
 
 //////////////// OS APIs
@@ -82,13 +83,13 @@ pub enum Opcode {
     SetStringClipping(ClipRect),
 
     /// Overwrite the string inside the clipping region.
-    String(xous::String<4096>),
+    String(String<4096>),
 
     /// Xor the string inside the clipping region.
-    StringXor(xous::String<4096>),
+    StringXor(String<4096>),
 
     /// Simulate the string on the clipping region (for computing text widths)
-    SimulateString(xous::String<4096>),
+    SimulateString(String<4096>),
 
     /// Retrieve the X and Y dimensions of the screen
     ScreenSize,

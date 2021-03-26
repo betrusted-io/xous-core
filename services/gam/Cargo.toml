@@ -1,33 +1,34 @@
 [package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "Graphical Abstraction Manager for Xous"
+edition = "2018"
 name = "gam"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "Graphical Abstraction Manager for Xous"
 
 [dependencies]
 bitflags = "1.2.1"
-xous = { path = "../../xous-rs" }
-graphics-server = { path = "../graphics-server" }
-ticktimer-server = { path = "../ticktimer-server" }
-xous-names = { path = "../xous-names" }
-log-server = { path = "../log-server" }
-keyboard = { path = "../keyboard" }
-trng = { path = "../trng" }
+blitstr-ref = {path = "../../imports/blitstr-ref"}
+com = {path = "../com"}
+content-plugin-api = {path = "../content-plugin-api"}
+graphics-server = {path = "../graphics-server"}
 heapless = "0.5"
+ime-plugin-api = {path = "../ime-plugin-api"}
+keyboard = {path = "../keyboard"}
 log = "0.4"
-com = { path = "../com"}
-blitstr-ref = { path = "../../imports/blitstr-ref" }
-ime-plugin-api = {path="../ime-plugin-api"}
-content-plugin-api = {path="../content-plugin-api"}
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
+trng = {path = "../trng"}
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}
 
 [dependencies.rkyv]
-version = "0.4.1"
 default-features = false
 features = ["const_generics"]
+version = "0.4.1"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []

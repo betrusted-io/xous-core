@@ -9,7 +9,7 @@ pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
     let ns_conn = xous::connect(ns_id).unwrap();
 
-    let mut registration_name = xous::String::<64>::new();
+    let mut registration_name = xous_ipc::String::<64>::new();
     write!(registration_name, "{}", name).expect("namserver: name probably too long");
     let request = api::Request::Register(registration_name);
     let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
@@ -41,7 +41,7 @@ pub fn request_connection(name: &str) -> Result<xous::CID, xous::Error> {
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
     let ns_conn = xous::connect(ns_id).unwrap();
 
-    let mut lookup_name = xous::String::<64>::new();
+    let mut lookup_name = xous_ipc::String::<64>::new();
     write!(lookup_name, "{}", name).expect("nameserver: name problably too long");
     let request = api::Request::Lookup(lookup_name);
 

@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
-use xous::String;
+use xous_ipc::String;
 
 static XOUS_LOGGER: XousLogger = XousLogger {
     locked: AtomicBool::new(false),
