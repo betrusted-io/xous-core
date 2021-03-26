@@ -106,6 +106,27 @@ pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     .unwrap();
 }
 
+/// Log the given message to the server.
+/// We accept any two parameters that can be treated as strings.
+pub fn log_message_send<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
+    let op = api::LogString {
+        prefix: xous::String::from_str(prefix.as_ref()),
+        message: xous::String::from_str(message.as_ref()),
+    };
+
+    // Convert the opcode into a serialized buffer. This consumes the opcode, which will
+    // exist on the heap in its own page. Furthermore, this will be in a flattened format
+    // suitable for passing around as a message.
+    let buf = buffer::Buffer::try_from(op).unwrap();
+
+    // Send the message to the server.
+    buf.send(
+        ensure_connection(),
+        api::Opcode::LogString.to_u32().unwrap(),
+    )
+    .unwrap();
+}
+
 // Callback messages will be sent to this private server.
 // Ideally it would be held in a Mutex.
 static mut CALLBACK_SID: Option<xous::SID> = None;
