@@ -1064,11 +1064,12 @@ impl SystemServices {
 
             let mut error = None;
 
-            // Lend each subsequent page.
+            // Move each subsequent page.
             for offset in (0..(len / core::mem::size_of::<usize>()))
                 .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
             {
                 mm.move_page(
+                    current_pid,
                     &src_mapping,
                     src_virt.wrapping_add(offset),
                     dest_pid,

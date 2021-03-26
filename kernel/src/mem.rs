@@ -11,9 +11,10 @@ use crate::arch::process::Process;
 use xous_kernel::{MemoryFlags, MemoryRange, PID};
 
 #[derive(Debug)]
-enum ClaimOrRelease {
+enum ClaimReleaseMove {
     Claim,
     Release,
+    Move(PID /* from */),
 }
 
 #[repr(C)]
@@ -487,12 +488,14 @@ impl MemoryManager {
     #[allow(dead_code)]
     pub fn move_page(
         &mut self,
+        src_pid: PID,
         src_mapping: &MemoryMapping,
         src_addr: *mut u8,
         dest_pid: PID,
         dest_mapping: &MemoryMapping,
         dest_addr: *mut u8,
     ) -> Result<(), xous_kernel::Error> {
+        let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
         crate::arch::mem::move_page_inner(
             self,
             &src_mapping,
@@ -500,6 +503,11 @@ impl MemoryManager {
             dest_pid,
             &dest_mapping,
             dest_addr,
+        )?;
+        self.claim_release_move(
+            phys_addr as *mut usize,
+            dest_pid,
+            ClaimReleaseMove::Move(src_pid),
         )
     }
 
@@ -557,40 +565,54 @@ impl MemoryManager {
     /// Claim the given memory for the given process, or release the memory
     /// back to the free pool.
     #[cfg(not(baremetal))]
-    fn claim_or_release(
+    fn claim_release_move(
         &mut self,
         _addr: *mut usize,
         _pid: PID,
-        _action: ClaimOrRelease,
+        _action: ClaimReleaseMove,
     ) -> Result<(), xous_kernel::Error> {
         Ok(())
     }
 
     #[cfg(baremetal)]
-    fn claim_or_release(
+    fn claim_release_move(
         &mut self,
         addr: *mut usize,
         pid: PID,
-        action: ClaimOrRelease,
+        action: ClaimReleaseMove,
     ) -> Result<(), xous_kernel::Error> {
         /// Modify the memory tracking table to note which process owns
         /// the specified address.
         fn action_inner(
-            addr: &mut Option<PID>,
+            owner_addr: &mut Option<PID>,
             pid: PID,
-            action: ClaimOrRelease,
+            action: ClaimReleaseMove,
         ) -> Result<(), xous_kernel::Error> {
-            if let Some(current_pid) = *addr {
+            if let Some(current_pid) = *owner_addr {
                 if current_pid != pid {
-                    return Err(xous_kernel::Error::MemoryInUse);
+                    // println!(
+                    //     "In claim_or_release({}, {}, {:?}) -- addr is owned by {} not {}",
+                    //     owner_addr.map(|v| v.get()).unwrap_or_default(),
+                    //     pid,
+                    //     action,
+                    //     current_pid,
+                    //     pid
+                    // );
+                    if let ClaimReleaseMove::Move(existing_pid) = action {
+                        if existing_pid != current_pid {
+                            return Err(xous_kernel::Error::MemoryInUse);
+                        }
+                    } else {
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
                 }
             }
             match action {
-                ClaimOrRelease::Claim => {
-                    *addr = Some(pid);
+                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                    *owner_addr = Some(pid);
                 }
-                ClaimOrRelease::Release => {
-                    *addr = None;
+                ClaimReleaseMove::Release => {
+                    *owner_addr = None;
                 }
             }
             Ok(())
@@ -632,11 +654,11 @@ impl MemoryManager {
 
     /// Mark a given address as being owned by the specified process ID
     fn claim_page(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
-        self.claim_or_release(addr, pid, ClaimOrRelease::Claim)
+        self.claim_release_move(addr, pid, ClaimReleaseMove::Claim)
     }
 
     /// Mark a given address as no longer being owned by the specified process ID
     fn release_page(&mut self, addr: *mut usize, pid: PID) -> Result<(), xous_kernel::Error> {
-        self.claim_or_release(addr, pid, ClaimOrRelease::Release)
+        self.claim_release_move(addr, pid, ClaimReleaseMove::Release)
     }
 }
