@@ -2,7 +2,11 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 fn print_log_messages(log_message: &str, prefix: &str) {
-    log::info!("Got a message hook! Message: [{}], prefix: [{}]", log_message, prefix);
+    log::info!(
+        "Got a message hook! Message: [{}], prefix: [{}]",
+        log_message,
+        prefix
+    );
 }
 
 #[xous::xous_main]
@@ -18,10 +22,13 @@ fn rkyv_test_client() -> ! {
     rkyv_test_server::hook_log_messages(print_log_messages);
 
     let mut idx = 0;
+    let double_src = xous::String::<256>::from_str("12345678");
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
         ticktimer_server::sleep_ms(ticktimer_conn, 500).ok();
         rkyv_test_server::log_message("prefix", "Hi there");
+        log::info!("Doubling string {}", double_src);
+        log::info!("Doubled string: {}", rkyv_test_server::double_string(&double_src));
         idx += 1;
     }
 }
