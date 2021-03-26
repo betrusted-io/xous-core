@@ -1,12 +1,11 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 mod api;
-mod buffer;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-use xous_ipc::String;
+use xous_ipc::{String, Buffer};
 
 // Note that connection IDs are never 0, so this is invalid, and could map to `None`.
 static SERVER_CID: AtomicU32 = AtomicU32::new(0);
@@ -31,7 +30,7 @@ pub fn add(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::try_from(op).or(Err(api::Error::InternalError))?;
 
     // Mutably lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -55,7 +54,7 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::try_from(op).or(Err(api::Error::InternalError))?;
 
     // Lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -98,7 +97,7 @@ pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = buffer::Buffer::try_from(op).unwrap();
+    let buf = Buffer::try_from(op).unwrap();
 
     // Send the message to the server.
     buf.lend(
@@ -119,7 +118,7 @@ pub fn log_message_send<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = buffer::Buffer::try_from(op).unwrap();
+    let buf = Buffer::try_from(op).unwrap();
 
     // Send the message to the server.
     buf.send(
@@ -142,7 +141,7 @@ fn callback_server() {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::CallbackType::LogString) => {
                 let mem = msg.body.memory_message().unwrap();
-                let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
+                let buffer = unsafe { Buffer::from_memory_message(mem) };
                 let log_string = buffer.try_into::<api::LogString, _>().unwrap();
                 unsafe {
                     for entry in CALLBACK_ARRAY.iter() {
@@ -197,7 +196,7 @@ pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).unwrap();
+    let mut buf = Buffer::try_from(op).unwrap();
 
     // Send the message to the server.
     buf.lend_mut(

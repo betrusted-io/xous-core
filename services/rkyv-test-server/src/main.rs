@@ -2,16 +2,15 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-mod buffer;
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous_ipc::String;
+use xous_ipc::{String, Buffer};
 
 fn value_or(val: Option<i32>, default: api::MathResult) -> api::MathResult {
     val.map(|v| api::MathResult::Value(v)).unwrap_or(default)
 }
 
 fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::MathOperation::*;
         match buffer.deserialize().unwrap() {
@@ -39,7 +38,7 @@ fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
 // This doesn't deserialize the struct, and therefore operates entirely
 // on the archived data. This saves a copy step.
 fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::ArchivedMathOperation::*;
         match *buffer.try_into::<api::MathOperation, _>().unwrap() {
@@ -65,7 +64,7 @@ fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
 }
 
 fn handle_log_string(mem: &xous::MemoryMessage) {
-    let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
+    let buffer = unsafe { Buffer::from_memory_message(mem) };
     let log_string = buffer.try_into::<api::LogString, _>().unwrap();
     log::info!(
         "Prefix: {}  Message: {}",
@@ -77,7 +76,7 @@ fn handle_log_string(mem: &xous::MemoryMessage) {
 /// Take the given string and double each character in an output string.
 fn double_string(mem: &mut xous::MemoryMessage) {
     use core::fmt::Write;
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let mut response = api::StringDoubler {
         value: String::new(),
     };
@@ -119,7 +118,7 @@ fn test_main() -> ! {
                 // If a callback exists, first pass this message to the callback server.
                 for callback_conn in logstring_callback_connections.iter() {
                     if let Some(callback_sid) = callback_conn {
-                        let buffer = unsafe { buffer::Buffer::from_memory_message(memory) };
+                        let buffer = unsafe { Buffer::from_memory_message(memory) };
                         buffer
                             .lend(
                                 *callback_sid,
