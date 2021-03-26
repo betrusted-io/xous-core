@@ -20,7 +20,8 @@ impl<const N: usize> String<N> {
         }
     }
 
-    pub fn from_str(src: &str) -> String<N> {
+    pub fn from_str<T>(src: T) -> String<N> where T: AsRef<str> {
+        let src = src.as_ref();
         let mut s = Self::new();
         // Copy the string into our backing store.
         for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.bytes) {
