@@ -446,7 +446,14 @@ pub fn move_page_inner(
     let phys = previous_entry >> 10 << 12;
     let flags = untranslate_flags(previous_entry);
 
-    let result = map_page_inner(mm, dest_pid, phys, dest_addr as usize, flags, dest_pid.get() != 1);
+    let result = map_page_inner(
+        mm,
+        dest_pid,
+        phys,
+        dest_addr as usize,
+        flags,
+        dest_pid.get() != 1,
+    );
 
     // Switch back to the original address space and return
     src_space.activate().unwrap();
@@ -495,15 +502,14 @@ pub fn lend_page_inner(
     }
 
     // Strip the `VALID` flag, and set the `SHARED` flag.
-    *entry = (*entry & !MMUFlags::VALID.bits())
-        | MMUFlags::S.bits();
+    *entry = (*entry & !MMUFlags::VALID.bits()) | MMUFlags::S.bits();
 
     // Ensure the change takes effect.
     unsafe { flush_mmu() };
 
     // Mark the page as Writable in new process space if it's writable here.
     let new_flags = if mutable && (*entry & MMUFlags::W.bits()) != 0 {
-        MemoryFlags::R |MemoryFlags::W
+        MemoryFlags::R | MemoryFlags::W
     } else {
         MemoryFlags::R
     };
