@@ -78,7 +78,8 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "trng",
         "llio",
-        "kernel-test",
+        "rkyv-test-client",
+        "rkyv-test-server",
     ];
     let task = env::args().nth(1);
     match task.as_deref() {
@@ -116,6 +117,7 @@ run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 benchmark [soc.svd]     builds a benchmarking image for real hardware
 fcc-agent [soc.svd]     builds a version suitable for FCC testing
+minimal [soc.svd]       builds a minimal image for API testing
 "
     )
 }
