@@ -142,14 +142,12 @@ fn test_main() -> ! {
                 {
                     let sid = xous::SID::from_u32(arg1 as _, arg2 as _, arg3 as _, arg4 as _);
                     let cb_conn = Some(xous::connect(sid).unwrap());
-                    // Add this callback connection to the list of callbacks if it doesn't
-                    // already exist.
-                    if !logstring_callback_connections.contains(&cb_conn) {
-                        for entry in logstring_callback_connections.iter_mut() {
-                            if *entry == None {
-                                *entry = cb_conn;
-                                break;
-                            }
+                    // Add this callback connection to the list of callbacks. If `AddLogStringCallback`
+                    // is called multiple times, then it will receive multiple callbacks.
+                    for entry in logstring_callback_connections.iter_mut() {
+                        if *entry == None {
+                            *entry = cb_conn;
+                            break;
                         }
                     }
                 }
