@@ -12,6 +12,9 @@ pub(crate) enum Opcode {
 
     /// Callback with log string
     AddLogStringCallback = 2,
+
+    /// Double the string
+    DoubleString = 3,
 }
 
 /// These enums indicate what kind of callback type we're sending.
@@ -41,6 +44,11 @@ pub(crate) enum MathOperation {
 pub(crate) struct LogString {
     pub(crate) prefix: xous::String<32>,
     pub(crate) message: xous::String<512>,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct StringDoubler {
+    pub(crate) value: xous::String<512>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]

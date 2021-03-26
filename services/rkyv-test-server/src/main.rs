@@ -10,7 +10,7 @@ fn value_or(val: Option<i32>, default: api::MathResult) -> api::MathResult {
 }
 
 fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
-    let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
+    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::MathOperation::*;
         match buffer.deserialize().unwrap() {
@@ -38,7 +38,7 @@ fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
 // This doesn't deserialize the struct, and therefore operates entirely
 // on the archived data. This saves a copy step.
 fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
-    let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
+    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::ArchivedMathOperation::*;
         match *buffer.try_into::<api::MathOperation, _>().unwrap() {
@@ -73,6 +73,17 @@ fn handle_log_string(mem: &xous::MemoryMessage) {
     );
 }
 
+/// Take the given string and double each character in an output string.
+fn double_string(mem: &mut xous::MemoryMessage) {
+    use core::fmt::Write;
+    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut response = api::StringDoubler { value: xous::String::new() };
+    for ch in buffer.try_into::<api::StringDoubler, _>().unwrap().value.as_str().chars() {
+        write!(response.value, "{}{}", ch, ch).ok();
+    }
+    buffer.serialize_from(response).unwrap();
+}
+
 #[xous::xous_main]
 fn test_main() -> ! {
     let mut callback_conn = None;
@@ -89,6 +100,9 @@ fn test_main() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::Mathematics) => {
                 handle_math_withcopy(msg.body.memory_message_mut().unwrap())
+            }
+            Some(api::Opcode::DoubleString) => {
+                double_string(msg.body.memory_message_mut().unwrap())
             }
             Some(api::Opcode::LogString) => {
                 let memory = msg.body.memory_message().unwrap();
