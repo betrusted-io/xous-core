@@ -500,7 +500,7 @@ impl Drop for MessageEnvelope {
     fn drop(&mut self) {
         match &self.body {
             Message::Borrow(x) | Message::MutableBorrow(x) => {
-                crate::syscall::return_memory(self.sender, x.buf).expect("couldn't return memory")
+                crate::syscall::return_memory_offset(self.sender, x.buf, x.offset).expect("couldn't return memory")
             }
             Message::Move(msg) => {
                 crate::syscall::unmap_memory(msg.buf).expect("couldn't free memory message")

@@ -223,6 +223,12 @@ impl<const N: usize> core::fmt::Debug for String<N> {
     }
 }
 
+impl<const N: usize> core::convert::AsRef<str> for String<N> {
+    fn as_ref(&self) -> &str {
+        self.to_str()
+    }
+}
+
 #[repr(C)]
 pub struct ArchivedString {
     ptr: rkyv::RelPtr<str>,

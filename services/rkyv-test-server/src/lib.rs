@@ -63,7 +63,14 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
         api::Opcode::Mathematics.to_u32().unwrap(),
     )
     .or(Err(api::Error::InternalError))?;
-    Err(api::Error::Overflow)
+
+    // Don't deserialize it -- use the archived version
+    match *buf.try_into::<api::MathResult, _>().unwrap() {
+        api::ArchivedMathResult::Value(v) => Ok(v),
+        api::ArchivedMathResult::Error(api::ArchivedError::InternalError) => Err(api::Error::InternalError),
+        api::ArchivedMathResult::Error(api::ArchivedError::Overflow) => Err(api::Error::Overflow),
+        api::ArchivedMathResult::Error(api::ArchivedError::Underflow) => Err(api::Error::Underflow),
+    }
 }
 
 pub fn subtract(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
@@ -78,10 +85,12 @@ pub fn divide(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
     do_op(api::MathOperation::Divide(arg1, arg2))
 }
 
-pub fn log_message(prefix: &str, message: &str) {
+/// Log the given message to the server.
+/// We accept any two parameters that can be treated as strings.
+pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix),
-        message: xous::String::from_str(message),
+        prefix: xous::String::from_str(prefix.as_ref()),
+        message: xous::String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
@@ -155,4 +164,24 @@ pub fn hook_log_messages(cb: fn(&str, &str)) {
         )
         .unwrap();
     }
+}
+
+pub fn double_string<const N: usize>(value: &xous::String<N>) -> xous::String<N> {
+    let op = api::StringDoubler {
+        value: xous::String::from_str(value.as_str().unwrap()),
+    };
+
+    // Convert the opcode into a serialized buffer. This consumes the opcode, which will
+    // exist on the heap in its own page. Furthermore, this will be in a flattened format
+    // suitable for passing around as a message.
+    let mut buf = buffer::Buffer::try_from(op).unwrap();
+
+    // Send the message to the server.
+    buf.lend_mut(
+        ensure_connection(),
+        api::Opcode::DoubleString.to_u32().unwrap(),
+    )
+    .unwrap();
+
+    xous::String::from_str(buf.try_into::<api::StringDoubler, _>().unwrap().value.as_str())
 }

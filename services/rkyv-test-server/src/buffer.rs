@@ -11,6 +11,7 @@ pub struct Buffer<'a> {
     offset: Option<MemoryAddress>,
     slice: &'a mut [u8],
     should_drop: bool,
+    memory_message: Option<&'a mut MemoryMessage>,
 }
 
 pub struct XousDeserializer;
@@ -54,6 +55,7 @@ impl<'a> Buffer<'a> {
             valid,
             offset: None,
             should_drop: true,
+            memory_message: None,
         }
     }
 
@@ -65,6 +67,19 @@ impl<'a> Buffer<'a> {
             valid: mem.buf,
             offset: mem.offset,
             should_drop: false,
+            memory_message: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub unsafe fn from_memory_message_mut(mem: &'a mut MemoryMessage) -> Self {
+        Buffer {
+            range: mem.buf,
+            slice: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),
+            valid: mem.buf,
+            offset: mem.offset,
+            should_drop: false,
+            memory_message: Some(mem),
         }
     }
 
@@ -127,15 +142,31 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn serialize_from<S>(self, src: S) -> core::result::Result<Self, ()>
+    pub fn serialize_from<S>(&mut self, src: S) -> core::result::Result<(), &'static str>
     where
-        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<Buffer<'a>>>,
+        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<&'a mut [u8]>>,
     {
-        let mut ser = rkyv::ser::serializers::BufferSerializer::new(self);
-        let pos = ser.serialize_value(&src).or(Err(()))?;
-        let mut buf = ser.into_inner();
-        buf.offset = MemoryAddress::new(pos);
-        Ok(buf)
+        // We must have a `memory_message` to update in order for this to work.
+        // Otherwise, we risk having the pointer go to somewhere invalid.
+        if self.memory_message.is_none() {
+            // Create this message using `from_memory_message_mut()` instead of
+            // `from_memory_message()`.
+            Err("couldn't serialize because buffer wasn't mutable")?;
+        }
+        // Unsafe Warning: Create a copy of the backing slice to hand to the deserializer.
+        // This is required because the deserializer consumes the buffer and returns it
+        // later as part of `.into_inner()`.
+        // The "correct" way to do this would be to implement `rkyv::Serializer` an `rkyv::Fallible`
+        // for ourselves.
+        let copied_slice =
+            unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
+        let mut ser = rkyv::ser::serializers::BufferSerializer::new(copied_slice);
+        let pos = ser.serialize_value(&src).or(Err("couldn't serialize"))?;
+        self.offset = MemoryAddress::new(pos);
+        if let Some(ref mut msg) = self.memory_message.as_mut() {
+            msg.offset = MemoryAddress::new(pos);
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
