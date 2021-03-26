@@ -44,6 +44,11 @@ fn rkyv_test_client() -> ! {
         write!(double_src, "12345678 Loop {} 🎉 你好", idx).unwrap();
         log::info!("Doubling string {}", double_src);
         log::info!("Doubled string: {}", rkyv_test_server::double_string(&double_src));
+
+        let sent_str = xous::String::<32>::from_str("This got moved");
+        log::info!("Sending a string \"{}\"", sent_str);
+        rkyv_test_server::log_message("prefix", sent_str);
+
         idx += 1;
     }
 }
