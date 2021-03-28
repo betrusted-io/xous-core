@@ -4,7 +4,7 @@ pub mod api;
 
 use core::fmt::Write;
 use xous_ipc::{String, Buffer};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::ToPrimitive;
 
 pub struct XousNames {
     conn: xous::CID,

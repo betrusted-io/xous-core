@@ -10,8 +10,7 @@ use api::*;
 use heapless::consts::*;
 use heapless::FnvIndexMap;
 
-use core::convert::TryInto;
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 use xous_ipc::{String, Buffer};
 
 use log::{error, info};
@@ -39,12 +38,12 @@ fn xmain() -> ! {
         if debug1{info!("NS: received message");}
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::Register) => {
-                let mut mem = msg.body.memory_message_mut().unwrap();
+                let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let xous_string = buffer.try_into::<xous_ipc::String::<64>, _>().unwrap();
-                let name = XousServerName::from_str(xous_string.as_str().unwrap());
+                let xous_string = buffer.try_into::<String::<64>, _>().unwrap();
+                let name = XousServerName::from_str(xous_string.as_str());
 
-                let mut response: api::Return;
+                let response: api::Return;
 
                 if debug1{info!("NS: registration request for '{}'", name);}
                 if !name_table.contains_key(&name) {
@@ -72,12 +71,12 @@ fn xmain() -> ! {
                 buffer.serialize_from(response).unwrap();
             }
             Some(api::Opcode::Lookup) => {
-                let mut mem = msg.body.memory_message_mut().unwrap();
+                let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let name_string = buffer.try_into::<xous_ipc::String::<64>, _>().unwrap();
-                let name = XousServerName::from_str(name_string.as_str().unwrap());
+                let name_string = buffer.try_into::<String::<64>, _>().unwrap();
+                let name = XousServerName::from_str(name_string.as_str());
                 if debug1{info!("NS: Lookup request for '{}'", name);}
-                let mut response: api::Return;
+                let response: api::Return;
                 if let Some(server_sid) = name_table.get(&name) {
                     let sender_pid = msg
                         .sender
@@ -112,7 +111,7 @@ fn xmain() -> ! {
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                     let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();
                     let auth_request = AuthenticateRequest {
-                        name: name_string,
+                        name: String::<64>::from_str(name_string.as_str()),
                         pubkey_id: [0; 20], // placeholder
                         challenge: [c1, c2, c3, c4],
                     };
@@ -121,9 +120,9 @@ fn xmain() -> ! {
                 buffer.serialize_from(response).unwrap();
             }
             Some(api::Opcode::AuthenticatedLookup) => {
-                let mut mem = msg.body.memory_message_mut().unwrap();
+                let mem = msg.body.memory_message_mut().unwrap();
                 let buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let auth_lookup = buffer.try_into::<api::AuthenticatedLookup, _>().unwrap();
+                let auth_lookup: AuthenticatedLookup = buffer.deserialize().unwrap();
                 info!("NS: AuthenticatedLookup request {:?}", auth_lookup);
                 error!("NS: AuthenticatedLookup not yet implemented");
                 unimplemented!("NS: AuthenticatedLookup not yet implemented");

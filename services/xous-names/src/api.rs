@@ -1,5 +1,6 @@
 use hash32::{Hash, Hasher};
 
+#[allow(dead_code)]
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -60,6 +61,7 @@ impl Default for XousServerName {
     }
 }
 
+#[allow(dead_code)]
 impl XousServerName {
     pub fn to_str(&self) -> &str {
         core::str::from_utf8(unsafe {

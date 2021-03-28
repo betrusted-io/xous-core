@@ -100,7 +100,8 @@ fn test_main() -> ! {
         "Hello, world! This is the server, PID {}",
         xous::current_pid().unwrap()
     );
-    let sid = xous_names::register_name(api::SERVER_NAME).unwrap();
+    let xns = xous_names::XousNames::new().unwrap();
+    let sid = xns.register_name(api::SERVER_NAME).unwrap();
 
     let mut logstring_callback_connections = [None; 32];
 
