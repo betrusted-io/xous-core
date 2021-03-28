@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
             Ok(Some(ret))
         } else {
             if Ok(true) == gam::powerdown_request(env.gam) {
-                ticktimer_server::sleep_ms(env.ticktimer, 500).unwrap(); // let the screen redraw
+                ticktimer.sleep_ms(env.ticktimer, 500).unwrap(); // let the screen redraw
 
                 // allow EC to snoop, so that it can wake up the system
                 llio::allow_ec_snoop(env.llio, true).unwrap();
@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
                 log::info!("CMD: powering down now!");
                 // pause execution, nothing after this should be reachable
-                ticktimer_server::sleep_ms(env.ticktimer, 2000).unwrap(); // should power off within 2 seconds
+                ticktimer.sleep_ms(env.ticktimer, 2000).unwrap(); // should power off within 2 seconds
                 log::info!("CMD: if you can read this, power down failed!");
             }
             write!(ret, "Powerdown request denied").unwrap();

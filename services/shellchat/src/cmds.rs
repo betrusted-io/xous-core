@@ -40,7 +40,7 @@ macro_rules! cmd_api {
 pub struct CommonEnv {
     llio: xous::CID,
     com: xous::CID,
-    ticktimer: xous::CID,
+    ticktimer: Ticktimer,
     gam: xous::CID,
 }
 
@@ -76,12 +76,12 @@ pub struct CmdEnv {
 }
 impl CmdEnv {
     pub fn new(gam: xous::CID) -> CmdEnv {
-        let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+        let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         CmdEnv {
             common_env: CommonEnv {
                 llio: xous_names::request_connection_blocking(xous::names::SERVER_NAME_LLIO).expect("CMD: can't connect to LLIO"),
                 com: xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("CMD: can't connect to COM"),
-                ticktimer: xous::connect(ticktimer_server_id).unwrap(),
+                ticktimer: ticktimer,
                 gam,
             },
             lastverb: String::<256>::new(),

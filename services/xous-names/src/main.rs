@@ -25,8 +25,7 @@ fn xmain() -> ! {
     let name_server = xous::create_server_with_address(b"xous-name-server")
         .expect("Couldn't create xousnames-server");
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     // this limits the number of available servers to be requested to 128...!
     let mut name_table = FnvIndexMap::<_, _, U128>::new();
@@ -57,13 +56,13 @@ fn xmain() -> ! {
                         rkyv::Archived::<api::Request>::SID(new_sid.into())
                     } else {
                         // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
-                        let target_time: u64 = ((ticktimer_server::elapsed_ms(ticktimer_conn)
+                        let target_time: u64 = ((ticktimer.elapsed_ms()
                             .unwrap()
                             / FAIL_TIMEOUT_MS)
                             + 1)
                             * FAIL_TIMEOUT_MS;
                         info!("NS: request failed, waiting for deterministic timeout");
-                        while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() < target_time {
+                        while ticktimer.elapsed_ms().unwrap() < target_time {
                             xous::yield_slice();
                         }
                         info!("NS: deterministic timeout done");

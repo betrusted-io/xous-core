@@ -24,9 +24,9 @@ fn sleep_loop_4(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize, pid: u
         //     sleep_ms,
         //     loop_count
         // );
-        let start_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-        ticktimer_server::sleep_ms(ticktimer_conn, sleep_ms).unwrap();
-        let end_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+        let start_time = ticktimer.elapsed_ms().unwrap();
+        ticktimer.sleep_ms(ticktimer_conn, sleep_ms).unwrap();
+        let end_time = ticktimer.elapsed_ms().unwrap();
         log::info!(
             "TEST THREAD {}:{}: target {}ms, {} loops: Sleep finished (uptime: {}, took {} ms)",
             pid,
@@ -60,8 +60,7 @@ fn sleep_loop_3(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize) {
 }
 
 fn sleep_loop_2(main_conn: usize, sleep_ms: usize) {
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap() as usize;
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     sleep_loop_3(main_conn, sleep_ms, ticktimer_conn);
 }
 
@@ -80,8 +79,7 @@ fn sleep_loop_0() {
 fn test_main() -> ! {
     log_server::init_wait().unwrap();
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let main_server = xous::create_server().unwrap();
     let server_conn = xous::connect(main_server).unwrap();

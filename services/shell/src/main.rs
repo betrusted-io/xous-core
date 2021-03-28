@@ -157,8 +157,7 @@ fn shell_main() -> ! {
     log_server::init_wait().unwrap();
     info!("SHELL: my PID is {}", xous::process::id());
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let graphics_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("SHELL: can't connect to COM");
 
@@ -175,8 +174,8 @@ fn shell_main() -> ! {
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
-    let start_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-    while ticktimer_server::elapsed_ms(ticktimer_conn).unwrap() - start_time < 1000 {
+    let start_time: u64 = ticktimer.elapsed_ms().unwrap();
+    while ticktimer.elapsed_ms().unwrap() - start_time < 1000 {
         xous::yield_slice();
     }
 
@@ -218,7 +217,7 @@ fn shell_main() -> ! {
     graphics_server::draw_rectangle(graphics_conn, work_clipregion)
         .expect("unable to clear region");
 
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
     let mut first_time = true;
     loop {
         //////////////// status bar
@@ -379,7 +378,7 @@ fn shell_main() -> ! {
         .expect("unable to draw to screen");
 
         // Periodic tasks
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
                 get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
@@ -391,6 +390,6 @@ fn shell_main() -> ! {
         graphics_server::flush(graphics_conn).expect("unable to draw to screen");
 
         // rate limit graphics
-        //ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
+        //ticktimer.sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
     }
 }

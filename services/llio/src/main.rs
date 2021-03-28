@@ -33,7 +33,7 @@ mod implementation {
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
-        ticktimer_conn: xous::CID,
+        ticktimer: ticktimer_server::Ticktimer,
         destruct_armed: bool,
     }
 
@@ -71,7 +71,7 @@ mod implementation {
         .expect("couldn't map GPIO CSR range");
         let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
         // setup the initial logging output
-        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // 0 = kernel, 1 = log, 2 = app_uart
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // 0 = kernel, 1 = log, 2 = app_uart
 
         gpio_base.as_mut_ptr() as *mut u32
     }
@@ -144,8 +144,7 @@ mod implementation {
             )
             .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xl = Llio {
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
@@ -159,7 +158,7 @@ mod implementation {
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
-                ticktimer_conn,
+                ticktimer,
                 destruct_armed: false,
             };
 
@@ -296,7 +295,7 @@ mod implementation {
         }
         pub fn ec_reset(&mut self) {
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            ticktimer_server::sleep_ms(self.ticktimer_conn, 100).unwrap();
+            self.ticktimer.sleep_ms(100).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
         }
         pub fn ec_power_on(&mut self) {
@@ -316,21 +315,21 @@ mod implementation {
             match pattern {
                 VibePattern::Short => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Long => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000).unwrap();
+                    self.ticktimer.sleep_ms(1000).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Double => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
             }
@@ -456,10 +455,9 @@ fn xmain() -> ! {
     let mut llio = Llio::new(handler_conn, gpio_base);
 
     // ticktimer is a well-known server
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     // create an i2c state machine handler
-    let mut i2c_machine = I2cStateMachine::new(ticktimer_conn, llio.get_i2c_base());
+    let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
     if debug1{info!("LLIO: starting main loop");}
     let mut reboot_requested: bool = false;

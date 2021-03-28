@@ -2,14 +2,11 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::Opcode;
 
 mod os_timer;
 
 use heapless::binary_heap::{BinaryHeap, Min};
 use heapless::consts::*;
-
-use core::convert::TryFrom;
 
 use log::{error, info};
 
@@ -110,7 +107,13 @@ mod implementation {
 
         // This is dangerous and may return an error if the queue is full.
         // Which is fine, because the queue is always recalculated any time a message arrives.
-        xous::try_send_message(xtt.connection, crate::api::Opcode::RecalculateSleep.into()).ok();
+        use num_traits::ToPrimitive;
+        xous::try_send_message(xtt.connection,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0
+            })
+        ).ok();
     }
 
     impl XousTickTimer {
@@ -440,39 +443,36 @@ fn xmain() -> ! {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
 
-        let envelope = xous::receive_message(ticktimer_server).unwrap();
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            // info!("TickTimer: Opcode: {:?}", opcode);
-            match opcode {
-                /*Opcode::Reset => {
-                    info!("TickTimer: reset called");
-                    ticktimer.reset();
-                }*/
-                Opcode::ElapsedMs => {
-                    let time = ticktimer.elapsed_ms() as i64;
-                    xous::return_scalar2(
-                        envelope.sender,
-                        (time & 0xFFFF_FFFFi64) as usize,
-                        ((time >> 32) & 0xFFF_FFFFi64) as usize,
-                    )
-                    .expect("TickTimer: couldn't return time request");
-                }
-                Opcode::SleepMs(ms) => {
+        let msg = xous::receive_message(ticktimer_server).unwrap();
+        match num_traits::FromPrimitive::from_usize(msg.body.id()) {
+            Some(api::Opcode::ElapsedMs) => {
+                let time = ticktimer.elapsed_ms() as i64;
+                xous::return_scalar2(
+                    msg.sender,
+                    (time & 0xFFFF_FFFFi64) as usize,
+                    ((time >> 32) & 0xFFF_FFFFi64) as usize,
+                )
+                .expect("TickTimer: couldn't return time request");
+            }
+            Some(api::Opcode::SleepMs) => {
+                if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                    id: _, arg1: ms, arg2: _, arg3: _, arg4: _}) = msg.body {
                     recalculate_sleep(
                         &mut ticktimer,
                         &mut sleep_heap,
                         Some(SleepRequest {
                             msec: ms as i64,
-                            sender: envelope.sender,
+                            sender: msg.sender,
                         }),
                     );
                 }
-                Opcode::RecalculateSleep => {
-                    recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-                }
             }
-        } else {
-            error!("couldn't convert opcode");
+            Some(api::Opcode::RecalculateSleep) => {
+                recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
+            }
+            None => {
+                error!("couldn't convert opcode");
+            }
         }
     }
 }

@@ -376,17 +376,16 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
                 println!("rx stats request disabled!!");
                 //get_rx_stats_agent(com_cid).unwrap();
             } else if tokens[1].trim() == "commit_pds" {
-                let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-                let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+                let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-                let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+                let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
                 for pds in pds_list.iter() {
                     let mut sendable_string = xous::String::<512>::new();
                     write!(&mut sendable_string, "{}", pds);
                     println!("{}", sendable_string);
                     send_pds_line(com_cid, &sendable_string);
                     loop {
-                        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+                        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
                             if elapsed_time - last_time > 250 {
                                 last_time = elapsed_time;
                                 break;
@@ -480,8 +479,7 @@ fn xmain() -> ! {
     let agent_server_sid = xous_names::register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
     let agent_server_client = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let mut uart = Uart::new(agent_server_client);
 
@@ -501,7 +499,7 @@ fn xmain() -> ! {
     uart.enable_rx();
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
     let mut pds_list: Vec<String<U512>, U16> = Vec::new();
     let mut repeat = false;
     let mut phase = 0;
@@ -543,7 +541,7 @@ fn xmain() -> ! {
             _ => () //xous::yield_slice(), // no message received, idle
         }
         // Periodic tasks
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
             if elapsed_time - last_time > 20_000 {
                 last_time = elapsed_time;
 

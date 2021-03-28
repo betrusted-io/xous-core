@@ -37,17 +37,17 @@ pub struct I2cStateMachine {
     state: I2cState,
     index: u32,  // index of the current buffer in the state machine
     timestamp: u64, // timestamp of the last transaction
-    ticktimer: xous::CID, // a connection to the ticktimer so we can measure timeouts
+    ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
     i2c_csr: utralib::CSR<u32>,
     listeners: Vec<xous::CID, U32>,
 }
 #[cfg(target_os = "none")]
 impl I2cStateMachine {
-    pub fn new(ticktimer: xous::CID, i2c_base: *mut u32) -> Self {
+    pub fn new(ticktimer: ticktimer_server::Ticktimer, i2c_base: *mut u32) -> Self {
         I2cStateMachine {
             transaction: I2cTransaction::new(),
             state: I2cState::Idle,
-            timestamp: ticktimer_server::elapsed_ms(ticktimer).unwrap(),
+            timestamp: ticktimer.elapsed_ms().unwrap(),
             ticktimer,
             i2c_csr: CSR::new(i2c_base),
             index: 0,
@@ -60,7 +60,7 @@ impl I2cStateMachine {
             return I2cStatus::ResponseFormatError
         }
 
-        let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+        let now = self.ticktimer.elapsed_ms().unwrap();
         if self.state != I2cState::Idle && ((now - self.timestamp) < self.transaction.timeout_ms as u64) {
             // we're in a transaction that hadn't timed out, can't accept a new one
             I2cStatus::ResponseBusy
@@ -145,7 +145,7 @@ impl I2cStateMachine {
     }
     pub fn handler(&mut self) {
         // check if the transaction had actually timed out
-        let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+        let now = self.ticktimer.elapsed_ms().unwrap();
         if now - self.timestamp > self.transaction.timeout_ms as u64 {
             // previous transaction had timed out...
             self.report_timeout();

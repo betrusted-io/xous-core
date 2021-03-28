@@ -54,14 +54,13 @@ impl Into<Message> for Opcode {
 fn stopwatch_thread(_arg: xous::SID) {
     info!("BENCHMARK|stopwatch: starting");
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let shell_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK|stopwatch: can't connect to main program");
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
     let mut start_sent = false;
     loop {
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
             if elapsed_time - last_time > 500 && !start_sent {
                 last_time = elapsed_time;
                 xous::send_message(shell_conn, Opcode::Start.into()).expect("BENCHMARK|stopwatch: couldn't send Start message");
@@ -77,11 +76,11 @@ fn stopwatch_thread(_arg: xous::SID) {
         if false {
             // send a start loop message
             xous::send_message(shell_conn, Opcode::Start.into()).expect("BENCHMARK|stopwatch: couldn't send Start message");
-            ticktimer_server::sleep_ms(ticktimer_conn, 10_000).expect("couldn't sleep");
+            ticktimer.sleep_ms(ticktimer_conn, 10_000).expect("couldn't sleep");
             // send a stop loop message
             xous::send_message(shell_conn, Opcode::Stop.into()).expect("BENCHMARK|stopwatch: couldn't send Stop message");
             // give a moment for the result to update
-            ticktimer_server::sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
+            ticktimer.sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
         }
         xous::yield_slice();
     }
@@ -93,8 +92,7 @@ fn shell_main() -> ! {
     info!("BENCHMARK: my PID is {}", xous::process::id());
 
     info!("BENCHMARK: ticktimer");
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK: can't register server");
 
@@ -137,10 +135,10 @@ fn shell_main() -> ! {
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     match opcode {
                         Opcode::Start => {
-                            start_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+                            start_time = ticktimer.elapsed_ms().unwrap();
                         },
                         Opcode::Stop => {
-                            stop_time = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+                            stop_time = ticktimer.elapsed_ms().unwrap();
                             update_result = true;
                         },
                     }

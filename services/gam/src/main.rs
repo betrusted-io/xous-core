@@ -188,8 +188,7 @@ fn xmain() -> ! {
     let gam_sid = xous_names::register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
     info!("GAM: starting up...");
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let gfx_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM: can't connect to COM");
     let trng_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("GAM: can't connect to TRNG");
@@ -228,7 +227,7 @@ fn xmain() -> ! {
     xous::create_thread_4(status_thread, gid[0] as _, gid[1] as _, gid[2] as _, gid[3] as _).expect("GAM: couldn't create status thread");
 
     let mut powerdown_requested = false;
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
     info!("GAM: entering main loop");
     loop {
         let envelope = xous::receive_message(gam_sid).unwrap();
@@ -269,7 +268,7 @@ fn xmain() -> ! {
                     if powerdown_requested {
                         continue; // don't allow any redraws if a powerdown is requested
                     }
-                    if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+                    if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
                         if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
                             last_time = elapsed_time;
 

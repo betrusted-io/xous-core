@@ -69,8 +69,7 @@ mod implementation {
             )
             .expect("couldn't map COM CSR range");
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xc = XousCom {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -108,12 +107,12 @@ mod implementation {
 
         pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
             if timeout.is_some() {
-                let curtime = ticktimer_server::elapsed_ms(self.ticktimer)
+                let curtime = self.ticktimer.elapsed_ms()
                     .expect("couldn't connect to ticktimer");
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                    if (ticktimer_server::elapsed_ms(self.ticktimer)
+                    if (self.ticktimer.elapsed_ms()
                         .expect("couldn't connect to ticktimer")
                         - curtime)
                         > to

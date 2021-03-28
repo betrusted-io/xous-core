@@ -17,7 +17,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let status_sid = xous_names::register_name(xous::names::SERVER_NAME_STATUS).expect("GAM|status: can't register server");
 
     let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("GAM|status: can't connect to GAM");
-    let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("GAM|status: can't connect to COM");
 
     if debug1{info!("GAM|status: getting screen size");}
@@ -46,7 +46,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     battstats_tv.margin = Point::new(0, 0);
 
     let mut stats: BattStats;
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
     let mut stats_phase: usize = 0;
     let mut last_seconds: usize = ((last_time / 1000) % 60) as usize;
 
@@ -92,7 +92,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
             _ => xous::yield_slice(),
         }
 
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
+        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
             let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
             if now_seconds != last_seconds {
                 last_seconds = now_seconds;

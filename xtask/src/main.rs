@@ -78,7 +78,8 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "trng",
         "llio",
-        "kernel-test",
+        "rkyv-test-client",
+        "rkyv-test-server",
     ];
     let task = env::args().nth(1);
     match task.as_deref() {

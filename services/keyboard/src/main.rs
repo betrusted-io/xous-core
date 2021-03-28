@@ -190,7 +190,7 @@ mod implementation {
         /// remember the last keycode since a change event
         lastcode: Option<Vec<RowCol, U16>>,
         /// connection to the timer for real-time events
-        ticktimer: xous::CID,
+        ticktimer: Ticktimer,
         /// mapping for ScanCode translation
         map: KeyMap,
         /// delay in ms before a key is considered to be repeating
@@ -227,10 +227,9 @@ mod implementation {
             )
             .expect("couldn't map Keyboard CSR range");
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let mut ticktimer = XousTickTimer::new(ticktimer_client).expect("KBD: couldn't connect to ticktimer");
 
-            let timestamp = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+            let timestamp = ticktimer.elapsed_ms().unwrap();
             let kbd = Keyboard {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 debounce: [[0; KBD_COLS]; KBD_ROWS],
@@ -342,7 +341,7 @@ mod implementation {
                 // clear the pending bit
                 self.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1);
 
-                let elapsed = ticktimer_server::elapsed_ms(self.ticktimer).unwrap() - self.timestamp;
+                let elapsed = self.ticktimer.elapsed_ms().unwrap() - self.timestamp;
                 if elapsed <= 1 {
                     // skip debounce processing if time elapsed is too short
                     (None, None)
@@ -436,7 +435,7 @@ mod implementation {
             let mut keystates: Vec<char, U4> = Vec::new();
 
             if self.chord_active || keydowns.is_some() {
-                let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+                let now = self.ticktimer.elapsed_ms().unwrap();
 
                 if !self.chord_active && keydowns.is_some() {
                     self.chord_active = true;
@@ -623,7 +622,7 @@ mod implementation {
 
             // interpret keys in the context of the shift/alt modifiers
             if let Some(kds) = &keydowns {
-                self.chord_timestamp = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+                self.chord_timestamp = self.ticktimer.elapsed_ms().unwrap();
                 // if more than one is held, the key that gets picked for the repeat function is arbitrary!
                 for &rc in kds.iter() {
                     let code = match self.map {
@@ -638,7 +637,7 @@ mod implementation {
                     }
                 }
             }
-            let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+            let now = self.ticktimer.elapsed_ms().unwrap();
             let hold: bool;
             if (now - self.chord_timestamp) >= self.delay as u64 {
                 if self.rate_timestamp <= self.chord_timestamp {

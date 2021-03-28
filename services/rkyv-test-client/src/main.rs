@@ -18,8 +18,7 @@ fn rkyv_test_client() -> ! {
         "Hello, world! This is the client, PID {}",
         xous::current_pid().unwrap().get()
     );
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't create ticktimer object");
 
     rkyv_test_server::hook_log_messages(print_log_messages);
 
@@ -33,7 +32,7 @@ fn rkyv_test_client() -> ! {
     let mut message_string = xous::String::<64>::new();
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
-        ticktimer_server::sleep_ms(ticktimer_conn, 500).ok();
+        ticktimer.sleep_ms(500).ok();
 
         message_string.clear();
         write!(message_string, "I'm at loop # {:^4} (some numer: {})", idx, some_number).unwrap();
