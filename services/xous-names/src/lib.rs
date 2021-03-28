@@ -4,6 +4,21 @@ pub mod api;
 
 use core::fmt::Write;
 
+pub struct XousNames {
+    conn: xous::CID,
+}
+impl XousNames {
+    pub fn new() -> Result<Self, Error> {
+        let conn = xous::connect(xous::SID::from_bytes(b"xous-name-server").unwrap()).expect("Couldn't connect to XousNames");
+        Ok(XousNames {
+           conn,
+        })
+    }
+    pub fn register_name(&self, name: &str) -> Result<xous::SID, xous::Error> {
+
+    }
+}
+
 pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
     // Ensure we have a connection to the nameserver. If one exists, this is a no-op.
     let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
