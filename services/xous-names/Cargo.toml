@@ -16,11 +16,7 @@ log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
-
-[dependencies.rkyv]
-default-features = false
-features = ["const_generics"]
-version = "0.4.1"
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}

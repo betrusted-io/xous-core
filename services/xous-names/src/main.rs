@@ -110,10 +110,11 @@ fn xmain() -> ! {
                         info!("NS: name: '{}', sid: '{:?}'", key, val);
                     }
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
+                    let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();
                     let auth_request = AuthenticateRequest {
                         name: name_string,
                         pubkey_id: [0; 20], // placeholder
-                        challenge: xous::create_server_id().to_u32().unwrap(),
+                        challenge: [c1, c2, c3, c4],
                     };
                     response = api::Return::AuthenticateRequest(auth_request) // this code just exists to exercise the return path
                 }
@@ -122,7 +123,7 @@ fn xmain() -> ! {
             Some(api::Opcode::AuthenticatedLookup) => {
                 let mut mem = msg.body.memory_message_mut().unwrap();
                 let buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let auth_lookup = buffer.try_into::<api::AuthenticatedLookup>().unwrap();
+                let auth_lookup = buffer.try_into::<api::AuthenticatedLookup, _>().unwrap();
                 info!("NS: AuthenticatedLookup request {:?}", auth_lookup);
                 error!("NS: AuthenticatedLookup not yet implemented");
                 unimplemented!("NS: AuthenticatedLookup not yet implemented");
