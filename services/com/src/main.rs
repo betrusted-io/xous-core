@@ -107,15 +107,11 @@ mod implementation {
 
         pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
             if timeout.is_some() {
-                let curtime = self.ticktimer.elapsed_ms()
-                    .expect("couldn't connect to ticktimer");
+                let curtime = self.ticktimer.elapsed_ms();
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                    if (self.ticktimer.elapsed_ms()
-                        .expect("couldn't connect to ticktimer")
-                        - curtime)
-                        > to
+                    if (self.ticktimer.elapsed_ms() - curtime) > to
                     {
                         timed_out = true;
                     }

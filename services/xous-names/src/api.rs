@@ -3,68 +3,39 @@ use hash32::{Hash, Hasher};
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum Request {
+pub(crate) enum Opcode {
     /// Create a new server with the given name and return its SID.
     Register,
-
     /// Create a connection to the target server.
     Lookup,
-
     /// Create an authenticated connection to the target server.
     AuthenticatedLookup,
-
-    // Return values
-
-    /// The caller must perform an AuthenticatedLookup using this challenge
-    AuthenticateRequest,
-
-    /// The connection failed for some reason
-    Failure,
-
-    /// A server was successfully created with the given SID
-    SID,
-
-    /// A connection was successfully made with the given CID
-    CID,
 }
-/*
-pub(crate) enum Request {
-    /// Create a new server with the given name and return its SID.
-    Register(xous_ipc::String::<64>),
 
-    /// Create a connection to the target server.
-    Lookup(xous_ipc::String::<64>),
-
-    /// Create an authenticated connection to the target server.
-    AuthenticatedLookup(AuthenticatedLookup),
-
-    // Return values
-
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) enum Return {
     /// The caller must perform an AuthenticatedLookup using this challenge
-    AuthenticateRequest(AuthenticatedRequest),
-
+    AuthenticateRequest(AuthenticateRequest),
     /// The connection failed for some reason
     Failure,
-
     /// A server was successfully created with the given SID
     SID([u32; 4]),
-
     /// A connection was successfully made with the given CID
-    CID(CID),
-}*/
+    CID(xous::CID),
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticatedLookup {
     pub name: xous_ipc::String::<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
-    pub challenge: [u32; 8],
+    pub response: [u32; 8],
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct AuthenticatedRequest {
-    pub request: AuthenicatedLookup,  // a copy of the original request. We don't trust it, but it's helpful to have for reference
-    pub nonce: [u32; 4],
-    pub response: [u32; 8],
+pub(crate) struct AuthenticateRequest {
+    pub name: xous_ipc::String::<64>,  // a copy of the originally requested lookup
+    pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
+    pub challenge: [u32; 4],
 }
 
 

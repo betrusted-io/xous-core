@@ -57,30 +57,27 @@ fn stopwatch_thread(_arg: xous::SID) {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let shell_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK|stopwatch: can't connect to main program");
-    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut start_sent = false;
     loop {
-        if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
-            if elapsed_time - last_time > 500 && !start_sent {
-                last_time = elapsed_time;
-                xous::send_message(shell_conn, Opcode::Start.into()).expect("BENCHMARK|stopwatch: couldn't send Start message");
-                start_sent = true;
-            } else if elapsed_time - last_time > 10_000 && start_sent {
-                last_time = elapsed_time;
-                start_sent = false;
-                xous::send_message(shell_conn, Opcode::Stop.into()).expect("BENCHMARK|stopwatch: couldn't send Stop message");
-            }
-        } else {
-            error!("error requesting ticktimer!")
+        elapsed_time = ticktimer.elapsed_ms();
+        if elapsed_time - last_time > 500 && !start_sent {
+            last_time = elapsed_time;
+            xous::send_message(shell_conn, Opcode::Start.into()).expect("BENCHMARK|stopwatch: couldn't send Start message");
+            start_sent = true;
+        } else if elapsed_time - last_time > 10_000 && start_sent {
+            last_time = elapsed_time;
+            start_sent = false;
+            xous::send_message(shell_conn, Opcode::Stop.into()).expect("BENCHMARK|stopwatch: couldn't send Stop message");
         }
         if false {
             // send a start loop message
             xous::send_message(shell_conn, Opcode::Start.into()).expect("BENCHMARK|stopwatch: couldn't send Start message");
-            ticktimer.sleep_ms(ticktimer_conn, 10_000).expect("couldn't sleep");
+            ticktimer.sleep_ms(10_000).expect("couldn't sleep");
             // send a stop loop message
             xous::send_message(shell_conn, Opcode::Stop.into()).expect("BENCHMARK|stopwatch: couldn't send Stop message");
             // give a moment for the result to update
-            ticktimer.sleep_ms(ticktimer_conn, 500).expect("couldn't sleep");
+            ticktimer.sleep_ms(500).expect("couldn't sleep");
         }
         xous::yield_slice();
     }
@@ -135,10 +132,10 @@ fn shell_main() -> ! {
                 if let Ok(opcode) = Opcode::try_from(&envelope.body) {
                     match opcode {
                         Opcode::Start => {
-                            start_time = ticktimer.elapsed_ms().unwrap();
+                            start_time = ticktimer.elapsed_ms();
                         },
                         Opcode::Stop => {
-                            stop_time = ticktimer.elapsed_ms().unwrap();
+                            stop_time = ticktimer.elapsed_ms();
                             update_result = true;
                         },
                     }

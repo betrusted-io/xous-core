@@ -174,8 +174,8 @@ fn shell_main() -> ! {
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();
     info!("SHELL: COM responder thread started");
-    let start_time: u64 = ticktimer.elapsed_ms().unwrap();
-    while ticktimer.elapsed_ms().unwrap() - start_time < 1000 {
+    let start_time: u64 = ticktimer.elapsed_ms();
+    while ticktimer.elapsed_ms() - start_time < 1000 {
         xous::yield_slice();
     }
 
@@ -217,7 +217,7 @@ fn shell_main() -> ! {
     graphics_server::draw_rectangle(graphics_conn, work_clipregion)
         .expect("unable to clear region");
 
-    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut first_time = true;
     loop {
         //////////////// status bar

@@ -378,7 +378,7 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
             } else if tokens[1].trim() == "commit_pds" {
                 let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-                let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+                let mut last_time: u64 = ticktimer.elapsed_ms();
                 for pds in pds_list.iter() {
                     let mut sendable_string = xous::String::<512>::new();
                     write!(&mut sendable_string, "{}", pds);
@@ -499,7 +499,7 @@ fn xmain() -> ! {
     uart.enable_rx();
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
-    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut pds_list: Vec<String<U512>, U16> = Vec::new();
     let mut repeat = false;
     let mut phase = 0;

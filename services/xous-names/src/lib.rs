@@ -3,90 +3,75 @@
 pub mod api;
 
 use core::fmt::Write;
+use xous_ipc::{String, Buffer};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 pub struct XousNames {
     conn: xous::CID,
 }
 impl XousNames {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self, xous::Error> {
         let conn = xous::connect(xous::SID::from_bytes(b"xous-name-server").unwrap()).expect("Couldn't connect to XousNames");
         Ok(XousNames {
            conn,
         })
     }
+
     pub fn register_name(&self, name: &str) -> Result<xous::SID, xous::Error> {
+        let mut registration_name = String::<64>::new();
+        // could also do String::from_str() but in this case we want things to fail if the string is too long.
+        write!(registration_name, "{}", name).expect("NS: name probably too long");
 
-    }
-}
+        let mut buf = Buffer::try_from(registration_name).or(Err(xous::Error::InternalError))?;
 
-pub fn register_name(name: &str) -> Result<xous::SID, xous::Error> {
-    // Ensure we have a connection to the nameserver. If one exists, this is a no-op.
-    let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
-    let ns_conn = xous::connect(ns_id).unwrap();
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Register.to_u32().unwrap()
+        )
+        .or(Err(xous::Error::InternalError))?;
 
-    let mut registration_name = xous_ipc::String::<64>::new();
-    write!(registration_name, "{}", name).expect("namserver: name probably too long");
-    let request = api::Request::Register(registration_name);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&request).expect("nameserver: couldn't archive name")
-    };
-    let mut xous_buffer = writer.into_inner();
-
-    xous_buffer
-        .lend_mut(ns_conn, pos as u32)
-        .expect("nameserver registration failure");
-
-    let archived = unsafe { rkyv::archived_value::<api::Request>(xous_buffer.as_ref(), pos) };
-
-    if let rkyv::Archived::<api::Request>::SID(sid) = archived {
-        let sid = sid.into();
-        xous::create_server_with_sid(sid).expect("can't auto-register server");
-        Ok(sid)
-    } else if let rkyv::Archived::<api::Request>::Failure = archived {
-        return Err(xous::Error::InternalError);
-    } else {
-        panic!("Invalid response from the server -- corruption occurred");
-    }
-}
-
-/// note: if this throws an AccessDenied error, you can retry with a request_authenticat_connection() call (to be written)
-pub fn request_connection(name: &str) -> Result<xous::CID, xous::Error> {
-    let ns_id = xous::SID::from_bytes(b"xous-name-server").unwrap();
-    let ns_conn = xous::connect(ns_id).unwrap();
-
-    let mut lookup_name = xous_ipc::String::<64>::new();
-    write!(lookup_name, "{}", name).expect("nameserver: name problably too long");
-    let request = api::Request::Lookup(lookup_name);
-
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&request).expect("nameserver: couldn't archive name")
-    };
-    let mut xous_buffer = writer.into_inner();
-
-    xous_buffer
-        .lend_mut(ns_conn, pos as u32)
-        .expect("nameserver lookup failure!");
-
-    let archived = unsafe { rkyv::archived_value::<api::Request>(xous_buffer.as_ref(), pos) };
-    match archived {
-        rkyv::Archived::<api::Request>::CID(cid) => Ok(*cid),
-        rkyv::Archived::<api::Request>::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
-        _ => Err(xous::Error::ServerNotFound),
-    }
-}
-
-/// note: you probably want to use this one, to avoid synchronization issues on startup as servers register asynhcronously
-pub fn request_connection_blocking(name: &str) -> Result<xous::CID, xous::Error> {
-    loop {
-        match request_connection(name) {
-            Ok(val) => return Ok(val),
-            Err(xous::Error::AccessDenied) => return Err(xous::Error::AccessDenied),
-            _ => (),
+        match buf.deserialize().unwrap() {
+            api::Return::SID(sid_raw) => {
+                let sid = sid_raw.into();
+                xous::create_server_with_sid(sid).expect("NS: can't auto-register server");
+                Ok(sid)
+            }
+            api::Return::Failure => {
+                Err(xous::Error::InternalError)
+            }
+            _ => unimplemented!("NS: unimplemented return codes")
         }
-        xous::yield_slice();
+    }
+
+    /// note: if this throws an AccessDenied error, you can retry with a request_authenticate_connection() call (to be written)
+    pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
+        let mut lookup_name = xous_ipc::String::<64>::new();
+        write!(lookup_name, "{}", name).expect("NS: name problably too long");
+
+        let mut buf = Buffer::try_from(lookup_name).or(Err(xous::Error::InternalError))?;
+
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Lookup.to_u32().unwrap()
+        )
+        .or(Err(xous::Error::InternalError))?;
+
+        match buf.deserialize().unwrap() {
+            api::Return::CID(cid) => Ok(cid),
+            api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::ServerNotFound),
+        }
+    }
+
+    /// note: you probably want to use this one, to avoid synchronization issues on startup as servers register asynhcronously
+    pub fn request_connection_blocking(&self, name: &str) -> Result<xous::CID, xous::Error> {
+        loop {
+            match self.request_connection(name) {
+                Ok(val) => return Ok(val),
+                Err(xous::Error::AccessDenied) => return Err(xous::Error::AccessDenied),
+                _ => (),
+            }
+            xous::yield_slice();
+        }
     }
 }

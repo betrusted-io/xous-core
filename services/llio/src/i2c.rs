@@ -47,7 +47,7 @@ impl I2cStateMachine {
         I2cStateMachine {
             transaction: I2cTransaction::new(),
             state: I2cState::Idle,
-            timestamp: ticktimer.elapsed_ms().unwrap(),
+            timestamp: ticktimer.elapsed_ms(),
             ticktimer,
             i2c_csr: CSR::new(i2c_base),
             index: 0,
@@ -60,7 +60,7 @@ impl I2cStateMachine {
             return I2cStatus::ResponseFormatError
         }
 
-        let now = self.ticktimer.elapsed_ms().unwrap();
+        let now = self.ticktimer.elapsed_ms();
         if self.state != I2cState::Idle && ((now - self.timestamp) < self.transaction.timeout_ms as u64) {
             // we're in a transaction that hadn't timed out, can't accept a new one
             I2cStatus::ResponseBusy
@@ -145,7 +145,7 @@ impl I2cStateMachine {
     }
     pub fn handler(&mut self) {
         // check if the transaction had actually timed out
-        let now = self.ticktimer.elapsed_ms().unwrap();
+        let now = self.ticktimer.elapsed_ms();
         if now - self.timestamp > self.transaction.timeout_ms as u64 {
             // previous transaction had timed out...
             self.report_timeout();

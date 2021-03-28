@@ -227,7 +227,7 @@ fn xmain() -> ! {
     xous::create_thread_4(status_thread, gid[0] as _, gid[1] as _, gid[2] as _, gid[3] as _).expect("GAM: couldn't create status thread");
 
     let mut powerdown_requested = false;
-    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     info!("GAM: entering main loop");
     loop {
         let envelope = xous::receive_message(gam_sid).unwrap();

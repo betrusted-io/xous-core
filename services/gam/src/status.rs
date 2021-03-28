@@ -46,7 +46,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     battstats_tv.margin = Point::new(0, 0);
 
     let mut stats: BattStats;
-    let mut last_time: u64 = ticktimer.elapsed_ms().unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut stats_phase: usize = 0;
     let mut last_seconds: usize = ((last_time / 1000) % 60) as usize;
 

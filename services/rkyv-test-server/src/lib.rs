@@ -15,7 +15,8 @@ static SERVER_CID: AtomicU32 = AtomicU32::new(0);
 fn ensure_connection() -> xous::CID {
     let mut cid = SERVER_CID.load(Ordering::Relaxed);
     if cid == 0 {
-        cid = xous_names::request_connection_blocking(api::SERVER_NAME).unwrap();
+        let ns = xous_names::XousNames::new().unwrap();
+        cid = ns.request_connection_blocking(api::SERVER_NAME).unwrap();
         SERVER_CID.store(cid, Ordering::Relaxed);
     }
     cid

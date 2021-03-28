@@ -24,9 +24,9 @@ fn sleep_loop_4(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize, pid: u
         //     sleep_ms,
         //     loop_count
         // );
-        let start_time = ticktimer.elapsed_ms().unwrap();
+        let start_time = ticktimer.elapsed_ms();
         ticktimer.sleep_ms(ticktimer_conn, sleep_ms).unwrap();
-        let end_time = ticktimer.elapsed_ms().unwrap();
+        let end_time = ticktimer.elapsed_ms();
         log::info!(
             "TEST THREAD {}:{}: target {}ms, {} loops: Sleep finished (uptime: {}, took {} ms)",
             pid,
