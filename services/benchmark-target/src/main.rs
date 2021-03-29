@@ -19,7 +19,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("BENCHTARGET: my PID is {}", xous::process::id());
 
-    let bench_sid = xous_names::register_name(xous::names::SERVER_NAME_BENCHMARK).expect("BENCHTARGET: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let bench_sid = xns.register_name(xous::names::SERVER_NAME_BENCHMARK).expect("BENCHTARGET: can't register server");
     info!("BENCHTARGET: registered with NS -- {:?}", bench_sid);
 
     loop {

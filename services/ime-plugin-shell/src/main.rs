@@ -20,7 +20,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("IME_SH: my PID is {}", xous::process::id());
 
-    let ime_sh_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IME_SH: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let ime_sh_sid = xns.register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("IME_SH: can't register server");
     if debug1{info!("IME_SH: registered with NS -- {:?}", ime_sh_sid);}
 
     let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.

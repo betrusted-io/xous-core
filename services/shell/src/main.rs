@@ -101,12 +101,13 @@ static INCOMING_FRESH: AtomicBool = AtomicBool::new(false);
 
 fn event_thread(_arg: usize) {
     info!("SHELL|event_thread: registering shell SID");
-    let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let shell_server = xns.register_name(xous::names::SERVER_NAME_SHELL).expect("SHELL: can't register server");
 
-    let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("SHELL|event_thread: can't connect to KBD");
+    let kbd_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("SHELL|event_thread: can't connect to KBD");
     keyboard::request_events(xous::names::SERVER_NAME_SHELL, kbd_conn).expect("SHELL|event_thread: couldn't request events from keyboard");
 
-    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL|event_thread: can't connect to COM");
+    let com_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL|event_thread: can't connect to COM");
     com::request_battstat_events(xous::names::SERVER_NAME_SHELL, com_conn).expect("SHELL|event_thread: couldn't request events from COM");
 
     info!("SHELL|event_thread: starting COM response handler thread");
@@ -159,17 +160,17 @@ fn shell_main() -> ! {
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-    let graphics_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("SHELL: can't connect to COM");
+    let graphics_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("SHELL: can't connect to COM");
 
     info!(
         "SHELL: Connected to Graphics server: {}  Ticktimer server: {}",
         graphics_conn, ticktimer_conn,
     );
 
-    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
+    let com_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_COM).expect("SHELL: can't connect to COM");
     info!("SHELL: connected to COM: {:?}", com_conn);
 
-    let trng_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("SHELL: can't connect to TRNG");
+    let trng_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("SHELL: can't connect to TRNG");
 
     // make a thread to catch responses from the COM
     xous::create_thread_simple(event_thread, 0).unwrap();

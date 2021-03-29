@@ -50,7 +50,7 @@ impl XousDisplay {
             .update_with_buffer(&native_buffer, WIDTH, HEIGHT)
             .unwrap();
 
-        let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD)
+        let kbd_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_KBD)
             .expect("GFX|hosted: can't connect to KBD for emulation");
         let keyboard_handler = Box::new(XousKeyboardHandler {
             kbd_conn: kbd_conn,

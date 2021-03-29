@@ -79,8 +79,8 @@ impl CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         CmdEnv {
             common_env: CommonEnv {
-                llio: xous_names::request_connection_blocking(xous::names::SERVER_NAME_LLIO).expect("CMD: can't connect to LLIO"),
-                com: xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("CMD: can't connect to COM"),
+                llio: xns.request_connection_blocking(xous::names::SERVER_NAME_LLIO).expect("CMD: can't connect to LLIO"),
+                com: xns.request_connection_blocking(xous::names::SERVER_NAME_COM).expect("CMD: can't connect to COM"),
                 ticktimer: ticktimer,
                 gam,
             },

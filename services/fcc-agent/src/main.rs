@@ -476,14 +476,15 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("FCCAGENT: my PID is {}", xous::process::id());
 
-    let agent_server_sid = xous_names::register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
-    let agent_server_client = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+    let xns = xous_names::XousNames::new().unwrap();
+    let agent_server_sid = xns.register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
+    let agent_server_client = xns.request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let mut uart = Uart::new(agent_server_client);
 
-    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("FCCAGENT: can't connect to COM");
+    let com_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_COM).expect("FCCAGENT: can't connect to COM");
 
     let mut cmd_string: String<U2048> = String::from("");
 

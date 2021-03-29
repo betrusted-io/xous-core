@@ -55,7 +55,7 @@ struct Repl {
 }
 impl Repl{
     fn new(my_server_name: &str) -> Self {
-        let gam_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("SHCH: can't connect to GAM");
+        let gam_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("SHCH: can't connect to GAM");
         let content = gam::request_content_canvas(gam_conn, my_server_name).expect("SHCH: couldn't get content canvas");
         let screensize = gam::get_canvas_bounds(gam_conn, content).expect("SHCH: couldn't get dimensions of content canvas");
         Repl {
@@ -218,10 +218,11 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("SHCH: my PID is {}", xous::process::id());
 
-    let shch_sid = xous_names::register_name(xous::names::SERVER_NAME_SHELLCHAT).expect("SHCH: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let shch_sid = xns.register_name(xous::names::SERVER_NAME_SHELLCHAT).expect("SHCH: can't register server");
     info!("SHCH: registered with NS -- {:?}", shch_sid);
 
-    let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("SHCH: can't connect to IMEF");
+    let imef_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("SHCH: can't connect to IMEF");
     let imef = ImeFrontEnd { connection: Some(imef_conn) };
     imef.register_listener(xous::names::SERVER_NAME_SHELLCHAT).expect("SHCH: couldn't request events from IMEF");
 

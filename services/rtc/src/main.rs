@@ -376,7 +376,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("RTC: my PID is {}", xous::process::id());
 
-    let rtc_sid = xous_names::register_name(xous::names::SERVER_NAME_RTC).expect("RTC: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let rtc_sid = xns.register_name(xous::names::SERVER_NAME_RTC).expect("RTC: can't register server");
     info!("RTC: registered with NS -- {:?}", rtc_sid);
 
     #[cfg(target_os = "none")]

@@ -447,7 +447,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("LLIO: my PID is {}", xous::process::id());
 
-    let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let llio_sid = xns.register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
     if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
 
     // Create a new llio object
@@ -629,7 +630,7 @@ fn xmain() -> ! {
             match &*value {
                 rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
                     let reg: String::<64> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
-                    let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
+                    let cid = xns.request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
                     i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
                 },
                 _ => panic!("LLIO: invalid Borrow memory message"),

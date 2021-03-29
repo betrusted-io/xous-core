@@ -185,13 +185,14 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("GAM: my PID is {}", xous::process::id());
 
-    let gam_sid = xous_names::register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let gam_sid = xns.register_name(xous::names::SERVER_NAME_GAM).expect("GAM: can't register server");
     info!("GAM: starting up...");
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-    let gfx_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM: can't connect to COM");
-    let trng_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("GAM: can't connect to TRNG");
+    let gfx_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("GAM: can't connect to COM");
+    let trng_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_TRNG).expect("GAM: can't connect to TRNG");
 
     let screensize = graphics_server::screen_size(gfx_conn).expect("GAM: Couldn't get screen size");
 
@@ -208,7 +209,7 @@ fn xmain() -> ! {
 
     // connect to the IME front end, and set its canvas
     info!("GAM: acquiring connection to IMEF...");
-    let imef_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
+    let imef_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_IME_FRONT).expect("GAM: can't connect to the IME front end");
     let imef = ime_plugin_api::ImeFrontEnd{ connection: Some(imef_conn), };
     imef.set_input_canvas(chatlayout.input).expect("GAM: couldn't set IMEF input canvas");
     imef.set_prediction_canvas(chatlayout.predictive).expect("GAM: couldn't set IMEF prediction canvas");
@@ -361,7 +362,7 @@ fn xmain() -> ! {
                     // as an authentication token perhaps to control access
 
                     //// here make a connection back to the requesting server, so that we can tell it to redraw if the layout has changed, etc.
-                    if let Ok(cc) = xous_names::request_connection_blocking(req.servername.as_str().expect("GAM: malformed server name in content canvas request")) {
+                    if let Ok(cc) = xns.request_connection_blocking(req.servername.as_str().expect("GAM: malformed server name in content canvas request")) {
                         ccc.connection = Some(cc);
                     } else {
                         log::error!("GAM: content requestor gave us a bogus canvas result, aborting");

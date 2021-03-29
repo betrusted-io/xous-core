@@ -56,7 +56,7 @@ fn stopwatch_thread(_arg: xous::SID) {
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-    let shell_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK|stopwatch: can't connect to main program");
+    let shell_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK|stopwatch: can't connect to main program");
     let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut start_sent = false;
     loop {
@@ -91,10 +91,11 @@ fn shell_main() -> ! {
     info!("BENCHMARK: ticktimer");
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-    let shell_server = xous_names::register_name(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let shell_server = xns.register_name(xous::names::SERVER_NAME_SHELL).expect("BENCHMARK: can't register server");
 
-    let graphics_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("BENCHMARK: can't connect to COM");
-    let target_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_BENCHMARK).expect("BENCHMARK: can't connect to COM");
+    let graphics_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_GFX).expect("BENCHMARK: can't connect to COM");
+    let target_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_BENCHMARK).expect("BENCHMARK: can't connect to COM");
 
     xous::create_thread_simple(stopwatch_thread, shell_server).unwrap();
     info!("BENCHMARK: stopwatch thread started");

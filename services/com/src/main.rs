@@ -240,12 +240,13 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("COM: my PID is {}", xous::process::id());
 
-    let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let com_sid = xns.register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
     info!("COM: registered with NS -- {:?}", com_sid);
 
     /*  // get rid of this feature for now, it doesn't work, we don't use it, and it potentially causes troubles
     let agent_conn= if cfg!(feature = "fccagent") {
-        xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
+        xns.request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
     } else {
         0 // bogus value
     }; */
@@ -268,7 +269,7 @@ fn xmain() -> ! {
             };
             match &*value {
                 rkyv::Archived::<api::Opcode>::RegisterBattStatsListener(registration_name) => {
-                    let cid = xous_names::request_connection_blocking(registration_name.as_str()).expect("COM: can't connect to requested listener for reporting events");
+                    let cid = xns.request_connection_blocking(registration_name.as_str()).expect("COM: can't connect to requested listener for reporting events");
                     battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
                 },
                 rkyv::Archived::<api::Opcode>::Wf200PdsLine(rkyv_l) => {

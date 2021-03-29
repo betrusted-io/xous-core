@@ -800,7 +800,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("KBD: my PID is {}", xous::process::id());
 
-    let kbd_sid = xous_names::register_name(xous::names::SERVER_NAME_KBD).expect("KBD: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let kbd_sid = xns.register_name(xous::names::SERVER_NAME_KBD).expect("KBD: can't register server");
     info!("KBD: registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
@@ -828,11 +829,11 @@ fn xmain() -> ! {
                     };
                     match &*value {
                         rkyv::Archived::<api::Opcode>::RegisterListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            let cid = xns.request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
                             normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
                         },
                         rkyv::Archived::<api::Opcode>::RegisterRawListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
+                            let cid = xns.request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
                             raw_conns.push(cid).expect("KBD: probably ran out of slots for raw keyboard event reporting");
                         },
                         _ => panic!("Invalid memory message response -- corruption occurred"),

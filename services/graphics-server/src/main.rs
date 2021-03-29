@@ -66,7 +66,8 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("GFX: my PID is {}", xous::process::id());
 
-    let sid = xous_names::register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let sid = xns.register_name(xous::names::SERVER_NAME_GFX).expect("GFX: can't register server");
     info!("GFX: Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.

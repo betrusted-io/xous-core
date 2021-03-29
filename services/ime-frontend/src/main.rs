@@ -586,14 +586,15 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("IMEF: my PID is {}", xous::process::id());
 
-    let imef_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_FRONT).expect("IMEF: can't register server");
+    let xns = xous_names::XousNames::new().unwrap();
+    let imef_sid = xns.register_name(xous::names::SERVER_NAME_IME_FRONT).expect("IMEF: can't register server");
     info!("IMEF: registered with NS -- {:?}", imef_sid);
 
-    let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
+    let kbd_conn = xns.request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
     keyboard::request_events(xous::names::SERVER_NAME_IME_FRONT, kbd_conn).expect("IMEF: couldn't request events from keyboard");
 
     let mut tracker = InputTracker::new(
-        xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
+        xns.request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
     );
 
     let mut listeners: Vec<xous::CID, U32> = Vec::new();
@@ -632,7 +633,7 @@ fn xmain() -> ! {
                     let s: String<256> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note second copy down below, this is put in early-init because we're likely to get these requests early on
-                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
+                    let cid = xns.request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
                       .expect("IMEF: can't connect to requested listener for reporting events");
                     if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
@@ -688,7 +689,7 @@ fn xmain() -> ! {
                     let s: String<256> = registration.deserialize(&mut xous_ipc::XousDeserializer {}).unwrap();
                     if dbglistener{info!("IMEF: registering listener {:?}", s);}
                     // note first copy above, put in early-init because we're likely to get these requests early on
-                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
+                    let cid = xns.request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
                       .expect("IMEF: can't connect to requested listener for reporting events");
                     if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
                     listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
