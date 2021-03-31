@@ -31,7 +31,7 @@ pub fn add(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::as_buf(op).or(Err(api::Error::InternalError))?;
 
     // Mutably lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -44,7 +44,7 @@ pub fn add(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
 
     // Turn the result of the response into a friendly value that can be understood
     // by the caller.
-    match buf.deserialize().unwrap() {
+    match buf.as_copy_obj().unwrap() {
         api::MathResult::Value(v) => Ok(v),
         api::MathResult::Error(val) => Err(val),
     }
@@ -55,7 +55,7 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::as_buf(op).or(Err(api::Error::InternalError))?;
 
     // Lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -67,7 +67,7 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     .or(Err(api::Error::InternalError))?;
 
     // Don't deserialize it -- use the archived version
-    match *buf.try_into::<api::MathResult, _>().unwrap() {
+    match *buf.as_zerocopy_obj::<api::MathResult, _>().unwrap() {
         api::ArchivedMathResult::Value(v) => Ok(v),
         api::ArchivedMathResult::Error(api::ArchivedError::InternalError) => Err(api::Error::InternalError),
         api::ArchivedMathResult::Error(api::ArchivedError::Overflow) => Err(api::Error::Overflow),
@@ -98,7 +98,7 @@ pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = Buffer::try_from(op).unwrap();
+    let buf = Buffer::as_buf(op).unwrap();
 
     // Send the message to the server.
     buf.lend(
@@ -119,7 +119,7 @@ pub fn log_message_send<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = Buffer::try_from(op).unwrap();
+    let buf = Buffer::as_buf(op).unwrap();
 
     // Send the message to the server.
     buf.send(
@@ -143,7 +143,7 @@ fn callback_server() {
             Some(api::CallbackType::LogString) => {
                 let mem = msg.body.memory_message().unwrap();
                 let buffer = unsafe { Buffer::from_memory_message(mem) };
-                let log_string = buffer.try_into::<api::LogString, _>().unwrap();
+                let log_string = buffer.as_zerocopy_obj::<api::LogString, _>().unwrap();
                 unsafe {
                     for entry in CALLBACK_ARRAY.iter() {
                         if let Some(cb) = entry {
@@ -197,7 +197,7 @@ pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = Buffer::try_from(op).unwrap();
+    let mut buf = Buffer::as_buf(op).unwrap();
 
     // Send the message to the server.
     buf.lend_mut(
@@ -206,5 +206,5 @@ pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     )
     .unwrap();
 
-    String::from_str(buf.try_into::<api::StringDoubler, _>().unwrap().value.as_str())
+    String::from_str(buf.as_zerocopy_obj::<api::StringDoubler, _>().unwrap().value.as_str())
 }

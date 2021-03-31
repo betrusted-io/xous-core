@@ -95,12 +95,12 @@ fn try_main() -> Result<(), DynError> {
             ],
         )?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
-        Some("run") => run(false)?,
+        Some("run") => run(false, &minimal_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs)?,
-        Some("debug") => run(true)?,
+        Some("debug") => run(true, &hw_pkgs)?,
         _ => print_help(),
     }
     Ok(())
@@ -215,25 +215,8 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     Ok(())
 }
 
-fn run(debug: bool) -> Result<(), DynError> {
+fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
-    let init = [
-        //"shell",
-        "gam",
-        "ime-frontend",
-        "ime-plugin-shell",
-        "shellchat",
-        //"benchmark",
-        //"benchmark-target",
-        "log-server",
-        "graphics-server",
-        "ticktimer-server",
-        "com",
-        "xous-names",
-        "keyboard",
-        "trng",
-        "llio",
-    ];
 
     build(&init, debug, None, None)?;
 
@@ -246,7 +229,7 @@ fn run(debug: bool) -> Result<(), DynError> {
     args.push("--");
 
     let mut paths = vec![];
-    for i in &init {
+    for i in init {
         let tmp: PathBuf = Path::new(&format!(
             "..{}target{}{}{}{}",
             MAIN_SEPARATOR, MAIN_SEPARATOR, stream, MAIN_SEPARATOR, i

@@ -129,7 +129,7 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn try_from<S>(src: S) -> core::result::Result<Self, ()>
+    pub fn as_buf<S>(src: S) -> core::result::Result<Self, ()>
     where
         S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<Buffer<'a>>>,
     {
@@ -170,7 +170,7 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn try_into<T, U>(&self) -> core::result::Result<&U, ()>
+    pub fn as_zerocopy_obj<T, U>(&self) -> core::result::Result<&U, ()>
     where
         T: rkyv::Archive<Archived = U>,
     {
@@ -180,7 +180,7 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn deserialize<T, U>(&self) -> core::result::Result<T, ()>
+    pub fn as_copy_obj<T, U>(&self) -> core::result::Result<T, ()>
     where
         T: rkyv::Archive<Archived = U>,
         U: rkyv::Deserialize<T, dyn Fallible<Error = XousUnreachable>>,

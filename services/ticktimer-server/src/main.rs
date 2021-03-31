@@ -245,6 +245,7 @@ mod implementation {
 mod implementation {
     use super::SleepRequest;
     use std::convert::TryInto;
+    use num_traits::ToPrimitive;
 
     #[derive(Debug)]
     enum SleepComms {
@@ -285,7 +286,10 @@ mod implementation {
                             // This is dangerous and may panic if the queue is full.
                             xous::try_send_message(
                                 cid,
-                                crate::api::Opcode::RecalculateSleep.into(),
+                                xous::Message::Scalar(xous::ScalarMessage {
+                                    id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
+                                    arg1: 0, arg2: 0, arg3: 0, arg4: 0
+                                })
                             )
                             .unwrap();
                             timeout = None;

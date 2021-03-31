@@ -19,7 +19,7 @@ pub struct I2cStateMachine {
 }
 #[cfg(not(target_os = "none"))]
 impl I2cStateMachine {
-    pub fn new(_ticktimer: xous::CID, _i2c_base: *mut u32) -> Self {
+    pub fn new(_ticktimer: ticktimer_server::Ticktimer, _i2c_base: *mut u32) -> Self {
         I2cStateMachine {}
     }
     pub fn initiate(&mut self, _transaction: I2cTransaction ) -> I2cStatus {

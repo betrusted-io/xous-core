@@ -40,7 +40,7 @@ fn xmain() -> ! {
             Some(api::Opcode::Register) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let xous_string = buffer.try_into::<String::<64>, _>().unwrap();
+                let xous_string = buffer.as_zerocopy_obj::<String::<64>, _>().unwrap();
                 let name = XousServerName::from_str(xous_string.as_str());
 
                 let response: api::Return;
@@ -73,7 +73,7 @@ fn xmain() -> ! {
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let name_string = buffer.try_into::<String::<64>, _>().unwrap();
+                let name_string = buffer.as_zerocopy_obj::<String::<64>, _>().unwrap();
                 let name = XousServerName::from_str(name_string.as_str());
                 if debug1{info!("NS: Lookup request for '{}'", name);}
                 let response: api::Return;
@@ -122,7 +122,7 @@ fn xmain() -> ! {
             Some(api::Opcode::AuthenticatedLookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let auth_lookup: AuthenticatedLookup = buffer.deserialize().unwrap();
+                let auth_lookup: AuthenticatedLookup = buffer.as_copy_obj().unwrap();
                 info!("NS: AuthenticatedLookup request {:?}", auth_lookup);
                 error!("NS: AuthenticatedLookup not yet implemented");
                 unimplemented!("NS: AuthenticatedLookup not yet implemented");
