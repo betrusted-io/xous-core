@@ -16,10 +16,8 @@ impl Trng {
     }
     pub fn get_u32(&self) -> Result<u32, xous::Error> {
         let response = send_message(self.conn,
-                xous::Message::BlockingScalar(xous::ScalarMessage {
-                    id: api::Opcode::GetTrng.to_usize().unwrap(),
-                    arg1: 1 /* count */, arg2: 0, arg3: 0, arg4: 0
-                })
+            xous::Message::new_blocking_scalar(api::Opcode::GetTrng.to_usize().unwrap(),
+                1 /* count */, 0, 0, 0, )
             ).expect("TRNG|LIB: can't get_u32");
         if let xous::Result::Scalar2(trng, _) = response {
             Ok(trng as u32)
@@ -29,10 +27,8 @@ impl Trng {
     }
     pub fn get_u64(&self) -> Result<u64, xous::Error> {
         let response = send_message(self.conn,
-            xous::Message::BlockingScalar(xous::ScalarMessage {
-                id: api::Opcode::GetTrng.to_usize().unwrap(),
-                arg1: 2 /* count */, arg2: 0, arg3: 0, arg4: 0
-            })
+            xous::Message::new_blocking_scalar(api::Opcode::GetTrng.to_usize().unwrap(),
+                2 /* count */, 0, 0, 0, )
         ).expect("TRNG|LIB: can't get_u32");
     if let xous::Result::Scalar2(lo, hi) = response {
             Ok( lo as u64 | ((hi as u64) << 32) )

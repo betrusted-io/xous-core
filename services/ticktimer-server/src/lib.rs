@@ -19,11 +19,9 @@ impl Ticktimer {
     /// note special case for elapsed_ms() is "infalliable". it really should never fail so get rid of the Error
     pub fn elapsed_ms(&self) -> u64 {
         let response = send_message(self.conn,
-            xous::Message::BlockingScalar(xous::ScalarMessage {
-                id: api::Opcode::ElapsedMs.to_usize().unwrap(),
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0
-            })
-        ).expect("Ticktimer: failure to send message to Ticktimer");
+            xous::Message::new_blocking_scalar(api::Opcode::ElapsedMs.to_usize().unwrap(),
+                0, 0, 0, 0,
+            )).expect("Ticktimer: failure to send message to Ticktimer");
         if let xous::Result::Scalar2(upper, lower) = response {
             upper as u64 | ((lower as u64) << 32)
         } else {
@@ -33,11 +31,9 @@ impl Ticktimer {
 
     pub fn sleep_ms(&self, ms: usize) -> Result<(), Error> {
         send_message(self.conn,
-            xous::Message::BlockingScalar(xous::ScalarMessage {
-                id: api::Opcode::SleepMs.to_usize().unwrap(),
-                arg1: ms,
-                arg2: 0, arg3: 0, arg4: 0
-            })
+            xous::Message::new_blocking_scalar(api::Opcode::SleepMs.to_usize().unwrap(),
+                 ms,
+                 0, 0, 0)
         ).map(|_| ())
     }
 }
