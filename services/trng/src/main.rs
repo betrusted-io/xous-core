@@ -61,7 +61,7 @@ mod implementation {
                 | trng.csr.ms(utra::trng_server::RO_CONFIG_OVERSAMPLING, 3)
             );
 
-            info!("TRNG: hardware initialized");
+            info!("hardware initialized");
 
             trng
         }
@@ -133,7 +133,7 @@ mod implementation {
         pub fn wait_full(&self) { }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
-            info!("TRNG: hosted mode TRNG is *not* random, it is an LFSR");
+            info!("hosted mode TRNG is *not* random, it is an LFSR");
             let mut ret: [u32; 2] = [0; 2];
             self.seed = self.move_lfsr(self.seed);
             ret[0] = self.seed;
@@ -150,11 +150,11 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
-    info!("TRNG: my PID is {}", xous::process::id());
+    info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("TRNG: can't register server");
-    info!("TRNG: registered with NS -- {:?}", trng_sid);
+    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
+    info!("registered with NS -- {:?}", trng_sid);
 
     #[cfg(target_os = "none")]
     let trng = Trng::new();
@@ -162,7 +162,7 @@ fn xmain() -> ! {
     #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
 
-    info!("TRNG: ready to accept requests");
+    info!("ready to accept requests");
 
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();
@@ -173,11 +173,11 @@ fn xmain() -> ! {
                 }) = msg.body {
                         let val: [u32; 2] = trng.get_trng(count);
                         xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
-                           .expect("TRNG: couldn't return GetTrng request");
-                } else { log::error!("TRNG: GetTrng malformed message"); }
+                           .expect("couldn't return GetTrng request");
+                } else { log::error!("GetTrng malformed message"); }
             }
             None => {
-                log::error!("TRNG: couldn't convert opcode")
+                log::error!("couldn't convert opcode")
             }
         }
     }

@@ -192,7 +192,7 @@ mod implementation {
                 #[cfg(feature = "debug-print")]
                 {
                     log::info!(
-                        "TickTimer: Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
+                        "Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
                         sr.msec,
                         self.elapsed_ms()
                     );
@@ -207,7 +207,7 @@ mod implementation {
             let irq_target = request.msec;
             #[cfg(feature = "debug-print")]
             log::info!(
-                "TickTimer: setting a response at {} ms (current time: {} ms)",
+                "setting a response at {} ms (current time: {} ms)",
                 irq_target,
                 self.elapsed_ms()
             );
@@ -386,35 +386,35 @@ fn recalculate_sleep(
     // If there's a sleep request ongoing now, grab it.
     if let Some(current) = ticktimer.stop_interrupt() {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: Existing request was {:?}", current);
+        info!("Existing request was {:?}", current);
         sleep_heap.push(current).expect("couldn't push to heap")
     } else {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: There was no existing request");
+        info!("There was no existing request");
     }
 
     // If we have a new sleep request, add it to the heap.
     if let Some(mut request) = new {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: New sleep request was: {:?}", request);
+        info!("New sleep request was: {:?}", request);
 
         request.msec += ticktimer.elapsed_ms() as i64;
 
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: Modified, the request was: {:?}", request);
+        info!("Modified, the request was: {:?}", request);
         sleep_heap
             .push(request)
             .expect("couldn't push new sleep to heap");
     } else {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: No new sleep request");
+        info!("No new sleep request");
     }
 
     // If there are items in the sleep heap, take the next item that will expire.
     if let Some(next_response) = sleep_heap.pop() {
         #[cfg(feature = "debug-print")]
         info!(
-            "TickTimer: scheduling a response at {} to {} (heap: {:?})",
+            "scheduling a response at {} to {} (heap: {:?})",
             next_response.msec, next_response.sender, sleep_heap
         );
         ticktimer.schedule_response(next_response);
@@ -429,11 +429,11 @@ fn xmain() -> ! {
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
-    info!("TICKTIMER: my PID is {}", xous::process::id());
+    info!("my PID is {}", xous::process::id());
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
         .expect("Couldn't create Ticktimer server");
-    info!("TICKTIMER: Server started with SID {:?}", ticktimer_server);
+    info!("Server started with SID {:?}", ticktimer_server);
 
     // Connect to our own server so we can send the "Recalculate" message
     let ticktimer_client = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())
@@ -456,7 +456,7 @@ fn xmain() -> ! {
                     (time & 0xFFFF_FFFFi64) as usize,
                     ((time >> 32) & 0xFFF_FFFFi64) as usize,
                 )
-                .expect("TICKTIMER: couldn't return time request");
+                .expect("couldn't return time request");
             }
             Some(api::Opcode::SleepMs) => {
                 if let xous::Message::BlockingScalar(xous::ScalarMessage {
@@ -475,7 +475,7 @@ fn xmain() -> ! {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
             None => {
-                error!("TICTKIMER: couldn't convert opcode");
+                error!("couldn't convert opcode");
             }
         }
     }
