@@ -1378,6 +1378,8 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "ticktimer-server",
  "utralib",
  "xous",

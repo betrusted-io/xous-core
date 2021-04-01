@@ -4,7 +4,7 @@
 mod api;
 use api::*;
 
-use core::convert::TryFrom;
+use num_traits::FromPrimitive;
 
 use log::{error, info};
 
@@ -154,7 +154,7 @@ fn xmain() -> ! {
     info!("TRNG: my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let trng_sid = xns.register_name(xous::names::SERVER_NAME_TRNG).expect("TRNG: can't register server");
+    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("TRNG: can't register server");
     info!("TRNG: registered with NS -- {:?}", trng_sid);
 
     #[cfg(target_os = "none")]
@@ -166,17 +166,20 @@ fn xmain() -> ! {
     info!("TRNG: ready to accept requests");
 
     loop {
-        let envelope = xous::receive_message(trng_sid).unwrap();
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            match opcode {
-                Opcode::GetTrng(count) => {
-                    let val: [u32; 2] = trng.get_trng(count);
-                    xous::return_scalar2(envelope.sender, val[0] as _, val[1] as _)
-                       .expect("TRNG: couldn't return GetTrng request");
-                },
+        let msg = xous::receive_message(trng_sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(api::Opcode::GetTrng) => {
+                if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                    id: _, arg1: count, arg2: _, arg3: _, arg4: _
+                }) = msg.body {
+                        let val: [u32; 2] = trng.get_trng(count);
+                        xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
+                           .expect("TRNG: couldn't return GetTrng request");
+                } else { log::error!("TRNG: GetTrng malformed message"); }
             }
-        } else {
-            error!("KBD: couldn't convert opcode");
+            None => {
+                log::error!("TRNG: couldn't convert opcode")
+            }
         }
     }
 }
