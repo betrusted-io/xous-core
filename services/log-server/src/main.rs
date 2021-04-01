@@ -1,6 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+mod api;
+use api::*;
+
 #[cfg(baremetal)]
 #[macro_use]
 mod debug;
@@ -250,7 +253,8 @@ fn reader_thread(arg: usize) {
         let sender = envelope.sender;
         // writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
         match &mut envelope.body {
-            xous::Message::Scalar(msg) => handle_scalar(&mut output, sender, msg, envelope.sender.pid().unwrap()),
+            xous::Message::Scalar(msg) =>
+                handle_scalar(&mut output, sender, msg, envelope.sender.pid().unwrap()),
             xous::Message::BlockingScalar(msg) => {
                 writeln!(
                     output,
@@ -274,17 +278,33 @@ fn reader_thread(arg: usize) {
                     })
                     .ok();
             }
-            xous::Message::Borrow(msg) => {
-                String::<4000>::from_message(msg)
-                    .map(|log_entry: String<4000>| writeln!(output, "{}", log_entry).unwrap())
-                    .or_else(|e| {
-                        writeln!(
-                            output,
-                            "LOG: unable to convert Borrow message to str: {}",
-                            e
-                        )
-                    })
-                    .ok();
+            xous::Message::Borrow(_msg) => {
+                let mem = envelope.body.memory_message().unwrap();
+                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
+                let lr: LogRecord = buffer.to_original::<LogRecord, _>().unwrap();
+                let level =
+                    if log::Level::Error as u32 == lr.level {
+                        "ERR " }
+                    else if log::Level::Warn as u32 == lr.level {
+                        "WARN" }
+                    else if log::Level::Info as u32 == lr.level {
+                        "INFO" }
+                    else if log::Level::Debug as u32 == lr.level {
+                        "DBG " }
+                    else if log::Level::Trace as u32 == lr.level {
+                        "TRCE" }
+                    else {
+                        "UNKNOWN"
+                    };
+                if let Some(line)= lr.line {
+                    writeln!(output, "{}:{}: {} ({}:{})",
+                    level, lr.module, lr.args, lr.file, line
+                    ).unwrap();
+                } else {
+                    writeln!(output, "{}:{}: {} ({})",
+                    level, lr.module, lr.args, lr.file
+                    ).unwrap();
+                }
             }
             xous::Message::MutableBorrow(msg) => {
                 String::<4000>::from_message(msg)

@@ -141,6 +141,25 @@ impl<'a> Buffer<'a> {
         Ok(buf)
     }
 
+    // erase ourself and re-use our allocated storage
+    #[allow(dead_code)]
+    pub fn rewrite<S>(&mut self, src: S) -> core::result::Result<(), xous::Error>
+    where
+        S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<&'a mut [u8]>>,
+    {
+        let copied_slice =
+            unsafe { core::slice::from_raw_parts_mut(self.slice.as_mut_ptr(), self.slice.len()) };
+        // zeroize the slice before using it
+        /*for &mut s in copied_slice {
+            s = 0;
+        }*/
+        let mut ser = rkyv::ser::serializers::BufferSerializer::new(copied_slice);
+        let pos = ser.serialize_value(&src).or(Err(())).unwrap();
+        self.slice = ser.into_inner();
+        self.offset = MemoryAddress::new(pos);
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn replace<S>(&mut self, src: S) -> core::result::Result<(), &'static str>
     where
