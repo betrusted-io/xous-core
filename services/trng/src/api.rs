@@ -1,5 +1,3 @@
-use xous::{Message, ScalarMessage};
-
 pub(crate) const SERVER_NAME_TRNG: &str     = "_TRNG manager_";
 
 #[allow(dead_code)]

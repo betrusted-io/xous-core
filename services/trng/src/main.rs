@@ -2,18 +2,17 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
 
 use num_traits::FromPrimitive;
 
-use log::{error, info};
+use log::info;
 
 
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
     // use crate::api::*;
-    use log::{/*error,*/ info};
+    use log::info;
 
     pub struct Trng {
         csr: utralib::CSR<u32>,
