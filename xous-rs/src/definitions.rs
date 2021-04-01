@@ -368,6 +368,18 @@ pub enum Message {
 }
 
 impl Message {
+    pub fn new_scalar(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> crate::Message {
+        Message::Scalar(crate::ScalarMessage {
+            id, arg1, arg2, arg3, arg4
+        })
+    }
+
+    pub fn new_blocking_scalar(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> crate::Message {
+        Message::BlockingScalar(crate::ScalarMessage {
+            id, arg1, arg2, arg3, arg4
+        })
+    }
+
     /// Determine whether the specified Message will block
     pub fn is_blocking(&self) -> bool {
         match *self {
