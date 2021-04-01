@@ -22,7 +22,7 @@ impl XousNames {
         // could also do String::from_str() but in this case we want things to fail if the string is too long.
         write!(registration_name, "{}", name).expect("NS: name probably too long");
 
-        let mut buf = Buffer::as_buf(registration_name).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(registration_name).or(Err(xous::Error::InternalError))?;
 
         buf.lend_mut(
             self.conn,
@@ -30,7 +30,7 @@ impl XousNames {
         )
         .or(Err(xous::Error::InternalError))?;
 
-        match buf.as_copy_obj().unwrap() {
+        match buf.to_original().unwrap() {
             api::Return::SID(sid_raw) => {
                 let sid = sid_raw.into();
                 xous::create_server_with_sid(sid).expect("NS: can't auto-register server");
@@ -48,7 +48,7 @@ impl XousNames {
         let mut lookup_name = xous_ipc::String::<64>::new();
         write!(lookup_name, "{}", name).expect("NS: name problably too long");
 
-        let mut buf = Buffer::as_buf(lookup_name).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
         buf.lend_mut(
             self.conn,
@@ -56,7 +56,7 @@ impl XousNames {
         )
         .or(Err(xous::Error::InternalError))?;
 
-        match buf.as_copy_obj().unwrap() {
+        match buf.to_original().unwrap() {
             api::Return::CID(cid) => Ok(cid),
             api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
             _ => Err(xous::Error::ServerNotFound),

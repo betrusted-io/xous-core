@@ -13,7 +13,7 @@ fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
     let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::MathOperation::*;
-        match buffer.as_copy_obj().unwrap() {
+        match buffer.to_original().unwrap() {
             Add(a, b) => value_or(
                 a.checked_add(b),
                 api::MathResult::Error(api::Error::Overflow),
@@ -32,7 +32,7 @@ fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
             ),
         }
     };
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
 }
 
 // This doesn't deserialize the struct, and therefore operates entirely
@@ -41,7 +41,7 @@ fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
     let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::ArchivedMathOperation::*;
-        match *buffer.as_zerocopy_obj::<api::MathOperation, _>().unwrap() {
+        match *buffer.as_flat::<api::MathOperation, _>().unwrap() {
             Add(a, b) => value_or(
                 a.checked_add(b),
                 api::MathResult::Error(api::Error::Overflow),
@@ -60,12 +60,12 @@ fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
             ),
         }
     };
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
 }
 
 fn handle_log_string(mem: &xous::MemoryMessage) {
     let buffer = unsafe { Buffer::from_memory_message(mem) };
-    let log_string = buffer.as_zerocopy_obj::<api::LogString, _>().unwrap();
+    let log_string = buffer.as_flat::<api::LogString, _>().unwrap();
     log::info!(
         "Prefix: {}  Message: {}",
         log_string.prefix.as_str(),
@@ -81,7 +81,7 @@ fn double_string(mem: &mut xous::MemoryMessage) {
         value: String::new(),
     };
     for ch in buffer
-        .as_zerocopy_obj::<api::StringDoubler, _>()
+        .as_flat::<api::StringDoubler, _>()
         .unwrap()
         .value
         .as_str()
@@ -89,7 +89,7 @@ fn double_string(mem: &mut xous::MemoryMessage) {
     {
         write!(response.value, "{}{}", ch, ch).ok();
     }
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
 }
 
 #[xous::xous_main]

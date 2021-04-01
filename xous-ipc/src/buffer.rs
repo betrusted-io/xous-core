@@ -129,7 +129,7 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn as_buf<S>(src: S) -> core::result::Result<Self, ()>
+    pub fn into_buf<S>(src: S) -> core::result::Result<Self, ()>
     where
         S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<Buffer<'a>>>,
     {
@@ -142,7 +142,7 @@ impl<'a> Buffer<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn serialize_from<S>(&mut self, src: S) -> core::result::Result<(), &'static str>
+    pub fn replace<S>(&mut self, src: S) -> core::result::Result<(), &'static str>
     where
         S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<&'a mut [u8]>>,
     {
@@ -169,8 +169,9 @@ impl<'a> Buffer<'a> {
         Ok(())
     }
 
+    /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in the heap. Cheap so uses "as_" prefix.
     #[allow(dead_code)]
-    pub fn as_zerocopy_obj<T, U>(&self) -> core::result::Result<&U, ()>
+    pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>
     where
         T: rkyv::Archive<Archived = U>,
     {
@@ -179,8 +180,9 @@ impl<'a> Buffer<'a> {
         Ok(r)
     }
 
+    /// A representation identical to the original, but reequires copying to the stack. More expensive so uses "to_" prefix.
     #[allow(dead_code)]
-    pub fn as_copy_obj<T, U>(&self) -> core::result::Result<T, ()>
+    pub fn to_original<T, U>(&self) -> core::result::Result<T, ()>
     where
         T: rkyv::Archive<Archived = U>,
         U: rkyv::Deserialize<T, dyn Fallible<Error = XousUnreachable>>,
