@@ -456,7 +456,7 @@ fn xmain() -> ! {
                     (time & 0xFFFF_FFFFi64) as usize,
                     ((time >> 32) & 0xFFF_FFFFi64) as usize,
                 )
-                .expect("TickTimer: couldn't return time request");
+                .expect("TICKTIMER: couldn't return time request");
             }
             Some(api::Opcode::SleepMs) => {
                 if let xous::Message::BlockingScalar(xous::ScalarMessage {
@@ -475,7 +475,7 @@ fn xmain() -> ! {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
             None => {
-                error!("couldn't convert opcode");
+                error!("TICTKIMER: couldn't convert opcode");
             }
         }
     }
