@@ -7,6 +7,8 @@ use xous_ipc::String;
 use com_rs::*;
 use com_rs_ref as com_rs;
 
+pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
+
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
     /// instantaneous voltage in mV
@@ -40,55 +42,52 @@ impl Into<[usize; 2]> for BattStats {
     }
 }
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum Opcode {
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum Opcode {
     /// Battery stats
     BattStats,
 
     /// Battery stats, non-blocking
     BattStatsNb,
 
-    /// Battery stats return
-    BattStatsEvent(BattStats),
-
     /// Query Full charge capacity of the battery
-    BattFullCapacity,
+    //BattFullCapacity,
 
     /// Turn Boost Mode On
-    BoostOn,
+    //BoostOn,
 
     /// Turn Boost Mode Off
-    BoostOff,
+    //BoostOff,
 
     /// Read the current accelerations off the IMU
-    ImuAccelRead,
+    //ImuAccelRead,
 
     /// Power off the SoC
     PowerOffSoc,
 
     /// Ship mode (battery disconnect)
-    ShipMode,
+    //ShipMode,
 
     /// Is the battery charging?
-    IsCharging,
+    //IsCharging,
 
     /// Set the backlight brightness
-    SetBackLight,
+    //SetBackLight,
 
     /// Request charging
-    RequestCharging,
+    //RequestCharging,
 
     /// Erase a region of EC FLASH
-    FlashErase,
+    //FlashErase,
 
     /// Program a page of FLASH
     //FlashProgram(&'a [u8]),
 
     /// Update the SSID list
-    SsidScan,
+    //SsidScan,
 
     /// Return the latest SSID list
-    SsidFetch,
+    //SsidFetch,
 
     /// Fetch the git ID of the EC
     EcGitRev,
@@ -97,15 +96,20 @@ pub enum Opcode {
     Wf200Rev,
 
     /// Send a line of PDS data
-    Wf200PdsLine(String<512>),
-
-    /// Send Rx stats to fcc-agent
-    RxStatsAgent,
+    Wf200PdsLine, //String<512>
 
     /// request for a listener to BattStats events
-    RegisterBattStatsListener(String<64>),
+    RegisterBattStatsListener, //String<64>
 }
 
+/// These enums indicate what kind of callback type we're sending.
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum CallbackType {
+    /// Battery status
+    BattStats,
+}
+
+/*
 impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
     fn try_from(message: &Message) -> Result<Self, Self::Error> {
@@ -144,7 +148,7 @@ impl core::convert::TryFrom<&Message> for Opcode {
                 }
             }
             _ => Err("unhandled message type"),
-        }
+        }let registration_name = buffer.as_flat::<
     }
 }
 
@@ -236,3 +240,4 @@ impl Into<Message> for Opcode {
         }
     }
 }
+*/

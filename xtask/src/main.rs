@@ -37,20 +37,20 @@ fn main() {
 
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
-        "gam",
-        //"shell",
-        "shellchat",
-        "ime-frontend",
-        "ime-plugin-shell",
-        "graphics-server",
+        //"gam",
+        //"shellchat",
+        //"ime-frontend",
+        //"ime-plugin-shell",
+        //"graphics-server",
         "ticktimer-server",
         "log-server",
         "com",
         "xous-names",
-        "keyboard",
+        //"keyboard",
         "trng",
         "llio",
-        //"kernel-test",
+        "rkyv-test-client",
+        "rkyv-test-server",
     ];
     let fcc_pkgs = [
         "shell",
