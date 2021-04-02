@@ -8,7 +8,7 @@ pub mod api;
 
 use api::BattStats;
 use api::Opcode;
-use xous::{send_message, Error, CID, Message};
+use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
 
@@ -23,18 +23,14 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::CallbackType::BattStats) => {
-                if let xous::Message::Scalar(xous::ScalarMessage {
-                    id: _, arg1: lo, arg2: hi, arg3: _, arg4: _
-                }) = msg.body {
-                    let bs: BattStats = [lo, hi].into();
-                    unsafe {
-                        if let Some(cb) = BATTSTATS_CB {
-                            cb(bs)
-                        }
+            Some(api::CallbackType::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
+                let bs: BattStats = [lo, hi].into();
+                unsafe {
+                    if let Some(cb) = BATTSTATS_CB {
+                        cb(bs)
                     }
                 }
-            }
+            }),
             _ => (),
         }
     }
