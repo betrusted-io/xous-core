@@ -47,7 +47,7 @@ impl hash32::Hash for Gid {
 pub const SERVER_NAME_GFX: &str      = "_Graphics_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum Opcode {
+pub(crate) enum Opcode {
     /// Flush the buffer to the screen
     Flush,
 
