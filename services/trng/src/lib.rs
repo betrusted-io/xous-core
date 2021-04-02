@@ -37,3 +37,11 @@ impl Trng {
         }
     }
 }
+
+impl Drop for Trng {
+    fn drop(&mut self) {
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+
+    }
+}

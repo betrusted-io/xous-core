@@ -48,7 +48,8 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         //"keyboard",
         "trng",
-        "llio",
+
+        "llio", // still to convert
         "rkyv-test-client",
         "rkyv-test-server",
     ];
