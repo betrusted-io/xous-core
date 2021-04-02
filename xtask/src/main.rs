@@ -41,7 +41,7 @@ fn try_main() -> Result<(), DynError> {
         //"shellchat",
         //"ime-frontend",
         //"ime-plugin-shell",
-        "graphics-server",
+        //"graphics-server",
         "ticktimer-server",
         "log-server",
         "com",

@@ -122,10 +122,21 @@ impl Com {
 
 impl Drop for Com {
     fn drop(&mut self) {
-        // tell my handler thread to quit
-        xous::send_message(self.conn,
-            Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        // now de-allocate myself
-        self.battstats_sid = None;
+        // if we have callbacks, destroy the battstats callback server
+        if let Some(sid) = self.battstats_sid.take() {
+            // no need to tell the COM server we're quitting: the next time a callback processes,
+            // it will automatically remove my entry as it will receive a ServerNotFound error.
+
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+
+        // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+
     }
 }

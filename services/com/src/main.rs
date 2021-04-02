@@ -127,21 +127,31 @@ mod implementation {
             self.txrx(tx)
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
 
@@ -207,21 +217,31 @@ mod implementation {
             }
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
     }
@@ -341,6 +361,15 @@ fn xmain() -> ! {
             None => error!("unknown opcode"),
         }
 
-        com.process_queue();
+        if let Some(dropped_cid) = com.process_queue() {
+            for entry in battstats_conns.iter_mut() {
+                if let Some(cid) = *entry {
+                    if cid == dropped_cid {
+                        *entry = None;
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
