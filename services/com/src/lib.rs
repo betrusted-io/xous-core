@@ -1,7 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use core::convert::TryInto;
-
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
 pub mod api;
@@ -23,7 +21,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Callback::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
+            Some(Callback::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 let bs: BattStats = [lo, hi].into();
                 unsafe {
                     if let Some(cb) = BATTSTATS_CB {
@@ -31,7 +29,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                 }
             }),
-            Some(api::Callback::Drop) => {
+            Some(Callback::Drop) => {
                 break; // this exits the loop and kills the thread
             }
             None => (),

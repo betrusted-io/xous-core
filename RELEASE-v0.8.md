@@ -299,7 +299,13 @@ fn xmain() -> ! {
 }
 
 /// only if doing callbacks. This might actually make more sense in a thread of its own, to make it
-/// truly asynchronous, but this example is focused on the messaging API, not the threading API
+/// truly asynchronous, but this example is focused on the messaging API, not the threading API.
+/// This example admittedly sweeps a rather hairy issue (passing data between process-local threads)
+/// under the carpet. As of Xous 0.8 your options to send data around between threads within a process
+/// are:
+///  1. Define a crate-local API to pass the messages
+///  2. Use Atomic data types (only applicable if you have primitive data to send)
+///  3. Do some static mut unsafe thing because we don't have a Mutex data type yet.
 fn do_callback(cb_conns: [Option<CID>; 32]) {
   let a = useful_computation();
   for maybe_conn in cb_conns.iter() {

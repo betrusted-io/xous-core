@@ -4,7 +4,6 @@
 mod api;
 use api::Opcode;
 
-use core::convert::TryFrom;
 use num_traits::{ToPrimitive, FromPrimitive};
 
 use log::{error, info, trace};
@@ -12,7 +11,7 @@ use log::{error, info, trace};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack};
 use xous_ipc::{Buffer, String};
 
 const STD_TIMEOUT: u32 = 100;
@@ -39,7 +38,6 @@ mod implementation {
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
-    use xous::CID;
 
     use heapless::Vec;
     use heapless::consts::U64;
@@ -232,9 +230,6 @@ mod implementation {
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::XousCom;
-    use core::pin::Pin;
-    use xous::buffer;
-    use rkyv::archived_value_mut;
 
     log_server::init_wait().unwrap();
     info!("my PID is {}", xous::process::id());
