@@ -5,218 +5,130 @@ pub mod api;
 pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle, ClipObject, ClipObjectType};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
-use xous_ipc::String;
 pub mod op;
 
-use xous::{send_message, CID};
-use xous_ipc::XousDeserializer;
-use rkyv::Deserialize;
-use core::fmt::Write;
+use api::Opcode; // if you prefer to map the api into your local namespace
+use xous::{send_message, Message};
+use xous_ipc::Buffer;
+use num_traits::ToPrimitive;
 
-pub fn draw_line(cid: CID, line: Line) -> Result<(), xous::Error> {
-    let m: xous::Message = api::Opcode::Line(line).into();
-    //log::info!("GFX|LIB: api encoded line as {:?}", m);
-    send_message(cid, m).map(|_| ())
+pub struct Gfx {
+    conn: xous::CID,
 }
-
-pub fn draw_circle(cid: CID, circ: Circle) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Circle(circ).into()).map(|_| ())
-}
-
-pub fn draw_rectangle(cid: CID, rect: Rectangle) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Rectangle(rect).into()).map(|_| ())
-}
-
-pub fn draw_rounded_rectangle(cid: CID, rr: RoundedRectangle) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::RoundedRectangle(rr).into()).map(|_| ())
-}
-
-pub fn flush(cid: CID) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::Flush.into()).map(|_| ())
-}
-
-pub fn draw_sleepscreen(cid: CID) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::DrawSleepScreen.into()).map(|_| ())
-}
-
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn set_string_clipping(cid: CID, r: ClipRect) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::SetStringClipping(r).into()).map(|_| ())
-}
-
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn set_cursor(cid: CID, c: Cursor) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::SetCursor(c).into()).map(|_| ())
-}
-
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn get_cursor(cid: CID) -> Result<Cursor, xous::Error> {
-    let response = send_message(cid, api::Opcode::GetCursor.into())?;
-    if let xous::Result::Scalar2(pt_as_usize, h) = response {
-        let p: Point = pt_as_usize.into();
-        Ok(Cursor::new(p.x as _, p.y as _, h as _))
-    } else {
-        panic!("unexpected return value: {:#?}", response);
+impl Gfx {
+    pub fn new(xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_GFX).expect("Can't connect to GFX");
+        Ok(Gfx {
+            conn,
+        })
     }
-}
 
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn draw_string(cid: CID, s: &String<4096>) -> Result<(), xous::Error> {
-    let mut clone_s: String<4096> = String::new();
-    write!(clone_s, "{}", s.as_str().unwrap()).map_err(|_| xous::Error::AccessDenied)?;
-    let request = api::Opcode::String(clone_s);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&request).expect("GFX: couldn't archive String request")
-    };
-    let xous_buffer = writer.into_inner();
-
-    //log::info!("GFX: draw_string message being sent");
-    xous_buffer.lend(cid, pos as u32).expect("GFX: String request failure");
-    //log::info!("GFX: draw_string completed");
-    Ok(())
-}
-
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn set_glyph_style(cid: CID, glyph: GlyphStyle) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::SetGlyphStyle(glyph).into()).map(|_| ())
-}
-
-pub fn screen_size(cid: CID) -> Result<Point, xous::Error> {
-    let response = send_message(cid, api::Opcode::ScreenSize.into())?;
-    if let xous::Result::Scalar2(x, y) = response {
-        Ok(Point::new(x as _, y as _))
-    } else {
-        panic!("unexpected return value: {:#?}", response);
+    pub fn draw_line(&self, line: Line) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Line.to_usize().unwrap(),
+                line.start.into(),
+                line.end.into(),
+                line.style.into(),
+                0
+        )).map(|_|())
     }
-}
 
-#[deprecated(
-    note = "Please use draw_textview for atomic text updates"
-)]
-pub fn query_glyph(cid: CID) -> Result<(GlyphStyle, usize), xous::Error> {
-    let response = send_message(cid, api::Opcode::QueryGlyphStyle.into())?;
-    if let xous::Result::Scalar2(glyph, h) = response {
-        Ok((GlyphStyle::from(glyph), h))
-    } else {
-        panic!("unexpected return value: {:#?}", response);
+    pub fn draw_circle(&self, circ: Circle) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Circle.to_usize().unwrap(),
+            circ.center.into(),
+            circ.radius as usize,
+            circ.style.into(),
+            0
+        )).map(|_|())
     }
-}
 
-pub fn glyph_height_hint(cid: CID, glyph: GlyphStyle) -> Result<usize, xous::Error> {
-    let response = send_message(cid, api::Opcode::QueryGlyphProps(glyph).into())?;
-    if let xous::Result::Scalar2(_, h) = response {
-        Ok(h)
-    } else {
-        panic!("unexpected return value: {:#?}", response);
+    pub fn draw_rectangle(&self, rect: Rectangle) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Rectangle.to_usize().unwrap(),
+            rect.tl.into(),
+            rect.br.into(),
+            rect.style.into(),
+            0,
+        )).map(|_|())
     }
-}
 
-pub fn draw_textview(cid: CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    let rkyv_tv = api::Opcode::DrawTextView(*tv);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&rkyv_tv).expect("couldn't archive textview")
-    };
-    let mut xous_buffer = writer.into_inner();
+    pub fn draw_rounded_rectangle(&self, rr: RoundedRectangle) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RoundedRectangle.to_usize().unwrap(),
+            rr.border.tl.into(),
+            rr.border.br.into(),
+            rr.border.style.into(),
+            rr.radius as _,
+        )).map(|_|())
+    }
 
-    xous_buffer.lend_mut(cid, pos as u32).expect("draw_textview operation failure");
+    pub fn flush(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Flush.to_usize().unwrap(), 0, 0, 0, 0,
+        )).map(|_|())
+    }
 
-    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::DrawTextView(result) = returned {
-        let tvr: TextView = result.deserialize(&mut XousDeserializer).expect("draw_textview couldn't deserialize result");
-        //log::info!("draw_textview: got cursor of {:?}, bounds of {:?}", tvr.cursor, tvr.bounds_computed);
+    pub fn draw_sleepscreen(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DrawSleepScreen.to_usize().unwrap(), 0, 0, 0, 0,
+        )).map(|_|())
+    }
+
+    pub fn screen_size(&self) -> Result<Point, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_scalar(Opcode::ScreenSize.to_usize().unwrap(), 0, 0, 0, 0,
+        )).expect("ScreenSize message failed");
+        if let xous::Result::Scalar2(x, y) = response {
+            Ok(Point::new(x as _, y as _))
+        } else {
+            panic!("unexpected return value: {:#?}", response);
+        }
+    }
+
+    pub fn glyph_height_hint(&self, glyph: GlyphStyle) -> Result<usize, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_scalar(Opcode::QueryGlyphProps.to_usize().unwrap(), glyph as usize, 0, 0, 0,
+        )).expect("QueryGlyphProps failed");
+        if let xous::Result::Scalar2(_, h) = response {
+            Ok(h)
+        } else {
+            panic!("unexpected return value: {:#?}", response);
+        }
+    }
+
+    pub fn draw_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        let mut buf = Buffer::into_buf(*tv).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::DrawTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+        let tvr = buf.to_original::<TextView, _>().unwrap();
         tv.bounds_computed = tvr.bounds_computed;
         tv.cursor = tvr.cursor;
         Ok(())
-    } else {
-        let tvr = returned.deserialize(&mut XousDeserializer).expect("draw_textview couldn't deserialize result");
-        log::info!("draw_textview saw an unhandled return type of {:?}", tvr);
-        Err(xous::Error::InternalError)
     }
-}
 
 
-pub fn draw_line_clipped(cid: xous::CID, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
-    let rkyv = api::Opcode::DrawClipObject(
-        ClipObject {
-            clip: clip,
-            obj: ClipObjectType::Line(line),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
-    };
-    let xous_buffer = writer.into_inner();
+    pub fn draw_line_clipped(&self, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
+        let co = ClipObject { clip, obj: ClipObjectType::Line(line) };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
+    }
 
-    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
+    pub fn draw_circle_clipped(&self, circ: Circle, clip: Rectangle) -> Result<(), xous::Error> {
+        let co = ClipObject { clip, obj: ClipObjectType::Circ(circ) };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
+    }
 
-    Ok(())
-}
+    pub fn draw_rectangle_clipped(&self, rect: Rectangle, clip: Rectangle) -> Result<(), xous::Error> {
+        let co = ClipObject { clip, obj: ClipObjectType::Rect(rect) };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
+    }
 
-pub fn draw_circle_clipped(cid: xous::CID, circ: Circle, clip: Rectangle) -> Result<(), xous::Error> {
-    let rkyv = api::Opcode::DrawClipObject(
-        ClipObject {
-            clip: clip,
-            obj: ClipObjectType::Circ(circ),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
-    };
-    let xous_buffer = writer.into_inner();
-
-    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
-
-    Ok(())
-}
-
-pub fn draw_rectangle_clipped(cid: xous::CID, rect: Rectangle, clip: Rectangle) -> Result<(), xous::Error> {
-    let rkyv = api::Opcode::DrawClipObject(
-        ClipObject {
-            clip: clip,
-            obj: ClipObjectType::Rect(rect),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
-    };
-    let xous_buffer = writer.into_inner();
-
-    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
-
-    Ok(())
-}
-
-pub fn draw_rounded_rectangle_clipped(cid: xous::CID, rr: RoundedRectangle, clip: Rectangle) -> Result<(), xous::Error> {
-    let rkyv = api::Opcode::DrawClipObject(
-        ClipObject {
-            clip: clip,
-            obj: ClipObjectType::RoundRect(rr),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&rkyv).expect("GFX_API: couldn't archive ClipObject")
-    };
-    let xous_buffer = writer.into_inner();
-
-    xous_buffer.lend(cid, pos as u32).expect("GFX_API: ClipObject operation failure");
-
-    Ok(())
+    pub fn draw_rounded_rectangle_clipped(&self, rr: RoundedRectangle, clip: Rectangle) -> Result<(), xous::Error> {
+        let co = ClipObject { clip, obj: ClipObjectType::RoundRect(rr) };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
+    }
 }

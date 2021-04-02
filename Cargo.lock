@@ -483,6 +483,8 @@ dependencies = [
  "log",
  "log-server",
  "minifb",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "utralib",
  "xous",
