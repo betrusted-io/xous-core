@@ -1,12 +1,6 @@
-use xous::{Message, ScalarMessage};
-use xous_ipc::String;
-
 // NOTE: the use of ComState "verbs" as commands is not meant as a 1:1 mapping of commands
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
-use com_rs::*;
-use com_rs_ref as com_rs;
-
 pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
 
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -41,7 +35,6 @@ impl Into<[usize; 2]> for BattStats {
         ]
     }
 }
-#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     /// Battery stats

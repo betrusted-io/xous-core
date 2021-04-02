@@ -4,7 +4,6 @@
 mod api;
 use api::Opcode;
 
-use core::convert::TryFrom;
 use num_traits::{ToPrimitive, FromPrimitive};
 
 use log::{error, info, trace};
@@ -12,7 +11,7 @@ use log::{error, info, trace};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack};
 use xous_ipc::{Buffer, String};
 
 const STD_TIMEOUT: u32 = 100;
@@ -39,7 +38,6 @@ mod implementation {
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
-    use xous::CID;
 
     use heapless::Vec;
     use heapless::consts::U64;
@@ -129,21 +127,31 @@ mod implementation {
             self.txrx(tx)
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
 
@@ -209,21 +217,31 @@ mod implementation {
             }
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
     }
@@ -232,16 +250,13 @@ mod implementation {
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::XousCom;
-    use core::pin::Pin;
-    use xous::buffer;
-    use rkyv::archived_value_mut;
 
     log_server::init_wait().unwrap();
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
     let com_sid = xns.register_name(api::SERVER_NAME_COM).expect("can't register server");
-    info!("registered with NS -- {:?}", com_sid);
+    trace!("registered with NS -- {:?}", com_sid);
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -250,7 +265,7 @@ fn xmain() -> ! {
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
-    info!("starting main loop");
+    trace!("starting main loop");
     loop {
         let msg = xous::receive_message(com_sid).unwrap();
         trace!("Message: {:?}", msg);
@@ -346,6 +361,15 @@ fn xmain() -> ! {
             None => error!("unknown opcode"),
         }
 
-        com.process_queue();
+        if let Some(dropped_cid) = com.process_queue() {
+            for entry in battstats_conns.iter_mut() {
+                if let Some(cid) = *entry {
+                    if cid == dropped_cid {
+                        *entry = None;
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

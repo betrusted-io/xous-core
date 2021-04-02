@@ -20,7 +20,7 @@ impl XousNames {
     pub fn register_name(&self, name: &str) -> Result<xous::SID, xous::Error> {
         let mut registration_name = String::<64>::new();
         // could also do String::from_str() but in this case we want things to fail if the string is too long.
-        write!(registration_name, "{}", name).expect("NS: name probably too long");
+        write!(registration_name, "{}", name).expect("name probably too long");
 
         let mut buf = Buffer::into_buf(registration_name).or(Err(xous::Error::InternalError))?;
 
@@ -33,20 +33,20 @@ impl XousNames {
         match buf.to_original().unwrap() {
             api::Return::SID(sid_raw) => {
                 let sid = sid_raw.into();
-                xous::create_server_with_sid(sid).expect("NS: can't auto-register server");
+                xous::create_server_with_sid(sid).expect("can't auto-register server");
                 Ok(sid)
             }
             api::Return::Failure => {
                 Err(xous::Error::InternalError)
             }
-            _ => unimplemented!("NS: unimplemented return codes")
+            _ => unimplemented!("unimplemented return codes")
         }
     }
 
     /// note: if this throws an AccessDenied error, you can retry with a request_authenticate_connection() call (to be written)
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
-        write!(lookup_name, "{}", name).expect("NS: name problably too long");
+        write!(lookup_name, "{}", name).expect("name problably too long");
 
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 

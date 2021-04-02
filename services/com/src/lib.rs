@@ -1,7 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use core::convert::TryInto;
-
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
 pub mod api;
@@ -23,7 +21,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Callback::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
+            Some(Callback::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 let bs: BattStats = [lo, hi].into();
                 unsafe {
                     if let Some(cb) = BATTSTATS_CB {
@@ -31,7 +29,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                 }
             }),
-            Some(api::Callback::Drop) => {
+            Some(Callback::Drop) => {
                 break; // this exits the loop and kills the thread
             }
             None => (),
@@ -124,10 +122,21 @@ impl Com {
 
 impl Drop for Com {
     fn drop(&mut self) {
-        // tell my handler thread to quit
-        xous::send_message(self.conn,
-            Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-        // now de-allocate myself
-        self.battstats_sid = None;
+        // if we have callbacks, destroy the battstats callback server
+        if let Some(sid) = self.battstats_sid.take() {
+            // no need to tell the COM server we're quitting: the next time a callback processes,
+            // it will automatically remove my entry as it will receive a ServerNotFound error.
+
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+
+        // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+
     }
 }
