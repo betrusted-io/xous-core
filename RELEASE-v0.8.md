@@ -33,6 +33,8 @@ Major features of the 0.8 API include:
   from other data types as it opens a clean path to migrate them into `std`
 - Use of enum discriminants to definitively match API calls across lib/main
   boundaries for both scalar and memory messages.
+- Incorporation of `num_derive` as a core dependency of Xous. This was incorporated
+  to allow us to convert API enums to u32 types and vice-versa cleanly.
 - Elimination of complex enum types in the API. This means the identifiers
   no longer codify their arguments, and this binding is pushed into the
   respective lib/main implementations.
@@ -47,4 +49,13 @@ Major features of the 0.8 API include:
   as they fully block until a callback message arrives.
 - Encapsulation of client-side API calls to a server within an object that
   maintains variables like connection state.
+- Splitting out return message definitions from the internal API enum. Previously,
+  we were re-using the API name space to define return messages. Now, there is
+  a distinction between client->server messages being enumerated, by convention,
+  in an `Opcode` enum in the API crate, and then potential return memory messages
+  being enumerated in a `Return` enum in the API crate. The return type conventions are
+  a bit more ad-hoc, though, because not all servers require them.
 - Numerous fixes to the scheduler and threading API to fix latent bugs
+- Upgrade logging infrastructure to handle rich logging data, including filename,
+  line number, error level and so forth
+- Incorporating `const_generics`, which means our minimum Rust version is 1.51
