@@ -11,7 +11,7 @@ incorporates a Xous `libstd` before we hit a 1.0 API milestone where
 we will start preferring bodges and patches to maintain API
 compatibility, over refactoring and improvement.
 
-Key concepts from previous Xous not changed:
+## Key concepts from previous Xous not changed
 - IPC messages can be `scalar` or `memory`. Scalar messages are sent in
   registers. Memory messages are sent by remapping virtual pages between
   process spaces.
@@ -25,8 +25,7 @@ Key concepts from previous Xous not changed:
 - Note that functions in the lib.rs run in the process space of the *caller*,
   even though the code exists in the crate of the server.
 
-Major features of the 0.8 API include:
-
+## Major features of the 0.8 API
 - Migration to `rkyv` as the method for passing rich structures via IPC
 - Clarification of API names to differentiate zero-copy (flat) operations.
 - Migration of `String` type to a `xous-ipc` crate. Strings are kept separate
@@ -59,3 +58,11 @@ Major features of the 0.8 API include:
 - Upgrade logging infrastructure to handle rich logging data, including filename,
   line number, error level and so forth
 - Incorporating `const_generics`, which means our minimum Rust version is 1.51
+- Incorporation of `msg_scalar_unpack!()`, `msg_blocking_scalar_unpack!()`, `new_scalar()`,
+  and `new_blocking_scalar()` to de-clutter code and make scalar messages a little bit
+  easier to deal with
+
+## 0.8 API In Practice
+
+Placeholder for some pointers to examples on how to use the 0.8 API to create
+servers and message types.
