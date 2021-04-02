@@ -43,7 +43,7 @@ pub struct Com {
 }
 impl Com {
     pub fn new(xns: xous_names::XousNames) -> Result<Self, xous::Error> {
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_COM).expect("Can't connect to TRNG server");
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_COM).expect("Can't connect to COM server");
         Ok(Com {
             conn,
             battstats_sid: None,
