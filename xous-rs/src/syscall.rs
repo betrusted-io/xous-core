@@ -1529,6 +1529,26 @@ pub fn current_tid() -> core::result::Result<TID, Error> {
     })
 }
 
+pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
+    rsyscall(SysCall::DestroyServer(sid)).and_then(|result| {
+        if let Result::Ok = result {
+            Ok(())
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
+    rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
+        if let Result::Ok = result {
+            Ok(())
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;
     let args = call.as_args();
