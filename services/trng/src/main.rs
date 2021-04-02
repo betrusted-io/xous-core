@@ -167,15 +167,11 @@ fn xmain() -> ! {
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::GetTrng) => {
-                if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                    id: _, arg1: count, arg2: _, arg3: _, arg4: _
-                }) = msg.body {
-                        let val: [u32; 2] = trng.get_trng(count);
-                        xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
-                           .expect("couldn't return GetTrng request");
-                } else { log::error!("GetTrng malformed message"); }
-            }
+            Some(api::Opcode::GetTrng) => xous::msg_scalar_unpack!(msg, count, _, _, _, {
+                let val: [u32; 2] = trng.get_trng(count);
+                xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
+                    .expect("couldn't return GetTrng request");
+            }),
             None => {
                 log::error!("couldn't convert opcode")
             }

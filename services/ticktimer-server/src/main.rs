@@ -458,9 +458,7 @@ fn xmain() -> ! {
                 )
                 .expect("couldn't return time request");
             }
-            Some(api::Opcode::SleepMs) => {
-                if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                    id: _, arg1: ms, arg2: _, arg3: _, arg4: _}) = msg.body {
+            Some(api::Opcode::SleepMs) => xous::msg_blocking_scalar_unpack!(msg, ms, _, _, _, {
                     recalculate_sleep(
                         &mut ticktimer,
                         &mut sleep_heap,
@@ -468,9 +466,8 @@ fn xmain() -> ! {
                             msec: ms as i64,
                             sender: msg.sender,
                         }),
-                    );
-                }
-            }
+                    )
+            }),
             Some(api::Opcode::RecalculateSleep) => {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }

@@ -12,7 +12,7 @@ use log::{error, info, trace};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-use xous::CID;
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
 
 const STD_TIMEOUT: u32 = 100;
@@ -255,10 +255,7 @@ fn xmain() -> ! {
         let msg = xous::receive_message(com_sid).unwrap();
         trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::RegisterBattStatsListener) => {
-                if let xous::Message::Scalar(xous::ScalarMessage {
-                    id: _id, arg1: sid0, arg2: sid1, arg3: sid2, arg4: sid3
-                }) = msg.body {
+            Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                     let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                     let cid = Some(xous::connect(sid).unwrap());
                     let mut found = false;
@@ -273,7 +270,7 @@ fn xmain() -> ! {
                         error!("RegisterBattStatsListener ran out of space registering callback");
                     }
                 }
-            }
+            ),
             Some(Opcode::Wf200PdsLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let l = buffer.to_original::<String::<512>, _>().unwrap();
