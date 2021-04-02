@@ -96,6 +96,7 @@ Asynchronous callback messages are defined in a `Callback` enum, by convention
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum Callback {
     Hello,
+    Drop,
 }
 ```
 
@@ -209,7 +210,70 @@ impl MyServer {
       _ => panic!("Got unknown return code")
     }
   }
+
+  /// an example of registering for a callback
+  static mut MYSERVER_CB: Option<fn(BattStats)> = None;
+  pub fn hook_callback(&mut self, cb: fn(u32)) -> Result<(), xous::Error> {
+      if unsafe{MYSERVER_CB}.is_some() {
+          return Err(xous::Error::MemoryInUse) // can't hook it twice
+      }
+      unsafe{MYSERVER_CB = Some(cb)};
+      if self.callback_sid.is_none() {
+          let sid = xous::create_server().unwrap();
+          self.callback_sid = Some(sid);
+          let sid_tuple = sid.to_u32();
+          xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+          xous::send_message(self.conn,
+              Message::new_scalar(Opcode::RegisterCallback.to_usize().unwrap(),
+              sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+          )).unwrap();
+      }
+      Ok(())
+  }
 }
+
+/// handles callback messages from the COM server, in the library user's process space.
+fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Callback::Hello) => msg_scalar_unpack!(msg, a, _, _, _, {
+                unsafe {
+                    if let Some(cb) = MYSERVER_CB {
+                        cb(a as u32)
+                    }
+                }
+            }),
+            Some(Callback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
+}
+
+impl Drop for MyServer {
+    fn drop(&mut self) {
+        // if we have callbacks, destroy the callback server
+        if let Some(sid) = self.callback_sid.take() {
+            // no need to tell the pstream server we're quitting: the next time a callback processes,
+            // it will automatically remove my entry as it will receive a ServerNotFound error.
+
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+
+        // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        // all implementations will need this
+        unsafe{xous::disconnect(self.conn).unwrap();}
+    }
+}
+
 ```
 
 ### main.rs
@@ -294,7 +358,7 @@ fn xmain() -> ! {
       // if you have callbacks, you'll probably want to start a separate thread to handle them
       // but for simplicity we just call a function here. But in this example, it means the callback
       // can only gets processed after any message is received.
-      do_callback(cb_conns);
+      do_callback(&mut cb_conns);
     }
 }
 
@@ -306,13 +370,19 @@ fn xmain() -> ! {
 ///  1. Define a crate-local API to pass the messages
 ///  2. Use Atomic data types (only applicable if you have primitive data to send)
 ///  3. Do some static mut unsafe thing because we don't have a Mutex data type yet.
-fn do_callback(cb_conns: [Option<CID>; 32]) {
+fn do_callback(&mut cb_conns: [Option<CID>; 32]) {
   let a = useful_computation();
-  for maybe_conn in cb_conns.iter() {
+  for maybe_conn in cb_conns.iter_mut() { // this code is notional and probably doesn't work
     if let Some(conn) = maybe_conn {
-       xous::send_message(conn,
+       match xous::send_message(conn,
          xous:Message::new_scalar(api::Callback::Hello.to_usize().unwrap(), a, 0, 0, 0)
-       ).unwrap();
+       ) {
+         Err(xous::Error::ServerNotFound) => {
+           maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+         },
+         Ok => {}
+         _ => panic!("unhandled error in callback processing");
+       }
     }
   }
 }
