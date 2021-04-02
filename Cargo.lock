@@ -1080,11 +1080,13 @@ dependencies = [
 name = "rkyv-test-client"
 version = "0.1.0"
 dependencies = [
+ "com",
  "log",
  "log-server",
  "rkyv-test-server",
  "ticktimer-server",
  "xous",
+ "xous-names",
 ]
 
 [[package]]

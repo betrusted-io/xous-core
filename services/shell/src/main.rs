@@ -382,7 +382,7 @@ fn shell_main() -> ! {
         if let Ok(elapsed_time) = ticktimer.elapsed_ms() {
             if elapsed_time - last_time > 500 {
                 last_time = elapsed_time;
-                get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+                req_batt_stats(com_conn).expect("Can't get battery stats from COM");
             }
         } else {
             error!("error requesting ticktimer!")

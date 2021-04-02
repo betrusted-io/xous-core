@@ -11,6 +11,10 @@ fn print_log_messages(log_message: &str, prefix: &str) {
     );
 }
 
+fn handle_battstats(bs: com::BattStats) {
+    log::info!("battstats: {:?}", bs);
+}
+
 #[xous::xous_main]
 fn rkyv_test_client() -> ! {
     log_server::init_wait().unwrap();
@@ -30,6 +34,11 @@ fn rkyv_test_client() -> ! {
     let mut double_src = xous::String::<256>::new();
 
     let mut message_string = xous::String::<64>::new();
+
+    let xns = xous_names::XousNames::new().unwrap();
+    let mut com = com::Com::new(xns).unwrap();
+    com.hook_batt_stats(handle_battstats);
+
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
         ticktimer.sleep_ms(500).ok();
@@ -47,6 +56,8 @@ fn rkyv_test_client() -> ! {
         let sent_str = xous::String::<32>::from_str("This got moved");
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
+
+        com.req_batt_stats();
 
         idx += 1;
     }

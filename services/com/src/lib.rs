@@ -6,8 +6,8 @@ use core::convert::TryInto;
 /// are calling these functions inside a different process.
 pub mod api;
 
-use api::BattStats;
-use api::Opcode;
+pub use api::BattStats;
+use api::{Callback, Opcode};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
@@ -23,7 +23,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::CallbackType::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
+            Some(api::Callback::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 let bs: BattStats = [lo, hi].into();
                 unsafe {
                     if let Some(cb) = BATTSTATS_CB {
@@ -31,7 +31,10 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                 }
             }),
-            _ => (),
+            Some(api::Callback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
         }
     }
 }
@@ -53,28 +56,6 @@ impl Com {
         send_message(self.conn,
             Message::new_scalar(Opcode::PowerOffSoc.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
-    }
-
-    pub fn hook_batt_stats(&mut self, cb: fn(BattStats)) -> Result<(), xous::Error> {
-        if unsafe{BATTSTATS_CB}.is_some() {
-            return Err(xous::Error::MemoryInUse)
-        }
-        unsafe{BATTSTATS_CB = Some(cb)};
-        if self.battstats_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.battstats_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(battstats_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterBattStatsListener.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
-        }
-        Ok(())
-    }
-
-    pub fn get_batt_stats_nb(&self) -> Result<(), xous::Error> {
-        send_message(self.conn, Message::new_scalar(Opcode::BattStatsNb.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
     }
 
     pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {
@@ -115,12 +96,38 @@ impl Com {
         ).map(|_| ())
     }
 
-    // event relay request API
-    pub fn request_battstat_events(&self, name: &str) -> Result<xous::Result, xous::Error> {
-        let s = String::<64>::from_str(name);
-        let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::RegisterBattStatsListener.to_u32().unwrap())
+    /// this kicks off an async callback for battery status at some later time
+    pub fn req_batt_stats(&self) -> Result<(), xous::Error> {
+        send_message(self.conn, Message::new_scalar(Opcode::BattStatsNb.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
     }
 
+    /// this allows the caller to provide a hook to handle the callback
+    pub fn hook_batt_stats(&mut self, cb: fn(BattStats)) -> Result<(), xous::Error> {
+        if unsafe{BATTSTATS_CB}.is_some() {
+            return Err(xous::Error::MemoryInUse)
+        }
+        unsafe{BATTSTATS_CB = Some(cb)};
+        if self.battstats_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.battstats_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(battstats_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            xous::send_message(self.conn,
+                Message::new_scalar(Opcode::RegisterBattStatsListener.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
+        Ok(())
+    }
     // note to future self: add other event listener registrations (such as network events) here
+}
+
+impl Drop for Com {
+    fn drop(&mut self) {
+        // tell my handler thread to quit
+        xous::send_message(self.conn,
+            Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        // now de-allocate myself
+        self.battstats_sid = None;
+    }
 }

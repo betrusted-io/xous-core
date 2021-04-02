@@ -60,7 +60,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
 
     com::request_battstat_events(xous::names::SERVER_NAME_STATUS, com_conn).expect("GAM|status: couldn't request events from COM");
     // prime the loop
-    com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+    com::req_batt_stats(com_conn).expect("Can't get battery stats from COM");
     last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("GAM|status: starting main loop");
     loop {
@@ -109,7 +109,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 //info!("GAM|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
                 if debug1{info!("GAM|status: periodic tasks: updating uptime, requesting battstats");}
                 last_time = elapsed_time;
-                com::get_batt_stats_nb(com_conn).expect("Can't get battery stats from COM");
+                com::req_batt_stats(com_conn).expect("Can't get battery stats from COM");
             }
         } else {
             error!("error requesting ticktimer!")

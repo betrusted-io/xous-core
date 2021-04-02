@@ -25,7 +25,7 @@ pub struct WorkRequest {
 fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> {
     let rawstats: [usize; 2] = stats.into();
     xous::send_message(cid,
-        xous::Message::new_scalar(api::CallbackType::BattStats.to_usize().unwrap(),
+        xous::Message::new_scalar(api::Callback::BattStats.to_usize().unwrap(),
         rawstats[0], rawstats[1], 0, 0)
     ).map(|_| ())
 }
