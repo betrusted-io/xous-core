@@ -803,3 +803,35 @@ impl From<Error> for Result {
 
 pub type SysCallRequest = core::result::Result<crate::syscall::SysCall, Error>;
 pub type SysCallResult = core::result::Result<Result, Error>;
+
+#[macro_export]
+macro_rules! msg_scalar_unpack {
+    // the args are `tt` so that you can specify _ as the arg
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {
+        {
+            if let xous::Message::Scalar(xous::ScalarMessage {
+                id: _, arg1: $arg1, arg2: $arg2, arg3: $arg3, arg4: $arg4
+            }) = $msg.body {
+               $body
+            } else {
+                log::error!("message expansion failed in msg_scalar_unpack macro")
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! msg_blocking_scalar_unpack {
+    // the args are `tt` so that you can specify _ as the arg
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {
+        {
+            if let xous::Message::BlockingScalar(xous::ScalarMessage {
+                id: _, arg1: $arg1, arg2: $arg2, arg3: $arg3, arg4: $arg4
+            }) = $msg.body {
+               $body
+            } else {
+                log::error!("message expansion failed in msg_scalar_unpack macro")
+            }
+        }
+    }
+}
