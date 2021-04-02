@@ -1525,6 +1525,42 @@ impl SystemServices {
         })
     }
 
+    /// Invalidate the provided connection ID.
+    pub fn disconnect_from_server(&mut self, cid: CID) -> Result<(), xous_kernel::Error> {
+        // Check to see if we've already connected to this server.
+        // While doing this, find a free slot in case we haven't
+        // yet connected.
+
+        // Slot indices are offset by two. Ensure we don't underflow.
+        let slot_idx = cid;
+        if slot_idx < 2 {
+            klog!("CID {} is not valid", cid);
+            return Err(xous_kernel::Error::ServerNotFound);
+        }
+        let slot_idx = (slot_idx - 2) as usize;
+        let pid = crate::arch::process::current_pid();
+        // klog!("KERNEL({}): Server table: {:?}", pid.get(), self.servers);
+        ArchProcess::with_inner_mut(|process_inner| {
+            assert_eq!(pid, process_inner.pid);
+            if slot_idx >= process_inner.connection_map.len() {
+                klog!("Slot index exceeds map length");
+                return Err(xous_kernel::Error::ServerNotFound);
+            }
+
+            // If the server ID is None, then we weren't connected in the first place.
+            let idx = &mut process_inner.connection_map[slot_idx];
+            if idx.is_none() {
+                klog!("IDX[{}] is already None!", slot_idx);
+                return Err(xous_kernel::Error::ServerNotFound);
+            }
+
+            // Nullify this connection ID. It may now be reused.
+            *idx = None;
+            klog!("Removing server from table");
+            Ok(())
+        })
+    }
+
     /// Retrieve the server ID index from the specified SID.
     /// This may only be called if the SID is a server owned by
     /// the current process.
