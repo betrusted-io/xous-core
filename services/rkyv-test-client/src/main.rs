@@ -13,6 +13,10 @@ fn print_log_messages(log_message: &str, prefix: &str) {
 
 fn handle_battstats(bs: com::BattStats) {
     log::info!("battstats: {:?}", bs);
+    // note: at this point to repatriate data into the core main loop, you have two options:
+    // 1. send a new message to the server, using your own private API. This feels "wasteful"
+    //    as you're bouncing a message twice but it keeps the API spaces strictly on crate boundaries
+    // 2. use an Atomic type to transfer primitive data types from the handler thread to the main thread
 }
 
 #[xous::xous_main]
