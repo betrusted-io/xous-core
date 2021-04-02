@@ -41,7 +41,6 @@ impl Into<[usize; 2]> for BattStats {
         ]
     }
 }
-#[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     /// Battery stats

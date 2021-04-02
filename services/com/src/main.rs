@@ -241,7 +241,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let com_sid = xns.register_name(api::SERVER_NAME_COM).expect("can't register server");
-    info!("registered with NS -- {:?}", com_sid);
+    trace!("registered with NS -- {:?}", com_sid);
 
     // Create a new com object
     let mut com = XousCom::new();
@@ -250,7 +250,7 @@ fn xmain() -> ! {
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
-    info!("starting main loop");
+    trace!("starting main loop");
     loop {
         let msg = xous::receive_message(com_sid).unwrap();
         trace!("Message: {:?}", msg);
