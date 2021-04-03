@@ -19,6 +19,14 @@ fn handle_battstats(bs: com::BattStats) {
     // 2. use an Atomic type to transfer primitive data types from the handler thread to the main thread
 }
 
+fn handle_keyevents(keys: [char; 4]) {
+    for &k in keys.iter() {
+        if k != '\u{0000}' {
+            log::info!("KEYEVENT: {}", k);
+        }
+    }
+}
+
 #[xous::xous_main]
 fn rkyv_test_client() -> ! {
     log_server::init_wait().unwrap();
@@ -40,9 +48,11 @@ fn rkyv_test_client() -> ! {
     let mut message_string = xous::String::<64>::new();
 
     let xns = xous_names::XousNames::new().unwrap();
-    let mut com = com::Com::new(xns).unwrap();
+    let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
 
+    let mut kbd = keyboard::Keyboard::new(&xns).unwrap();
+    kbd.hook_keyboard_events(handle_keyevents).unwrap();
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
         ticktimer.sleep_ms(500).ok();

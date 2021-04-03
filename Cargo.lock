@@ -1085,6 +1085,7 @@ name = "rkyv-test-client"
 version = "0.1.0"
 dependencies = [
  "com",
+ "keyboard",
  "log",
  "log-server",
  "rkyv-test-server",

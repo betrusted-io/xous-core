@@ -24,6 +24,10 @@ pub struct RowCol {
     pub r: u8,
     pub c: u8,
 }
+/// RowColVec is implemented here instead of using heapless::Vec because we can't
+/// derive the rkyv traits on heapless::Vec. By making a janky vector type here
+/// our IPC doesn't rely on dangerous serialization techniques like casting to
+/// raw u8 slices which rely on the implicit shape of packed structures...
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct RowColVec {
     storage: [Option<RowCol>; MAX_KEYS],

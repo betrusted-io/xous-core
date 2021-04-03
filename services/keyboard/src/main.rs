@@ -874,8 +874,15 @@ fn xmain() -> ! {
                 // send rawstates on to rawstate listeners
                 send_rawstates(&mut raw_conns, &rawstates);
 
-                // TODO: refactor this Vec usage into an array (the Vec is from a previous implementation)
-                // for now, just copy the array over, inefficiently
+                // GROSS: we copy our IPC-compatible RowColVec type into a heapless::Vec for further processing
+                // this code can probably be cleaned up and improved quite a bit to reduce CPU time.
+                // We don't use heapless::Vec for the IPC because we can't serialize the object with a trait natively
+                // which leaves us with ugly/dangerous slice-of-u8 cast techniques and/or inefficient serialization
+                // methods that rely on effectively a substantially similar intermediate array-based implementation.
+                // We retain the use of the "Vec" type here because the Vec type has some nice functions like iterators,
+                // and push(), len() etc. which doesn't really make sense to re-implement. But, maybe someone much
+                // more clever than I could do extend RowColVec to have these feature and get rid of this ugly copy
+                // step and make the rest of this routine operate natively on RowColVec types....
                 let mut keyups_core: Vec<RowCol, U16> = Vec::new();
                 let mut keydowns_core: Vec<RowCol, U16> = Vec::new();
                 for i in 0..rawstates.keyups.len() {

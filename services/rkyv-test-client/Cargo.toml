@@ -14,5 +14,7 @@ xous = {path = "../../xous-rs"}
 com = {path = "../com"}
 xous-names = {path="../xous-names"}
 
+keyboard = {path="../keyboard"}
+
 [features]
 default = []

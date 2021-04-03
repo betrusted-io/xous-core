@@ -18,7 +18,7 @@ pub struct Keyboard {
     raw_cb_sid: Option<xous::SID>,
 }
 impl Keyboard {
-    pub fn new(xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KBD).expect("Can't connect to KBD");
         Ok(Keyboard {
             conn,
