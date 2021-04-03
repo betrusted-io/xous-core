@@ -16,7 +16,7 @@ pub struct Gfx {
     conn: xous::CID,
 }
 impl Gfx {
-    pub fn new(&xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_GFX).expect("Can't connect to GFX");
         Ok(Gfx {
             conn,

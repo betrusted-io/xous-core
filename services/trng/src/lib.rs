@@ -8,7 +8,7 @@ pub struct Trng {
     conn: CID,
 }
 impl Trng {
-    pub fn new(&xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_TRNG).expect("Can't connect to TRNG server");
         Ok(Trng {
             conn
