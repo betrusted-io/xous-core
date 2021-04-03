@@ -132,3 +132,10 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 }
+
+impl Drop for Gfx {
+    fn drop(&mut self) {
+        // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+    }
+}

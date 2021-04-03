@@ -179,7 +179,7 @@ impl MyServer {
     use core::fmt::Write;
     write!(rich_struct.name, "{}", words).expect("words too long");
     // now convert it into a Xous::Buffer, which can then be lent to the server
-    let buf = Buffer::into_buf(rich_struct).or(Err(xous::Error:InternalError))?;
+    let buf = Buffer::into_buf(rich_struct).or(Err(xous::Error::InternalError))?;
     buf.lend(self.conn, Opcode::ExampleMemory.to_u32().unwrap()).map(|_| ())
   }
 
@@ -191,7 +191,7 @@ impl MyServer {
       stuff,
     };
     // now convert it into a Xous::Buffer, which can then be mutably lent to the server
-    let mut buf = Buffer::into_buf(rich_struct).or(Err(xous::Error:InternalError))?;
+    let mut buf = Buffer::into_buf(rich_struct).or(Err(xous::Error::InternalError))?;
     buf.lend_mut(self.conn, Opcode::ExampleMemoryWithReturn.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
     // note that to_original() creates a local copy on the stack of the returned buffer
@@ -212,7 +212,7 @@ impl MyServer {
   }
 
   /// an example of registering for a callback
-  static mut MYSERVER_CB: Option<fn(BattStats)> = None;
+  static mut MYSERVER_CB: Option<fn(BattStats)> = None; // this actually goes outside the object decl
   pub fn hook_callback(&mut self, cb: fn(u32)) -> Result<(), xous::Error> {
       if unsafe{MYSERVER_CB}.is_some() {
           return Err(xous::Error::MemoryInUse) // can't hook it twice
@@ -232,7 +232,7 @@ impl MyServer {
   }
 }
 
-/// handles callback messages from the COM server, in the library user's process space.
+/// handles callback messages from server, in the library user's process space.
 fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {
@@ -370,18 +370,18 @@ fn xmain() -> ! {
 ///  1. Define a crate-local API to pass the messages
 ///  2. Use Atomic data types (only applicable if you have primitive data to send)
 ///  3. Do some static mut unsafe thing because we don't have a Mutex data type yet.
-fn do_callback(&mut cb_conns: [Option<CID>; 32]) {
+fn do_callback(cb_conns: &mut [Option<CID>; 32]) {
   let a = useful_computation();
   for maybe_conn in cb_conns.iter_mut() { // this code is notional and probably doesn't work
     if let Some(conn) = maybe_conn {
-       match xous::send_message(conn,
-         xous:Message::new_scalar(api::Callback::Hello.to_usize().unwrap(), a, 0, 0, 0)
+       match xous::send_message(*conn,
+         xous::Message::new_scalar(api::Callback::Hello.to_usize().unwrap(), a, 0, 0, 0)
        ) {
          Err(xous::Error::ServerNotFound) => {
-           maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+           *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
          },
-         Ok => {}
-         _ => panic!("unhandled error in callback processing");
+         Ok(xous::Result::Ok) => {}
+         _ => panic!("unhandled error or result in callback processing");
        }
     }
   }

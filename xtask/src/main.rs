@@ -46,7 +46,7 @@ fn try_main() -> Result<(), DynError> {
         "log-server",
         "com",
         "xous-names",
-        //"keyboard",
+        "keyboard",
         "trng",
 
         "llio", // still to convert
