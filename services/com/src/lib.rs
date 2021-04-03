@@ -42,7 +42,7 @@ pub struct Com {
     battstats_sid: Option<xous::SID>,
 }
 impl Com {
-    pub fn new(xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_COM).expect("Can't connect to COM server");
         Ok(Com {
             conn,

@@ -138,7 +138,7 @@ pub struct MyServer {
   callback_sid: Option<xous::SID>, // this is only necessary if you have callbacks
 }
 impl MyServer {
-  pub fn new(xns: xous_names::XousNames) -> Result<Self, xous::Error> {
+  pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
     let conn = xns.request_connection_blocking(api::MY_SERVER_NAME).expect("Can't connect to MyServer");
     Ok(MyServer {
       conn,
