@@ -257,7 +257,7 @@ impl Drop for MyServer {
     fn drop(&mut self) {
         // if we have callbacks, destroy the callback server
         if let Some(sid) = self.callback_sid.take() {
-            // no need to tell the pstream server we're quitting: the next time a callback processes,
+            // no need to tell the upstream server we're quitting: the next time a callback processes,
             // it will automatically remove my entry as it will receive a ServerNotFound error.
 
             // tell my handler thread to quit
@@ -316,7 +316,7 @@ fn xmain() -> ! {
         }),
         Some(Opcode::ExampleMemory) => {
           let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-          let rms = buffer.to_flat::<RichMemStruct, _>().unwrap();
+          let rms = buffer.as_flat::<RichMemStruct, _>().unwrap();
           // we can now access fields in rms without copying the data
           // use to_original if you need to invoke methods on the struct object
         }
@@ -381,7 +381,7 @@ fn do_callback(cb_conns: &mut [Option<CID>; 32]) {
            *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
          },
          Ok(xous::Result::Ok) => {}
-         _ => panic!("unhandled error or result in callback processing");
+         _ => panic!("unhandled error or result in callback processing")
        }
     }
   }
