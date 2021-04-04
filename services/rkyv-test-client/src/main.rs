@@ -55,7 +55,7 @@ fn rkyv_test_client() -> ! {
     kbd.hook_keyboard_events(handle_keyevents).unwrap();
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
-        ticktimer.sleep_ms(500).ok();
+        ticktimer.sleep_ms(3000).ok();
 
         message_string.clear();
         write!(message_string, "I'm at loop # {:^4} (some numer: {})", idx, some_number).unwrap();

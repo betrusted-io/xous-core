@@ -55,6 +55,15 @@ impl RowColVec {
             self.storage[i]= data;
         }
     }
+    // used by the interrupt handler, we can't deal with errors anyways
+    pub fn add_unchecked(&mut self, key: RowCol) {
+        for s in self.storage.iter_mut() {
+            if *s == None {
+                *s = Some(key);
+                break;
+            }
+        }
+    }
     // returns True if key is unique and added; False if already exists in storage
     pub fn add_rc(&mut self, key: RowCol) -> Result<bool, xous::Error> {
         // first, check if the rc is in the array
@@ -173,7 +182,7 @@ pub(crate) enum Opcode {
     HostModeInjectKey, //(char),
 
     /// used by the interrupt handler to transfer results to the main loop
-    HandlerRawStates, // KeyRawState
+    HandlerTrigger,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

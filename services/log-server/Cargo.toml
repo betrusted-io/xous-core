@@ -6,7 +6,8 @@ name = "log-server"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+#log = "0.4"
+log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}

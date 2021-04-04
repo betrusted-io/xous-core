@@ -6,7 +6,7 @@ name = "keyboard"
 version = "0.1.0"
 
 [dependencies]
-log = "0.4"
+log = {version = "0.4", features = ["max_level_trace", "release_max_level_trace"]}
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
