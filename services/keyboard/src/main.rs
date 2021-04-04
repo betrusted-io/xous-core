@@ -7,12 +7,12 @@ use api::*;
 use heapless::Vec;
 use heapless::consts::*;
 
-use log::{error, info};
+use log::info;
 
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use api::{Opcode, KeyRawStates};
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack};
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
@@ -167,11 +167,9 @@ mod implementation {
     use utralib::generated::*;
     use crate::api::*;
     use crate::{map_dvorak, map_qwerty};
-    use log::{error, info};
     use ticktimer_server::Ticktimer;
     use xous::CID;
-    use xous_ipc::Buffer;
-    use num_traits::{FromPrimitive, ToPrimitive};
+    use num_traits::ToPrimitive;
 
     use heapless::Vec;
     use heapless::consts::*;
@@ -183,8 +181,6 @@ mod implementation {
     pub struct Keyboard {
         conn: CID,
         csr: utralib::CSR<u32>,
-        /// last timestamp (in ms) since last call
-        timestamp: u64,
         /// where the interrupt handler copies the new state
         new_state: RowColVec,
         /// remember the last key states
@@ -242,7 +238,6 @@ mod implementation {
             let mut kbd = Keyboard {
                 conn: xous::connect(sid).unwrap(),
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                timestamp,
                 new_state: RowColVec::new(),
                 last_state: RowColVec::new(),
                 ticktimer,
@@ -350,7 +345,7 @@ mod implementation {
             for i in 0..self.last_state.len() {
                 if let Some(lastcode) = self.last_state.get(i) {
                     if !new_codes.contains(lastcode) {
-                        keyups.add_rc(lastcode);
+                        keyups.add_rc(lastcode).unwrap();
                         self.last_state.set(i, None);
                     }
                 }
@@ -616,7 +611,7 @@ mod implementation {
                 hold = false;
             }
 
-            fn report_ok(k: char) -> Result<(), ()> { error!("ran out of space saving char: {}", k); Ok(()) }
+            fn report_ok(k: char) -> Result<(), ()> { log::error!("ran out of space saving char: {}", k); Ok(()) }
 
             if let Some(kus) = &keyups_noshift {
                 for &rc in kus.iter() {
@@ -713,7 +708,6 @@ mod implementation {
     use heapless::consts::*;
     use crate::api::*;
     //use crate::{map_dvorak, map_qwerty};
-    //use log::{error, info};
 
     #[allow(dead_code)]
     pub struct Keyboard {
@@ -813,7 +807,7 @@ fn xmain() -> ! {
                     }
                 }
                 if !found {
-                    error!("RegisterListener ran out of space registering callback");
+                    log::error!("RegisterListener ran out of space registering callback");
                 }
             }),
             Some(Opcode::RegisterRawListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
@@ -828,7 +822,7 @@ fn xmain() -> ! {
                     }
                 }
                 if !found {
-                    error!("RegisterListener ran out of space registering callback");
+                    log::error!("RegisterListener ran out of space registering callback");
                 }
             }),
             Some(Opcode::SelectKeyMap) => msg_scalar_unpack!(msg, km, _, _, _, {
@@ -840,10 +834,10 @@ fn xmain() -> ! {
             Some(Opcode::SetChordInterval) => msg_scalar_unpack!(msg, delay, _, _, _, {
                 kbd.set_chord_interval(delay as u32);
             }),
-            Some(Opcode::HostModeInjectKey) => msg_scalar_unpack!(msg, k, _, _, _, {
+            Some(Opcode::HostModeInjectKey) => msg_scalar_unpack!(msg, _k, _, _, _, {
                 #[cfg(not(target_os = "none"))]
                 {
-                    let key = if let Some(a) = core::char::from_u32(k as u32) {
+                    let key = if let Some(a) = core::char::from_u32(_k as u32) {
                         a
                     } else {
                         '\u{0000}'
@@ -887,12 +881,12 @@ fn xmain() -> ! {
                 let mut keydowns_core: Vec<RowCol, U16> = Vec::new();
                 for i in 0..rawstates.keyups.len() {
                     if let Some(rc) = rawstates.keyups.get(i) {
-                        keyups_core.push(rc);
+                        keyups_core.push(rc).unwrap();
                     }
                 }
                 for i in 0..rawstates.keydowns.len() {
                     if let Some(rc) = rawstates.keydowns.get(i) {
-                        keydowns_core.push(rc);
+                        keydowns_core.push(rc).unwrap();
                     }
                 }
                 let keyups = if keyups_core.len() > 0 {

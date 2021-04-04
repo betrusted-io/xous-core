@@ -1,6 +1,5 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous_ipc::String;
 use num_traits::{ToPrimitive, FromPrimitive};
 
 pub mod api;

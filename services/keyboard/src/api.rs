@@ -1,7 +1,3 @@
-use xous::{Message, ScalarMessage};
-use xous_ipc::String;
-use num_traits::{ToPrimitive, FromPrimitive};
-
 pub const SERVER_NAME_KBD: &str      = "_Matrix keyboard driver_";
 
 #[derive(Debug, Default, Copy, Clone)]
