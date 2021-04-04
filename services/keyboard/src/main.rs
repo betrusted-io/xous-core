@@ -332,8 +332,6 @@ mod implementation {
             keys
         }
 
-        /// update() is called from an interrupt context
-        /// it will send messages to the main loop with the keyup/keydown codes that were pressed
         pub fn update(&mut self) -> KeyRawStates {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
