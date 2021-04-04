@@ -580,6 +580,8 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "xous",
  "xous-ipc",
@@ -594,6 +596,8 @@ dependencies = [
  "ime-plugin-api",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
