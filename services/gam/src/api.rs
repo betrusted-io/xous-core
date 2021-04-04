@@ -2,6 +2,8 @@ use xous::{Message, ScalarMessage};
 use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Circle, Point};
 use xous_ipc::String;
 
+pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum GamObjectType {
     Line(Line),
@@ -31,32 +33,30 @@ pub struct ContentCanvasRequest {
     pub servername: String<256>,
 }
 
-#[repr(C)]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-// #[archive(derive(Copy, Clone))]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     // clears a canvas with a given GID
-    ClearCanvas(Gid),
+    ClearCanvas, //(Gid),
 
     // return the dimensions of a canvas as a Point (the top left is always (0,0))
-    GetCanvasBounds(Gid),
+    GetCanvasBounds, //(Gid),
 
     // request a new size for my canvas.
     // This normally will be denied, unless the requested Gid corresponds to a special canvas that allows resizing.
-    SetCanvasBounds(SetCanvasBoundsRequest),
+    SetCanvasBounds, //(SetCanvasBoundsRequest),
 
     // draws an object
-    RenderObject(GamObject),
+    RenderObject, //(GamObject),
 
     // renders a TextView
-    RenderTextView(TextView),
+    RenderTextView, //(TextView),
 
     // forces a redraw (which also does defacement, etc.)
     Redraw,
 
     // returns a GID to the "content" Canvas; currently, anyone can request it and draw to it, but maybe that policy should be stricter.
     // the Gid argument is the rkyv return value.
-    RequestContentCanvas(ContentCanvasRequest),
+    RequestContentCanvas, //(ContentCanvasRequest),
 
     // Requests setting the UI to the power down screen
     PowerDownRequest,
@@ -64,12 +64,21 @@ pub(crate) enum Opcode {
     /////// planned
 
     // hides a canvas with a given GID
-    HideCanvas(Gid),
+    //HideCanvas(Gid),
 
     // indicates if the current UI layout requires an input field
-    HasInput(bool),
+    //HasInput(bool),
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) enum Return {
+    RenderReturn(TextView),
+    SetCanvasBoundsReturn(SetCanvasBoundsRequest),
+    ContentCanvasReturn(ContentCanvasRequest),
+    Failure,
+}
+
+/*
 impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
     fn try_from(message: &Message) -> Result<Self, Self::Error> {
@@ -110,3 +119,4 @@ impl Into<Message> for Opcode {
         }
     }
 }
+*/

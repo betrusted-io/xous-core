@@ -159,7 +159,7 @@ impl MyServer {
   pub fn send_example_scalar(&self, a: u32, b: u32) -> Result<u32, xous::Error> {
     let response = send_message(self.conn,
       Message::new_blocking_scalar(Opcode::ExampleScalar.to_usize().unwrap()), a, b, 0, 0)
-    ).map(|_|())
+    ).map(|_|());
     // you could also receive two scalar values if you use Scalar2 instead of Scalar1
     if let xous::Result::Scalar1(result) = response {
       Ok(result as u32)
