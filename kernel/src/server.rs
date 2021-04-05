@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub use crate::arch::process::Thread;
+use crate::{mem::MemoryManager, services::SystemServices};
 use core::mem;
 use xous_kernel::{MemoryAddress, MemoryRange, MemorySize, Message, MessageSender, PID, SID, TID};
 
@@ -111,7 +112,7 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* server return address */
+        usize, /* reserved */
         usize, /* id */
         usize, /* arg1 */
         usize, /* arg2 */
@@ -122,7 +123,7 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* server return address */
+        usize, /* reserved */
         usize, /* id */
         usize, /* arg1 */
         usize, /* arg2 */
@@ -133,9 +134,9 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* reserved */
+        usize, /* client memory address */
         usize, /* id */
-        usize, /* buf */
+        usize, /* server memory address */
         usize, /* buf_size */
         usize, /* offset */
         usize, /* valid */
@@ -144,9 +145,9 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* address of memory base in server */
+        usize, /* client memory address */
         usize, /* id */
-        usize, /* buf */
+        usize, /* server memory address */
         usize, /* buf_size */
         usize, /* offset */
         usize, /* valid */
@@ -155,9 +156,9 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* address of memory base in server */
+        usize, /* client memory address */
         usize, /* id */
-        usize, /* buf */
+        usize, /* server memory address */
         usize, /* buf_size */
         usize, /* offset */
         usize, /* valid */
@@ -169,9 +170,9 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* address of memory base in server */
+        usize, /* client memory address */
         usize, /* id */
-        usize, /* buf */
+        usize, /* server memory address */
         usize, /* buf_size */
         usize, /* offset */
         usize, /* valid */
@@ -183,9 +184,9 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* address of memory base in server */
+        usize, /* client memory address */
         usize, /* id */
-        usize, /* buf */
+        usize, /* server memory address */
         usize, /* buf_size */
         usize, /* offset */
         usize, /* valid */
@@ -197,7 +198,7 @@ enum QueuedMessage {
         u16,   /* client PID */
         u8,    /* client TID */
         u8,    /* message index */
-        usize, /* server return address */
+        usize, /* reserved */
         usize, /* id */
         usize, /* arg1 */
         usize, /* arg2 */
@@ -239,6 +240,22 @@ enum QueuedMessage {
     ),
 }
 
+impl QueuedMessage {
+    /// Return `true` if this Queued Message is sitting inside of the Server, and
+    /// is therefore waiting to be returned.
+    /// This only indicates messages that have been seen by the Server and have
+    /// not yet been responded to -- Messages that have not yet been seen by the
+    /// Server will return `false`.
+    fn is_in_server(&self) -> bool {
+        match self {
+            &QueuedMessage::WaitingForget(_, _, _, _, _, _)
+            | &QueuedMessage::WaitingReturnMemory(_, _, _, _, _, _)
+            | &QueuedMessage::WaitingReturnScalar(_, _, _, _) => true,
+            _ => false,
+        }
+    }
+}
+
 impl Server {
     /// Initialize a server in the given option array. This function is
     /// designed to be called with `new` pointing to an entry in a vec.
@@ -260,7 +277,7 @@ impl Server {
         let queue = unsafe {
             core::slice::from_raw_parts_mut(
                 _backing.as_mut_ptr() as *mut QueuedMessage,
-               _backing.len() / mem::size_of::<QueuedMessage>(),
+                _backing.len() / mem::size_of::<QueuedMessage>(),
             )
         };
 
@@ -289,12 +306,182 @@ impl Server {
     }
 
     /// Take a current slot and replace it with `None`, clearing out the contents of the queue.
-    pub fn destroy(current: &mut Option<Server>) -> Result<(), xous_kernel::Error> {
-        if let Some(mut server) = current.take() {
-            server.queue_head = 0;
-            server.queue_tail = 0;
-            server.ready_threads = 0;
+    /// Returns an error if the queue has any waiting elements.
+    /// Returns a list of threads that should be readied.
+    pub fn destroy(
+        mut self,
+        ss: &mut SystemServices,
+    ) -> Result<(), Self> {
+
+        // First determine if the server has any Waiting messages. That is, any messages
+        // that are currently sitting in the memory space of the Server. These cannot
+        // safely be handled, and will cause an error if we try to mess with them.
+        for queue_entry in self.queue.iter() {
+            if queue_entry.is_in_server() {
+                return Err(self);
+            }
         }
+
+        // We now know there will be no problems in shutting down this server. Look
+        // through the queue and respond to each message in turn.
+        for entry in self.queue.iter_mut() {
+            match *entry {
+                // If there are `Waiting` messages, then something is seriously wrong because
+                // we already determined above that this wouldn't happen.
+                QueuedMessage::WaitingForget(_, _, _, _, _, _)
+                | QueuedMessage::WaitingReturnMemory(_, _, _, _, _, _)
+                | QueuedMessage::WaitingReturnScalar(_, _, _, _) => panic!("message was waiting"),
+
+                // For `Empty` and `Scalar` messages, all we have to do is ignore them.
+                // The sending process will not be blocked. These messages will be dropped,
+                // and the server will never see them.
+                QueuedMessage::Empty | QueuedMessage::ScalarMessage(_, _, _, _, _, _, _, _, _) => {
+                    ()
+                }
+
+                // For `Send` messages, the Server has not yet seen these messages. Simply
+                // prevent this memory from getting mapped into the Server and free it.
+                QueuedMessage::MemoryMessageSend(
+                    _pid,
+                    _tid,
+                    _idx,
+                    _client_memory_addr,
+                    _id,
+                    server_memory_addr,
+                    memory_length,
+                    _offset,
+                    _valid,
+                ) => {
+                    MemoryManager::with_mut(|mm| {
+                        let mut result = Ok(xous_kernel::Result::Ok);
+                        let virt = server_memory_addr;
+                        let size = memory_length;
+                        if virt & 0xfff != 0 {
+                            return Err(xous_kernel::Error::BadAlignment);
+                        }
+                        for addr in (virt..(virt + size)).step_by(crate::mem::PAGE_SIZE) {
+                            if let Err(e) = mm.unmap_page(addr as *mut usize) {
+                                if result.is_ok() {
+                                    result = Err(e);
+                                }
+                            }
+                        }
+                        result
+                    })
+                    .unwrap();
+                }
+
+                // For BlockingScalar messages, the client is waiting for a response.
+                // Unblock the client and return an error indicating the server does
+                // not exist.
+                QueuedMessage::BlockingScalarTerminated(pid, tid, _, _, _, _, _, _, _)
+                | QueuedMessage::BlockingScalarMessage(pid, tid, _, _, _, _, _, _, _) => {
+                    let pid = PID::new(pid as _).unwrap();
+                    let tid = tid as _;
+
+                    // Set the return value of the specified thread.
+                    ss.set_thread_result(
+                        pid,
+                        tid,
+                        xous_kernel::Result::Error(xous_kernel::Error::ServerNotFound),
+                    )
+                    .unwrap();
+
+                    // Mark it as ready to run.
+                    ss.ready_thread(pid, tid).unwrap();
+                }
+
+                QueuedMessage::MemoryMessageROLend(
+                    client_pid,
+                    client_tid,
+                    _idx,
+                    client_addr,
+                    _id,
+                    server_addr,
+                    buf_size,
+                    _,
+                    _,
+                )
+                | QueuedMessage::MemoryMessageRWLend(
+                    client_pid,
+                    client_tid,
+                    _idx,
+                    client_addr,
+                    _id,
+                    server_addr,
+                    buf_size,
+                    _,
+                    _,
+                )
+                | QueuedMessage::MemoryMessageROLendTerminated(
+                    client_pid,
+                    client_tid,
+                    _idx,
+                    client_addr,
+                    _id,
+                    server_addr,
+                    buf_size,
+                    _,
+                    _,
+                )
+                | QueuedMessage::MemoryMessageRWLendTerminated(
+                    client_pid,
+                    client_tid,
+                    _idx,
+                    client_addr,
+                    _id,
+                    server_addr,
+                    buf_size,
+                    _,
+                    _,
+                ) => {
+                    let client_pid = PID::new(client_pid as _).unwrap();
+                    let client_tid = client_tid as _;
+                    // Return the memory to the calling process
+                    ss.return_memory(
+                        server_addr as *mut u8,
+                        client_pid,
+                        client_tid,
+                        client_addr as _,
+                        buf_size,
+                    )
+                    .unwrap();
+                    ss.ready_thread(client_pid, client_tid).unwrap();
+                    ss.set_thread_result(
+                        client_pid,
+                        client_tid,
+                        xous_kernel::Result::Error(xous_kernel::Error::ServerNotFound),
+                    )
+                    .unwrap();
+                }
+            }
+            *entry = QueuedMessage::Empty;
+        }
+
+        let server_pid = ss.current_pid();
+
+        // Finally, wake up all threads that are waiting on this Server.
+        while let Some(server_tid) = self.take_available_thread() {
+            ss.ready_thread(server_pid, server_tid).unwrap();
+            ss.set_thread_result(
+                server_pid,
+                server_tid,
+                xous_kernel::Result::Error(xous_kernel::Error::ServerNotFound),
+            )
+            .unwrap();
+        }
+
+        // Release the backing memory
+        #[cfg(baremetal)]
+        MemoryManager::with_mut(|mm| {
+            let virt = self.queue.as_mut_ptr() as usize;
+            let size = self.queue.len();
+            for addr in (virt..(virt + size)).step_by(crate::arch::mem::PAGE_SIZE) {
+                mm.unmap_page(addr as *mut usize).unwrap();
+            }
+        });
+
+        // The server should now be destroyed.
         Ok(())
     }
 
@@ -392,7 +579,8 @@ impl Server {
             .get_mut(message_index)
             .ok_or(xous_kernel::Error::BadAddress)?;
         // klog!("memory in queue[{}]: {:?}", message_index, current_val);
-        let (pid, tid, _idx, server_addr, client_addr, len, forget, is_memory) = match *current_val {
+        let (pid, tid, _idx, server_addr, client_addr, len, forget, is_memory) = match *current_val
+        {
             QueuedMessage::WaitingReturnMemory(pid, tid, idx, server_addr, client_addr, len) => {
                 (pid, tid, idx, server_addr, client_addr, len, false, true)
             }
@@ -509,7 +697,7 @@ impl Server {
                     idx,
                     client_addr,
                     id,
-                    buf,
+                    server_addr,
                     buf_size,
                     offset,
                     valid,
@@ -520,7 +708,7 @@ impl Server {
                             sender: sender.into(),
                             body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                                 id,
-                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                buf: MemoryRange::new(server_addr, buf_size).ok()?,
                                 offset: MemorySize::new(offset),
                                 valid: MemorySize::new(valid),
                             }),
@@ -529,7 +717,7 @@ impl Server {
                             pid,
                             tid,
                             idx,
-                            buf,
+                            server_addr,
                             client_addr,
                             buf_size,
                         ),
@@ -541,7 +729,7 @@ impl Server {
                     idx,
                     client_addr,
                     id,
-                    buf,
+                    server_addr,
                     buf_size,
                     offset,
                     valid,
@@ -552,7 +740,7 @@ impl Server {
                             sender: sender.into(),
                             body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                                 id,
-                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                buf: MemoryRange::new(server_addr, buf_size).ok()?,
                                 offset: MemorySize::new(offset),
                                 valid: MemorySize::new(valid),
                             }),
@@ -561,7 +749,7 @@ impl Server {
                             pid,
                             tid,
                             idx,
-                            buf,
+                            server_addr,
                             client_addr,
                             buf_size,
                         ),
@@ -573,7 +761,7 @@ impl Server {
                     idx,
                     client_addr,
                     id,
-                    buf,
+                    server_addr,
                     buf_size,
                     offset,
                     valid,
@@ -584,7 +772,7 @@ impl Server {
                             sender: sender.into(),
                             body: xous_kernel::Message::Borrow(xous_kernel::MemoryMessage {
                                 id,
-                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                buf: MemoryRange::new(server_addr, buf_size).ok()?,
                                 offset: MemorySize::new(offset),
                                 valid: MemorySize::new(valid),
                             }),
@@ -593,7 +781,7 @@ impl Server {
                             pid,
                             tid,
                             idx,
-                            buf,
+                            server_addr,
                             client_addr,
                             buf_size,
                         ),
@@ -605,7 +793,7 @@ impl Server {
                     idx,
                     client_addr,
                     id,
-                    buf,
+                    server_addr,
                     buf_size,
                     offset,
                     valid,
@@ -616,7 +804,7 @@ impl Server {
                             sender: sender.into(),
                             body: xous_kernel::Message::MutableBorrow(xous_kernel::MemoryMessage {
                                 id,
-                                buf: MemoryRange::new(buf, buf_size).ok()?,
+                                buf: MemoryRange::new(server_addr, buf_size).ok()?,
                                 offset: MemorySize::new(offset),
                                 valid: MemorySize::new(valid),
                             }),
@@ -625,7 +813,7 @@ impl Server {
                             pid,
                             tid,
                             idx,
-                            buf,
+                            server_addr,
                             client_addr,
                             buf_size,
                         ),
@@ -666,7 +854,7 @@ impl Server {
                     idx,
                     _reserved,
                     id,
-                    buf,
+                    server_addr,
                     buf_size,
                     offset,
                     valid,
@@ -676,7 +864,7 @@ impl Server {
                         sender: sender.into(),
                         body: xous_kernel::Message::Move(xous_kernel::MemoryMessage {
                             id,
-                            buf: MemoryRange::new(buf, buf_size).ok()?,
+                            buf: MemoryRange::new(server_addr, buf_size).ok()?,
                             offset: MemorySize::new(offset),
                             valid: MemorySize::new(valid),
                         }),
@@ -832,7 +1020,7 @@ impl Server {
                 pid.get() as _,
                 tid as _,
                 self.tail_generation,
-                original_address.map(|x| x.get()).unwrap_or(0),
+                0,
                 msg.id,
                 msg.arg1,
                 msg.arg2,
@@ -843,7 +1031,7 @@ impl Server {
                 pid.get() as _,
                 tid as _,
                 self.tail_generation,
-                original_address.map(|x| x.get()).unwrap_or(0),
+                0,
                 msg.id,
                 msg.arg1,
                 msg.arg2,

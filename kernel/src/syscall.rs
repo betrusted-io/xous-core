@@ -323,16 +323,18 @@ fn return_memory(
         //     client_pid,
         //     client_tid
         // );
+        #[cfg(baremetal)]
+        let src_virt = server_addr.get() as _;
+        #[cfg(not(baremetal))]
+        let src_virt = buf.addr.get() as _;
 
         // Return the memory to the calling process
         ss.return_memory(
-            server_addr.get() as _,
-            tid,
+            src_virt,
             client_pid,
             client_tid,
             client_addr.get() as _,
             len.get(),
-            buf,
         )?;
 
         // Unblock the client context to allow it to continue.
@@ -843,6 +845,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Disconnect(cid) => SystemServices::with_mut(|ss| {
             ss.disconnect_from_server(cid)
                 .and(Ok(xous_kernel::Result::Ok))
+        }),
+        SysCall::DestroyServer(sid) => SystemServices::with_mut(|ss| {
+            ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok))
         }),
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
