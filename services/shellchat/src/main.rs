@@ -244,6 +244,7 @@ fn xmain() -> ! {
     let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT).expect("can't register server");
     log::trace!("registered with NS -- {:?}", shch_sid);
 
+    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(shch_sid).unwrap())};
     let mut imef = ImeFrontEnd::new(&xns).expect("can't connect to IMEF");
     imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
 
@@ -257,6 +258,7 @@ fn xmain() -> ! {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<String<4000>, _>().unwrap();
+                log::trace!("shell got input line: {}", s.as_str());
                 repl.input(s.as_str()).expect("REPL couldn't accept input string");
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
             }

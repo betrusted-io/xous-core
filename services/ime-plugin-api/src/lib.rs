@@ -188,8 +188,11 @@ pub enum ImefOpcode {
     /// register a listener for finalized inputs
     RegisterListener, //(String<64>),
 
-    /// internal for passing keyboard events from the keyboard callback
+    /// internal use for passing keyboard events from the keyboard callback
     ProcessKeys,
+
+    /// force a redraw of the UI
+    Redraw,
 
     // this is the event opcode used by listeners
     //GotInputLine, //(String<4000>),
@@ -205,6 +208,7 @@ pub trait ImeFrontEndApi {
     fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
+    fn redraw(&self) -> Result<(), xous::Error>;
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
@@ -281,6 +285,14 @@ impl ImeFrontEndApi for ImeFrontEnd {
                 sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
             )).unwrap();
         }
+        Ok(())
+    }
+
+    fn redraw(&self) -> Result<(), xous::Error> {
+        send_message(self.cid,
+            Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(),
+            0, 0, 0, 0)
+        )?;
         Ok(())
     }
 }

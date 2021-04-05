@@ -181,7 +181,7 @@ impl ModalCanvases {
 fn xmain() -> ! {
     let debugc = true;
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -216,6 +216,8 @@ fn xmain() -> ! {
     log::trace!("acquiring connection to the default 'shell' predictor...");
     imef.set_predictor(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("couldn't set IMEF prediction to shell");
     // NOTE: all three API calls (set_input_canvas, set_prediction_canvas, set_predictor) are mandatory for IMEF initialization
+    // now update the IMEF area, since we're initialized
+    imef.redraw().unwrap();
 
     // no content canvas initially, but keep a placeholder for one
     let mut ccc: ContentCanvasConnection = ContentCanvasConnection{connection: None, redraw_id: None};

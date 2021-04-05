@@ -616,19 +616,10 @@ fn xmain() -> ! {
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
 
-    // The main lop can't start until we've been assigned Gids from the GAM, and a Predictor.
-    info!("waiting for my canvas Gids");
-    let mut init_done = false;
+    log::trace!("Initialized but still waiting for my canvas Gids");
     loop {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
-        if !init_done && tracker.is_init() {
-            init_done = true;
-            // force a redraw of the UI
-            info!("IMEF initialized, forcing initial UI redraw");
-            tracker.clear_area().expect("can't initially clear areas");
-            tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
-        }
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ImefOpcode::SetInputCanvas) => {
                 msg_scalar_unpack!(msg, g0, g1, g2, g3, {
@@ -670,7 +661,7 @@ fn xmain() -> ! {
                 }
             }),
             Some(ImefOpcode::ProcessKeys) => {
-                if init_done {
+                if tracker.is_init() {
                     msg_scalar_unpack!(msg, k1, k2, k3, k4, {
                         let keys = [
                             if let Some(a) = core::char::from_u32(k1 as u32) {
@@ -706,8 +697,17 @@ fn xmain() -> ! {
                                         Err(xous::Error::ServerNotFound) => {
                                             *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
                                         },
-                                        Ok(xous::Result::Ok) => {}
-                                        _ => panic!("unhandled error or result in callback processing")
+                                        Ok(xous::Result::Ok) => {},
+                                        Ok(xous::Result::MemoryReturned(offset, valid)) => {
+                                            // ignore anything that's returned, but note it in case we're debugging
+                                            log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
+                                        },
+                                        Err(e) => {
+                                            log::error!("unhandled error in callback processing: {:?}", e);
+                                        }
+                                        Ok(e) => {
+                                            log::error!("unexpected result in callback processing: {:?}", e);
+                                        }
                                     }
                                 }
                             }
@@ -715,6 +715,15 @@ fn xmain() -> ! {
                     });
                 } else {
                     log::trace!("got keys, but we're not initialized");
+                    // ignore keyboard events until we've fully initialized
+                }
+            }
+            Some(ImefOpcode::Redraw) => {
+                if tracker.is_init() {
+                    tracker.clear_area().expect("can't initially clear areas");
+                    tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+                } else {
+                    log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
                 }
             }
