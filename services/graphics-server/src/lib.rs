@@ -12,6 +12,7 @@ use xous::{send_message, Message};
 use xous_ipc::Buffer;
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Gfx {
     conn: xous::CID,
 }
@@ -77,7 +78,7 @@ impl Gfx {
 
     pub fn screen_size(&self) -> Result<Point, xous::Error> {
         let response = send_message(self.conn,
-            Message::new_scalar(Opcode::ScreenSize.to_usize().unwrap(), 0, 0, 0, 0,
+            Message::new_blocking_scalar(Opcode::ScreenSize.to_usize().unwrap(), 0, 0, 0, 0,
         )).expect("ScreenSize message failed");
         if let xous::Result::Scalar2(x, y) = response {
             Ok(Point::new(x as _, y as _))
@@ -88,8 +89,9 @@ impl Gfx {
 
     pub fn glyph_height_hint(&self, glyph: GlyphStyle) -> Result<usize, xous::Error> {
         let response = send_message(self.conn,
-            Message::new_scalar(Opcode::QueryGlyphProps.to_usize().unwrap(), glyph as usize, 0, 0, 0,
-        )).expect("QueryGlyphProps failed");
+            Message::new_blocking_scalar(Opcode::QueryGlyphProps.to_usize().unwrap(),
+            glyph as usize, 0, 0, 0,)
+        ).expect("QueryGlyphProps failed");
         if let xous::Result::Scalar2(_, h) = response {
             Ok(h)
         } else {

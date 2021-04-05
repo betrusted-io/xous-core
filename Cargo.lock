@@ -1236,6 +1236,8 @@ dependencies = [
  "llio",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",

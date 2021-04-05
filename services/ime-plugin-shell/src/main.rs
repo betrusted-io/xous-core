@@ -121,7 +121,12 @@ fn xmain() -> ! {
             Some(Opcode::GetPredictionTriggers) => {
                 xous::return_scalar(msg.sender, mytriggers.into()).expect("couldn't return GetPredictionTriggers");
             }
-            None => error!("unknown Opcode")
+            None => {error!("unknown Opcode"); break}
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(ime_sh_sid).unwrap();
+    xous::destroy_server(ime_sh_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

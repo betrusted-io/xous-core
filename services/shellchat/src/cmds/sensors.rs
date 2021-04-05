@@ -19,13 +19,13 @@ impl<'a> ShellCmdApi<'a> for Sensors {
         let mut ret = String::<1024>::new();
 
         write!(ret, "Vbus {:.2}V\nVint {:.2}V\nVaux {:.2}V\nVbram {:.2}V\nUSB {:.2}|{:.2}V\nTemp {:.1}°C",
-           (llio::adc_vbus(env.llio).unwrap() as f64) * 0.005033,
-           (llio::adc_vccint(env.llio).unwrap() as f64) / 1365.0,
-           (llio::adc_vccaux(env.llio).unwrap() as f64) / 1365.0,
-           (llio::adc_vccbram(env.llio).unwrap() as f64) / 1365.0,
-           (llio::adc_usb_p(env.llio).unwrap() as f64) / 1365.0,
-           (llio::adc_usb_n(env.llio).unwrap() as f64) / 1365.0,
-           ((llio::adc_temperature(env.llio).unwrap() as f64) * 0.12304) - 273.15,
+           (env.llio.adc_vbus().unwrap() as f64) * 0.005033,
+           (env.llio.adc_vccint().unwrap() as f64) / 1365.0,
+           (env.llio.adc_vccaux().unwrap() as f64) / 1365.0,
+           (env.llio.adc_vccbram().unwrap() as f64) / 1365.0,
+           (env.llio.adc_usb_p().unwrap() as f64) / 1365.0,
+           (env.llio.adc_usb_n().unwrap() as f64) / 1365.0,
+           ((env.llio.adc_temperature().unwrap() as f64) * 0.12304) - 273.15,
         ).unwrap();
 
         Ok(Some(ret))

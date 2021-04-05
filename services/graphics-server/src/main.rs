@@ -348,25 +348,30 @@ fn xmain() -> ! {
             }),
             Some(Opcode::ScreenSize) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let pt = display.screen_size();
-                xous::return_scalar2(msg.sender, pt.x as usize, pt.y as usize)
-                    .expect("couldn't return ScreenSize request");
+                xous::return_scalar2(msg.sender,
+                    pt.x as usize,
+                    pt.y as usize
+                ).expect("couldn't return ScreenSize request");
             }),
             Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
                 let glyph = GlyphStyle::from(style);
-                xous::return_scalar2(
-                    msg.sender,
+                xous::return_scalar2(msg.sender,
                     glyph.into(),
-                    blitstr::glyph_to_height_hint(glyph),
-                )
-                .expect("could not return QueryGlyphProps request");
+                    blitstr::glyph_to_height_hint(glyph)
+                ).expect("could not return QueryGlyphProps request");
             }),
             Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
                 display.blit_screen(logo::LOGO_MAP);
                 display.update();
                 display.redraw();
             }),
-            None => panic!("received opcode scalar that is not handled")
+            None => {log::error!("received opcode scalar that is not handled"); break}
         }
         display.update();
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(sid).unwrap();
+    xous::destroy_server(sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

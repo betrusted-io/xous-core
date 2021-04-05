@@ -330,6 +330,12 @@ fn reader_thread(arg: usize) {
             }
         }
     }
+    /* // all cases handled, this loop can never exit
+    log::trace!("main loop exit, destroying servers");
+    xous::destroy_server(server_addr).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
+    */
 }
 
 #[xous::xous_main]

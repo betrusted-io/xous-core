@@ -5,6 +5,7 @@ pub mod api;
 use xous::{send_message, Error, CID};
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Ticktimer {
     conn: CID,
 }

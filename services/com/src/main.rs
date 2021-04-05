@@ -252,6 +252,7 @@ fn xmain() -> ! {
     use crate::implementation::XousCom;
 
     log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -358,7 +359,7 @@ fn xmain() -> ! {
                 )
                 .expect("couldn't return WF200 firmware rev");
             }
-            None => error!("unknown opcode"),
+            None => {error!("unknown opcode"); break},
         }
 
         if let Some(dropped_cid) = com.process_queue() {
@@ -372,4 +373,9 @@ fn xmain() -> ! {
             }
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(com_sid).unwrap();
+    xous::destroy_server(com_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

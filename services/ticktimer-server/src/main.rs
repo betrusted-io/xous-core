@@ -473,7 +473,13 @@ fn xmain() -> ! {
             }
             None => {
                 error!("couldn't convert opcode");
+                break
             }
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xous::destroy_server(ticktimer_server).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

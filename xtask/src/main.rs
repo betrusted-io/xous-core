@@ -38,7 +38,7 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
         "gam",
-        //"shellchat",
+        "shellchat",
         "ime-frontend",
         "ime-plugin-shell",
         "graphics-server",
@@ -50,8 +50,8 @@ fn try_main() -> Result<(), DynError> {
         "trng",
 
         "llio", // still to convert
-        "rkyv-test-client",
-        "rkyv-test-server",
+        //"rkyv-test-client",
+        //"rkyv-test-server",
     ];
     let fcc_pkgs = [
         "shell",

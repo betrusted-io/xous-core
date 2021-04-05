@@ -6,6 +6,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
 pub fn callback_thread() {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    let xns = xous_names::XousNames::new().unwrap();
+    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
     log::info!("callback initiator test thread started");
     loop {

@@ -127,7 +127,12 @@ fn xmain() -> ! {
                 error!("AuthenticatedLookup not yet implemented");
                 unimplemented!("AuthenticatedLookup not yet implemented");
             }
-            None => error!("couldn't decode message: {:?}", msg)
+            None => {error!("couldn't decode message: {:?}", msg); break}
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xous::destroy_server(name_server).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

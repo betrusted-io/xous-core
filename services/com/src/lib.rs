@@ -36,7 +36,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         }
     }
 }
-
+#[derive(Debug)]
 pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,

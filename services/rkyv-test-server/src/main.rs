@@ -153,7 +153,13 @@ fn test_main() -> ! {
                     }
                 }
             }
-            None => (),
+            None => break,
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(sid).unwrap();
+    xous::destroy_server(sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

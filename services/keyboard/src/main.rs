@@ -734,8 +734,8 @@ mod implementation {
         }
         pub fn get_map(&self) -> KeyMap {self.map}
 
-        pub fn update(&self) -> ( Option<Vec<RowCol, U16>>, Option<Vec<RowCol, U16>> ) {
-            (None, None)
+        pub fn update(&self) -> KeyRawStates {
+            KeyRawStates::new()
         }
 
         pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
@@ -776,7 +776,7 @@ fn send_rawstates(cb_conns: &mut [Option<CID>; 16], krs: &KeyRawStates) {
 fn xmain() -> ! {
     use crate::implementation::Keyboard;
     log_server::init_wait().unwrap();
-    //log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -938,7 +938,12 @@ fn xmain() -> ! {
                     }
                 }
             },
-            None => log::error!("couldn't convert opcode"),
+            None => {log::error!("couldn't convert opcode"); break}
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(kbd_sid).unwrap();
+    xous::destroy_server(kbd_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

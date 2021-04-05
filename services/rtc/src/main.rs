@@ -402,4 +402,9 @@ fn xmain() -> ! {
             error!("KBD: couldn't convert opcode");
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(rtc_sid).unwrap();
+    xous::destroy_server(rtc_sid).unwrap();
+    log::trace!("quitting");
 }

@@ -48,6 +48,7 @@ fn rkyv_test_client() -> ! {
     let mut message_string = xous::String::<64>::new();
 
     let xns = xous_names::XousNames::new().unwrap();
+
     let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
 

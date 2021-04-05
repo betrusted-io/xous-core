@@ -637,6 +637,12 @@ fn xmain() -> ! {
             };
         } else {
             error!("LLIO: couldn't convert opcode");
+            break;
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(llio_sid).unwrap();
+    xous::destroy_server(llio_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

@@ -604,4 +604,9 @@ fn xmain() -> ! {
             error!("error requesting ticktimer!")
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(agent_server_sid).unwrap();
+    xous::destroy_server(agent_server_sid).unwrap();
+    log::trace!("quitting");
 }

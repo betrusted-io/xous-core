@@ -22,7 +22,7 @@ const MAX_PREDICTION_OPTIONS: usize = 4;
 
 struct InputTracker {
     /// connection for handling graphical update requests
-    pub gam_conn: xous::CID,
+    pub gam: gam::Gam,
 
 
     /// input area canvas, as given by the GAM
@@ -58,9 +58,9 @@ struct InputTracker {
 }
 
 impl InputTracker {
-    pub fn new(gam_conn: xous::CID)-> InputTracker {
+    pub fn new(xns: &xous_names::XousNames)-> InputTracker {
         InputTracker {
-            gam_conn,
+            gam: gam::Gam::new(&xns).unwrap(),
             input_canvas: None,
             pred_canvas: None,
             predictor: None,
@@ -93,8 +93,8 @@ impl InputTracker {
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
         if let Some(pc) = self.pred_canvas {
-            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("Couldn't get prediction canvas bounds");
-            gam::draw_rectangle(self.gam_conn, pc,
+            let pc_bounds: Point = self.gam.get_canvas_bounds(pc).expect("Couldn't get prediction canvas bounds");
+            self.gam.draw_rectangle(pc,
                 Rectangle::new_with_style(Point::new(0, 0), pc_bounds,
                 DrawStyle {
                     fill_color: Some(PixelColor::Light),
@@ -103,7 +103,7 @@ impl InputTracker {
                 }
             )).expect("can't clear prediction area");
             // add the border line on top
-            gam::draw_line(self.gam_conn, pc,
+            self.gam.draw_line(pc,
                 Line::new_with_style(
                     Point::new(0,0),
                     Point::new(pc_bounds.x, 0),
@@ -116,8 +116,8 @@ impl InputTracker {
         }
 
         if let Some(ic) = self.input_canvas {
-            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("Couldn't get input canvas bounds");
-            gam::draw_rectangle(self.gam_conn, ic,
+            let ic_bounds: Point = self.gam.get_canvas_bounds(ic).expect("Couldn't get input canvas bounds");
+            self.gam.draw_rectangle(ic,
                 Rectangle::new_with_style(Point::new(0, 0), ic_bounds,
                 DrawStyle {
                     fill_color: Some(PixelColor::Light),
@@ -127,7 +127,7 @@ impl InputTracker {
             )).expect("can't clear input area");
 
             // add the border line on top
-            gam::draw_line(self.gam_conn, ic,
+            self.gam.draw_line(ic,
                 Line::new_with_style(
                     Point::new(0,0),
                     Point::new(ic_bounds.x, 0),
@@ -214,7 +214,7 @@ impl InputTracker {
         let mut retstring: Option<String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
             if debug1{info!("updating input area");}
-            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("Couldn't get input canvas bounds");
+            let ic_bounds: Point = self.gam.get_canvas_bounds(ic).expect("Couldn't get input canvas bounds");
             let mut input_tv = TextView::new(ic,
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
             input_tv.draw_border = false;
@@ -361,7 +361,7 @@ impl InputTracker {
                                 granted: None,
                             };
                             if debug1{info!("attempting resize to {:?}", req.requested);}
-                            gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("couldn't call set_bounds_request on input area overflow");
+                            self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
                             if debug1{
                                 info!("carriage return resize to {:?}", req.granted);
                             }
@@ -450,7 +450,7 @@ impl InputTracker {
             if debug1{info!("insertion point is {}, characters in string {}", self.insertion, self.characters);}
             if do_redraw {
                 write!(input_tv.text, "{}", self.line.as_str().expect("couldn't convert str")).expect("couldn't update TextView string in input canvas");
-                gam::post_textview(self.gam_conn, &mut input_tv).expect("can't draw input TextView");
+                self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                 if debug1{info!("got computed cursor of {:?}", input_tv.cursor);}
 
                 // check if the cursor is now at the bottom of the textview, this means we need to grow the box
@@ -467,7 +467,7 @@ impl InputTracker {
                         granted: None,
                     };
                     if debug1{info!("attempting resize to {:?}", req.requested);}
-                    gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("couldn't call set_bounds_request on input area overflow");
+                    self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
                     self.clear_area().expect("couldn't clear area after resize");
                     match req.granted {
                         Some(bounds) => {
@@ -476,7 +476,7 @@ impl InputTracker {
                             // request was approved, redraw with the new bounding box
                             input_tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), bounds));
                             input_tv.bounds_computed = None;
-                            gam::post_textview(self.gam_conn, &mut input_tv).expect("can't draw input TextView");
+                            self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                         },
                         _ => info!("couldn't resize input canvas after overflow of text")
                     }
@@ -490,7 +490,7 @@ impl InputTracker {
         // just draw a rectangle for the prediction area for now
         if let Some(pc) = self.pred_canvas {
             if debug1{info!("updating prediction area");}
-            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("Couldn't get prediction canvas bounds");
+            let pc_bounds: Point = self.gam.get_canvas_bounds(pc).expect("Couldn't get prediction canvas bounds");
             let pc_clip: Rectangle = Rectangle::new_with_style(Point::new(0,1), pc_bounds,
                 DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 }
             );
@@ -528,10 +528,10 @@ impl InputTracker {
                 empty_tv.clear_area = true;
                 write!(empty_tv.text, "Ready for input...").expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
-                gam::post_textview(self.gam_conn, &mut empty_tv).expect("can't draw prediction TextView");
+                self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
             } else if update_predictor  {
                 // alright, first, let's clear the area
-                gam::draw_rectangle(self.gam_conn, pc, pc_clip).expect("couldn't clear predictor area");
+                self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
                 if debug1{info!("valid_predictions: {}", valid_predictions);}
                 // OK, let's start initially with just a naive, split-by-N layout of the prediction area
@@ -545,7 +545,7 @@ impl InputTracker {
                             Point::new(i * approx_width, 1),
                             Point::new((i+1) * approx_width, pc_bounds.y)).clip_with(pc_clip).unwrap();
                         if i > 0 {
-                            gam::draw_line(self.gam_conn, pc,
+                            self.gam.draw_line(pc,
                             Line::new_with_style(
                             Point::new(i * approx_width, 1),
                             Point::new( i * approx_width, pc_bounds.y),
@@ -560,23 +560,30 @@ impl InputTracker {
                         p_tv.ellipsis = true;
                         p_tv.style = blitstr::GlyphStyle::Small;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
-                        gam::post_textview(self.gam_conn, &mut p_tv).expect("couldn't post prediction text");
+                        self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");
                         i += 1;
                     }
                 }
             }
         }
 
-        gam::redraw(self.gam_conn).expect("couldn't redraw screen");
+        self.gam.redraw().expect("couldn't redraw screen");
 
         Ok(retstring)
     }
 }
 
 // we have to store this connection state somewhere, either in the lib side or the local side
+// it's unsafe to access because in theory, someone could change the value between when we
+// unwrap it and when we use it. However, we guarantee this not to happen through the construction
+// of the program itself. Later on (maybe in v0.9) once we get Boxed closures, it would be good to
+// re-implement this callback as a Boxed closure instead of a function, but for Xous 0.8 this is the best
+// we can do.
 static mut CB_TO_MAIN_CONN: Option<CID> = None;
 fn handle_keyevents(keys: [char; 4]) {
+    log::trace!("got key event callback");
     if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+        log::trace!("sending keys: {:?}", keys);
         xous::send_message(cb_to_main_conn,
             xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
             keys[0] as u32 as usize,
@@ -589,10 +596,11 @@ fn handle_keyevents(keys: [char; 4]) {
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = false;
+    let debug1 = true;
     let dbglistener = false;
     let dbgcanvas = false;
     log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -604,9 +612,7 @@ fn xmain() -> ! {
     let mut kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
     kbd.hook_keyboard_events(handle_keyevents).unwrap();
 
-    let mut tracker = InputTracker::new(
-        xns.request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("can't connect to GAM"),
-    );
+    let mut tracker = InputTracker::new(&xns);
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
 
@@ -616,6 +622,13 @@ fn xmain() -> ! {
     loop {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
+        if !init_done && tracker.is_init() {
+            init_done = true;
+            // force a redraw of the UI
+            info!("IMEF initialized, forcing initial UI redraw");
+            tracker.clear_area().expect("can't initially clear areas");
+            tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+        }
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ImefOpcode::SetInputCanvas) => {
                 msg_scalar_unpack!(msg, g0, g1, g2, g3, {
@@ -634,6 +647,7 @@ fn xmain() -> ! {
             Some(ImefOpcode::SetPredictionServer) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s = buffer.as_flat::<String::<64>, _>().unwrap();
+                log::trace!("got prediction server: {}", s.as_str());
                 match xns.request_connection(s.as_str()) {
                     Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
                     _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str()),
@@ -642,6 +656,7 @@ fn xmain() -> ! {
             Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = Some(xous::connect(sid).unwrap());
+                log::trace!("listener registered: {:?}", sid);
                 let mut found = false;
                 for entry in listeners.iter_mut() {
                     if *entry == None {
@@ -679,6 +694,7 @@ fn xmain() -> ! {
                                 '\u{0000}'
                             },
                         ];
+                        log::trace!("tracking keys: {:?}", keys);
                         if let Some(line) = tracker.update(keys).expect("couldn't update input tracker with latest key presses") {
                             if dbglistener{info!("sending listeners {:?}", line);}
                             let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
@@ -698,17 +714,21 @@ fn xmain() -> ! {
                         }
                     });
                 } else {
+                    log::trace!("got keys, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
                 }
             }
-            None => log::error!("couldn't convert opcode")
-        }
-        if !init_done && tracker.is_init() {
-            init_done = true;
-            // force a redraw of the UI
-            if debug1{info!("forcing initial UI redraw");}
-            tracker.clear_area().expect("can't initially clear areas");
-            tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+            None => {log::error!("couldn't convert opcode"); break}
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    unsafe{
+        if let Some(cb) = CB_TO_MAIN_CONN {
+            xous::disconnect(cb).unwrap();
+        }
+    }
+    xns.unregister_server(imef_sid).unwrap();
+    xous::destroy_server(imef_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

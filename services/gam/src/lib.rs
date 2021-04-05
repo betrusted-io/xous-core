@@ -6,20 +6,20 @@ use api::*;
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
-use log::info;
 
 use api::Opcode; // if you prefer to map the api into your local namespace
-use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
+use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Gam {
     conn: CID,
 }
 impl Gam {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_GAM).expect("Can't connect to GAM");
-        Ok(MyServer {
+        Ok(Gam {
           conn,
         })
     }
@@ -49,7 +49,7 @@ impl Gam {
     /// the actual screen update is allowed
     pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
         tv.set_op(TextOp::Render);
-        let mut buf = Buffer::into_buf(*tv.clone()).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RenderTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
@@ -99,8 +99,9 @@ impl Gam {
     pub fn get_canvas_bounds(&self, gid: Gid) -> Result<Point, xous::Error> {
         log::trace!("GAM_API: get_canvas_bounds");
         let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::GetCanvasBounds,
-                gid.gid()[0] as _,  gid.gid()[1] as _,  gid.gid()[2] as _,  gid.gid()[3] as _).map(|_|() ));
+            Message::new_blocking_scalar(Opcode::GetCanvasBounds.to_usize().unwrap(),
+                gid.gid()[0] as _,  gid.gid()[1] as _,  gid.gid()[2] as _,  gid.gid()[3] as _))
+                .expect("GAM_API: can't get canvas bounds from GAM");
             if let xous::Result::Scalar2(tl, br) = response {
             // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
             log::trace!("GAM_API: tl:{}, br:{}", tl, br);
@@ -112,7 +113,7 @@ impl Gam {
     }
 
     pub fn set_canvas_bounds_request(&self, req: &mut SetCanvasBoundsRequest) -> Result<(), xous::Error> {
-        let mut buf = Buffer::into_buf(*req.clone()).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(req.clone()).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::SetCanvasBounds.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         match buf.to_original().unwrap() {
             api::Return::SetCanvasBoundsReturn(ret) => {
@@ -123,13 +124,14 @@ impl Gam {
         Ok(())
     }
 
-    pub fn request_content_canvas(&self, requestor_name: &str) -> Result<Gid, xous::Error> {
+    pub fn request_content_canvas(&self, requestor_name: &str, redraw_id: usize) -> Result<Gid, xous::Error> {
         let mut server = String::<256>::new();
         use core::fmt::Write;
         write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
         let req = ContentCanvasRequest {
             canvas: Gid::new([0,0,0,0]),
             servername: server,
+            redraw_scalar_id: redraw_id,
         };
         let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RequestContentCanvas.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
@@ -143,5 +145,13 @@ impl Gam {
                 Err(xous::Error::InternalError)
             }
         }
+    }
+}
+
+impl Drop for Gam {
+    fn drop(&mut self) {
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+
     }
 }

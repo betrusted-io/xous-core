@@ -38,13 +38,19 @@ pub trait ContentCanvasApi {
 
 pub struct ContentCanvasConnection {
     pub connection: Option<CID>,
+    pub redraw_id: Option<usize>,
 }
 
 impl ContentCanvasApi for ContentCanvasConnection {
     fn redraw_canvas(&self) -> Result<(), xous::Error> {
-        match self.connection {
-            Some(cid) => send_message(cid, Opcode::Redraw.into()).map(|_| ()),
-            _ => Err(xous::Error::UseBeforeInit),
+        if let Some(id) = self.redraw_id {
+            match self.connection {
+                Some(cid) => send_message(cid,
+                    Message::new_scalar(id, 0, 0, 0, 0)).map(|_| ()),
+                _ => Err(xous::Error::UseBeforeInit),
+            }
+        } else {
+            Err(xous::Error::UseBeforeInit)
         }
     }
 }

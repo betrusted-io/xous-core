@@ -17,6 +17,16 @@ impl XousNames {
         })
     }
 
+    pub fn unregister_server(&self, _sid: xous::SID) -> Result<(), xous::Error> {
+        // placeholder function for a future call that will search the name table and remove
+        // a given SID from the table. It's considered "secure" because you'd have to guess a random 128-bit SID
+        // to destroy someone else's SID.
+
+        // note that with the current implementation, the destroy call will have to be an O(N) search through
+        // the server table, but this is OK as we expect <100 servers on a device
+        Ok(())
+    }
+
     pub fn register_name(&self, name: &str) -> Result<xous::SID, xous::Error> {
         let mut registration_name = String::<64>::new();
         // could also do String::from_str() but in this case we want things to fail if the string is too long.

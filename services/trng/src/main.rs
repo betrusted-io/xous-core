@@ -167,14 +167,21 @@ fn xmain() -> ! {
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::GetTrng) => xous::msg_scalar_unpack!(msg, count, _, _, _, {
+            Some(api::Opcode::GetTrng) => xous::msg_blocking_scalar_unpack!(msg, count, _, _, _, {
                 let val: [u32; 2] = trng.get_trng(count);
                 xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
                     .expect("couldn't return GetTrng request");
             }),
             None => {
-                log::error!("couldn't convert opcode")
+                log::error!("couldn't convert opcode");
+                break
             }
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(trng_sid).unwrap();
+    xous::destroy_server(trng_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }
