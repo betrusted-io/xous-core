@@ -1318,8 +1318,9 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
     }
 }
 
-pub fn terminate_process() {
+pub fn terminate_process() -> ! {
     rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
+    panic!("process didn't terminate");
 }
 
 /// Return execution to the kernel. This function may return at any time,
