@@ -238,6 +238,7 @@ fn reader_thread(arg: usize) {
     // capturing the build time of the very most recent change!
     // writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
     writeln!(output, "LOG: ****************************************************************").unwrap();
+    println!("LOG: my PID is {}", xous::process::id());
     let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
 

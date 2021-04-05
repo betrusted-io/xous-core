@@ -92,6 +92,22 @@ fn double_string(mem: &mut xous::MemoryMessage) {
     buffer.replace(response).unwrap();
 }
 
+fn local_lender(){
+    use core::fmt::Write;
+
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let mut message_string = xous::String::<64>::new();
+
+    let mut idx: usize = 0;
+    loop {
+        message_string.clear();
+        write!(message_string, "LOCAL loop # {:^4}", idx).unwrap();
+        idx += 1;
+        rkyv_test_server::log_message("LOCAL LENDER", message_string);
+        ticktimer.sleep_ms(500).unwrap();
+    }
+}
+
 #[xous::xous_main]
 fn test_main() -> ! {
     log_server::init_wait().unwrap();
@@ -104,6 +120,8 @@ fn test_main() -> ! {
     let sid = xns.register_name(api::SERVER_NAME).unwrap();
 
     let mut logstring_callback_connections = [None; 32];
+
+    xous::create_thread_0(local_lender);
 
     loop {
         let mut msg = xous::receive_message(sid).unwrap();

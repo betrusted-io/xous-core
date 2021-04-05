@@ -49,11 +49,11 @@ fn rkyv_test_client() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
 
-    let mut com = com::Com::new(&xns).unwrap();
+    /*let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
 
     let mut kbd = keyboard::Keyboard::new(&xns).unwrap();
-    kbd.hook_keyboard_events(handle_keyevents).unwrap();
+    kbd.hook_keyboard_events(handle_keyevents).unwrap();*/
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
         ticktimer.sleep_ms(3000).ok();
@@ -72,7 +72,7 @@ fn rkyv_test_client() -> ! {
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
 
-        com.req_batt_stats().unwrap();
+        //com.req_batt_stats().unwrap();
 
         idx += 1;
     }

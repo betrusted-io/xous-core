@@ -154,7 +154,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
-    info!("registered with NS -- {:?}", trng_sid);
+    log::trace!("registered with NS -- {:?}", trng_sid);
 
     #[cfg(target_os = "none")]
     let trng = Trng::new();
@@ -162,7 +162,9 @@ fn xmain() -> ! {
     #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
 
-    info!("ready to accept requests");
+    // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
+    trng.get_trng(2);
+    log::trace!("ready to accept requests");
 
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();

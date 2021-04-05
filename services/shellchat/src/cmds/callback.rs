@@ -20,7 +20,7 @@ pub fn callback_thread() {
                 id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             })).unwrap();
         } else {
-            xous::yield_slice();
+            ticktimer.sleep_ms(250).unwrap(); // a little more polite than simply busy-waiting
         }
     }
 }

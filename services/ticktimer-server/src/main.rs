@@ -76,6 +76,7 @@ mod implementation {
         //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
         //  - the CPU runs at 100MHz with a tight tolerance
         //  - thus we have to confirm the write of the watchdog data before moving to the next state
+        #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
             if xtt.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
                 while xtt.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
@@ -88,6 +89,7 @@ mod implementation {
             }
         }
         // Clear the interrupt
+        #[cfg(feature = "watchdog")]
         xtt.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
     }
 

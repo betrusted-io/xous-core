@@ -1,6 +1,5 @@
 use xous_ipc::String;
 pub(crate) const SERVER_NAME: &str = "Rkyv Test Server 1";
-
 /// A `usize` value that gets set as the `id` for every message handled
 /// by our server.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]

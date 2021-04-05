@@ -224,6 +224,7 @@ fn xmain() -> ! {
     // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     let status_gid = chatlayout.status.gid();
+    log::trace!("starting status thread with gid {:?}", status_gid);
     xous::create_thread_4(status_thread, status_gid[0] as _, status_gid[1] as _, status_gid[2] as _, status_gid[3] as _).expect("couldn't create status thread");
 
     let mut powerdown_requested = false;
