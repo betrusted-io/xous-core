@@ -121,7 +121,9 @@ request to lookup and connect to a server will succeed, but the hooks
 are there to enforce permissions and deny connections, and/or request
 authentication for connection.
 
-A list of canonical names for servers is stored in `xous-rs/names.rs`.
+Most server names are crate-local, and are bound through library functions
+called during the creation of server access objects. However, some names
+of servers which may not be statically bound are stored in `xous-rs/names.rs`.
 The intention is that this is a list of "public" services that should
 be well-known and generally all processes are allowed to connect to
 these.
