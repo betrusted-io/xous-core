@@ -11,6 +11,11 @@ reference and replace it with the commented-out gitref. In the worst case, the d
 failed to push up changes in the dependant crate, at which point you should open an issue
 to get that fixed.
 
+## #TIL: patch.crates-io
+When we did this, we didn't know there was a thing such as `[patch.crates-io]` that allows for
+overrides in cargo paths. Probably this system should be refactored to use this,
+instead of the methodology outlined here.
+
 ## Rationale
 We depend upon some packages that aren't in `crates.io` yet, but are also not
 integrated into the `xous-core` repo. Reasons for this range from the preference
