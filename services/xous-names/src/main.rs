@@ -22,6 +22,7 @@ const FAIL_TIMEOUT_MS: u64 = 100;
 fn xmain() -> ! {
     let debug1 = false;
     log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let name_server = xous::create_server_with_address(b"xous-name-server")

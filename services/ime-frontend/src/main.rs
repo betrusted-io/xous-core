@@ -560,6 +560,7 @@ impl InputTracker {
                         p_tv.ellipsis = true;
                         p_tv.style = blitstr::GlyphStyle::Small;
                         write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
+                        log::trace!("****posting string with length {}", p_tv.text.as_str().unwrap().len());
                         self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");
                         i += 1;
                     }
@@ -600,7 +601,7 @@ fn xmain() -> ! {
     let dbglistener = false;
     let dbgcanvas = false;
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

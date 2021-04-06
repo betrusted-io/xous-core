@@ -150,6 +150,7 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

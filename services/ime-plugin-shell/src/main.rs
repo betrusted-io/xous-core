@@ -13,6 +13,7 @@ use num_traits::FromPrimitive;
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -56,7 +57,7 @@ fn xmain() -> ! {
                 // the API allows for large picked feedback, but this implementation only keeps the first 64 characters
                 let mut local_s: String<64> = String::new();
                 use core::fmt::Write;
-                write!(local_s, "{:32}", s.as_str()).expect("overflowed history variable");
+                write!(local_s, "{}", s.as_str()).expect("overflowed history variable");
                 log::trace!("storing history value | {}", s.as_str());
                 if history.len() == history_max {
                     history.dequeue().expect("couldn't dequeue history");

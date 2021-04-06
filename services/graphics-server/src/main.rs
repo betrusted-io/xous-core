@@ -57,6 +57,8 @@ fn map_fonts() {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
+    let debugtv = false;
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -89,7 +91,6 @@ fn xmain() -> ! {
 
     let screen_clip = Rectangle::new(Point::new(0,0), display.screen_size());
 
-    let debugtv = false;
     display.redraw();
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
@@ -296,7 +297,7 @@ fn xmain() -> ! {
                 };
 
                 let mut ref_cursor = blitstr::Cursor::from_top_left_of(cr.into());
-                if debugtv { log::trace!("(TV): paint_str with {:?} | {:?} | {:?} | {:?}", cr, ref_cursor, tv.style, tv.text); }
+                if debugtv { log::trace!("(TV): paint_str with {:?} | {:?} | {:?} | {:?} len: {}", cr, ref_cursor, tv.style, tv.text, tv.text.as_str().unwrap().len()); }
                 blitstr::paint_str(
                     display.native_buffer(),
                     cr.into(),
