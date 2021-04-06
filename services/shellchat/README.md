@@ -48,4 +48,4 @@ the four-step instructions embedded within the file, starting around line 40.
 ## Things to Keep in Mind
 - Xous is currently `nostd`
 - When you're done adding your command, you should be able to do a `cargo xtask run` and it will fire up an emulated environment, like the one above
-- Type...very...slowly...and hold down keys when using the emulated environment.
+- Type...very...slowly...when using the emulated environment.
