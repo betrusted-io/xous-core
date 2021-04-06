@@ -19,7 +19,7 @@ it in the services/shellchat/src/cmds/ directory:
 
 ```Rust
 use crate::{ShellCmdApi, CommonEnv};
-use xous::String;
+use xous_ipc::String;
 
 #[derive(Debug)]
 pub struct Echo {
