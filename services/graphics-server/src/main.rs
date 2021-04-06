@@ -329,23 +329,23 @@ fn xmain() -> ! {
             Some(Opcode::Clear) => {
                 let mut r = Rectangle::full_screen();
                 r.style = DrawStyle::new(PixelColor::Light, PixelColor::Light, 0);
-                op::rectangle(display.native_buffer(), r, None)
+                op::rectangle(display.native_buffer(), r, screen_clip.into())
             }
             Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
                 let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
-                op::line(display.native_buffer(), l, None);
+                op::line(display.native_buffer(), l, screen_clip.into());
             }),
             Some(Opcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
                 let r = Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
-                op::rectangle(display.native_buffer(), r, None);
+                op::rectangle(display.native_buffer(), r, screen_clip.into());
             }),
             Some(Opcode::RoundedRectangle) => msg_scalar_unpack!(msg, tl, br, style, r, {
                 let rr = RoundedRectangle::new(Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style)), r as _);
-                op::rounded_rectangle(display.native_buffer(), rr, None);
+                op::rounded_rectangle(display.native_buffer(), rr, screen_clip.into());
             }),
             Some(Opcode::Circle) => msg_scalar_unpack!(msg, center, radius, style, _, {
                 let c = Circle::new_with_style(Point::from(center), radius as _, DrawStyle::from(style));
-                op::circle(display.native_buffer(), c, None);
+                op::circle(display.native_buffer(), c, screen_clip.into());
             }),
             Some(Opcode::ScreenSize) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let pt = display.screen_size();

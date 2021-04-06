@@ -70,10 +70,13 @@ dependencies = [
  "graphics-server",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -83,9 +86,12 @@ version = "0.1.0"
 dependencies = [
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 

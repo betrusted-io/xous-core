@@ -67,6 +67,7 @@ fn try_main() -> Result<(), DynError> {
         "ticktimer-server",
         "log-server",
         "xous-names",
+        "keyboard",
         "trng",
     ];
     let minimal_pkgs = [
@@ -92,7 +93,7 @@ fn try_main() -> Result<(), DynError> {
             ],
         )?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
-        Some("run") => run(false, &hw_pkgs)?,
+        Some("run") => run(false, &benchmark_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,

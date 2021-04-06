@@ -1,5 +1,3 @@
-use xous::{Message, ScalarMessage};
-
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct TestStruct {
     pub challenge: [u32; 8],
@@ -12,37 +10,11 @@ impl TestStruct {
     }
 }
 
+pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";
+
 #[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Opcode {
-    TestScalar(u32),
-    TestMemory(TestStruct),
-}
-
-impl core::convert::TryFrom<& Message> for Opcode {
-    type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
-        match message {
-            Message::BlockingScalar(m) => match m.id {
-                0 => Ok(Opcode::TestScalar(m.arg1 as u32)),
-                _ => Err("BENCHMARK-TARGET api: unknown BlockingScalar ID"),
-            },
-            _ => Err("BENCHMARK-TARGET api: unhandled message type"),
-        }
-    }
-}
-
-impl Into<Message> for Opcode {
-    fn into(self) -> Message {
-        match self {
-            Opcode::TestScalar(count) => Message::BlockingScalar(ScalarMessage {
-                id: 0,
-                arg1: count as usize,
-                arg2: 0,
-                arg3: 0,
-                arg4: 0,
-            }),
-            _ => panic!("GFX api: Opcode type not handled by Into(), maybe you meant to use a helper method?"),
-        }
-    }
+    TestScalar, //(u32),
+    TestMemory, //(TestStruct),
 }
