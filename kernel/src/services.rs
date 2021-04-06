@@ -1147,6 +1147,10 @@ impl SystemServices {
         }
 
         let current_pid = self.current_pid();
+        // If it's within the same process, ignore the operation.
+        if current_pid == dest_pid {
+            return Ok(src_virt);
+        }
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         use crate::mem::MemoryManager;
