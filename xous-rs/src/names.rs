@@ -10,7 +10,6 @@ pub const SERVER_NAME_IME_PLUGIN_SHELL: &str = "_IME shell plugin_";
 pub const SERVER_NAME_SHELL: &str    = "_Shell_";
 pub const SERVER_NAME_RTC: &str       = "_Real time clock application server_";
 
-pub const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
 pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";
 
 /*

@@ -377,6 +377,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 

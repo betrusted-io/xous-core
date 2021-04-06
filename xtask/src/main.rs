@@ -48,13 +48,9 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
-
-        "llio", // still to convert
-        //"rkyv-test-client",
-        //"rkyv-test-server",
+        "llio",
     ];
     let fcc_pkgs = [
-        "shell",
         "fcc-agent",
         "graphics-server",
         "ticktimer-server",
