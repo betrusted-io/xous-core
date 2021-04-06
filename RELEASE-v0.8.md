@@ -64,7 +64,7 @@ compatibility, over refactoring and improvement.
   and `new_blocking_scalar()` to de-clutter code and make scalar messages a little bit
   easier to deal with
 
-## 0.8 Messaging API In Practice
+## Xous 0.8 Messaging API In Practice
 
 Here are the idioms for building servers and passing messages.
 
