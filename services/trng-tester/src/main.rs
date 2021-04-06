@@ -237,8 +237,7 @@ fn xmain() -> ! {
     let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
     let log_conn = xous::connect(log_server_id).unwrap();
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     // Create a new com object
     let mut trng = Trng::new();
@@ -263,12 +262,12 @@ fn xmain() -> ! {
         if false {
             // to test the powerdown feature
             trng.wait_full();
-            ticktimer_server::sleep_ms(ticktimer_conn, 5000).expect("couldn't sleep");
+            ticktimer.sleep_ms(5000).expect("couldn't sleep");
         }
 
         if false {
             // select this to print XADC data to info!()
-            ticktimer_server::sleep_ms(ticktimer_conn, 20).expect("couldn't sleep"); // sleep to allow xadc sampling in case we're in a very tight TRNG request loop
+            ticktimer.sleep_ms(20).expect("couldn't sleep"); // sleep to allow xadc sampling in case we're in a very tight TRNG request loop
             info!("temperature: {}C", trng.read_temperature());
             info!("vccint: {}mV", trng.read_vccint());
             info!("vccaux: {}mV", trng.read_vccaux());

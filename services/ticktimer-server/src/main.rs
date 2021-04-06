@@ -2,14 +2,11 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::Opcode;
 
 mod os_timer;
 
 use heapless::binary_heap::{BinaryHeap, Min};
 use heapless::consts::*;
-
-use core::convert::TryFrom;
 
 use log::{error, info};
 
@@ -79,6 +76,7 @@ mod implementation {
         //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
         //  - the CPU runs at 100MHz with a tight tolerance
         //  - thus we have to confirm the write of the watchdog data before moving to the next state
+        #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
             if xtt.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
                 while xtt.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
@@ -91,6 +89,7 @@ mod implementation {
             }
         }
         // Clear the interrupt
+        #[cfg(feature = "watchdog")]
         xtt.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
     }
 
@@ -110,7 +109,13 @@ mod implementation {
 
         // This is dangerous and may return an error if the queue is full.
         // Which is fine, because the queue is always recalculated any time a message arrives.
-        xous::try_send_message(xtt.connection, crate::api::Opcode::RecalculateSleep.into()).ok();
+        use num_traits::ToPrimitive;
+        xous::try_send_message(xtt.connection,
+            xous::Message::Scalar(xous::ScalarMessage {
+                id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
+                arg1: 0, arg2: 0, arg3: 0, arg4: 0
+            })
+        ).ok();
     }
 
     impl XousTickTimer {
@@ -189,7 +194,7 @@ mod implementation {
                 #[cfg(feature = "debug-print")]
                 {
                     log::info!(
-                        "TickTimer: Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
+                        "Stopping currently-running timer sr.msec: {}  elapsed_ms: {}",
                         sr.msec,
                         self.elapsed_ms()
                     );
@@ -204,7 +209,7 @@ mod implementation {
             let irq_target = request.msec;
             #[cfg(feature = "debug-print")]
             log::info!(
-                "TickTimer: setting a response at {} ms (current time: {} ms)",
+                "setting a response at {} ms (current time: {} ms)",
                 irq_target,
                 self.elapsed_ms()
             );
@@ -242,6 +247,7 @@ mod implementation {
 mod implementation {
     use super::SleepRequest;
     use std::convert::TryInto;
+    use num_traits::ToPrimitive;
 
     #[derive(Debug)]
     enum SleepComms {
@@ -282,7 +288,10 @@ mod implementation {
                             // This is dangerous and may panic if the queue is full.
                             xous::try_send_message(
                                 cid,
-                                crate::api::Opcode::RecalculateSleep.into(),
+                                xous::Message::Scalar(xous::ScalarMessage {
+                                    id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
+                                    arg1: 0, arg2: 0, arg3: 0, arg4: 0
+                                })
                             )
                             .unwrap();
                             timeout = None;
@@ -379,35 +388,35 @@ fn recalculate_sleep(
     // If there's a sleep request ongoing now, grab it.
     if let Some(current) = ticktimer.stop_interrupt() {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: Existing request was {:?}", current);
+        info!("Existing request was {:?}", current);
         sleep_heap.push(current).expect("couldn't push to heap")
     } else {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: There was no existing request");
+        info!("There was no existing request");
     }
 
     // If we have a new sleep request, add it to the heap.
     if let Some(mut request) = new {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: New sleep request was: {:?}", request);
+        info!("New sleep request was: {:?}", request);
 
         request.msec += ticktimer.elapsed_ms() as i64;
 
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: Modified, the request was: {:?}", request);
+        info!("Modified, the request was: {:?}", request);
         sleep_heap
             .push(request)
             .expect("couldn't push new sleep to heap");
     } else {
         #[cfg(feature = "debug-print")]
-        info!("TickTimer: No new sleep request");
+        info!("No new sleep request");
     }
 
     // If there are items in the sleep heap, take the next item that will expire.
     if let Some(next_response) = sleep_heap.pop() {
         #[cfg(feature = "debug-print")]
         info!(
-            "TickTimer: scheduling a response at {} to {} (heap: {:?})",
+            "scheduling a response at {} to {} (heap: {:?})",
             next_response.msec, next_response.sender, sleep_heap
         );
         ticktimer.schedule_response(next_response);
@@ -422,11 +431,12 @@ fn xmain() -> ! {
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
-    info!("TICKTIMER: my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
         .expect("Couldn't create Ticktimer server");
-    info!("TICKTIMER: Server started with SID {:?}", ticktimer_server);
+    info!("Server started with SID {:?}", ticktimer_server);
 
     // Connect to our own server so we can send the "Recalculate" message
     let ticktimer_client = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())
@@ -440,39 +450,39 @@ fn xmain() -> ! {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
 
-        let envelope = xous::receive_message(ticktimer_server).unwrap();
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            // info!("TickTimer: Opcode: {:?}", opcode);
-            match opcode {
-                /*Opcode::Reset => {
-                    info!("TickTimer: reset called");
-                    ticktimer.reset();
-                }*/
-                Opcode::ElapsedMs => {
-                    let time = ticktimer.elapsed_ms() as i64;
-                    xous::return_scalar2(
-                        envelope.sender,
-                        (time & 0xFFFF_FFFFi64) as usize,
-                        ((time >> 32) & 0xFFF_FFFFi64) as usize,
-                    )
-                    .expect("TickTimer: couldn't return time request");
-                }
-                Opcode::SleepMs(ms) => {
+        let msg = xous::receive_message(ticktimer_server).unwrap();
+        match num_traits::FromPrimitive::from_usize(msg.body.id()) {
+            Some(api::Opcode::ElapsedMs) => {
+                let time = ticktimer.elapsed_ms() as i64;
+                xous::return_scalar2(
+                    msg.sender,
+                    (time & 0xFFFF_FFFFi64) as usize,
+                    ((time >> 32) & 0xFFF_FFFFi64) as usize,
+                )
+                .expect("couldn't return time request");
+            }
+            Some(api::Opcode::SleepMs) => xous::msg_blocking_scalar_unpack!(msg, ms, _, _, _, {
                     recalculate_sleep(
                         &mut ticktimer,
                         &mut sleep_heap,
                         Some(SleepRequest {
                             msec: ms as i64,
-                            sender: envelope.sender,
+                            sender: msg.sender,
                         }),
-                    );
-                }
-                Opcode::RecalculateSleep => {
-                    recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-                }
+                    )
+            }),
+            Some(api::Opcode::RecalculateSleep) => {
+                recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
             }
-        } else {
-            error!("couldn't convert opcode");
+            None => {
+                error!("couldn't convert opcode");
+                break
+            }
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xous::destroy_server(ticktimer_server).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

@@ -3,30 +3,26 @@
 
 
 use gam::api::SetCanvasBoundsRequest;
-use ime_plugin_api::ImefOpcode;
-
-use core::convert::TryFrom;
-use core::fmt::Write;
+use ime_plugin_api::{ImefOpcode, ImefCallback};
 
 use log::{error, info};
 
 use graphics_server::{Gid, Line, PixelColor, Point, Rectangle, TextBounds, TextView, DrawStyle};
 use blitstr_ref as blitstr;
-use core::pin::Pin;
 use ime_plugin_api::{PredictionTriggers, PredictionPlugin, PredictionApi};
 
-use rkyv::Deserialize;
-use rkyv::archived_value;
+use num_traits::{ToPrimitive,FromPrimitive};
+use xous_ipc::{String, Buffer};
+use xous::{CID, msg_scalar_unpack};
 
-use heapless::Vec;
-use heapless::consts::*;
+use core::fmt::Write;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
 
 struct InputTracker {
     /// connection for handling graphical update requests
-    pub gam_conn: xous::CID,
+    pub gam: gam::Gam,
 
 
     /// input area canvas, as given by the GAM
@@ -41,13 +37,13 @@ struct InputTracker {
     /// set if we're in a state where a backspace should trigger an unpredict
     can_unpick: bool, // note: untested as of Mar 7 2021
     /// the predictor string -- this is different from the input line, because it can be broken up by spaces and punctuatino
-    pred_phrase: xous::String::<4000>, // note: untested as of Mar 7 2021
+    pred_phrase: String::<4000>, // note: untested as of Mar 7 2021
     /// character position of the last prediction trigger -- this is where the prediction overwrite starts
     /// if None, it means we were unable to determine the trigger (e.g., we went back and edited text manually)
     last_trigger_char: Option<usize>,
 
     /// track the progress of our input line
-    line: xous::String::<4000>,
+    line: String::<4000>,
     /// length of the line in *characters*, not bytes (which is what .len() returns), used to index char_locs
     characters: usize,
     /// the insertion point, 0 is inserting characters before the first, 1 inserts characters after the first, etc.
@@ -58,21 +54,21 @@ struct InputTracker {
     was_grown: bool,
 
     /// render the predictions
-    pred_options: [Option<xous::String::<4000>>; MAX_PREDICTION_OPTIONS],
+    pred_options: [Option<String::<4000>>; MAX_PREDICTION_OPTIONS],
 }
 
 impl InputTracker {
-    pub fn new(gam_conn: xous::CID)-> InputTracker {
+    pub fn new(xns: &xous_names::XousNames)-> InputTracker {
         InputTracker {
-            gam_conn,
+            gam: gam::Gam::new(&xns).unwrap(),
             input_canvas: None,
             pred_canvas: None,
             predictor: None,
             pred_triggers: None,
             can_unpick: false,
-            pred_phrase: xous::String::<4000>::new(),
+            pred_phrase: String::<4000>::new(),
             last_trigger_char: Some(0),
-            line: xous::String::<4000>::new(),
+            line: String::<4000>::new(),
             characters: 0,
             insertion: 0,
             last_height: 0,
@@ -83,7 +79,7 @@ impl InputTracker {
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
         self.predictor = Some(predictor);
         self.pred_triggers = Some(predictor.get_prediction_triggers()
-        .expect("IMEF: InputTracker failed to get prediction triggers from plugin"));
+        .expect("InputTracker failed to get prediction triggers from plugin"));
     }
     pub fn set_input_canvas(&mut self, input: Gid) {
         self.input_canvas = Some(input);
@@ -97,17 +93,17 @@ impl InputTracker {
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
         if let Some(pc) = self.pred_canvas {
-            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
-            gam::draw_rectangle(self.gam_conn, pc,
+            let pc_bounds: Point = self.gam.get_canvas_bounds(pc).expect("Couldn't get prediction canvas bounds");
+            self.gam.draw_rectangle(pc,
                 Rectangle::new_with_style(Point::new(0, 0), pc_bounds,
                 DrawStyle {
                     fill_color: Some(PixelColor::Light),
                     stroke_color: None,
                     stroke_width: 0
                 }
-            )).expect("IMEF: can't clear prediction area");
+            )).expect("can't clear prediction area");
             // add the border line on top
-            gam::draw_line(self.gam_conn, pc,
+            self.gam.draw_line(pc,
                 Line::new_with_style(
                     Point::new(0,0),
                     Point::new(pc_bounds.x, 0),
@@ -116,22 +112,22 @@ impl InputTracker {
                        stroke_color: Some(PixelColor::Dark),
                        stroke_width: 1,
                    })
-            ).expect("IMEF: can't draw prediction top border");
+            ).expect("can't draw prediction top border");
         }
 
         if let Some(ic) = self.input_canvas {
-            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
-            gam::draw_rectangle(self.gam_conn, ic,
+            let ic_bounds: Point = self.gam.get_canvas_bounds(ic).expect("Couldn't get input canvas bounds");
+            self.gam.draw_rectangle(ic,
                 Rectangle::new_with_style(Point::new(0, 0), ic_bounds,
                 DrawStyle {
                     fill_color: Some(PixelColor::Light),
                     stroke_color: None,
                     stroke_width: 0
                 }
-            )).expect("IMEF: can't clear input area");
+            )).expect("can't clear input area");
 
             // add the border line on top
-            gam::draw_line(self.gam_conn, ic,
+            self.gam.draw_line(ic,
                 Line::new_with_style(
                     Point::new(0,0),
                     Point::new(ic_bounds.x, 0),
@@ -140,7 +136,7 @@ impl InputTracker {
                         stroke_color: Some(PixelColor::Dark),
                         stroke_width: 1,
                     }))
-                    .expect("IMEF: can't draw input top line border");
+                    .expect("can't draw input top line border");
         }
 
         Ok(())
@@ -175,7 +171,7 @@ impl InputTracker {
                 }
                 // now push the characters in the predicted options onto the line
                 for c in pred_str.as_str().unwrap().chars() {
-                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    self.line.push(c).expect("ran out of space inserting prediction");
                     chars += 1;
                 }
                 // forward until we find the next prediction trigger in the original string
@@ -184,7 +180,7 @@ impl InputTracker {
                         if trigger.whitespace && c.is_ascii_whitespace() ||
                            trigger.punctuation && c.is_ascii_punctuation() {
                                // include the trigger that was found
-                               self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                               self.line.push(c).expect("ran out of space inserting prediction");
                                chars += 1;
                                break;
                         }
@@ -196,14 +192,14 @@ impl InputTracker {
                 self.last_trigger_char = Some(chars);
                 // copy the remainder of the line, if any
                 while let Some(c) = c_iter.next() {
-                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    self.line.push(c).expect("ran out of space inserting prediction");
                     chars += 1;
                 }
                 self.characters = chars;
             } else {
                 // just append the prediction to the line
                 for c in pred_str.as_str().unwrap().chars() {
-                    self.line.push(c).expect("IMEF: ran out of space inserting prediction");
+                    self.line.push(c).expect("ran out of space inserting prediction");
                     self.characters += 1;
                 }
                 self.last_trigger_char = Some(self.insertion);
@@ -212,13 +208,13 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<xous::String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
-        let mut retstring: Option<xous::String::<4000>> = None;
+        let mut retstring: Option<String::<4000>> = None;
         if let Some(ic) = self.input_canvas {
-            if debug1{info!("IMEF: updating input area");}
-            let ic_bounds: Point = gam::get_canvas_bounds(self.gam_conn, ic).expect("IMEF: Couldn't get input canvas bounds");
+            if debug1{info!("updating input area");}
+            let ic_bounds: Point = self.gam.get_canvas_bounds(ic).expect("Couldn't get input canvas bounds");
             let mut input_tv = TextView::new(ic,
                 TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), ic_bounds)));
             input_tv.draw_border = false;
@@ -227,12 +223,12 @@ impl InputTracker {
 
             let mut do_redraw = false;
             for &k in newkeys.iter() {
-                if debug1{info!("IMEF: got key '{}'", k);}
+                if debug1{info!("got key '{}'", k);}
                 match k {
                     '\u{0000}' => (),
                     '←' => { // move insertion point back
                         if self.insertion > 0 {
-                            info!("IMEF: moving insertion point back");
+                            info!("moving insertion point back");
                             self.insertion -= 1;
                         }
                         do_redraw = true;
@@ -285,7 +281,7 @@ impl InputTracker {
                     }
                     '\u{0008}' => { // backspace
                         if (self.characters > 0) && (self.insertion == self.characters) {
-                            if debug1{info!("IMEF: simple backspace case")}
+                            if debug1{info!("simple backspace case")}
                             self.line.pop();
                             self.characters -= 1;
                             self.insertion -= 1;
@@ -293,14 +289,14 @@ impl InputTracker {
 
                             if let Some(predictor) = self.predictor {
                                 if self.can_unpick {
-                                    predictor.unpick().expect("IMEF: couldn't unpick last prediction");
+                                    predictor.unpick().expect("couldn't unpick last prediction");
                                     self.can_unpick = false;
                                     update_predictor = true;
                                 }
                                 self.pred_phrase.clear();
                             }
                         } else if (self.characters > 0)  && (self.insertion > 0) {
-                            if debug1{info!("IMEF: mid-string backspace case")}
+                            if debug1{info!("mid-string backspace case")}
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
                             let tempbytes: [u8; 4000] = self.line.as_bytes();
@@ -326,7 +322,7 @@ impl InputTracker {
                                         }
                                     }
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
+                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
                                 }
                                 i += 1;
                             }
@@ -338,21 +334,21 @@ impl InputTracker {
                         }
                     }
                     '\u{000d}' => { // carriage return
-                        let mut ret = xous::String::<4000>::new();
-                        write!(ret, "{}", self.line.as_str().expect("IMEF: couldn't convert input line")).expect("IMEF: couldn't copy input ilne to output");
+                        let mut ret = String::<4000>::new();
+                        write!(ret, "{}", self.line.as_str().expect("couldn't convert input line")).expect("couldn't copy input ilne to output");
                         retstring = Some(ret);
 
                         if let Some(trigger) = self.pred_triggers {
                             if trigger.newline {
-                                self.predictor.unwrap().feedback_picked(self.line).expect("IMEF: couldn't send feedback to predictor");
+                                self.predictor.unwrap().feedback_picked(self.line).expect("couldn't send feedback to predictor");
                             } else if trigger.punctuation {
-                                self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                                self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
                             }
                         }
                         self.can_unpick = false;
                         self.pred_phrase.clear();
 
-                        if debug1{info!("IMEF: got carriage return");}
+                        if debug1{info!("got carriage return");}
                         self.line.clear();
                         self.last_trigger_char = Some(0);
                         // clear all the temporary variables
@@ -364,22 +360,22 @@ impl InputTracker {
                                 requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
                                 granted: None,
                             };
-                            if debug1{info!("IMEF: attempting resize to {:?}", req.requested);}
-                            gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("IMEF: couldn't call set_bounds_request on input area overflow");
+                            if debug1{info!("attempting resize to {:?}", req.requested);}
+                            self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
                             if debug1{
-                                info!("IMEF: carriage return resize to {:?}", req.granted);
+                                info!("carriage return resize to {:?}", req.granted);
                             }
                             self.last_height = 0;
                             self.was_grown = false;
                         }
-                        self.clear_area().expect("IMEF: can't clear on carriage return");
+                        self.clear_area().expect("can't clear on carriage return");
                         update_predictor = true;
                     },
                     _ => {
                         if let Some(trigger) = self.pred_triggers {
                             if trigger.whitespace && k.is_ascii_whitespace() {
                                 if self.pred_phrase.len() > 0 {
-                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
                                     update_predictor = true;
@@ -388,7 +384,7 @@ impl InputTracker {
                             }
                             if trigger.punctuation && k.is_ascii_punctuation() {
                                 if self.pred_phrase.len() > 0 {
-                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("IMEF: couldn't send feedback to predictor");
+                                    self.predictor.unwrap().feedback_picked(self.pred_phrase).expect("couldn't send feedback to predictor");
                                     self.pred_phrase.clear();
                                     self.can_unpick = true;
                                     update_predictor = true;
@@ -397,11 +393,11 @@ impl InputTracker {
                             }
                         }
                         if self.insertion == self.characters {
-                            self.line.push(k).expect("IMEF: ran out of space pushing character into input line");
+                            self.line.push(k).expect("ran out of space pushing character into input line");
                             if let Some(trigger) = self.pred_triggers {
                                 if !(trigger.punctuation && k.is_ascii_punctuation() ||
                                     trigger.whitespace  && k.is_ascii_whitespace() ) {
-                                    self.pred_phrase.push(k).expect("IMEF: ran out of space pushing character into prediction phrase");
+                                    self.pred_phrase.push(k).expect("ran out of space pushing character into prediction phrase");
                                     update_predictor = true;
                                 }
                             }
@@ -420,7 +416,7 @@ impl InputTracker {
                                 // goes back to appending words at the end of the sentence
                             }
 
-                            if debug1{info!("IMEF: handling case of inserting characters. insertion: {}", self.insertion)};
+                            if debug1{info!("handling case of inserting characters. insertion: {}", self.insertion)};
                             // awful O(N) algo because we have to decode variable-length utf8 strings to figure out character boundaries
                             // first, make a copy of the string
                             let tempbytes: [u8; 4000] = self.line.as_bytes();
@@ -434,11 +430,11 @@ impl InputTracker {
                                 if debug1{info!("checking index {}", i);}
                                 if i == self.insertion {
                                     if debug1{info!("inserting char {}", k);}
-                                    self.line.push(k).expect("IMEF: ran out of space inserting new character into input line");
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
+                                    self.line.push(k).expect("ran out of space inserting new character into input line");
+                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
                                 } else {
                                     if debug1{info!("copying char {}", c);}
-                                    self.line.push(c).expect("IMEF: ran out of space inserting orignial characters into input line");
+                                    self.line.push(c).expect("ran out of space inserting orignial characters into input line");
                                 }
                                 i += 1;
                             }
@@ -451,15 +447,15 @@ impl InputTracker {
             }
 
             input_tv.insertion = Some(self.insertion as _);
-            if debug1{info!("IMEF: insertion point is {}, characters in string {}", self.insertion, self.characters);}
+            if debug1{info!("insertion point is {}, characters in string {}", self.insertion, self.characters);}
             if do_redraw {
-                write!(input_tv.text, "{}", self.line.as_str().expect("IMEF: couldn't convert str")).expect("IMEF: couldn't update TextView string in input canvas");
-                gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
-                if debug1{info!("IMEF: got computed cursor of {:?}", input_tv.cursor);}
+                write!(input_tv.text, "{}", self.line.as_str().expect("couldn't convert str")).expect("couldn't update TextView string in input canvas");
+                self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
+                if debug1{info!("got computed cursor of {:?}", input_tv.cursor);}
 
                 // check if the cursor is now at the bottom of the textview, this means we need to grow the box
                 if input_tv.cursor.line_height == 0 && self.characters > 0 {
-                    if debug1{info!("IMEF: caught case of overflowed text box, attempting to resize");}
+                    if debug1{info!("caught case of overflowed text box, attempting to resize");}
                     let delta = if self.last_height > 0 {
                         self.last_height + 1 + 1 // 1 pixel allowance for interline space, plus 1 for fencepost
                     } else {
@@ -470,19 +466,19 @@ impl InputTracker {
                         requested: Point::new(0, ic_bounds.y + delta as i16),
                         granted: None,
                     };
-                    if debug1{info!("IMEF: attempting resize to {:?}", req.requested);}
-                    gam::set_canvas_bounds_request(self.gam_conn, &mut req).expect("IMEF: couldn't call set_bounds_request on input area overflow");
-                    self.clear_area().expect("IMEF: couldn't clear area after resize");
+                    if debug1{info!("attempting resize to {:?}", req.requested);}
+                    self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
+                    self.clear_area().expect("couldn't clear area after resize");
                     match req.granted {
                         Some(bounds) => {
                             self.was_grown = true;
-                            if debug1{info!("IMEF: refresh succeeded, now redrawing with height of {:?}", bounds);}
+                            if debug1{info!("refresh succeeded, now redrawing with height of {:?}", bounds);}
                             // request was approved, redraw with the new bounding box
                             input_tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(Point::new(0,1), bounds));
                             input_tv.bounds_computed = None;
-                            gam::post_textview(self.gam_conn, &mut input_tv).expect("IMEF: can't draw input TextView");
+                            self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                         },
-                        _ => info!("IMEF: couldn't resize input canvas after overflow of text")
+                        _ => info!("couldn't resize input canvas after overflow of text")
                     }
                 } else {
                     self.last_height = input_tv.cursor.line_height as u32;
@@ -493,24 +489,24 @@ impl InputTracker {
         // prediction area is drawn second because the area could be cleared on behalf of a resize of the text box
         // just draw a rectangle for the prediction area for now
         if let Some(pc) = self.pred_canvas {
-            if debug1{info!("IMEF: updating prediction area");}
-            let pc_bounds: Point = gam::get_canvas_bounds(self.gam_conn, pc).expect("IMEF: Couldn't get prediction canvas bounds");
+            if debug1{info!("updating prediction area");}
+            let pc_bounds: Point = self.gam.get_canvas_bounds(pc).expect("Couldn't get prediction canvas bounds");
             let pc_clip: Rectangle = Rectangle::new_with_style(Point::new(0,1), pc_bounds,
                 DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 }
             );
-            if debug1{info!("IMEF: got pc_bound {:?}", pc_bounds);}
+            if debug1{info!("got pc_bound {:?}", pc_bounds);}
 
             if update_predictor {
                 if self.pred_phrase.len() > 0 {
                     if let Some(pred) = self.predictor {
-                        pred.set_input(self.pred_phrase).expect("IMEF: couldn't update predictor with current input");
+                        pred.set_input(self.pred_phrase).expect("couldn't update predictor with current input");
                     }
                 }
 
                 // Query the prediction engine for the latest predictions
                 if let Some(pred) = self.predictor {
                     for i in 0..self.pred_options.len() {
-                        self.pred_options[i] = pred.get_prediction(i as u32).expect("IMEF: couldn't query prediction engine");
+                        self.pred_options[i] = pred.get_prediction(i as u32).expect("couldn't query prediction engine");
                     }
                 }
             }
@@ -530,14 +526,14 @@ impl InputTracker {
                 empty_tv.draw_border = false;
                 empty_tv.border_width = 1;
                 empty_tv.clear_area = true;
-                write!(empty_tv.text, "Ready for input...").expect("IMEF: couldn't set up empty TextView");
-                if debug_canvas { info!("IMEF: pc canvas {:?}", pc) }
-                gam::post_textview(self.gam_conn, &mut empty_tv).expect("IMEF: can't draw prediction TextView");
+                write!(empty_tv.text, "Ready for input...").expect("couldn't set up empty TextView");
+                if debug_canvas { info!("pc canvas {:?}", pc) }
+                self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
             } else if update_predictor  {
                 // alright, first, let's clear the area
-                gam::draw_rectangle(self.gam_conn, pc, pc_clip).expect("IMEF: couldn't clear predictor area");
+                self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
-                if debug1{info!("IMEF: valid_predictions: {}", valid_predictions);}
+                if debug1{info!("valid_predictions: {}", valid_predictions);}
                 // OK, let's start initially with just a naive, split-by-N layout of the prediction area
                 let approx_width = pc_bounds.x / valid_predictions as i16;
 
@@ -549,12 +545,12 @@ impl InputTracker {
                             Point::new(i * approx_width, 1),
                             Point::new((i+1) * approx_width, pc_bounds.y)).clip_with(pc_clip).unwrap();
                         if i > 0 {
-                            gam::draw_line(self.gam_conn, pc,
+                            self.gam.draw_line(pc,
                             Line::new_with_style(
                             Point::new(i * approx_width, 1),
                             Point::new( i * approx_width, pc_bounds.y),
                             DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Dark), stroke_width: 1 }
-                            )).expect("IMEF: couldn't draw dividing lines in prediction area");
+                            )).expect("couldn't draw dividing lines in prediction area");
                         }
                         let mut p_tv = TextView::new(pc,
                             TextBounds::BoundingBox(p_clip));
@@ -563,158 +559,186 @@ impl InputTracker {
                         p_tv.clear_area = false;
                         p_tv.ellipsis = true;
                         p_tv.style = blitstr::GlyphStyle::Small;
-                        write!(p_tv.text, "{}", pred_str).expect("IMEF: can't write the prediction string");
-                        gam::post_textview(self.gam_conn, &mut p_tv).expect("IMEF: couldn't post prediction text");
+                        write!(p_tv.text, "{}", pred_str).expect("can't write the prediction string");
+                        log::trace!("****posting string with length {}", p_tv.text.as_str().unwrap().len());
+                        self.gam.post_textview(&mut p_tv).expect("couldn't post prediction text");
                         i += 1;
                     }
                 }
             }
         }
 
-        gam::redraw(self.gam_conn).expect("IMEF: couldn't redraw screen");
+        self.gam.redraw().expect("couldn't redraw screen");
 
         Ok(retstring)
     }
 }
 
+// we have to store this connection state somewhere, either in the lib side or the local side
+// it's unsafe to access because in theory, someone could change the value between when we
+// unwrap it and when we use it. However, we guarantee this not to happen through the construction
+// of the program itself. Later on (maybe in v0.9) once we get Boxed closures, it would be good to
+// re-implement this callback as a Boxed closure instead of a function, but for Xous 0.8 this is the best
+// we can do.
+static mut CB_TO_MAIN_CONN: Option<CID> = None;
+fn handle_keyevents(keys: [char; 4]) {
+    log::trace!("got key event callback");
+    if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+        log::trace!("sending keys: {:?}", keys);
+        xous::send_message(cb_to_main_conn,
+            xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
+            keys[0] as u32 as usize,
+            keys[1] as u32 as usize,
+            keys[2] as u32 as usize,
+            keys[3] as u32 as usize,
+        )).unwrap();
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = false;
+    let debug1 = true;
     let dbglistener = false;
     let dbgcanvas = false;
     log_server::init_wait().unwrap();
-    info!("IMEF: my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
 
-    let imef_sid = xous_names::register_name(xous::names::SERVER_NAME_IME_FRONT).expect("IMEF: can't register server");
-    info!("IMEF: registered with NS -- {:?}", imef_sid);
+    let xns = xous_names::XousNames::new().unwrap();
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", imef_sid);
 
-    let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD).expect("IMEF: can't connect to KBD");
-    keyboard::request_events(xous::names::SERVER_NAME_IME_FRONT, kbd_conn).expect("IMEF: couldn't request events from keyboard");
+    // hook the keyboard event server and have it forward keys to our local main loop
+    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(imef_sid).unwrap())};
+    let mut kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
+    kbd.hook_keyboard_events(handle_keyevents).unwrap();
 
-    let mut tracker = InputTracker::new(
-        xous_names::request_connection_blocking(xous::names::SERVER_NAME_GAM).expect("IMEF: can't connect to GAM"),
-    );
+    let mut tracker = InputTracker::new(&xns);
 
-    let mut listeners: Vec<xous::CID, U32> = Vec::new();
+    let mut listeners: [Option<CID>; 32] = [None; 32];
 
-    // The main lop can't start until we've been assigned Gids from the GAM, and a Predictor.
-    info!("IMEF: waiting for my canvas Gids");
+    log::trace!("Initialized but still waiting for my canvas Gids");
     loop {
-        let envelope = xous::receive_message(imef_sid).unwrap();
-        if let Ok(opcode) = ImefOpcode::try_from(&envelope.body) {
-            match opcode {
-                ImefOpcode::SetInputCanvas(g) => {
-                    if debug1 || dbgcanvas {info!("IMEF: got input canvas {:?}", g);}
+        let msg = xous::receive_message(imef_sid).unwrap();
+        log::trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ImefOpcode::SetInputCanvas) => {
+                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
+                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
+                    if debug1 || dbgcanvas {info!("got input canvas {:?}", g);}
                     tracker.set_input_canvas(g);
-                },
-                ImefOpcode::SetPredictionCanvas(g) => {
-                    if debug1 || dbgcanvas {info!("IMEF: got prediction canvas {:?}", g);}
-                    tracker.set_pred_canvas(g);
-                },
-                _ => info!("IMEF: expected canvas Gid, but got {:?}", opcode)
+                });
             }
-        } else if let xous::Message::Borrow(m) = &envelope.body {
-            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-            let bytes = Pin::new(buf.as_ref());
-            let value = unsafe {
-                archived_value::<ImefOpcode>(&bytes, m.id as usize)
-            };
-            match &*value {
-                rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
-                    match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
-                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
-                        _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
-                    }
-                },
-                rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
-                    if dbglistener{info!("IMEF: registering listener {:?}", s);}
-                    // note second copy down below, this is put in early-init because we're likely to get these requests early on
-                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
-                      .expect("IMEF: can't connect to requested listener for reporting events");
-                    if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
-                    listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
-                },
-                _ => panic!("IME_SH: invalid response from server -- corruption occurred in MemoryMessage")
-            };
-        } else {
-            info!("IMEF: expected canvas Gid, but got other message first {:?}", envelope);
-        }
-        if tracker.is_init() {
-            break;
-        }
-    }
-
-    // force a redraw of the UI
-    if debug1{info!("IMEF: forcing initial UI redraw");}
-    tracker.clear_area().expect("IMEF: can't initially clear areas");
-    tracker.update(['\u{0000}'; 4]).expect("IMEF: can't setup initial screen arrangement");
-
-    info!("IMEF: entering main loop");
-    loop {
-        let envelope = xous::receive_message(imef_sid).unwrap();
-        if debug1{info!("IMEF: got message {:?}", envelope);}
-        if let Ok(opcode) = ImefOpcode::try_from(&envelope.body) {
-            match opcode {
-                ImefOpcode::SetInputCanvas(g) => {
-                    // there are valid reasons for this to happen, but it should be rare.
-                    info!("IMEF: warning: input canvas Gid has been reset");
-                    tracker.set_input_canvas(g);
-                },
-                ImefOpcode::SetPredictionCanvas(g) => {
-                    // there are valid reasons for this to happen, but it should be rare.
-                    info!("IMEF: warning: prediction canvas Gid has been reset");
+            Some(ImefOpcode::SetPredictionCanvas) => {
+                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
+                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
+                    if debug1 || dbgcanvas {info!("got prediction canvas {:?}", g);}
                     tracker.set_pred_canvas(g);
-                },
-                _ => info!("IMEF: unhandled opcode {:?}", opcode)
+                });
             }
-        } else if let xous::Message::Borrow(m) = &envelope.body {
-            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-            let bytes = Pin::new(buf.as_ref());
-            let value = unsafe {
-                archived_value::<ImefOpcode>(&bytes, m.id as usize)
-            };
-            match &*value {
-                rkyv::Archived::<ImefOpcode>::SetPredictionServer(rkyv_s) => {
-                    let s: xous::String<256> = rkyv_s.deserialize(&mut xous::XousDeserializer).unwrap();
-                    match xous_names::request_connection(s.as_str().expect("IMEF: SetPrediction received malformed server name")) {
-                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
-                        _ => error!("IMEF: can't find predictive engine {}, retaining existing one.", s.as_str().expect("IMEF: SetPrediction received malformed server name")),
+            Some(ImefOpcode::SetPredictionServer) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let s = buffer.as_flat::<String::<64>, _>().unwrap();
+                log::trace!("got prediction server: {}", s.as_str());
+                match xns.request_connection(s.as_str()) {
+                    Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
+                    _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str()),
+                }
+            }
+            Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                log::trace!("listener registered: {:?}", sid);
+                let mut found = false;
+                for entry in listeners.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
                     }
-                },
-                rkyv::Archived::<ImefOpcode>::RegisterListener(registration) => {
-                    let s: xous::String<256> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
-                    if dbglistener{info!("IMEF: registering listener {:?}", s);}
-                    // note first copy above, put in early-init because we're likely to get these requests early on
-                    let cid = xous_names::request_connection_blocking(s.as_str().expect("IMEF: can't decode RegisterListener string"))
-                      .expect("IMEF: can't connect to requested listener for reporting events");
-                    if dbglistener{info!("IMEF: listener with cid {:?}", cid);}
-                    listeners.push(cid).expect("IMEF: probably ran out of slots for input event reporting");
-                },
-                _ => panic!("IMEF: invalid response from server -- corruption occurred in MemoryMessage")
-            };
-        } else if let Ok(opcode) = keyboard::api::Opcode::try_from(&envelope.body) {
-            match opcode {
-                keyboard::api::Opcode::KeyboardEvent(keys) => {
-                    if let Some(line) = tracker.update(keys).expect("IMEF: couldn't update input tracker with latest key presses") {
-                        if dbglistener{info!("IMEF: sending listeners {:?}", line);}
-                        for &conn in listeners.iter() {
-                            let op = ImefOpcode::GotInputLine(line);
-                            let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+                }
+                if !found {
+                    error!("RegisterCallback listener ran out of space registering callback");
+                }
+            }),
+            Some(ImefOpcode::ProcessKeys) => {
+                if tracker.is_init() {
+                    msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                        let keys = [
+                            if let Some(a) = core::char::from_u32(k1 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k2 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k3 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                            if let Some(a) = core::char::from_u32(k4 as u32) {
+                                a
+                            } else {
+                                '\u{0000}'
+                            },
+                        ];
+                        log::trace!("tracking keys: {:?}", keys);
+                        if let Some(line) = tracker.update(keys).expect("couldn't update input tracker with latest key presses") {
+                            if dbglistener{info!("sending listeners {:?}", line);}
+                            let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
 
-                            use rkyv::ser::Serializer;
-                            let pos = writer.serialize_value(&op).expect("IMEF: couldn't archive line for sending");
-                            if dbglistener{info!("IMEF: sending to conn {:?}", conn);}
-                            writer.into_inner().lend(conn, pos as u32).expect("IMEF: couldn't send input line to listener");
+                            for maybe_conn in listeners.iter_mut() {
+                                if let Some(conn) = maybe_conn {
+                                    if dbglistener{info!("sending to conn {:?}", conn);}
+                                    match buf.lend(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
+                                        Err(xous::Error::ServerNotFound) => {
+                                            *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+                                        },
+                                        Ok(xous::Result::Ok) => {},
+                                        Ok(xous::Result::MemoryReturned(offset, valid)) => {
+                                            // ignore anything that's returned, but note it in case we're debugging
+                                            log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
+                                        },
+                                        Err(e) => {
+                                            log::error!("unhandled error in callback processing: {:?}", e);
+                                        }
+                                        Ok(e) => {
+                                            log::error!("unexpected result in callback processing: {:?}", e);
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                },
-                _ => error!("IMEF: received KBD event opcode that wasn't expected"),
+                    });
+                } else {
+                    log::trace!("got keys, but we're not initialized");
+                    // ignore keyboard events until we've fully initialized
+                }
             }
-        } else {
-            info!("IMEF: expected canvas Gid, but got {:?}", envelope);
+            Some(ImefOpcode::Redraw) => {
+                if tracker.is_init() {
+                    tracker.clear_area().expect("can't initially clear areas");
+                    tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+                } else {
+                    log::trace!("got redraw, but we're not initialized");
+                    // ignore keyboard events until we've fully initialized
+                }
+            }
+            None => {log::error!("couldn't convert opcode"); break}
         }
     }
-
+    log::trace!("main loop exit, destroying servers");
+    unsafe{
+        if let Some(cb) = CB_TO_MAIN_CONN {
+            xous::disconnect(cb).unwrap();
+        }
+    }
+    xns.unregister_server(imef_sid).unwrap();
+    xous::destroy_server(imef_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

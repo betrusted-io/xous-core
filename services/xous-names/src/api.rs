@@ -1,68 +1,49 @@
-#![allow(dead_code)]
-
-use xous::CID;
 use hash32::{Hash, Hasher};
 
-// bottom 16 bits are reserved for structure re-use by other servers
-pub const ID_REGISTER_NAME: u32 = 0x1_0000;
-pub const ID_LOOKUP_NAME: u32 = 0x2_0000;
-pub const ID_AUTHENTICATE: u32 = 0x3_0000;
-
+#[allow(dead_code)]
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-pub(crate) enum Request {
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum Opcode {
     /// Create a new server with the given name and return its SID.
-    Register(xous::String::<64>),
-
+    Register,
     /// Create a connection to the target server.
-    Lookup(xous::String::<64>),
-
+    Lookup,
     /// Create an authenticated connection to the target server.
-    AuthenticatedLookup(AuthenticatedLookup),
-
-    // Return values
-
-    /// The caller must perform an AuthenticatedLookup using this challenge
-    AuthenticateRequest([u32; 8]),
-
-    /// The connection failed for some reason
-    Failure,
-
-    /// A server was successfully created with the given SID
-    SID([u32; 4]),
-
-    /// A connection was successfully made with the given CID
-    CID(CID),
+    AuthenticatedLookup,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) struct Lookup {
-    pub name: xous::String::<64>,
+pub(crate) enum Return {
+    /// The caller must perform an AuthenticatedLookup using this challenge
+    AuthenticateRequest(AuthenticateRequest),
+    /// The connection failed for some reason
+    Failure,
+    /// A server was successfully created with the given SID
+    SID([u32; 4]),
+    /// A connection was successfully made with the given CID
+    CID(xous::CID),
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticatedLookup {
-    pub name: xous::String::<64>,
+    pub name: xous_ipc::String::<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
-    pub challenge: [u32; 8],
+    pub response: [u32; 8],
 }
 
-#[derive(Debug)]
-pub struct Authenticate {
-    pub name: xous::String::<64>,
-    pub success: bool,
-    pub response_to_challenge: [u32; 8],
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct AuthenticateRequest {
+    pub name: xous_ipc::String::<64>,  // a copy of the originally requested lookup
+    pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
+    pub challenge: [u32; 4],
 }
 
-impl Authenticate {
-    pub fn mid(&self) -> u32 {
-        ID_AUTHENTICATE as u32
-    }
-}
 
+//////////////////////////////////////////////////////////////////////////////////////////////
 // We keep XousServerName around because want to be able to index off the server name, without
 // burdening the Kernel String type with the Hash32 methods
+//////////////////////////////////////////////////////////////////////////////////////////////
 
 // --------------------- Taken from rkyv docs https://docs.rs/rkyv/0.3.0/rkyv/trait.Archive.html //
 #[derive(Debug, Copy, Clone)]
@@ -80,6 +61,7 @@ impl Default for XousServerName {
     }
 }
 
+#[allow(dead_code)]
 impl XousServerName {
     pub fn to_str(&self) -> &str {
         core::str::from_utf8(unsafe {

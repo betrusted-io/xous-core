@@ -323,16 +323,18 @@ fn return_memory(
         //     client_pid,
         //     client_tid
         // );
+        #[cfg(baremetal)]
+        let src_virt = server_addr.get() as _;
+        #[cfg(not(baremetal))]
+        let src_virt = buf.addr.get() as _;
 
         // Return the memory to the calling process
         ss.return_memory(
-            server_addr.get() as _,
-            tid,
+            src_virt,
             client_pid,
             client_tid,
             client_addr.get() as _,
             len.get(),
-            buf,
         )?;
 
         // Unblock the client context to allow it to continue.
@@ -341,7 +343,11 @@ fn return_memory(
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
             ss.switch_to_thread(client_pid, Some(client_tid))?;
-            ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::MemoryReturned(offset, valid))?;
+            ss.set_thread_result(
+                client_pid,
+                client_tid,
+                xous_kernel::Result::MemoryReturned(offset, valid),
+            )?;
 
             // Return success to the server
             Ok(xous_kernel::Result::Ok)
@@ -782,7 +788,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             ss.connect_to_server(sid)
                 .map(xous_kernel::Result::ConnectionID)
         }),
-        SysCall::ReturnMemory(sender, buf, offset, valid) => return_memory(pid, tid, in_irq, sender, buf, offset, valid),
+        SysCall::ReturnMemory(sender, buf, offset, valid) => {
+            return_memory(pid, tid, in_irq, sender, buf, offset, valid)
+        }
         SysCall::ReturnScalar1(sender, arg) => return_scalar(pid, tid, in_irq, sender, arg),
         SysCall::ReturnScalar2(sender, arg1, arg2) => {
             return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
@@ -834,6 +842,13 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 Err(e) => Err(e),
             }
         }
+        SysCall::Disconnect(cid) => SystemServices::with_mut(|ss| {
+            ss.disconnect_from_server(cid)
+                .and(Ok(xous_kernel::Result::Ok))
+        }),
+        SysCall::DestroyServer(sid) => SystemServices::with_mut(|ss| {
+            ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok))
+        }),
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

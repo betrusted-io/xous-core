@@ -15,20 +15,14 @@ pub mod carton;
 pub mod definitions;
 mod messages;
 
-pub mod buffer;
 pub mod process;
-#[cfg(feature = "archive")]
-pub mod string;
 pub mod syscall;
 
 pub mod names;
 
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
-pub use buffer::XousBuffer;
 pub use definitions::*;
 pub use messages::*;
-#[cfg(feature = "archive")]
-pub use string::*;
 pub use syscall::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]

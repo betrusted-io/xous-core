@@ -2,18 +2,18 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-mod buffer;
 use num_traits::{FromPrimitive, ToPrimitive};
+use xous_ipc::{String, Buffer};
 
 fn value_or(val: Option<i32>, default: api::MathResult) -> api::MathResult {
     val.map(|v| api::MathResult::Value(v)).unwrap_or(default)
 }
 
 fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::MathOperation::*;
-        match buffer.deserialize().unwrap() {
+        match buffer.to_original().unwrap() {
             Add(a, b) => value_or(
                 a.checked_add(b),
                 api::MathResult::Error(api::Error::Overflow),
@@ -32,16 +32,16 @@ fn handle_math_withcopy(mem: &mut xous::MemoryMessage) {
             ),
         }
     };
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
 }
 
 // This doesn't deserialize the struct, and therefore operates entirely
 // on the archived data. This saves a copy step.
 fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let response = {
         use api::ArchivedMathOperation::*;
-        match *buffer.try_into::<api::MathOperation, _>().unwrap() {
+        match *buffer.as_flat::<api::MathOperation, _>().unwrap() {
             Add(a, b) => value_or(
                 a.checked_add(b),
                 api::MathResult::Error(api::Error::Overflow),
@@ -60,12 +60,12 @@ fn handle_math_zerocopy(mem: &mut xous::MemoryMessage) {
             ),
         }
     };
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
 }
 
 fn handle_log_string(mem: &xous::MemoryMessage) {
-    let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
-    let log_string = buffer.try_into::<api::LogString, _>().unwrap();
+    let buffer = unsafe { Buffer::from_memory_message(mem) };
+    let log_string = buffer.as_flat::<api::LogString, _>().unwrap();
     log::info!(
         "Prefix: {}  Message: {}",
         log_string.prefix.as_str(),
@@ -76,12 +76,12 @@ fn handle_log_string(mem: &xous::MemoryMessage) {
 /// Take the given string and double each character in an output string.
 fn double_string(mem: &mut xous::MemoryMessage) {
     use core::fmt::Write;
-    let mut buffer = unsafe { buffer::Buffer::from_memory_message_mut(mem) };
+    let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
     let mut response = api::StringDoubler {
-        value: xous::String::new(),
+        value: String::new(),
     };
     for ch in buffer
-        .try_into::<api::StringDoubler, _>()
+        .as_flat::<api::StringDoubler, _>()
         .unwrap()
         .value
         .as_str()
@@ -89,7 +89,23 @@ fn double_string(mem: &mut xous::MemoryMessage) {
     {
         write!(response.value, "{}{}", ch, ch).ok();
     }
-    buffer.serialize_from(response).unwrap();
+    buffer.replace(response).unwrap();
+}
+
+fn local_lender(){
+    use core::fmt::Write;
+
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let mut message_string = xous::String::<64>::new();
+
+    let mut idx: usize = 0;
+    loop {
+        message_string.clear();
+        write!(message_string, "LOCAL loop # {:^4}", idx).unwrap();
+        idx += 1;
+        rkyv_test_server::log_message("LOCAL LENDER", message_string);
+        ticktimer.sleep_ms(500).unwrap();
+    }
 }
 
 #[xous::xous_main]
@@ -100,9 +116,12 @@ fn test_main() -> ! {
         "Hello, world! This is the server, PID {}",
         xous::current_pid().unwrap()
     );
-    let sid = xous_names::register_name(api::SERVER_NAME).unwrap();
+    let xns = xous_names::XousNames::new().unwrap();
+    let sid = xns.register_name(api::SERVER_NAME).unwrap();
 
     let mut logstring_callback_connections = [None; 32];
+
+    xous::create_thread_0(local_lender);
 
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
@@ -118,7 +137,7 @@ fn test_main() -> ! {
                 // If a callback exists, first pass this message to the callback server.
                 for callback_conn in logstring_callback_connections.iter() {
                     if let Some(callback_sid) = callback_conn {
-                        let buffer = unsafe { buffer::Buffer::from_memory_message(memory) };
+                        let buffer = unsafe { Buffer::from_memory_message(memory) };
                         buffer
                             .lend(
                                 *callback_sid,
@@ -152,7 +171,13 @@ fn test_main() -> ! {
                     }
                 }
             }
-            None => (),
+            None => break,
         }
     }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(sid).unwrap();
+    xous::destroy_server(sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

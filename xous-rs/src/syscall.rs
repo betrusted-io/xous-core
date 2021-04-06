@@ -310,6 +310,14 @@ pub enum SysCall {
     /// Get the current Process ID
     GetProcessId,
 
+    /// Destroys the given Server ID. All clients that are waiting will be woken
+    /// up and will receive a `ServerNotFound` response.
+    DestroyServer(SID),
+
+    /// Disconnects from a Server. This invalidates the CID, which may be reused
+    /// in a future reconnection.
+    Disconnect(CID),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -349,6 +357,8 @@ pub enum SysCallNumber {
     CreateServerId = 31,
     GetThreadId = 32,
     GetProcessId = 33,
+    DestroyServer = 34,
+    Disconnect = 35,
     Invalid,
 }
 
@@ -388,6 +398,8 @@ impl SysCallNumber {
             31 => CreateServerId,
             32 => GetThreadId,
             33 => GetProcessId,
+            34 => DestroyServer,
+            35 => Disconnect,
             _ => Invalid,
         }
     }
@@ -686,6 +698,29 @@ impl SysCall {
             ],
             SysCall::GetThreadId => [SysCallNumber::GetThreadId as usize, 0, 0, 0, 0, 0, 0, 0],
             SysCall::GetProcessId => [SysCallNumber::GetProcessId as usize, 0, 0, 0, 0, 0, 0, 0],
+            SysCall::DestroyServer(sid) => {
+                let s = sid.to_u32();
+                [
+                    SysCallNumber::DestroyServer as usize,
+                    s.0 as _,
+                    s.1 as _,
+                    s.2 as _,
+                    s.3 as _,
+                    0,
+                    0,
+                    0,
+                ]
+            }
+            SysCall::Disconnect(cid) => [
+                SysCallNumber::Disconnect as usize,
+                *cid as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -843,6 +878,10 @@ impl SysCall {
             SysCallNumber::CreateServerId => SysCall::CreateServerId,
             SysCallNumber::GetThreadId => SysCall::GetThreadId,
             SysCallNumber::GetProcessId => SysCall::GetProcessId,
+            SysCallNumber::DestroyServer => {
+                SysCall::DestroyServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
+            }
+            SysCallNumber::Disconnect => SysCall::Disconnect(a1 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1281,6 +1320,7 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
 
 pub fn terminate_process() {
     rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
+    panic!("process didn't terminate");
 }
 
 /// Return execution to the kernel. This function may return at any time,
@@ -1484,6 +1524,26 @@ pub fn current_tid() -> core::result::Result<TID, Error> {
     rsyscall(SysCall::GetThreadId).and_then(|result| {
         if let Result::ThreadID(tid) = result {
             Ok(tid)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
+    rsyscall(SysCall::DestroyServer(sid)).and_then(|result| {
+        if let Result::Ok = result {
+            Ok(())
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
+    rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
+        if let Result::Ok = result {
+            Ok(())
         } else {
             Err(Error::InternalError)
         }

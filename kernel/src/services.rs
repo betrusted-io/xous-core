@@ -1047,6 +1047,12 @@ impl SystemServices {
         }
 
         let current_pid = self.current_pid();
+
+        // If the dest and src PID is the same, do nothing.
+        if current_pid == dest_pid {
+            return Ok(src_virt);
+        }
+
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         crate::mem::MemoryManager::with_mut(|mm| {
@@ -1141,6 +1147,10 @@ impl SystemServices {
         }
 
         let current_pid = self.current_pid();
+        // If it's within the same process, ignore the operation.
+        if current_pid == dest_pid {
+            return Ok(src_virt);
+        }
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         use crate::mem::MemoryManager;
@@ -1219,12 +1229,10 @@ impl SystemServices {
     pub fn return_memory(
         &mut self,
         src_virt: *mut u8,
-        _src_tid: TID,
         dest_pid: PID,
         _dest_tid: TID,
         dest_virt: *mut u8,
         len: usize,
-        _buf: MemoryRange,
     ) -> Result<*mut u8, xous_kernel::Error> {
         // klog!(
         //     "Returning from {}:{} to {}:{}",
@@ -1251,6 +1259,10 @@ impl SystemServices {
         }
 
         let current_pid = self.current_pid();
+        // If it's within the same process, ignore the operation.
+        if current_pid == dest_pid {
+            return Ok(src_virt);
+        }
         let src_mapping = self.get_process(current_pid)?.mapping;
         let dest_mapping = self.get_process(dest_pid)?.mapping;
         use crate::mem::MemoryManager;
@@ -1287,13 +1299,13 @@ impl SystemServices {
     pub fn return_memory(
         &mut self,
         src_virt: *mut u8,
-        _src_tid: TID,
         dest_pid: PID,
         dest_tid: TID,
         _dest_virt: *mut u8,
-        _len: usize,
-        buf: MemoryRange,
+        len: usize,
+        // buf: MemoryRange,
     ) -> Result<*mut u8, xous_kernel::Error> {
+        let buf = MemoryRange::new(src_virt as usize, len)?;
         let buf = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len()) };
         let current_pid = self.current_pid();
         {
@@ -1447,6 +1459,55 @@ impl SystemServices {
         Ok(sid)
     }
 
+    /// Destroy the provided server ID and disconnect any processes that are
+    /// connected.
+    pub fn destroy_server(&mut self, pid: PID, sid: SID) -> Result<(), xous_kernel::Error> {
+        let mut idx_to_destroy = None;
+        // Look through the server list for a server that matches this SID
+        for (idx, entry) in self.servers.iter().enumerate() {
+            if let Some(server) = entry {
+                if server.sid == sid && server.pid == pid {
+                    idx_to_destroy = Some(idx);
+                    break;
+                }
+            }
+        }
+
+        let server_idx = idx_to_destroy.ok_or(xous_kernel::Error::ServerNotFound)?;
+        let server = self.servers[server_idx].take().unwrap();
+        // Try to destroy the server. This will fail if the server
+        // has any outstanding memory requests.
+        server.destroy(self).map_err(|server| {
+            self.servers[server_idx] = Some(server);
+            xous_kernel::Error::ServerQueueFull
+        })?;
+
+        let pid = crate::arch::process::current_pid();
+        // println!("KERNEL({}): Server table: {:?}", _pid.get(), self.servers);
+        // Disconnect this server from all processes.
+        for process in self.processes.iter_mut() {
+            if !process.free() {
+                process.activate().unwrap();
+                ArchProcess::with_inner_mut(|process_inner| {
+                    // Look through the connection map for (1) a free slot, and (2) an
+                    // existing connection
+                    for server_idx_opt in process_inner.connection_map.iter_mut() {
+                        if let Some(client_server_idx) = server_idx_opt {
+                            if client_server_idx.get() == (server_idx + 2) as _ {
+                                *server_idx_opt = None;
+                                continue;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Switch back to the primary process.
+        self.get_process(pid).unwrap().activate().unwrap();
+        Ok(())
+    }
+
     /// Connect to a server on behalf of another process.
     pub fn connect_process_to_server(
         &mut self,
@@ -1522,6 +1583,42 @@ impl SystemServices {
                 }
             }
             Err(xous_kernel::Error::ServerNotFound) // May also be OutOfMemory if the table is full
+        })
+    }
+
+    /// Invalidate the provided connection ID.
+    pub fn disconnect_from_server(&mut self, cid: CID) -> Result<(), xous_kernel::Error> {
+        // Check to see if we've already connected to this server.
+        // While doing this, find a free slot in case we haven't
+        // yet connected.
+
+        // Slot indices are offset by two. Ensure we don't underflow.
+        let slot_idx = cid;
+        if slot_idx < 2 {
+            klog!("CID {} is not valid", cid);
+            return Err(xous_kernel::Error::ServerNotFound);
+        }
+        let slot_idx = (slot_idx - 2) as usize;
+        let pid = crate::arch::process::current_pid();
+        // klog!("KERNEL({}): Server table: {:?}", pid.get(), self.servers);
+        ArchProcess::with_inner_mut(|process_inner| {
+            assert_eq!(pid, process_inner.pid);
+            if slot_idx >= process_inner.connection_map.len() {
+                klog!("Slot index exceeds map length");
+                return Err(xous_kernel::Error::ServerNotFound);
+            }
+
+            // If the server ID is None, then we weren't connected in the first place.
+            let idx = &mut process_inner.connection_map[slot_idx];
+            if idx.is_none() {
+                klog!("IDX[{}] is already None!", slot_idx);
+                return Err(xous_kernel::Error::ServerNotFound);
+            }
+
+            // Nullify this connection ID. It may now be reused.
+            *idx = None;
+            klog!("Removing server from table");
+            Ok(())
         })
     }
 
@@ -1731,9 +1828,9 @@ impl SystemServices {
     /// Calls the provided function with the current inner process state.
     pub fn shutdown(&mut self) -> Result<(), xous_kernel::Error> {
         // Destroy all servers. This will cause all queued messages to be lost.
-        for server in &mut self.servers {
-            if server.is_some() {
-                Server::destroy(server).unwrap();
+        for server_idx in 0..self.servers.len() {
+            if let Some(server) = self.servers[server_idx].take() {
+                server.destroy(self).unwrap();
             }
         }
 

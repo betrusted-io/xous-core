@@ -7,16 +7,12 @@ use api::*;
 use heapless::Vec;
 use heapless::consts::*;
 
-#[cfg(not(target_os = "none"))]
-use heapless::spsc::Queue;
+use log::info;
 
-use core::convert::TryFrom;
-
-use log::{error, info};
-
-use core::pin::Pin;
-use xous::buffer;
-use rkyv::archived_value;
+use num_traits::{FromPrimitive, ToPrimitive};
+use xous_ipc::Buffer;
+use api::{Opcode, KeyRawStates};
+use xous::{CID, msg_scalar_unpack};
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
@@ -168,29 +164,29 @@ fn map_qwerty(code: RowCol) -> ScanCode {
 
 #[cfg(target_os = "none")]
 mod implementation {
-    use heapless::Vec;
-    use heapless::consts::*;
     use utralib::generated::*;
     use crate::api::*;
     use crate::{map_dvorak, map_qwerty};
-    use log::{error, info};
+    use ticktimer_server::Ticktimer;
+    use xous::CID;
+    use num_traits::ToPrimitive;
+
+    use heapless::Vec;
+    use heapless::consts::*;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
     const KBD_COLS: usize = 10;
 
     pub struct Keyboard {
+        conn: CID,
         csr: utralib::CSR<u32>,
-        /// debounce counter array
-        debounce: [[u8; KBD_COLS]; KBD_ROWS],
-        /// threshold (in ms) for considering an up or down event to be debounced, in loop interations.
-        threshold: u8,
-        /// last timestamp (in ms) since last call
-        timestamp: u64,
-        /// remember the last keycode since a change event
-        lastcode: Option<Vec<RowCol, U16>>,
+        /// where the interrupt handler copies the new state
+        new_state: RowColVec,
+        /// remember the last key states
+        last_state: RowColVec,
         /// connection to the timer for real-time events
-        ticktimer: xous::CID,
+        ticktimer: Ticktimer,
         /// mapping for ScanCode translation
         map: KeyMap,
         /// delay in ms before a key is considered to be repeating
@@ -217,8 +213,17 @@ mod implementation {
         chord_active: bool,
     }
 
+    fn handle_kbd(_irq_no: usize, arg: *mut usize) {
+        let kbd = unsafe { &mut *(arg as *mut Keyboard) };
+        kbd.new_state = kbd.kbd_getcodes();
+        kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear the interrupt
+
+        xous::try_send_message(kbd.conn,
+            xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+    }
+
     impl Keyboard {
-        pub fn new() -> Keyboard {
+        pub fn new(sid: xous::SID) -> Keyboard {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::keyboard::HW_KEYBOARD_BASE),
                 None,
@@ -227,17 +232,15 @@ mod implementation {
             )
             .expect("couldn't map Keyboard CSR range");
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
+            let timestamp = ticktimer.elapsed_ms();
 
-            let timestamp = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
-            let kbd = Keyboard {
+            let mut kbd = Keyboard {
+                conn: xous::connect(sid).unwrap(),
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                debounce: [[0; KBD_COLS]; KBD_ROWS],
-                threshold: 5,
-                timestamp: timestamp,
-                lastcode: None,
-                ticktimer: ticktimer_conn,
+                new_state: RowColVec::new(),
+                last_state: RowColVec::new(),
+                ticktimer,
                 map: KeyMap::Qwerty,
                 delay: 500,
                 rate: 20,
@@ -253,7 +256,16 @@ mod implementation {
                 chord_active: false,
             };
 
-            info!("KBD: hardware initialized"); // gratuitous info statement to keep clippy quiet about unused info import
+            xous::claim_interrupt(
+                utra::keyboard::KEYBOARD_IRQ,
+                handle_kbd,
+                (&mut kbd) as *mut Keyboard as *mut usize,
+            )
+            .expect("couldn't claim irq");
+            kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear in case it's pending for some reason
+            kbd.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 1);
+
+            log::trace!("hardware initialized");
 
             kbd
         }
@@ -290,125 +302,75 @@ mod implementation {
         }
 
         /// scan the entire key matrix and return the list of keys that are currently
-        /// pressed as key codes. Return format is an option-wrapped vector of u8,
+        /// pressed as key codes. Return format is an array of option-wrapped RowCol
         /// which is structured as (row : col), where each of row and col are a u8.
         /// Option "none" means no keys were pressed during this scan.
-        fn kbd_getcodes(&self) -> Option<Vec<RowCol, U16>> {
-            let mut keys: Vec<RowCol, U16> = Vec::new();
+        /// This has O(N^2) time growth as number of keys are pressed; but, typically,
+        /// it's rare that more than two keys are pressed at once, and most of the time, none are pressed.
+        /// The 16-element limit is more allowing for an extremely likely worst case. On average, this will perform
+        /// as well as an O(N) heapless Vec, but comes with the benefit of getting rid of that dependency.
+        fn kbd_getcodes(&self) -> RowColVec {
+            let mut keys = RowColVec::new();
 
             for r in 0..KBD_ROWS {
                 let cols: u16 = self.kbd_getrow(r as u8);
                 for c in 0..KBD_COLS {
                     if (cols & (1 << c)) != 0 {
-                        keys.push( RowCol{r: r as _, c: c as _} ).unwrap();
+                        // note: we could implement a check to flag if more than 16 keys were pressed within a single
+                        // debounce quanta (5ms) at once...
+                        // this is an unlikely scenario, so we're just going to count on ample space being the solution
+                        // to this problem
+                        keys.add_unchecked(RowCol{r: r as _, c: c as _});
                     }
                 }
             }
-
-            if keys.len() > 0 {
-                Some(keys)
-            } else {
-                None
-            }
+            keys
         }
 
-        /// update() does a software-based debounce of the keyboard switches
-        /// update() is designed to be called at regular intervals (not based on keyboard interrupt)
-        /// it will automatically fetch new keycodes if a change event has happened, otherwise
-        /// the regular calls to update() are necessary to update the debouncer state
-        ///
-        /// returns a struct of (keydown, keyup) scan codes.
-
-        pub fn update(&mut self) -> ( Option<Vec<RowCol, U16>>, Option<Vec<RowCol, U16>> ) {
-            let mut downs: [[bool; KBD_COLS]; KBD_ROWS] = [[false; KBD_COLS]; KBD_ROWS];
-            let mut keydowns: Vec<RowCol, U16> = Vec::new();
-            let mut keyups: Vec<RowCol, U16> = Vec::new();
-
+        pub fn update(&mut self) -> KeyRawStates {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
             // for keys that are pressed & held.
-            if self.csr.rf(utra::keyboard::EV_PENDING_KEYPRESSED) != 0 {
-                // only do the getcodes() call if we saw a change to key state
-                self.lastcode = self.kbd_getcodes();
-                /*
-                info!("KBD: pending detected");
-                if let Some(lc) = &self.lastcode {
-                    for &code in lc.iter() {
-                        info!("KBD: {:?}", code);
-                    }
-                } else {
-                    info!("KBD: lastcode is None");
-                }*/
-                // clear the pending bit
-                self.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1);
 
-                let elapsed = ticktimer_server::elapsed_ms(self.ticktimer).unwrap() - self.timestamp;
-                if elapsed <= 1 {
-                    // skip debounce processing if time elapsed is too short
-                    (None, None)
-                } else {
-                    self.timestamp = elapsed;
-
-                    // in case a lot of time has elapsed, saturate the debounce increment at the threshold so we don't
-                    // overflow the debounce counter's u8
-                    let increment: u8;
-                    if elapsed > self.threshold as u64 {
-                        increment = self.threshold;
-                    } else {
-                        increment = elapsed as u8;
-                    }
-
-                    // if there's keys pressed, continue to increment the debounce counter
-                    if let Some(code) = &self.lastcode {
-                        for &rc in code.iter() {
-                            let row = rc.r as usize; let col = rc.c as usize;
-                            if self.debounce[row][col] < self.threshold {
-                                self.debounce[row][col] += increment;
-                                // now check if we've passed the debounce threshold, and report a keydown
-                                if self.debounce[row][col] >= self.threshold {
-                                    keydowns.push(RowCol{r: row as _, c: col as _}).expect("KBD hw: probably ran out of space to track keydowns");
-                                }
-                            }
-                            downs[row][col] = true;  // record that we processed the key
-                        }
-                    }
-
-                    // now decrement debounce couter for all elements that don't have a press
-                    for r in 0..KBD_ROWS {
-                        for c in 0..KBD_COLS {
-                            if !downs[r][c] && (self.debounce[r][c] > 0) {
-                                if self.debounce[r][c] >= increment {
-                                    self.debounce[r][c] -= increment;
-                                } else {
-                                    self.debounce[r][c] = 0;
-                                }
-
-                                if self.debounce[r][c] == 0 {
-                                    keyups.push(RowCol{r: r as _, c: c as _}).expect("KBD hw: probably ran out of space to track keyups");
-                                }
-                            }
-                        }
-                    }
-
-                    let retdowns: Option<Vec<RowCol, U16>>;
-                    if keydowns.len() > 0 {
-                        retdowns = Some(keydowns);
-                    } else {
-                        retdowns = None;
-                    }
-
-                    let retups: Option<Vec<RowCol, U16>>;
-                    if keyups.len() > 0 {
-                        retups = Some(keyups);
-                    } else {
-                        retups = None;
-                    }
-
-                    (retdowns, retups)
-                }
-            } else {
-                (None, None)
+            if log::log_enabled!(log::Level::Trace) {
+                log::trace!("pending detected");
+                log::trace!("{:?}", self.new_state);
             }
+            let new_codes = self.new_state;
+
+            let mut keydowns = RowColVec::new();
+            let mut keyups = RowColVec::new();
+
+            // check to see if there are codes in the last state that aren't in the current codes
+            for i in 0..self.last_state.len() {
+                if let Some(lastcode) = self.last_state.get(i) {
+                    if !new_codes.contains(lastcode) {
+                        keyups.add_rc(lastcode).unwrap();
+                        self.last_state.set(i, None);
+                    }
+                }
+            }
+            // check to see if the codes in the current set aren't already in the current codes
+            for i in 0..new_codes.len() {
+                if let Some(rc) = new_codes.get(i) {
+                    match self.last_state.add_rc(rc) {
+                        Ok(true) => {
+                            keydowns.add_rc(rc).unwrap();
+                        },
+                        Ok(false) => {
+                            // already in the array, don't report anything as it's not a change
+                        },
+                        _ => log::error!("out of key storage state in keyboard update")
+                    }
+                }
+            }
+
+            let krs = KeyRawStates {
+                keydowns,
+                keyups,
+            };
+
+            krs
         }
 
         pub fn track_chord(&mut self, keyups: Option<Vec<RowCol, U16>>, keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
@@ -436,7 +398,7 @@ mod implementation {
             let mut keystates: Vec<char, U4> = Vec::new();
 
             if self.chord_active || keydowns.is_some() {
-                let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+                let now = self.ticktimer.elapsed_ms();
 
                 if !self.chord_active && keydowns.is_some() {
                     self.chord_active = true;
@@ -569,10 +531,10 @@ mod implementation {
                             if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                 // if the shift key was tapped twice, remove the shift modifier
                                 if self.shift_up == false {
-                                    //info!("KBD: shift down true");
+                                    //info!("shift down true");
                                     self.shift_down = true;
                                 } else {
-                                    //info!("KBD: shift up false");
+                                    //info!("shift up false");
                                     self.shift_up = false;
                                 }
                             }
@@ -604,13 +566,13 @@ mod implementation {
                                 if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
                                     // only set the shift-up if we didn't previously clear it with a double-tap of shift
                                     if self.shift_down {
-                                        //info!("KBD: shift up true");
+                                        //info!("shift up true");
                                         self.shift_up = true;
                                     }
-                                    //info!("KBD: shift down false");
+                                    //info!("shift down false");
                                     self.shift_down = false;
                                 } else {
-                                    //info!("KBD: adding non-shift entry {:?}", rc);
+                                    //info!("adding non-shift entry {:?}", rc);
                                     ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
                                 }
                             }
@@ -623,7 +585,7 @@ mod implementation {
 
             // interpret keys in the context of the shift/alt modifiers
             if let Some(kds) = &keydowns {
-                self.chord_timestamp = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+                self.chord_timestamp = self.ticktimer.elapsed_ms();
                 // if more than one is held, the key that gets picked for the repeat function is arbitrary!
                 for &rc in kds.iter() {
                     let code = match self.map {
@@ -638,7 +600,7 @@ mod implementation {
                     }
                 }
             }
-            let now = ticktimer_server::elapsed_ms(self.ticktimer).unwrap();
+            let now = self.ticktimer.elapsed_ms();
             let hold: bool;
             if (now - self.chord_timestamp) >= self.delay as u64 {
                 if self.rate_timestamp <= self.chord_timestamp {
@@ -649,11 +611,11 @@ mod implementation {
                 hold = false;
             }
 
-            fn report_ok(k: char) -> Result<(), ()> { error!("KBD: ran out of space saving char: {}", k); Ok(()) }
+            fn report_ok(k: char) -> Result<(), ()> { log::error!("ran out of space saving char: {}", k); Ok(()) }
 
             if let Some(kus) = &keyups_noshift {
                 for &rc in kus.iter() {
-                    // info!("KBD: interpreting keyups_noshift entry {:?}", rc);
+                    // info!("interpreting keyups_noshift entry {:?}", rc);
                     let code = match self.map {
                         KeyMap::Qwerty => map_qwerty(rc),
                         KeyMap::Dvorak => map_dvorak(rc),
@@ -717,7 +679,7 @@ mod implementation {
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
-                                    // info!("KBD: appeding normal key '{}'", keycode);
+                                    // info!("appeding normal key '{}'", keycode);
                                     ks.push(keycode).or_else(report_ok).ok();
                                 }
                             }
@@ -746,10 +708,10 @@ mod implementation {
     use heapless::consts::*;
     use crate::api::*;
     //use crate::{map_dvorak, map_qwerty};
-    //use log::{error, info};
 
     #[allow(dead_code)]
     pub struct Keyboard {
+        cid: xous::CID,
         map: KeyMap,
         rate: u32,
         delay: u32,
@@ -757,8 +719,9 @@ mod implementation {
     }
 
     impl Keyboard {
-        pub fn new() -> Keyboard {
+        pub fn new(sid: xous::SID) -> Keyboard {
             Keyboard {
+                cid: xous::connect(sid).unwrap(),
                 map: KeyMap::Qwerty,
                 rate: 20,
                 delay: 200,
@@ -771,8 +734,8 @@ mod implementation {
         }
         pub fn get_map(&self) -> KeyMap {self.map}
 
-        pub fn update(&self) -> ( Option<Vec<RowCol, U16>>, Option<Vec<RowCol, U16>> ) {
-            (None, None)
+        pub fn update(&self) -> KeyRawStates {
+            KeyRawStates::new()
         }
 
         pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
@@ -794,161 +757,193 @@ mod implementation {
     }
 }
 
-#[xous::xous_main]
-fn xmain() -> ! {
-    use crate::implementation::Keyboard;
-
-    log_server::init_wait().unwrap();
-    info!("KBD: my PID is {}", xous::process::id());
-
-    let kbd_sid = xous_names::register_name(xous::names::SERVER_NAME_KBD).expect("KBD: can't register server");
-    info!("KBD: registered with NS -- {:?}", kbd_sid);
-
-    // Create a new kbd object
-    let mut kbd = Keyboard::new();
-
-    let mut normal_conns: Vec<xous::CID, U64> = Vec::new();
-    let mut raw_conns: Vec<xous::CID, U64> = Vec::new();
-
-    info!("KBD: starting main loop");
-    #[cfg(not(target_os = "none"))]
-    let mut injected_keys: Queue<char, U64, _> = Queue::u8();
-    #[cfg(not(target_os = "none"))]
-    let (mut key_enqueue, mut key_dequeue) = injected_keys.split();
-
-    loop {
-        let maybe_env = xous::try_receive_message(kbd_sid).unwrap();
-        match maybe_env {
-            Some(envelope) => {
-                info!("KBD: Message: {:?}", envelope);
-                if let xous::Message::Borrow(m) = &envelope.body {
-                    let buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
-                    let bytes = Pin::new(buf.as_ref());
-                    let value = unsafe {
-                        archived_value::<api::Opcode>(&bytes, m.id as usize)
-                    };
-                    match &*value {
-                        rkyv::Archived::<api::Opcode>::RegisterListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
-                            normal_conns.push(cid).expect("KBD: probably ran out of slots for keyboard event reporting");
-                        },
-                        rkyv::Archived::<api::Opcode>::RegisterRawListener(registration) => {
-                            let cid = xous_names::request_connection_blocking(registration.as_str()).expect("KBD: can't connect to requested listener for reporting events");
-                            raw_conns.push(cid).expect("KBD: probably ran out of slots for raw keyboard event reporting");
-                        },
-                        _ => panic!("Invalid memory message response -- corruption occurred"),
-                    };
-                } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-                    match opcode {
-                        Opcode::SelectKeyMap(map) => {
-                            kbd.set_map(map);
-                        },
-                        Opcode::SetRepeat(rate, delay) => {
-                            kbd.set_repeat(rate, delay);
-                        },
-                        Opcode::SetChordInterval(delay) => {
-                            kbd.set_chord_interval(delay);
-                        },
-                        Opcode::KeyboardEvent(_keys) => {
-                            error!("KBD: somehow received an outgoing event code, this shouldn't happen!");
-                        },
-                        Opcode::HostModeInjectKey(key) => {
-                            info!("KBD: injecting emulation key press '{}'", key);
-                            #[cfg(not(target_os = "none"))]
-                            key_enqueue.enqueue(key).unwrap();
-                        },
-                        _ => panic!("KBD: received unknown opcode")
-                    }
-                } else {
-                    error!("KBD: couldn't convert opcode");
-                }
-            }
-            _ => xous::yield_slice(),
-        }
-
-        let (keydowns, keyups) = kbd.update();
-        /*
-        if let Some(ku) = &keyups {
-            for &kus in ku.iter() {
-                info!("KBD: keyup r{} c{}", kus.r, kus.c);
-            }
-        }
-        if let Some(kd) = &keydowns {
-            for &kds in kd.iter() {
-                info!("KBD: keydown r{} c{}", kds.r, kds.c);
-            }
-        }
-        */
-
-        // this code is totally untested
-        if keyups.is_some() || keydowns.is_some() {
-            // send the raw codes
-            for conn in raw_conns.iter() {
-                let mut rs: KeyRawStates = KeyRawStates::new();
-                if let Some(ku) = &keyups {
-                    for &k in ku.iter() {
-                        unsafe { // because rs is "repr packed"
-                            rs.keyups.push(k).unwrap();
-                        }
-                    }
-                }
-                if let Some(kd) = &keydowns {
-                    for &k in kd.iter() {
-                        unsafe {
-                            rs.keydowns.push(k).unwrap();
-                        }
-                    }
-                }
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-                let pos = {
-                    use rkyv::ser::Serializer;
-                    writer.serialize_value(&rs).expect("KBD: couldn't archive request")
-                };
-                let xous_buffer = writer.into_inner();
-                xous_buffer.send(*conn, pos as u32).expect("KBD: can't send raw code");
-            }
-        }
-
-        // interpret scan codes
-        // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
-        let kc: Vec<char, U4> = match kbd.get_map() {
-            KeyMap::Braille => {
-                kbd.track_chord(keyups, keydowns)
-            },
-            _ => {
-                kbd.track_keys(keyups, keydowns)
-            },
-        };
-
-        // this is used for hosted mode emulation injection of keys
-        #[cfg(not(target_os = "none"))]
-        {
-            let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
-            let mut i = 0;
-            while let Some(c) = key_dequeue.dequeue() {
-                keys[i] = c;
-                i = i + 1;
-                if i == 4 { break; } // see https://github.com/rust-lang/rfcs/pull/2497 for why this can't be at the top of the loop conditional
-            };
-            if i != 0 {
-                for conn in normal_conns.iter() {
-                    xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
-                }
-            }
-        }
-
-        // send keys, if any
-        if kc.len() > 0 {
-            let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
-            for i in 0..kc.len() {
-                // info!("KBD: sending key '{}'", kc[i]);
-                keys[i] = kc[i];
-            }
-            for conn in normal_conns.iter() {
-                xous::send_message(*conn, api::Opcode::KeyboardEvent(keys).into()).map(|_| ()).expect("KBD: Couldn't send event to listener");
+fn send_rawstates(cb_conns: &mut [Option<CID>; 16], krs: &KeyRawStates) {
+    for maybe_conn in cb_conns.iter_mut() {
+        if let Some(conn) = maybe_conn {
+            let buf = Buffer::into_buf(*krs).unwrap();
+            match buf.lend(*conn, Callback::KeyRawEvent.to_u32().unwrap()) {
+                Err(xous::Error::ServerNotFound) => {
+                    *maybe_conn = None
+                },
+                Ok(xous::Result::Ok) => {},
+                _ => panic!("unhandled error or result in callback processing"),
             }
         }
     }
-    // this shuts up the keyboard thread from polluting the kernel logs when panics happen elsewhere
-    //loop {xous::receive_message(kbd_sid).unwrap(); xous::yield_slice();}
+}
+
+#[xous::xous_main]
+fn xmain() -> ! {
+    use crate::implementation::Keyboard;
+    log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
+
+    let xns = xous_names::XousNames::new().unwrap();
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", kbd_sid);
+
+    // Create a new kbd object
+    let mut kbd = Keyboard::new(kbd_sid);
+
+    let mut normal_conns: [Option<CID>; 16] = [None; 16];
+    let mut raw_conns: [Option<CID>; 16] = [None; 16];
+
+    log::trace!("starting main loop");
+
+    loop {
+        let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
+        log::trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                let mut found = false;
+                for entry in normal_conns.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    log::error!("RegisterListener ran out of space registering callback");
+                }
+            }),
+            Some(Opcode::RegisterRawListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                let mut found = false;
+                for entry in raw_conns.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    log::error!("RegisterListener ran out of space registering callback");
+                }
+            }),
+            Some(Opcode::SelectKeyMap) => msg_scalar_unpack!(msg, km, _, _, _, {
+                kbd.set_map(KeyMap::from(km))
+            }),
+            Some(Opcode::SetRepeat) => msg_scalar_unpack!(msg, rate, delay, _, _, {
+                kbd.set_repeat(rate as u32, delay as u32);
+            }),
+            Some(Opcode::SetChordInterval) => msg_scalar_unpack!(msg, delay, _, _, _, {
+                kbd.set_chord_interval(delay as u32);
+            }),
+            Some(Opcode::HostModeInjectKey) => msg_scalar_unpack!(msg, _k, _, _, _, {
+                #[cfg(not(target_os = "none"))]
+                {
+                    let key = if let Some(a) = core::char::from_u32(_k as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    };
+                    info!("injecting emulation key press '{}'", key);
+                    for maybe_conn in normal_conns.iter_mut() {
+                        if let Some(conn) = maybe_conn {
+                            match xous::send_message(*conn,
+                                xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
+                                key as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                                '\u{0000}' as u32 as usize,
+                            )) {
+                                Err(xous::Error::ServerNotFound) => {
+                                    *maybe_conn = None
+                                },
+                                Ok(xous::Result::Ok) => {},
+                                _ => log::error!("unhandled error in key event sending")
+                            }
+                        }
+                    }
+                }
+            }),
+            Some(Opcode::HandlerTrigger) => {
+                let rawstates = kbd.update();
+
+                // send rawstates on to rawstate listeners
+                send_rawstates(&mut raw_conns, &rawstates);
+
+                // GROSS: we copy our IPC-compatible RowColVec type into a heapless::Vec for further processing
+                // this code can probably be cleaned up and improved quite a bit to reduce CPU time.
+                // We don't use heapless::Vec for the IPC because we can't serialize the object with a trait natively
+                // which leaves us with ugly/dangerous slice-of-u8 cast techniques and/or inefficient serialization
+                // methods that rely on effectively a substantially similar intermediate array-based implementation.
+                // We retain the use of the "Vec" type here because the Vec type has some nice functions like iterators,
+                // and push(), len() etc. which doesn't really make sense to re-implement. But, maybe someone much
+                // more clever than I could do extend RowColVec to have these feature and get rid of this ugly copy
+                // step and make the rest of this routine operate natively on RowColVec types....
+                let mut keyups_core: Vec<RowCol, U16> = Vec::new();
+                let mut keydowns_core: Vec<RowCol, U16> = Vec::new();
+                for i in 0..rawstates.keyups.len() {
+                    if let Some(rc) = rawstates.keyups.get(i) {
+                        keyups_core.push(rc).unwrap();
+                    }
+                }
+                for i in 0..rawstates.keydowns.len() {
+                    if let Some(rc) = rawstates.keydowns.get(i) {
+                        keydowns_core.push(rc).unwrap();
+                    }
+                }
+                let keyups = if keyups_core.len() > 0 {
+                    Some(keyups_core)
+                } else {
+                    None
+                };
+                let keydowns = if keydowns_core.len() > 0 {
+                    Some(keydowns_core)
+                } else {
+                    None
+                };
+
+                // interpret scancodes
+                // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
+                let kc: Vec<char, U4> = match kbd.get_map() {
+                    KeyMap::Braille => {
+                        kbd.track_chord(keyups, keydowns)
+                    },
+                    _ => {
+                        kbd.track_keys(keyups, keydowns)
+                    },
+                };
+
+                // send keys, if any
+                if kc.len() > 0 {
+                    let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+                    for i in 0..kc.len() {
+                        // info!("sending key '{}'", kc[i]);
+                        keys[i] = kc[i];
+                    }
+
+                    for maybe_conn in normal_conns.iter_mut() {
+                        if let Some(conn) = maybe_conn {
+                            match xous::send_message(*conn,
+                                xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
+                                keys[0] as u32 as usize,
+                                keys[1] as u32 as usize,
+                                keys[2] as u32 as usize,
+                                keys[3] as u32 as usize,
+                            )) {
+                                Err(xous::Error::ServerNotFound) => {
+                                    *maybe_conn = None
+                                },
+                                Ok(xous::Result::Ok) => {},
+                                _ => log::error!("unhandled error in key event sending")
+                            }
+                        }
+                    }
+                }
+            },
+            None => {log::error!("couldn't convert opcode"); break}
+        }
+    }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(kbd_sid).unwrap();
+    xous::destroy_server(kbd_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

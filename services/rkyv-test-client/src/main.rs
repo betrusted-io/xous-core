@@ -11,6 +11,22 @@ fn print_log_messages(log_message: &str, prefix: &str) {
     );
 }
 
+fn handle_battstats(bs: com::BattStats) {
+    log::info!("battstats: {:?}", bs);
+    // note: at this point to repatriate data into the core main loop, you have two options:
+    // 1. send a new message to the server, using your own private API. This feels "wasteful"
+    //    as you're bouncing a message twice but it keeps the API spaces strictly on crate boundaries
+    // 2. use an Atomic type to transfer primitive data types from the handler thread to the main thread
+}
+
+fn handle_keyevents(keys: [char; 4]) {
+    for &k in keys.iter() {
+        if k != '\u{0000}' {
+            log::info!("KEYEVENT: {}", k);
+        }
+    }
+}
+
 #[xous::xous_main]
 fn rkyv_test_client() -> ! {
     log_server::init_wait().unwrap();
@@ -18,8 +34,7 @@ fn rkyv_test_client() -> ! {
         "Hello, world! This is the client, PID {}",
         xous::current_pid().unwrap().get()
     );
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't create ticktimer object");
 
     rkyv_test_server::hook_log_messages(print_log_messages);
 
@@ -31,9 +46,17 @@ fn rkyv_test_client() -> ! {
     let mut double_src = xous::String::<256>::new();
 
     let mut message_string = xous::String::<64>::new();
+
+    let xns = xous_names::XousNames::new().unwrap();
+
+    /*let mut com = com::Com::new(&xns).unwrap();
+    com.hook_batt_stats(handle_battstats).unwrap();
+
+    let mut kbd = keyboard::Keyboard::new(&xns).unwrap();
+    kbd.hook_keyboard_events(handle_keyevents).unwrap();*/
     loop {
         log::info!("2 + {} = {}", idx, rkyv_test_server::add(2, idx).unwrap());
-        ticktimer_server::sleep_ms(ticktimer_conn, 500).ok();
+        ticktimer.sleep_ms(3000).ok();
 
         message_string.clear();
         write!(message_string, "I'm at loop # {:^4} (some numer: {})", idx, some_number).unwrap();
@@ -48,6 +71,8 @@ fn rkyv_test_client() -> ! {
         let sent_str = xous::String::<32>::from_str("This got moved");
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
+
+        //com.req_batt_stats().unwrap();
 
         idx += 1;
     }

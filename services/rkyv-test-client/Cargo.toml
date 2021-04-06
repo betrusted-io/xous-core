@@ -11,6 +11,10 @@ log-server = {path = "../log-server"}
 rkyv-test-server = {path = "../rkyv-test-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
+com = {path = "../com"}
+xous-names = {path="../xous-names"}
+
+keyboard = {path="../keyboard"}
 
 [features]
 default = []

@@ -4,14 +4,15 @@
 mod api;
 use api::Opcode;
 
-use core::convert::TryFrom;
+use num_traits::{ToPrimitive, FromPrimitive};
 
-use log::{error, info};
+use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-use xous::CID;
+use xous::{CID, msg_scalar_unpack};
+use xous_ipc::{Buffer, String};
 
 const STD_TIMEOUT: u32 = 100;
 #[derive(Debug, Copy, Clone)]
@@ -21,7 +22,11 @@ pub struct WorkRequest {
 }
 
 fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> {
-    xous::send_message(cid, crate::api::Opcode::BattStatsEvent(stats).into()).map(|_| ())
+    let rawstats: [usize; 2] = stats.into();
+    xous::send_message(cid,
+        xous::Message::new_scalar(api::Callback::BattStats.to_usize().unwrap(),
+        rawstats[0], rawstats[1], 0, 0)
+    ).map(|_| ())
 }
 
 #[cfg(target_os = "none")]
@@ -33,21 +38,15 @@ mod implementation {
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
-    use xous::CID;
 
     use heapless::Vec;
-    use heapless::consts::*;
+    use heapless::consts::U64;
 
-    /*
-        use typenum::{UInt, UTerm};
-        use typenum::bit::{B0, B1};
-        type U1280 = UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UInt<UTerm, B1>, B0>, B1>, B0>, B0>, B0>, B0>, B0>, B0>, B0>, B0>;
-    */
     const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
-        ticktimer: CID,
+        ticktimer: ticktimer_server::Ticktimer,
         pub workqueue: Vec<WorkRequest, U64>,
         busy: bool,
     }
@@ -69,12 +68,11 @@ mod implementation {
             )
             .expect("couldn't map COM CSR range");
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xc = XousCom {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                ticktimer: ticktimer_conn,
+                ticktimer,
                 workqueue: Vec::new(),
                 busy: false,
                 //tx_queue: Vec::new(),
@@ -108,15 +106,11 @@ mod implementation {
 
         pub fn wait_txrx(&mut self, tx: u16, timeout: Option<u32>) -> u16 {
             if timeout.is_some() {
-                let curtime = ticktimer_server::elapsed_ms(self.ticktimer)
-                    .expect("couldn't connect to ticktimer");
+                let curtime = self.ticktimer.elapsed_ms();
                 let mut timed_out = false;
                 let to = timeout.unwrap() as u64;
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
-                    if (ticktimer_server::elapsed_ms(self.ticktimer)
-                        .expect("couldn't connect to ticktimer")
-                        - curtime)
-                        > to
+                    if (self.ticktimer.elapsed_ms() - curtime) > to
                     {
                         timed_out = true;
                     }
@@ -133,21 +127,31 @@ mod implementation {
             self.txrx(tx)
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
 
@@ -213,21 +217,31 @@ mod implementation {
             }
         }
 
-        pub fn process_queue(&mut self) {
+        pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
                 let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
-                if work_descriptor.work.verb == ComState::STAT.verb {
+                let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
-                    return_battstats(work_descriptor.sender, stats)
-                        .expect("Could not return BattStatsNb value");
+                    match return_battstats(work_descriptor.sender, stats) {
+                        Err(xous::Error::ServerNotFound) => {
+                            // the callback target has quit, so de-allocate it from our list
+                            Some(work_descriptor.sender)
+                        },
+                        Ok(()) => None,
+                        _ => panic!("unhandled error in callback process_queue"),
+                    }
                 } else {
                     error!(
                         "unimplemented work queue responder 0x{:x}",
                         work_descriptor.work.verb
                     );
-                }
+                    None
+                };
                 self.busy = false;
+                ret
+            } else {
+                None
             }
         }
     }
@@ -236,89 +250,83 @@ mod implementation {
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::XousCom;
-    use heapless::Vec;
-    use heapless::consts::*;
-    use core::pin::Pin;
-    use xous::buffer;
-    use rkyv::archived_value_mut;
 
     log_server::init_wait().unwrap();
-    info!("COM: my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
 
-    let com_sid = xous_names::register_name(xous::names::SERVER_NAME_COM).expect("COM: can't register server");
-    info!("COM: registered with NS -- {:?}", com_sid);
-
-    /*  // get rid of this feature for now, it doesn't work, we don't use it, and it potentially causes troubles
-    let agent_conn= if cfg!(feature = "fccagent") {
-        xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM")
-    } else {
-        0 // bogus value
-    }; */
+    let xns = xous_names::XousNames::new().unwrap();
+    let com_sid = xns.register_name(api::SERVER_NAME_COM).expect("can't register server");
+    trace!("registered with NS -- {:?}", com_sid);
 
     // Create a new com object
     let mut com = XousCom::new();
 
-    // create a Vec to track return connections for battery stats
-    let mut battstats_conns: Vec<xous::CID, U64> = Vec::new();
+    // create an array to track return connections for battery stats
+    let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
-    info!("COM: starting main loop");
+    trace!("starting main loop");
     loop {
-        let envelope = xous::receive_message(com_sid).unwrap();
-        // info!("COM: Message: {:?}", envelope);
-        if let xous::Message::Borrow(m) = &envelope.body {
-            let mut buf = unsafe { buffer::XousBuffer::from_memory_message(m) };
-            let value = unsafe {
-                archived_value_mut::<api::Opcode>(Pin::new(buf.as_mut()), m.id as usize)
-            };
-            match &*value {
-                rkyv::Archived::<api::Opcode>::RegisterBattStatsListener(registration_name) => {
-                    let cid = xous_names::request_connection_blocking(registration_name.as_str()).expect("COM: can't connect to requested listener for reporting events");
-                    battstats_conns.push(cid).expect("COM: probably ran out of slots for battstats event reporting");
-                },
-                rkyv::Archived::<api::Opcode>::Wf200PdsLine(rkyv_l) => {
-                    let l = xous::String::<512>::from_str(rkyv_l.as_str());
-                    info!("COM: Wf200PdsLine got line {}", l);
-                    let line = l.as_bytes();
-                    let length = (l.len() + 0) as u16;
-                    //info!("COM: 0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
-                    com.txrx(ComState::WFX_PDS_LINE_SET.verb);
-                    //info!("COM: 0x{:04x}", length);
-                    com.txrx(length);
-                    //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
-                    for i in 0..128 {
-                        let word: u16;
-                        if (i * 2 + 1) == length as usize { // odd last element
-                            word = line[i * 2] as u16;
-                        } else if i * 2 < length as usize {
-                            word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
-                        } else {
-                            word = 0;
+        let msg = xous::receive_message(com_sid).unwrap();
+        trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                    let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                    let cid = Some(xous::connect(sid).unwrap());
+                    let mut found = false;
+                    for entry in battstats_conns.iter_mut() {
+                        if *entry == None {
+                            *entry = cid;
+                            found = true;
+                            break;
                         }
-                        com.txrx(word);
-                        //info!("COM: 0x{:04x}", word);
+                    }
+                    if !found {
+                        error!("RegisterBattStatsListener ran out of space registering callback");
                     }
                 }
-                _ => panic!("Invalid memory message response -- corruption occurred"),
-            };
-        } else if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            // info!("COM: Opcode: {:?}", opcode);
-            match opcode {
-                Opcode::PowerOffSoc => {
-                    info!("COM: power off called");
-                    com.txrx(ComState::POWER_OFF.verb);
-                    com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used
+            ),
+            Some(Opcode::Wf200PdsLine) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let l = buffer.to_original::<String::<512>, _>().unwrap();
+                info!("Wf200PdsLine got line {}", l);
+                let line = l.as_bytes();
+                let length = (l.len() + 0) as u16;
+                //info!("0x{:04x}", ComState::WFX_PDS_LINE_SET.verb);
+                com.txrx(ComState::WFX_PDS_LINE_SET.verb);
+                //info!("0x{:04x}", length);
+                com.txrx(length);
+                //for i in 0..(ComState::WFX_PDS_LINE_SET.w_words as usize - 1) {
+                for i in 0..128 {
+                    let word: u16;
+                    if (i * 2 + 1) == length as usize { // odd last element
+                        word = line[i * 2] as u16;
+                    } else if i * 2 < length as usize {
+                        word = (line[i*2] as u16) | ((line[i*2+1] as u16) << 8);
+                    } else {
+                        word = 0;
+                    }
+                    com.txrx(word);
+                    //info!("0x{:04x}", word);
                 }
-                Opcode::BattStats => {
-                    info!("COM: batt stats request received");
-                    let stats = com.get_battstats();
-                    let raw_stats: [usize; 2] = stats.into();
-                    xous::return_scalar2(envelope.sender, raw_stats[1], raw_stats[0])
-                        .expect("COM: couldn't return batt stats request");
-                    info!("COM: done returning batt stats request");
-                }
-                Opcode::BattStatsNb => {
-                    for &conn in battstats_conns.iter() {
+            }
+            Some(Opcode::PowerOffSoc) => {
+                info!("power off called");
+                com.txrx(ComState::POWER_OFF.verb);
+                com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used
+            }
+            Some(Opcode::BattStats) => {
+                info!("batt stats request received");
+                let stats = com.get_battstats();
+                let raw_stats: [usize; 2] = stats.into();
+                xous::return_scalar2(msg.sender, raw_stats[1], raw_stats[0])
+                    .expect("couldn't return batt stats request");
+                info!("done returning batt stats request");
+            }
+            Some(Opcode::BattStatsNb) => {
+                for &maybe_conn in battstats_conns.iter() {
+                    if let Some(conn) = maybe_conn {
                         com.workqueue
                             .push(WorkRequest {
                                 work: ComState::STAT,
@@ -327,52 +335,47 @@ fn xmain() -> ! {
                             .unwrap();
                     }
                 }
-                Opcode::Wf200Rev => {
-                    com.txrx(ComState::WFX_FW_REV_GET.verb);
-                    let major = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
-                    let minor = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
-                    let build = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
-                    xous::return_scalar(
-                        envelope.sender,
-                        ((major as usize) << 16) | ((minor as usize) << 8) | (build as usize)
-                    )
-                    .expect("COM: couldn't return WF200 firmware rev");
-                }
-                Opcode::EcGitRev => {
-                    com.txrx(ComState::EC_GIT_REV.verb);
-                    let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                    let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                    let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
-                    xous::return_scalar2(
-                        envelope.sender,
-                        ((rev_msb as usize) << 16) | (rev_lsb as usize),
-                        dirty as usize
-                    )
-                    .expect("COM: couldn't return WF200 firmware rev");
-                }
-                /* // excised because it doesn't work
-                Opcode::RxStatsAgent => {
-                    if cfg!(feature = "fccagent") {
-                        // note -- this code never worked, but wasn't needed. just hanging out as bread crumbs for future work in case this is needed.
-                        let mut stats: [u8; (ComState::WFX_RXSTAT_GET.r_words*2) as usize] = [0; (ComState::WFX_RXSTAT_GET.r_words*2) as usize];
-                        com.txrx(ComState::WFX_RXSTAT_GET.verb);
-                        for i in 0..ComState::WFX_RXSTAT_GET.r_words as usize {
-                            let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                            stats[i*2] = data as u8;
-                            stats[i*2+1] = (data >> 8) as u8;
-                        }
-                        // hard-coded from fccagent to break circular dependency of fcc agent on com on agent on com on...
-                        let data = xous::carton::Carton::from_bytes(&stats);
-                        let m = xous::Message::Borrow(data.into_message(2));
-                        xous::send_message(agent_conn, m).expect("Can't send RxStat message to FCC agent!");
-                    }
-                }*/
-                _ => error!("unknown opcode"),
             }
-        } else {
-            error!("couldn't convert opcode");
+            Some(Opcode::Wf200Rev) => {
+                com.txrx(ComState::WFX_FW_REV_GET.verb);
+                let major = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                let minor = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                let build = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                xous::return_scalar(
+                    msg.sender,
+                    ((major as usize) << 16) | ((minor as usize) << 8) | (build as usize)
+                )
+                .expect("couldn't return WF200 firmware rev");
+            }
+            Some(Opcode::EcGitRev) => {
+                com.txrx(ComState::EC_GIT_REV.verb);
+                let rev_msb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                let rev_lsb = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                let dirty = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
+                xous::return_scalar2(
+                    msg.sender,
+                    ((rev_msb as usize) << 16) | (rev_lsb as usize),
+                    dirty as usize
+                )
+                .expect("couldn't return WF200 firmware rev");
+            }
+            None => {error!("unknown opcode"); break},
         }
 
-        com.process_queue();
+        if let Some(dropped_cid) = com.process_queue() {
+            for entry in battstats_conns.iter_mut() {
+                if let Some(cid) = *entry {
+                    if cid == dropped_cid {
+                        *entry = None;
+                        break;
+                    }
+                }
+            }
+        }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(com_sid).unwrap();
+    xous::destroy_server(com_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

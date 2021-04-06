@@ -1,17 +1,14 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous::{Message, ScalarMessage, String, CID};
-use graphics_server::Gid;
-use rkyv::ser::Serializer;
+use xous::{Message, CID, send_message};
+use xous_ipc::{Buffer, String};
+use num_traits::{ToPrimitive, FromPrimitive};
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Prediction {
     pub index: u32,
     pub valid: bool,
-    // to *return* a value in rkyv, we can't have a variable-length string, as the "pos" argument changes
-    // this is OK for predictions, we only show the first few characters anyways.
-    pub string: [u8; 31], // 31 is the longest fixed-length array rkyv supports
-    pub len: u32,
+    pub string: String::<1000>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -43,14 +40,13 @@ impl From<usize> for PredictionTriggers {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum Opcode {
     /// update with the latest input candidate. Replaces the previous input.
-    Input(xous::String<4000>),
+    Input, //(String<4000>),
 
     /// feed back to the IME plugin as to what was picked, so predictions can be updated
-    Picked(xous::String<4000>),
+    Picked, //(String<4000>),
 
     /// Undo the last Picked value. To be used when a user hits backspace after picking a prediction
     /// note that repeated calls to Unpick will have an implementation-defined behavior
@@ -58,44 +54,17 @@ pub enum Opcode {
 
     /// fetch the prediction at a given index, where the index is ordered from 0..N, where 0 is the most likely prediction
     /// if there is no prediction available, just return an empty string
-    Prediction(Prediction),
+    Prediction, //(Prediction),
 
     /// return the prediction triggers used by this IME. These are characters that can indicate that a
     /// whole predictive unit has been entered.
     GetPredictionTriggers,
 }
 
-impl core::convert::TryFrom<& Message> for Opcode {
-    type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
-        match message {
-            Message::Scalar(m) => match m.id {
-                0 => Ok(Opcode::Unpick),
-                _ => Err("IME_SH api: unknown Scalar ID"),
-            },
-            Message::BlockingScalar(m) => match m.id {
-                1 => Ok(Opcode::GetPredictionTriggers),
-                _ => Err("IME_SH api: unknown BlockingScalar ID"),
-            },
-            _ => Err("IME_SH api: unhandled message type"),
-        }
-    }
-}
-
-impl Into<Message> for Opcode {
-    fn into(self) -> Message {
-        match self {
-            Opcode::Unpick => Message::Scalar(ScalarMessage {
-                id: 0,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-            }),
-            Opcode::GetPredictionTriggers => Message::BlockingScalar(ScalarMessage {
-                id: 1,
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-            }),
-            _ => panic!("IME_SH api: Opcode type not handled by Into(), refer to helper method"),
-        }
-    }
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum Return {
+    Prediction(Prediction),
+    Failure,
 }
 
 pub trait PredictionApi {
@@ -103,7 +72,7 @@ pub trait PredictionApi {
     fn unpick(&self) -> Result<(), xous::Error>;
     fn set_input(&self, s: String<4000>) -> Result<(), xous::Error>;
     fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error>;
-    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error>;
+    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error>;
 }
 
 // provide a convenience version of the API for generic/standard calls
@@ -116,7 +85,8 @@ impl PredictionApi for PredictionPlugin {
     fn get_prediction_triggers(&self) -> Result<PredictionTriggers, xous::Error> {
         match self.connection {
             Some(cid) => {
-                let response = xous::send_message(cid, Opcode::GetPredictionTriggers.into())?;
+                let response = send_message(cid,
+                    Message::new_blocking_scalar(Opcode::GetPredictionTriggers.to_usize().unwrap(), 0, 0, 0, 0))?;
                 if let xous::Result::Scalar1(code) = response {
                     Ok(code.into())
                 } else {
@@ -130,7 +100,8 @@ impl PredictionApi for PredictionPlugin {
     fn unpick(&self) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                xous::send_message(cid, Opcode::Unpick.into())?;
+                send_message(cid,
+                   Message::new_scalar(Opcode::Unpick.to_usize().unwrap(), 0, 0, 0, 0))?;
                 Ok(())
             },
             _ => Err(xous::Error::UseBeforeInit)
@@ -140,13 +111,8 @@ impl PredictionApi for PredictionPlugin {
     fn set_input(&self, s: String<4000>) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let rkyv_input = Opcode::Input(s);
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-                let pos = writer.serialize_value(&rkyv_input).expect("IME|API: couldn't archive input string");
-                let xous_buffer = writer.into_inner();
-
-                xous_buffer.lend(cid, pos as u32).expect("IME|API: set_input operation failure");
+                let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
+                buf.lend(cid, Opcode::Input.to_u32().unwrap()).expect("|API: set_input operation failure");
                 Ok(())
             },
             _ => Err(xous::Error::UseBeforeInit),
@@ -156,56 +122,43 @@ impl PredictionApi for PredictionPlugin {
     fn feedback_picked(&self, s: String<4000>) -> Result<(), xous::Error> {
         match self.connection {
             Some(cid) => {
-                let rkyv_picked = Opcode::Picked(s);
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-                let pos = writer.serialize_value(&rkyv_picked).expect("IME|API: couldn't archive picked string");
-                let xous_buffer = writer.into_inner();
-
-                xous_buffer.lend(cid, pos as u32).expect("IME|API: feedback_picked operation failure");
+                let buf = Buffer::into_buf(s).or(Err(xous::Error::InternalError))?;
+                buf.lend(cid, Opcode::Picked.to_u32().unwrap()).expect("|API: feedback_picked operation failure");
                 Ok(())
             },
             _ => Err(xous::Error::UseBeforeInit),
         }
     }
 
-    fn get_prediction(&self, index: u32) -> Result<Option<xous::String<4000>>, xous::Error> {
-        use rkyv::Deserialize;
-        let debug1 = false;
+    fn get_prediction(&self, index: u32) -> Result<Option<String<4000>>, xous::Error> {
         match self.connection {
             Some(cid) => {
                 let prediction = Prediction {
                     index,
-                    string: [0; 31],
-                    len: 0,
+                    string: String::<1000>::new(),
                     valid: false,
                 };
-                let pred_op = Opcode::Prediction(prediction);
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+                let mut buf = Buffer::into_buf(prediction).or(Err(xous::Error::InternalError))?;
+                buf.lend_mut(cid, Opcode::Prediction.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
-                let pos = writer.serialize_value(&pred_op).expect("IME|API: couldn't archive prediction request");
-                let mut xous_buffer = writer.into_inner();
-                if debug1{log::info!("IME|API: lending Prediction with pos {}", pos);}
+                log::trace!("IME|API: returned from get_prediction");
 
-                xous_buffer.lend_mut(cid, pos as u32).expect("IME|API: prediction fetch operation failure");
-
-                if debug1{log::info!("IME|API: returned from get_prediction");}
-                let returned = unsafe { rkyv::archived_value::<Opcode>(xous_buffer.as_ref(), pos)};
-                if let rkyv::Archived::<Opcode>::Prediction(result) = returned {
-                    let pred_r: Prediction = result.deserialize(&mut xous::XousDeserializer).unwrap();
-                    if debug1{log::info!("IME|API: got {:?}", pred_r);}
-                    if pred_r.valid {
-                        let mut ret = xous::String::<4000>::new();
-                        use core::fmt::Write as CoreWrite;
-                        write!(ret, "{}", core::str::from_utf8(&pred_r.string[0..pred_r.len as usize]).unwrap()).unwrap();
-                        Ok(Some(ret))
-                    } else {
-                        Ok(None)
+                match buf.to_original().unwrap() {
+                    Return::Prediction(pred) => {
+                        log::trace!("|API: got {:?}", pred);
+                        if pred.valid {
+                            let mut ret = String::<4000>::new();
+                            use core::fmt::Write as CoreWrite;
+                            write!(ret, "{}", pred.string).unwrap();
+                            Ok(Some(ret))
+                        } else {
+                            Ok(None)
+                        }
                     }
-                } else {
-                    let r = returned.deserialize(&mut xous::XousDeserializer).unwrap();
-                    log::error!("IME: API get_prediction returned an invalid result {:?}", r);
-                    Err(xous::Error::InvalidString)
+                    _ => {
+                        log::error!("API get_prediction returned an invalid result");
+                        Err(xous::Error::InternalError)
+                    }
                 }
             },
             _ => Err(xous::Error::UseBeforeInit),
@@ -221,117 +174,148 @@ impl PredictionApi for PredictionPlugin {
 // in this crate so we can break circular dependencies
 // between the IMEF, GAM, and graphics server
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ImefOpcode {
     /// informs me where my input canvas is
-    SetInputCanvas(Gid),
+    SetInputCanvas, //(Gid),
 
     /// informs me where my prediction canvas is
-    SetPredictionCanvas(Gid),
+    SetPredictionCanvas, //(Gid),
 
     /// set prediction server. Must be a String of the name of a server that is loaded in the system.
-    SetPredictionServer(xous::String<64>),
+    SetPredictionServer, //(String<64>),
 
     /// register a listener for finalized inputs
-    RegisterListener(xous::String<64>),
+    RegisterListener, //(String<64>),
 
-    /// this is the event opcode used by listeners
-    GotInputLine(xous::String<4000>),
+    /// internal use for passing keyboard events from the keyboard callback
+    ProcessKeys,
+
+    /// force a redraw of the UI
+    Redraw,
+
+    // this is the event opcode used by listeners
+    //GotInputLine, //(String<4000>),
 }
-
-impl core::convert::TryFrom<& Message> for ImefOpcode {
-    type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
-        match message {
-            Message::Scalar(m) => match m.id {
-                0 => Ok(ImefOpcode::SetInputCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
-                1 => Ok(ImefOpcode::SetPredictionCanvas(Gid::new([m.arg1 as _, m.arg2 as _, m.arg3 as _, m.arg4 as _]))),
-                _ => Err("IMEF api: unknown Scalar ID"),
-            },
-            _ => Err("IMEF api: unhandled message type"),
-        }
-    }
-}
-
-impl Into<Message> for ImefOpcode {
-    fn into(self) -> Message {
-        match self {
-            ImefOpcode::SetInputCanvas(gid) => Message::Scalar(ScalarMessage {
-                id: 0, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
-            }),
-            ImefOpcode::SetPredictionCanvas(gid) => Message::Scalar(ScalarMessage {
-                id: 1, arg1: gid.gid()[0] as _, arg2: gid.gid()[1] as _, arg3: gid.gid()[2] as _, arg4: gid.gid()[3] as _
-            }),
-            _ => panic!("IMEF api: Opcode type not handled by into()"),
-        }
-    }
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum ImefCallback {
+    GotInputLine, //(String<4000>),
+    Drop,
 }
 
 pub trait ImeFrontEndApi {
     fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
     fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error>;
-    fn register_listener(&self, servername: &str) -> Result<(), xous::Error>;
+    fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
+    fn redraw(&self) -> Result<(), xous::Error>;
 }
 
+pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
+static mut INPUT_CB: Option<fn(String::<4000>)> = None;
+
 pub struct ImeFrontEnd {
-    pub connection: Option<CID>,
+    cid: CID,
+    callback_sid: Option<xous::SID>,
+}
+impl ImeFrontEnd {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(SERVER_NAME_IME_FRONT).expect("Can't connect to IMEF");
+        Ok(ImeFrontEnd {
+            cid: conn,
+            callback_sid: None,
+          })
+    }
+}
+impl Drop for ImeFrontEnd {
+    fn drop(&mut self) {
+        if let Some(sid) = self.callback_sid.take() {
+            // no need to tell the pstream server we're quitting: the next time a callback processes,
+            // it will automatically remove my entry as it will receive a ServerNotFound error.
+
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(ImefCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+
+        unsafe{xous::disconnect(self.cid).unwrap();}
+    }
 }
 
 impl ImeFrontEndApi for ImeFrontEnd {
     fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
-        match self.connection {
-            Some(cid) => {
-                xous::send_message(cid, ImefOpcode::SetInputCanvas(g).into())?;
-                Ok(())
-            },
-            _ => Err(xous::Error::UseBeforeInit)
-        }
+        send_message(self.cid,
+            Message::new_scalar(ImefOpcode::SetInputCanvas.to_usize().unwrap(),
+            g.gid()[0] as _, g.gid()[1] as _, g.gid()[2] as _, g.gid()[3] as _
+        ))?;
+        Ok(())
     }
 
     fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
-        match self.connection {
-            Some(cid) => {
-                xous::send_message(cid, ImefOpcode::SetPredictionCanvas(g).into())?;
-                Ok(())
-            },
-            _ => Err(xous::Error::UseBeforeInit)
-        }
+        send_message(self.cid,
+            Message::new_scalar(ImefOpcode::SetPredictionCanvas.to_usize().unwrap(),
+            g.gid()[0] as _, g.gid()[1] as _, g.gid()[2] as _, g.gid()[3] as _
+        ))?;
+        Ok(())
     }
 
     fn set_predictor(&self, servername: &str) -> Result<(), xous::Error> {
-        match self.connection {
-            Some(cid) => {
-                let mut server = xous::String::<64>::new();
-                use core::fmt::Write;
-                write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
-                let ime_op = ImefOpcode::SetPredictionServer(server);
-
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-                let pos = writer.serialize_value(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
-                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredictionServer request failure");
-                Ok(())
-            },
-            _ => Err(xous::Error::UseBeforeInit)
-        }
+        let mut server = String::<64>::new();
+        use core::fmt::Write;
+        write!(server, "{}", servername).expect("couldn't write set_predictor server name");
+        let buf = Buffer::into_buf(server).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.cid, ImefOpcode::SetPredictionServer.to_u32().unwrap()).map(|_|())
     }
 
-    fn register_listener(&self, servername: &str) -> Result<(), xous::Error> {
-        match self.connection {
-            Some(cid) => {
-                let mut server = xous::String::<64>::new();
-                use core::fmt::Write;
-                write!(server, "{}", servername).expect("IMEF: couldn't write set_predictor server name");
-                let ime_op = ImefOpcode::RegisterListener(server);
+    fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error> {
+        if unsafe{INPUT_CB}.is_some() {
+            return Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+        unsafe{INPUT_CB = Some(cb)};
+        if self.callback_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.callback_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            xous::send_message(self.cid,
+                Message::new_scalar(ImefOpcode::RegisterListener.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
+        Ok(())
+    }
 
-                let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    fn redraw(&self) -> Result<(), xous::Error> {
+        send_message(self.cid,
+            Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(),
+            0, 0, 0, 0)
+        )?;
+        Ok(())
+    }
+}
 
-                let pos = writer.serialize_value(&ime_op).expect("IMEF: couldn't archive SetPredictionServer");
-                writer.into_inner().lend(cid, pos as u32).expect("IMEF: SetPredicitonServer request failure");
-                Ok(())
+/// handles callback messages from server, in the library user's process space.
+fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ImefCallback::GotInputLine) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
+                unsafe {
+                    if let Some(cb) = INPUT_CB {
+                        cb(inputline)
+                    }
+                }
             },
-            _ => Err(xous::Error::UseBeforeInit)
+            Some(ImefCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
         }
     }
 }

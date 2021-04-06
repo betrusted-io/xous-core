@@ -147,7 +147,7 @@ impl Into<Message> for Opcode {
     }
 }
 
-use log::{error, info};
+use log::info;
 use core::fmt::{Error, Write};
 
 use utralib::generated::*;
@@ -157,9 +157,6 @@ use heapless::Vec;
 use heapless::consts::*;
 
 use core::convert::TryFrom;
-
-use com::*;
-
 
 pub struct Uart {
     uart_csr: utralib::CSR<u32>,
@@ -195,7 +192,7 @@ macro_rules! println
 	});
 }
 
-fn handle_irq(_irq_no: usize, arg: *mut usize) {
+fn handle_irq(_irq_no: usize, _arg: *mut usize) {
     let uart = unsafe { &mut UART_STRUCT };
 
     while let Some(c) = uart.getc() {
@@ -263,8 +260,8 @@ impl Write for Uart {
 
 fn was_continuous(cmd: &mut String<U2048>) -> bool {
     let mut tokens = Vec::<_, U16>::new();
-    for i in 0..16 {
-        let mut empty: String<U512> = String::from("");
+    for _ in 0..16 {
+        let empty: String<U512> = String::from("");
         tokens.push(empty).unwrap();
     }
 
@@ -300,7 +297,7 @@ fn was_continuous(cmd: &mut String<U2048>) -> bool {
     false
 }
 
-fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<String<U512>, U16>, info_csr: &utralib::CSR<u32>) -> Result<(), xous::Error> {
+fn do_agent(cmd: &mut String<U2048>, com: &com::Com, pds_list: &mut Vec<String<U512>, U16>, info_csr: &utralib::CSR<u32>) -> Result<(), xous::Error> {
     if false {
         let tokens: Vec<&str, U16> = cmd.as_mut_str().split(' ').collect();
         for token in tokens.iter() {
@@ -314,8 +311,8 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
     But we can't. Heapless is having big problems with this for lots of reasons, so we make it manually.
     */
     let mut tokens = Vec::<_, U16>::new();
-    for i in 0..16 {
-        let mut empty: String<U512> = String::from("");
+    for _ in 0..16 {
+        let empty: String<U512> = String::from("");
         tokens.push(empty).unwrap();
     }
 
@@ -359,7 +356,7 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
             } else if tokens[1].trim() == "--help" {
                 println!("I need all the help I can get.\n\r");
             } else if tokens[1].trim() == "read_fw_version" {
-                let (major, minor, build) = get_wf200_fw_rev(com_cid).unwrap();
+                let (major, minor, build) = com.get_wf200_fw_rev().unwrap();
                 println!("{}.{}.{}\n\r", major, minor, build);
             } else if tokens[1].trim() == "read_driver_version" {
                 println!("0.0.0\n\r");
@@ -368,35 +365,33 @@ fn do_agent(cmd: &mut String<U2048>, com_cid: xous::CID, pds_list: &mut Vec<Stri
                 let mut stripped: String<U512> = String::from("");
                 for c in pdsline.chars() {
                     if c != '"' {
-                        stripped.push(c);
+                        stripped.push(c).unwrap();
                     }
                 }
-                pds_list.push(stripped);
+                pds_list.push(stripped).unwrap();
             } else if tokens[1].trim() == "read_rx_stats" {
                 println!("rx stats request disabled!!");
-                //get_rx_stats_agent(com_cid).unwrap();
+                //com.get_rx_stats_agent().unwrap();
             } else if tokens[1].trim() == "commit_pds" {
-                let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-                let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+                let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
-                let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+                let mut last_time: u64 = ticktimer.elapsed_ms();
                 for pds in pds_list.iter() {
-                    let mut sendable_string = xous::String::<512>::new();
-                    write!(&mut sendable_string, "{}", pds);
+                    let mut sendable_string = xous_ipc::String::<512>::new();
+                    write!(&mut sendable_string, "{}", pds).unwrap();
                     println!("{}", sendable_string);
-                    send_pds_line(com_cid, &sendable_string);
+                    com.send_pds_line(&sendable_string).unwrap();
                     loop {
-                        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-                            if elapsed_time - last_time > 250 {
-                                last_time = elapsed_time;
-                                break;
-                            }
+                        let elapsed_time = ticktimer.elapsed_ms();
+                        if elapsed_time - last_time > 250 {
+                            last_time = elapsed_time;
+                            break;
                         }
                     }
                 }
                 pds_list.clear();
             } else if tokens[1].trim() == "ec_version" {
-                let (gitrev, dirty) = get_ec_git_rev(com_cid).unwrap();
+                let (gitrev, dirty) = com.get_ec_git_rev().unwrap();
                 if dirty {
                     println!("ecrev: {:08x} dirty", gitrev);
                 } else {
@@ -458,6 +453,8 @@ pub union sl_wfx_indication_data_u {
     _bindgen_union_align: [u8; 376],
 }
 
+const SERVER_NAME_FCCAGENT: &str = "_Agent for EMC Testing_";
+
 #[xous::xous_main]
 fn xmain() -> ! {
     /*
@@ -477,15 +474,15 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     info!("FCCAGENT: my PID is {}", xous::process::id());
 
-    let agent_server_sid = xous_names::register_name(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
-    let agent_server_client = xous_names::request_connection_blocking(xous::names::SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
+    let xns = xous_names::XousNames::new().unwrap();
+    let agent_server_sid = xns.register_name(SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't register server");
+    let agent_server_client = xns.request_connection_blocking(SERVER_NAME_FCCAGENT).expect("FCCAGENT: can't connect to COM");
 
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let mut uart = Uart::new(agent_server_client);
 
-    let com_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("FCCAGENT: can't connect to COM");
+    let com = com::Com::new(&xns).unwrap();
 
     let mut cmd_string: String<U2048> = String::from("");
 
@@ -501,10 +498,10 @@ fn xmain() -> ! {
     uart.enable_rx();
 
     print!("\n\r\n\r*** FCC agent ***\n\r\n\r");
-    let mut last_time: u64 = ticktimer_server::elapsed_ms(ticktimer_conn).unwrap();
+    let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut pds_list: Vec<String<U512>, U16> = Vec::new();
     let mut repeat = false;
-    let mut phase = 0;
+    let mut _phase = 0;
     loop {
         let envelope = xous::try_receive_message(agent_server_sid).unwrap();
         match envelope {
@@ -517,7 +514,7 @@ fn xmain() -> ! {
                                 cmd_string.push(c as char).unwrap();
                             } else {
                                 println!("");
-                                do_agent(&mut cmd_string, com_conn, &mut pds_list, &info_csr,/* &mut gpio */).unwrap();
+                                do_agent(&mut cmd_string, &com, &mut pds_list, &info_csr,/* &mut gpio */).unwrap();
                                 repeat = was_continuous(&mut cmd_string);
                                 // print!("agent@precursor:~$ ");
                                 cmd_string.clear();
@@ -536,73 +533,70 @@ fn xmain() -> ! {
                             println!("Throughput on correct frames received: {}", unsafe{stats_u.rx_stats.throughput});
                             // TODO: fill in more stats output
                         },*/
-                        _ => println!("Unknown opcode received.")
+                        // _ => println!("Unknown opcode received.")
                     }
                 }
             }
             _ => () //xous::yield_slice(), // no message received, idle
         }
         // Periodic tasks
-        if let Ok(elapsed_time) = ticktimer_server::elapsed_ms(ticktimer_conn) {
-            if elapsed_time - last_time > 20_000 {
-                last_time = elapsed_time;
+        let elapsed_time = ticktimer.elapsed_ms();
+        if elapsed_time - last_time > 20_000 {
+            last_time = elapsed_time;
 
-                if repeat {
-                    for pds in pds_list.iter() {
-                        let mut sendable_string = xous::String::<512>::new();
-                        write!(&mut sendable_string, "{}", pds);
-                        println!("{}", sendable_string);
-                        send_pds_line(com_conn, &sendable_string);
-                    }
+            if repeat {
+                for pds in pds_list.iter() {
+                    let mut sendable_string = xous_ipc::String::<512>::new();
+                    write!(&mut sendable_string, "{}", pds).unwrap();
+                    println!("{}", sendable_string);
+                    com.send_pds_line(&sendable_string).unwrap();
                 }
-
-                /* // for testing the PDS API
-                let mut string_buffer = xous::String::<512>::new();
-                write!(&mut string_buffer, "\"{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}\"").expect("Can't write");
-                //write!(&mut string_buffer,     "{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}").expect("Can't write");
-                println!("sending line: {}", string_buffer);
-                send_pds_line(com_conn, &string_buffer); */
-
-                //// full simulation of commands
-                /*
-                if phase == 0 {
-                    info!("FCCAGENT: sending PDS start commands");
-                    let mut pds1: String<U512> = String::from("");
-                    write!(&mut pds1, "{{j:{{a:0}}}}");
-                    pds_list.push(pds1);
-                    let mut pds2: String<U512> = String::from("");
-                    write!(&mut pds2, "{{h:{{e:0,a:50,b:0,c:[{{a:[1,E],b:[0,0,0,0,0,0]}}],d:0}},i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
-                    pds_list.push(pds2);
-                    let mut pds3: String<U512> = String::from("");
-                    write!(&mut pds3, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
-                    pds_list.push(pds3);
-
-                    let mut cmd: String<U2048> = String::from("");
-                    write!(&mut cmd, "wfx_test_agent commit_pds");
-                    do_agent(&mut cmd, com_conn, &mut pds_list, &info_csr).unwrap();
-                    phase = 1;
-                } else if phase == 1 {
-                    info!("FCCAGENT: waiting...");
-                    phase = 2;
-                } else if phase == 2 {
-                    info!("FCCAGENT: sending PDS stop commands");
-                    let mut pds_stop: String<U512> = String::from("");
-                    write!(&mut pds_stop, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:64,f:1}},e:{{}}}}}}");
-                    pds_list.push(pds_stop);
-
-                    let mut cmd: String<U2048> = String::from("");
-                    write!(&mut cmd, "wfx_test_agent commit_pds");
-                    do_agent(&mut cmd, com_conn, &mut pds_list, &info_csr).unwrap();
-                    phase = 3;
-                } else {
-                    info!("FCCAGENT: waiting again...");
-                    phase = 0;
-                }
-                */
-
             }
-        } else {
-            error!("error requesting ticktimer!")
+
+            /* // for testing the PDS API
+            let mut string_buffer = xous_ipc::String::<512>::new();
+            write!(&mut string_buffer, "\"{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}\"").expect("Can't write");
+            //write!(&mut string_buffer,     "{{i:{{a:7,b:1,f:3E8,c:{{a:0,b:0,c:0,d:44}},d:{{a:BB8,b:0,c:0,d:15,e:64,f:4}},e:{{}}}}}}").expect("Can't write");
+            println!("sending line: {}", string_buffer);
+            com.send_pds_line(&string_buffer); */
+
+            //// full simulation of commands
+            /*
+            if phase == 0 {
+                info!("FCCAGENT: sending PDS start commands");
+                let mut pds1: String<U512> = String::from("");
+                write!(&mut pds1, "{{j:{{a:0}}}}");
+                pds_list.push(pds1);
+                let mut pds2: String<U512> = String::from("");
+                write!(&mut pds2, "{{h:{{e:0,a:50,b:0,c:[{{a:[1,E],b:[0,0,0,0,0,0]}}],d:0}},i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
+                pds_list.push(pds2);
+                let mut pds3: String<U512> = String::from("");
+                write!(&mut pds3, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:0,f:1}},e:{{}}}}}}");
+                pds_list.push(pds3);
+
+                let mut cmd: String<U2048> = String::from("");
+                write!(&mut cmd, "wfx_test_agent commit_pds");
+                com.do_agent(&mut cmd, &mut pds_list, &info_csr).unwrap();
+                phase = 1;
+            } else if phase == 1 {
+                info!("FCCAGENT: waiting...");
+                phase = 2;
+            } else if phase == 2 {
+                info!("FCCAGENT: sending PDS stop commands");
+                let mut pds_stop: String<U512> = String::from("");
+                write!(&mut pds_stop, "{{i:{{a:1,b:1,f:F4240,c:{{a:0,b:0,c:0,d:44}},d:{{a:5DC,b:0,c:0,d:0,e:64,f:1}},e:{{}}}}}}");
+                pds_list.push(pds_stop);
+
+                let mut cmd: String<U2048> = String::from("");
+                write!(&mut cmd, "wfx_test_agent commit_pds");
+                com.do_agent(&mut cmd, &mut pds_list, &info_csr).unwrap();
+                phase = 3;
+            } else {
+                info!("FCCAGENT: waiting again...");
+                phase = 0;
+            }
+            */
+
         }
     }
 }

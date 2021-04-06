@@ -1,7 +1,9 @@
 #![cfg_attr(target_os = "none", no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
-use xous::String;
+use xous_ipc::{String, Buffer};
+
+pub mod api;
 
 static XOUS_LOGGER: XousLogger = XousLogger {
     locked: AtomicBool::new(false),
@@ -17,19 +19,19 @@ static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
     buffer: None,
 };
 
-struct XousLoggerBacking {
+struct XousLoggerBacking<'a> {
     conn: xous::CID,
-    buffer: Option<String<4000>>, // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
+    buffer: Option<Buffer<'a>>,
     initialized: bool,
 }
 
-impl XousLoggerBacking {
+impl XousLoggerBacking<'_> {
     fn init(&mut self) -> Result<(), xous::Error> {
         if self.initialized {
             return Ok(());
         }
         self.conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?;
-        self.buffer = Some(String::<4000>::new());
+        self.buffer = Some(Buffer::new(4000)); // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
         self.initialized = true;
         Ok(())
     }
@@ -38,10 +40,19 @@ impl XousLoggerBacking {
         if !self.initialized && self.init().is_err() {
             return;
         }
-        if let Some(ref mut buf) = self.buffer {
-            buf.clear();
-            write!(buf, "{} - {}", record.level(), record.args()).unwrap();
-            buf.lend(self.conn).unwrap();
+        let mut args = String::<2800>::new();
+        write!(args, "{}", record.args()).unwrap();
+        let lr = api::LogRecord {
+            file: String::from_str(record.file().unwrap_or("")),
+            line: record.line(),
+            module: String::from_str(record.module_path().unwrap_or("")),
+            level: record.level() as u32,
+            args,
+        };
+
+        if let Some(buf) = self.buffer.as_mut() {
+            buf.rewrite(lr).unwrap();
+            buf.lend(self.conn, 0).unwrap(); // there is only one type of buffer we should be sending!
         }
     }
 }

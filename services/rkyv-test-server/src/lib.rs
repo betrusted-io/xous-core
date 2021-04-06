@@ -1,10 +1,11 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 mod api;
-mod buffer;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 use num_traits::{FromPrimitive, ToPrimitive};
+
+use xous_ipc::{String, Buffer};
 
 // Note that connection IDs are never 0, so this is invalid, and could map to `None`.
 static SERVER_CID: AtomicU32 = AtomicU32::new(0);
@@ -14,7 +15,8 @@ static SERVER_CID: AtomicU32 = AtomicU32::new(0);
 fn ensure_connection() -> xous::CID {
     let mut cid = SERVER_CID.load(Ordering::Relaxed);
     if cid == 0 {
-        cid = xous_names::request_connection_blocking(api::SERVER_NAME).unwrap();
+        let ns = xous_names::XousNames::new().unwrap();
+        cid = ns.request_connection_blocking(api::SERVER_NAME).unwrap();
         SERVER_CID.store(cid, Ordering::Relaxed);
     }
     cid
@@ -29,7 +31,7 @@ pub fn add(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::into_buf(op).or(Err(api::Error::InternalError))?;
 
     // Mutably lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -42,7 +44,7 @@ pub fn add(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
 
     // Turn the result of the response into a friendly value that can be understood
     // by the caller.
-    match buf.deserialize().unwrap() {
+    match buf.to_original().unwrap() {
         api::MathResult::Value(v) => Ok(v),
         api::MathResult::Error(val) => Err(val),
     }
@@ -53,7 +55,7 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).or(Err(api::Error::InternalError))?;
+    let mut buf = Buffer::into_buf(op).or(Err(api::Error::InternalError))?;
 
     // Lend our op to the server, specifying the `api::Opcode::Mathematics` opcode.
     // This will return a structure that we can deserialize back into something we
@@ -65,7 +67,7 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     .or(Err(api::Error::InternalError))?;
 
     // Don't deserialize it -- use the archived version
-    match *buf.try_into::<api::MathResult, _>().unwrap() {
+    match *buf.as_flat::<api::MathResult, _>().unwrap() {
         api::ArchivedMathResult::Value(v) => Ok(v),
         api::ArchivedMathResult::Error(api::ArchivedError::InternalError) => Err(api::Error::InternalError),
         api::ArchivedMathResult::Error(api::ArchivedError::Overflow) => Err(api::Error::Overflow),
@@ -89,14 +91,14 @@ pub fn divide(arg1: i32, arg2: i32) -> Result<i32, api::Error> {
 /// We accept any two parameters that can be treated as strings.
 pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix.as_ref()),
-        message: xous::String::from_str(message.as_ref()),
+        prefix: String::from_str(prefix.as_ref()),
+        message: String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = buffer::Buffer::try_from(op).unwrap();
+    let buf = Buffer::into_buf(op).unwrap();
 
     // Send the message to the server.
     buf.lend(
@@ -110,14 +112,14 @@ pub fn log_message<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
 /// We accept any two parameters that can be treated as strings.
 pub fn log_message_send<S: AsRef<str>, T: AsRef<str>>(prefix: S, message: T) {
     let op = api::LogString {
-        prefix: xous::String::from_str(prefix.as_ref()),
-        message: xous::String::from_str(message.as_ref()),
+        prefix: String::from_str(prefix.as_ref()),
+        message: String::from_str(message.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let buf = buffer::Buffer::try_from(op).unwrap();
+    let buf = Buffer::into_buf(op).unwrap();
 
     // Send the message to the server.
     buf.send(
@@ -140,8 +142,8 @@ fn callback_server() {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::CallbackType::LogString) => {
                 let mem = msg.body.memory_message().unwrap();
-                let buffer = unsafe { buffer::Buffer::from_memory_message(mem) };
-                let log_string = buffer.try_into::<api::LogString, _>().unwrap();
+                let buffer = unsafe { Buffer::from_memory_message(mem) };
+                let log_string = buffer.as_flat::<api::LogString, _>().unwrap();
                 unsafe {
                     for entry in CALLBACK_ARRAY.iter() {
                         if let Some(cb) = entry {
@@ -187,15 +189,15 @@ pub fn hook_log_messages(cb: fn(&str, &str)) {
     }
 }
 
-pub fn double_string<const N: usize>(value: &xous::String<N>) -> xous::String<N> {
+pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     let op = api::StringDoubler {
-        value: xous::String::from_str(value.as_str().unwrap()),
+        value: String::from_str(value.as_ref()),
     };
 
     // Convert the opcode into a serialized buffer. This consumes the opcode, which will
     // exist on the heap in its own page. Furthermore, this will be in a flattened format
     // suitable for passing around as a message.
-    let mut buf = buffer::Buffer::try_from(op).unwrap();
+    let mut buf = Buffer::into_buf(op).unwrap();
 
     // Send the message to the server.
     buf.lend_mut(
@@ -204,5 +206,5 @@ pub fn double_string<const N: usize>(value: &xous::String<N>) -> xous::String<N>
     )
     .unwrap();
 
-    xous::String::from_str(buf.try_into::<api::StringDoubler, _>().unwrap().value.as_str())
+    String::from_str(buf.as_flat::<api::StringDoubler, _>().unwrap().value.as_str())
 }

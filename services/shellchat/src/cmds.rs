@@ -1,4 +1,5 @@
-use xous::{String, MessageEnvelope};
+use xous::{MessageEnvelope};
+use xous_ipc::String;
 use core::fmt::Write;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
@@ -37,10 +38,10 @@ macro_rules! cmd_api {
 /////////////////////////// Command shell integration
 #[derive(Debug)]
 pub struct CommonEnv {
-    llio: xous::CID,
-    com: xous::CID,
-    ticktimer: xous::CID,
-    gam: xous::CID,
+    llio: llio::Llio,
+    com: com::Com,
+    ticktimer: ticktimer_server::Ticktimer,
+    gam: gam::Gam,
 }
 
 /*
@@ -74,14 +75,14 @@ pub struct CmdEnv {
     callback_cmd: CallBack,
 }
 impl CmdEnv {
-    pub fn new(gam: xous::CID) -> CmdEnv {
-        let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
+    pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
+        let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         CmdEnv {
             common_env: CommonEnv {
-                llio: xous_names::request_connection_blocking(xous::names::SERVER_NAME_LLIO).expect("CMD: can't connect to LLIO"),
-                com: xous_names::request_connection_blocking(xous::names::SERVER_NAME_COM).expect("CMD: can't connect to COM"),
-                ticktimer: xous::connect(ticktimer_server_id).unwrap(),
-                gam,
+                llio: llio::Llio::new(&xns).expect("CMD: couldn't connect to LLIO"),
+                com: com::Com::new(&xns).expect("CMD: could't connect to COM"),
+                ticktimer: ticktimer,
+                gam: gam::Gam::new(&xns).expect("CMD: couldn't connect to GAM"),
             },
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()

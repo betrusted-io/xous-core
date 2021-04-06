@@ -19,7 +19,7 @@ pub struct XousDisplay {
 }
 
 struct XousKeyboardHandler {
-    kbd_conn: xous::CID,
+    kbd: keyboard::Keyboard,
     left_shift: bool,
     right_shift: bool,
 }
@@ -50,10 +50,10 @@ impl XousDisplay {
             .update_with_buffer(&native_buffer, WIDTH, HEIGHT)
             .unwrap();
 
-        let kbd_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_KBD)
-            .expect("GFX|hosted: can't connect to KBD for emulation");
+        let xns = xous_names::XousNames::new().unwrap();
+        let kbd = keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
         let keyboard_handler = Box::new(XousKeyboardHandler {
-            kbd_conn: kbd_conn,
+            kbd: kbd,
             left_shift: false,
             right_shift: false,
         });
@@ -258,12 +258,7 @@ impl minifb::InputCallback for XousKeyboardHandler {
         log::info!("GFX|hosted: sending key {:?}", key);
         let c = self.decode_key(key);
         if c != '\u{0000}' {
-            xous::send_message(
-                self.kbd_conn,
-                keyboard::api::Opcode::HostModeInjectKey(c).into(),
-            )
-            .map(|_| ())
-            .unwrap();
+            self.kbd.hostmode_inject_key(c);
         }
     }
 }

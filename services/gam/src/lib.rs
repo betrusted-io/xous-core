@@ -3,167 +3,155 @@
 pub mod api;
 use api::*;
 
-use xous::send_message;
-use rkyv::Deserialize;
-use rkyv::ser::Serializer;
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
-use log::info;
 
-pub fn redraw(gam_cid: xous::CID) -> Result<(), xous::Error> {
-    xous::send_message(gam_cid, api::Opcode::Redraw.into()).map(|_|())
+use api::Opcode; // if you prefer to map the api into your local namespace
+use xous::{send_message, CID, Message};
+use xous_ipc::{String, Buffer};
+use num_traits::ToPrimitive;
+
+#[derive(Debug)]
+pub struct Gam {
+    conn: CID,
 }
+impl Gam {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_GAM).expect("Can't connect to GAM");
+        Ok(Gam {
+          conn,
+        })
+    }
 
-pub fn powerdown_request(gam_cid: xous::CID) -> Result<bool, xous::Error> {
-    let response = send_message(gam_cid, api::Opcode::PowerDownRequest.into())?;
-    if let xous::Result::Scalar1(confirmed) = response {
-        if confirmed != 0 {
-            Ok(true)
+    pub fn redraw(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
+
+    pub fn powerdown_request(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PowerDownRequest.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(confirmed) = response {
+            if confirmed != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         } else {
-            Ok(false)
+            panic!("GAM_API: unexpected return value: {:#?}", response);
         }
-    } else {
-        panic!("GAM_API: unexpected return value: {:#?}", response);
-    }
-}
-
-/// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
-/// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
-/// the actual screen update is allowed
-pub fn post_textview(gam_cid: xous::CID, tv: &mut TextView) -> Result<(), xous::Error> {
-    tv.set_op(TextOp::Render);
-    let rkyv_tv = api::Opcode::RenderTextView(*tv);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-    let pos = writer.serialize_value(&rkyv_tv).expect("GAM_API: couldn't archive textview");
-    let mut xous_buffer = writer.into_inner();
-
-    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: RenderTextView operation failure");
-
-    // recover the mutable values and mirror the ones we care about back into our local structure
-    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::RenderTextView(result) = returned {
-            let tvr: TextView = result.deserialize(&mut xous::XousDeserializer).unwrap();
-            tv.bounds_computed = tvr.bounds_computed;
-            tv.cursor = tvr.cursor;
-    } else {
-        panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled");
     }
 
-    tv.set_op(TextOp::Nop);
-    Ok(())
-}
+    /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
+    /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
+    /// the actual screen update is allowed
+    pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        tv.set_op(TextOp::Render);
+        let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::RenderTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
-pub fn draw_line(gam_cid: xous::CID, gid: Gid, line: Line) -> Result<(), xous::Error> {
-    let rkyv_tv = api::Opcode::RenderObject(
-        GamObject {
+        match buf.to_original().unwrap() {
+            api::Return::RenderReturn(tvr) => {
+                tv.bounds_computed = tvr.bounds_computed;
+                tv.cursor = tvr.cursor;
+            }
+            _ => panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled")
+        }
+        tv.set_op(TextOp::Nop);
+        Ok(())
+    }
+
+    pub fn draw_line(&self, gid: Gid, line: Line) -> Result<(), xous::Error> {
+        let go = GamObject {
             canvas: gid,
             obj: GamObjectType::Line(line),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-    let pos = writer.serialize_value(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
-    let xous_buffer = writer.into_inner();
-    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
-    Ok(())
-}
-pub fn draw_rectangle(gam_cid: xous::CID, gid: Gid, rect: Rectangle) -> Result<(), xous::Error> {
-    let rkyv_tv = api::Opcode::RenderObject(
-        GamObject {
+        };
+        let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
+    }
+    pub fn draw_rectangle(&self, gid: Gid, rect: Rectangle) -> Result<(), xous::Error> {
+        let go = GamObject {
             canvas: gid,
             obj: GamObjectType::Rect(rect),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-    let pos = writer.serialize_value(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
-    let xous_buffer = writer.into_inner();
-    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
-    Ok(())
-}
-pub fn draw_rouded_rectangle(gam_cid: xous::CID, gid: Gid, rr: RoundedRectangle) -> Result<(), xous::Error> {
-    let rkyv_tv = api::Opcode::RenderObject(
-        GamObject {
+        };
+        let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
+    }
+    pub fn draw_rounded_rectangle(&self, gid: Gid, rr: RoundedRectangle) -> Result<(), xous::Error> {
+        let go = GamObject {
             canvas: gid,
             obj: GamObjectType::RoundRect(rr),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+        };
+        let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
+    }
+    pub fn draw_circle(&self, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
+        let go = GamObject {
+                canvas: gid,
+                obj: GamObjectType::Circ(circ),
+        };
+        let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
+    }
 
-    let pos = writer.serialize_value(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
-    let xous_buffer = writer.into_inner();
-    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
-    Ok(())
-}
-pub fn draw_circle(gam_cid: xous::CID, gid: Gid, circ: Circle) -> Result<(), xous::Error> {
-    let rkyv_tv = api::Opcode::RenderObject(
-        GamObject {
-            canvas: gid,
-            obj: GamObjectType::Circ(circ),
-    });
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+    pub fn get_canvas_bounds(&self, gid: Gid) -> Result<Point, xous::Error> {
+        log::trace!("GAM_API: get_canvas_bounds");
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetCanvasBounds.to_usize().unwrap(),
+                gid.gid()[0] as _,  gid.gid()[1] as _,  gid.gid()[2] as _,  gid.gid()[3] as _))
+                .expect("GAM_API: can't get canvas bounds from GAM");
+            if let xous::Result::Scalar2(tl, br) = response {
+            // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
+            log::trace!("GAM_API: tl:{}, br:{}", tl, br);
+            assert!(tl == 0, "GAM_API: api call returned non-zero top left for canvas bounds");
+            Ok(br.into())
+        } else {
+            panic!("GAM_API: can't get canvas bounds")
+        }
+    }
 
-    let pos = writer.serialize_value(&rkyv_tv).expect("GAM_API: couldn't archive GamObject");
-    let xous_buffer = writer.into_inner();
-    xous_buffer.lend(gam_cid, pos as u32).expect("GAM_API: GamObject operation failure");
-    Ok(())
-}
+    pub fn set_canvas_bounds_request(&self, req: &mut SetCanvasBoundsRequest) -> Result<(), xous::Error> {
+        let mut buf = Buffer::into_buf(req.clone()).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::SetCanvasBounds.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        match buf.to_original().unwrap() {
+            api::Return::SetCanvasBoundsReturn(ret) => {
+                req.granted = ret.granted;
+            }
+            _ => panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled")
+        }
+        Ok(())
+    }
 
-pub fn get_canvas_bounds(gam_cid: xous::CID, gid: Gid) -> Result<Point, xous::Error> {
-    let debug1 = false;
-    if debug1{info!("GAM_API: get_canvas_bounds");}
-    let response = xous::send_message(gam_cid, api::Opcode::GetCanvasBounds(gid).into())?;
-    if let xous::Result::Scalar2(tl, br) = response {
-        // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
-        if debug1{info!("GAM_API: tl:{}, br:{}", tl, br);}
-        assert!(tl == 0, "GAM_API: api call returned non-zero top left for canvas bounds");
-        Ok(br.into())
-    } else {
-        panic!("GAM_API: can't get canvas bounds")
+    pub fn request_content_canvas(&self, requestor_name: &str, redraw_id: usize) -> Result<Gid, xous::Error> {
+        let mut server = String::<256>::new();
+        use core::fmt::Write;
+        write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
+        let req = ContentCanvasRequest {
+            canvas: Gid::new([0,0,0,0]),
+            servername: server,
+            redraw_scalar_id: redraw_id,
+        };
+        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::RequestContentCanvas.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::ContentCanvasReturn(ret) => {
+                Ok(ret.canvas)
+            }
+            _ => {
+                log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
+                Err(xous::Error::InternalError)
+            }
+        }
     }
 }
 
-pub fn set_canvas_bounds_request(gam_cid: xous::CID, req: &mut SetCanvasBoundsRequest) -> Result<(), xous::Error> {
-    let rkyv = api::Opcode::SetCanvasBounds((*req).clone());
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
+impl Drop for Gam {
+    fn drop(&mut self) {
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
 
-    let pos = writer.serialize_value(&rkyv).expect("GAM_API: couldn't archive SetCanvasBounds");
-    let mut xous_buffer = writer.into_inner();
-    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: SetCanvasBounds operation failure");
-
-    // recover the mutable values and mirror the ones we care about back into our local structure
-    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::SetCanvasBounds(result) = returned {
-            let ret: SetCanvasBoundsRequest = result.deserialize(&mut xous::XousDeserializer).unwrap();
-            req.granted = ret.granted;
-    } else {
-        panic!("GAM_API: set_canvas_bounds_request view got a return value from the server that isn't expected or handled");
-    }
-    Ok(())
-}
-
-pub fn request_content_canvas(gam_cid: xous::CID, requestor_name: &str) -> Result<Gid, xous::Error> {
-    let mut server = xous::String::<256>::new();
-    use core::fmt::Write;
-    write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
-    let req = ContentCanvasRequest {
-        canvas: Gid::new([0,0,0,0]),
-        servername: server,
-    };
-    let rkyv = api::Opcode::RequestContentCanvas(req);
-
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-
-    let pos = writer.serialize_value(&rkyv).expect("GAM_API: couldn't archive RequestContentCanvas");
-    let mut xous_buffer = writer.into_inner();
-    xous_buffer.lend_mut(gam_cid, pos as u32).expect("GAM_API: RequestContentCanvas operation failure");
-
-    // recover the mutable values and mirror the ones we care about back into our local structure
-    let returned = unsafe { rkyv::archived_value::<api::Opcode>(xous_buffer.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::RequestContentCanvas(result) = returned {
-        let ret: ContentCanvasRequest = result.deserialize(&mut xous::XousDeserializer).unwrap();
-        Ok(ret.canvas)
-    } else {
-        log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
-        Err(xous::Error::InternalError)
     }
 }

@@ -2,23 +2,22 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use llio::api::*;
+use api::*;
 mod i2c;
 use i2c::*;
 
-use core::convert::TryFrom;
-use core::pin::Pin;
-use rkyv::archived_value;
-use rkyv::ser::Serializer;
-use rkyv::Deserialize;
-
 use log::{error, info};
+
+use num_traits::FromPrimitive;
+use xous_ipc::Buffer;
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 #[cfg(target_os = "none")]
 mod implementation {
-    use llio::api::*;
+    use crate::api::*;
     use log::{error, info};
     use utralib::generated::*;
+    use num_traits::ToPrimitive;
 
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
@@ -32,7 +31,7 @@ mod implementation {
         power_csr: utralib::CSR<u32>,
         seed_csr: utralib::CSR<u32>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
-        ticktimer_conn: xous::CID,
+        ticktimer: ticktimer_server::Ticktimer,
         destruct_armed: bool,
     }
 
@@ -52,7 +51,8 @@ mod implementation {
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
         if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn, Opcode::IrqI2cTxrxDone.into()).map(|_| ()).unwrap();
+            xous::try_send_message(conn,
+                xous::Message::new_scalar(Opcode::IrqI2cTxrxDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
         } else {
             log::error!("LLIO|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
         }
@@ -143,8 +143,7 @@ mod implementation {
             )
             .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
 
-            let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-            let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+            let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xl = Llio {
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
@@ -158,7 +157,7 @@ mod implementation {
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
-                ticktimer_conn,
+                ticktimer,
                 destruct_armed: false,
             };
 
@@ -235,7 +234,7 @@ mod implementation {
                 UartType::Kernel => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0),
                 UartType::Log => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1),
                 UartType::Application => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2),
-                _ => info!("LLIO: invalid UART type specified for mux, doing nothing."),
+                _ => info!("invalid UART type specified for mux, doing nothing."),
             }
         }
 
@@ -271,10 +270,10 @@ mod implementation {
         }
         pub fn power_self(&mut self, power_on: bool) {
             if power_on {
-                info!("LLIO: setting self-power state to on");
+                info!("setting self-power state to on");
                 self.power_csr.rmwf(utra::power::POWER_SELF, 1);
             } else {
-                info!("LLIO: setting self-power state to OFF");
+                info!("setting self-power state to OFF");
                 self.power_csr.rmwf(utra::power::POWER_STATE, 0);
                 self.power_csr.rmwf(utra::power::POWER_SELF, 0);
             }
@@ -295,7 +294,7 @@ mod implementation {
         }
         pub fn ec_reset(&mut self) {
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            ticktimer_server::sleep_ms(self.ticktimer_conn, 100).unwrap();
+            self.ticktimer.sleep_ms(100).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
         }
         pub fn ec_power_on(&mut self) {
@@ -308,28 +307,28 @@ mod implementation {
                 self.destruct_armed = true;
             } else {
                 self.destruct_armed = false;
-                error!("LLIO: self destruct attempted, but incorrect code sequence presented.");
+                error!("self destruct attempted, but incorrect code sequence presented.");
             }
         }
         pub fn vibe(&mut self, pattern: VibePattern) {
             match pattern {
                 VibePattern::Short => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Long => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 1000).unwrap();
+                    self.ticktimer.sleep_ms(1000).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Double => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    ticktimer_server::sleep_ms(self.ticktimer_conn, 250).unwrap();
+                    self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
             }
@@ -436,207 +435,230 @@ mod implementation {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+struct ScalarCallback {
+    server_to_cb_cid: CID,
+    cb_to_client_cid: CID,
+    cb_to_client_id: u32,
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
-    let debug1 = false;
     use crate::implementation::Llio;
 
     // very early on map in the GPIO base so we can have the right logging enabled
     let gpio_base = crate::implementation::log_init();
 
     log_server::init_wait().unwrap();
-    info!("LLIO: my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
 
-    let llio_sid = xous_names::register_name(xous::names::SERVER_NAME_LLIO).expect("LLIO: can't register server");
-    if debug1{info!("LLIO: registered with NS -- {:?}", llio_sid);}
+    let xns = xous_names::XousNames::new().unwrap();
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", llio_sid);
 
     // Create a new llio object
-    let handler_conn = xous::connect(llio_sid).expect("LLIO: can't create IRQ handler connection");
+    let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
 
     // ticktimer is a well-known server
-    let ticktimer_server_id = xous::SID::from_bytes(b"ticktimer-server").unwrap();
-    let ticktimer_conn = xous::connect(ticktimer_server_id).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     // create an i2c state machine handler
-    let mut i2c_machine = I2cStateMachine::new(ticktimer_conn, llio.get_i2c_base());
+    let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
-    if debug1{info!("LLIO: starting main loop");}
+    let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
+
+    log::trace!("starting main loop");
     let mut reboot_requested: bool = false;
     loop {
-        let envelope = xous::receive_message(llio_sid).unwrap();
-        if debug1{info!("LLIO: Message: {:?}", envelope)};
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            // info!("LLIO: Opcode: {:?}", opcode);
-            // reset the reboot request if the very next opcode is not a confirm
-            if reboot_requested {
-                match opcode {
-                    Opcode::RebootCpuConfirm => {
-                        if reboot_requested {
-                            llio.reboot(false);
-                        }
-                    },
-                    Opcode::RebootSocConfirm => {
-                        if reboot_requested {
-                            llio.reboot(true);
-                        }
-                    },
-                    _ => reboot_requested = false,
+        let mut msg = xous::receive_message(llio_sid).unwrap();
+        log::trace!("Message: {:?}", msg);
+        if reboot_requested {
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::RebootCpuConfirm) => {
+                    llio.reboot(false);
                 }
+                Some(Opcode::RebootSocConfirm) => {
+                    llio.reboot(true);
+                }
+                _ => reboot_requested = false,
             }
-            match opcode {
-                Opcode::RebootRequest => {
+        } else {
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::RebootRequest) => {
                     reboot_requested = true;
                 },
-                Opcode::RebootCpuConfirm => {
-                    info!("LLIO: RebootCpuConfirm, but no prior Request. Ignoring.");
+                Some(Opcode::RebootCpuConfirm) => {
+                    info!("RebootCpuConfirm, but no prior Request. Ignoring.");
                 },
-                Opcode::RebootSocConfirm => {
-                    info!("LLIO: RebootSocConfirm, but no prior Request. Ignoring.");
+                Some(Opcode::RebootSocConfirm) => {
+                    info!("RebootSocConfirm, but no prior Request. Ignoring.");
                 },
-                Opcode::RebootVector(vector) => {
-                    llio.set_reboot_vector(vector);
-                },
-                Opcode::CrgMode(_mode) => {
-                    todo!("LLIO: CrgMode opcode not yet implemented.");
-                },
-                Opcode::GpioDataOut(d) => {
-                    llio.gpio_dout(d);
-                },
-                Opcode::GpioDataIn => {
-                    xous::return_scalar(envelope.sender, llio.gpio_din() as usize).expect("LLIO: couldn't return gpio data in");
-                },
-                Opcode::GpioDataDrive(d) => {
-                    llio.gpio_drive(d);
-                },
-                Opcode::GpioIntMask(d) => {
-                    llio.gpio_int_mask(d);
-                },
-                Opcode::GpioIntAsFalling(d) => {
-                    llio.gpio_int_as_falling(d);
-                },
-                Opcode::GpioIntPending => {
-                    xous::return_scalar(envelope.sender, llio.gpio_int_pending() as usize).expect("LLIO: couldn't return gpio pending vector");
-                },
-                Opcode::GpioIntEna(d) => {
-                    llio.gpio_int_ena(d);
-                },
-                Opcode::UartMux(mux) => {
-                    llio.set_uart_mux(mux);
-                },
-                Opcode::InfoDna => {
+                Some(Opcode::RebootVector) =>  msg_scalar_unpack!(msg, vector, _, _, _, {
+                    llio.set_reboot_vector(vector as u32);
+                }),
+                Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
+                    todo!("CrgMode opcode not yet implemented.");
+                }),
+                Some(Opcode::GpioDataOut) => msg_scalar_unpack!(msg, d, _, _, _, {
+                    llio.gpio_dout(d as u32);
+                }),
+                Some(Opcode::GpioDataIn) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.gpio_din() as usize).expect("couldn't return gpio data in");
+                }),
+                Some(Opcode::GpioDataDrive) => msg_scalar_unpack!(msg, d, _, _, _, {
+                    llio.gpio_drive(d as u32);
+                }),
+                Some(Opcode::GpioIntMask) => msg_scalar_unpack!(msg, d, _, _, _, {
+                    llio.gpio_int_mask(d as u32);
+                }),
+                Some(Opcode::GpioIntAsFalling) => msg_scalar_unpack!(msg, d, _, _, _, {
+                    llio.gpio_int_as_falling(d as u32);
+                }),
+                Some(Opcode::GpioIntPending) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.gpio_int_pending() as usize).expect("couldn't return gpio pending vector");
+                }),
+                Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
+                    llio.gpio_int_ena(d as u32);
+                }),
+                Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
+                    llio.set_uart_mux(mux.into());
+                }),
+                Some(Opcode::InfoDna) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_dna();
-                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return DNA");
-                },
-                Opcode::InfoGit => {
+                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return DNA");
+                }),
+                Some(Opcode::InfoGit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_git();
-                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Git");
-                },
-                Opcode::InfoPlatform => {
+                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Git");
+                }),
+                Some(Opcode::InfoPlatform) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_platform();
-                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Platform");
-                },
-                Opcode::InfoTarget => {
+                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Platform");
+                }),
+                Some(Opcode::InfoTarget) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_target();
-                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Target");
-                },
-                Opcode::InfoSeed => {
+                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
+                }),
+                Some(Opcode::InfoSeed) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_seed();
-                    xous::return_scalar2(envelope.sender, val1, val2).expect("LLIO: couldn't return Seed");
-                },
-                Opcode::PowerAudio(power_on) => {
-                    llio.power_audio(power_on);
-                },
-                Opcode::PowerSelf(power_on) => {
-                    llio.power_self(power_on);
-                },
-                Opcode::PowerBoostMode(power_on) => {
-                    llio.power_boost_mode(power_on);
-                },
-                Opcode::EcSnoopAllow(allow) => {
-                    llio.ec_snoop_allow(allow);
-                },
-                Opcode::EcReset => {
+                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Seed");
+                }),
+                Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                    if power_on == 0 {
+                        llio.power_audio(false);
+                    } else {
+                        llio.power_audio(true);
+                    }
+                }),
+                Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                    if power_on == 0 {
+                        llio.power_self(false);
+                    } else {
+                        llio.power_self(true);
+                    }
+                }),
+                Some(Opcode::PowerBoostMode) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                    if power_on == 0 {
+                        llio.power_boost_mode(false);
+                    } else {
+                        llio.power_boost_mode(true);
+                    }
+                }),
+                Some(Opcode::EcSnoopAllow) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                    if power_on == 0 {
+                        llio.ec_snoop_allow(false);
+                    } else {
+                        llio.ec_snoop_allow(true);
+                    }
+                }),
+                Some(Opcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
                     llio.ec_reset();
-                },
-                Opcode::EcPowerOn => {
+                }),
+                Some(Opcode::EcPowerOn) => msg_scalar_unpack!(msg, _, _, _, _, {
                     llio.ec_power_on();
-                },
-                Opcode::SelfDestruct(code) => {
-                    llio.self_destruct(code);
-                },
-                Opcode::Vibe(pattern) => {
-                    llio.vibe(pattern);
-                },
-                Opcode::AdcVbus => {
-                    xous::return_scalar(envelope.sender, llio.xadc_vbus() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcVccInt => {
-                    xous::return_scalar(envelope.sender, llio.xadc_vccint() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcVccAux => {
-                    xous::return_scalar(envelope.sender, llio.xadc_vccaux() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcVccBram => {
-                    xous::return_scalar(envelope.sender, llio.xadc_vccbram() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcUsbN => {
-                    xous::return_scalar(envelope.sender, llio.xadc_usbn() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcUsbP => {
-                    xous::return_scalar(envelope.sender, llio.xadc_usbp() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcTemperature => {
-                    xous::return_scalar(envelope.sender, llio.xadc_temperature() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcGpio5 => {
-                    xous::return_scalar(envelope.sender, llio.xadc_gpio5() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::AdcGpio2 => {
-                    xous::return_scalar(envelope.sender, llio.xadc_gpio2() as _).expect("LLIO: couldn't return Xadc");
-                },
-                Opcode::IrqI2cTxrxDone => {
+                }),
+                Some(Opcode::SelfDestruct) => msg_scalar_unpack!(msg, code, _, _, _, {
+                    llio.self_destruct(code as u32);
+                }),
+                Some(Opcode::Vibe) => msg_scalar_unpack!(msg, pattern, _, _, _, {
+                    llio.vibe(pattern.into());
+                }),
+                Some(Opcode::AdcVbus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_vbus() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcVccInt) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_vccint() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcVccAux) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_vccaux() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcVccBram) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_vccbram() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcUsbN) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_usbn() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcUsbP) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_usbp() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcTemperature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_temperature() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcGpio5) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_gpio5() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::AdcGpio2) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    xous::return_scalar(msg.sender, llio.xadc_gpio2() as _).expect("couldn't return Xadc");
+                }),
+                Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
                     // I2C state machine handler irq received
                     i2c_machine.handler();
-                },
-            _ => error!("LLIO: no handler for opcode"),
-            }
-        } else if let xous::Message::MutableBorrow(m) = &envelope.body {
-            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-            let bytes = Pin::new(buf.as_ref());
-            let value = unsafe {
-                archived_value::<Opcode>(&bytes, m.id as usize)
-            };
-            match &*value {
-                rkyv::Archived::<Opcode>::I2cTxRx(rkyv_i2c) => {
-                    let mut i2c_txrx: I2cTransaction = rkyv_i2c.deserialize(&mut xous::XousDeserializer).unwrap();
-
+                }),
+                Some(Opcode::I2cTxRx) => {
+                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
                     let status = i2c_machine.initiate(i2c_txrx);
-
-                    i2c_txrx.status = status;
-                    // pack our data back into the buffer to return
-                    let mut writer = rkyv::ser::serializers::BufferSerializer::new(buf);
-                    let pos = writer
-                        .serialize_value(&Opcode::I2cTxRx(i2c_txrx))
-                        .expect("LLIO: couldn't archive self");
-                },
-                _ => panic!("LLIO: invalid MutableBorrow memory message")
-            };
-        } else if let xous::Message::Borrow(m) = &envelope.body {
-            let buf = unsafe { xous::XousBuffer::from_memory_message(m) };
-            let bytes = Pin::new(buf.as_ref());
-            let value = unsafe {
-                archived_value::<api::Opcode>(&bytes, m.id as usize)
-            };
-            match &*value {
-                rkyv::Archived::<api::Opcode>::I2cSubscribe(registration) => {
-                    let reg: xous::String::<64> = registration.deserialize(&mut xous::XousDeserializer).unwrap();
-                    let cid = xous_names::request_connection_blocking(reg.to_str()).expect("KBD: can't connect to requested listener for reporting events");
-                    i2c_machine.register_listener(cid).expect("LLIO: probably ran out of slots for I2C event reporting");
-                },
-                _ => panic!("LLIO: invalid Borrow memory message"),
-            };
-        } else {
-            error!("LLIO: couldn't convert opcode");
+                    buffer.replace(status).unwrap();
+                }
+                Some(Opcode::I2cRegisterCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                    let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                    let cid = xous::connect(sid).unwrap();
+                    i2c_machine.register_listener(cid).unwrap();
+                }),
+                Some(Opcode::EventUsbAttachSubscribe) => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                    let (s0, s1, s2, s3) = hookdata.sid;
+                    let sid = xous::SID::from_u32(s0, s1, s2, s3);
+                    let server_to_cb_cid = xous::connect(sid).unwrap();
+                    let cb_dat = Some(ScalarCallback {
+                        server_to_cb_cid,
+                        cb_to_client_cid: hookdata.cid,
+                        cb_to_client_id: hookdata.id,
+                    });
+                    let mut found = false;
+                    for entry in usb_cb_conns.iter_mut() {
+                        if entry.is_none() {
+                            *entry = cb_dat;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        error!("EventUsbAttachSubscribe ran out of space registering callback");
+                    }
+                }
+                None => {
+                    error!("couldn't convert opcode");
+                    break;
+                }
+            }
         }
     }
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(llio_sid).unwrap();
+    xous::destroy_server(llio_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

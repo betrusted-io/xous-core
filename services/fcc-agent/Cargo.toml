@@ -14,6 +14,7 @@ log-server = { path = "../log-server" }
 log = "0.4"
 typenum = "1.12"
 xous-names = { path = "../xous-names" }
+xous-ipc = {path = "../../xous-ipc"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

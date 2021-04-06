@@ -1,5 +1,5 @@
+use xous_ipc::String;
 pub(crate) const SERVER_NAME: &str = "Rkyv Test Server 1";
-
 /// A `usize` value that gets set as the `id` for every message handled
 /// by our server.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -42,13 +42,13 @@ pub(crate) enum MathOperation {
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct LogString {
-    pub(crate) prefix: xous::String<32>,
-    pub(crate) message: xous::String<512>,
+    pub(crate) prefix: String<32>,
+    pub(crate) message: String<512>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct StringDoubler {
-    pub(crate) value: xous::String<512>,
+    pub(crate) value: String<512>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]

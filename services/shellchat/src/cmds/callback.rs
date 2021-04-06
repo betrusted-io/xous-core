@@ -1,24 +1,26 @@
 use crate::{ShellCmdApi,CommonEnv};
-use xous::{String, MessageEnvelope, Message, ScalarMessage};
+use xous::{MessageEnvelope, Message, ScalarMessage};
+use xous_ipc::String;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
 pub fn callback_thread() {
-    let ticktimer_conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap()).unwrap();
-    let callback_conn = xous_names::request_connection_blocking(xous::names::SERVER_NAME_SHELLCHAT).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    let xns = xous_names::XousNames::new().unwrap();
+    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
     log::info!("callback initiator test thread started");
     loop {
         if CB_RUN.load(Ordering::Relaxed) {
 
             CB_RUN.store(false, Ordering::Relaxed);
-            ticktimer_server::sleep_ms(ticktimer_conn, 10000).unwrap();
+            ticktimer.sleep_ms(10000).unwrap();
             // just send a bogus message
             xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
                 id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
             })).unwrap();
         } else {
-            xous::yield_slice();
+            ticktimer.sleep_ms(250).unwrap(); // a little more polite than simply busy-waiting
         }
     }
 }

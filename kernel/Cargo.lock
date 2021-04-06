@@ -275,15 +275,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
 
 [[package]]
-name = "memoffset"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "miniz_oxide"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -317,26 +308,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04f5f085b5d71e2188cb8271e5da0161ad52c3f227a661a3c135fdf28e258b12"
 dependencies = [
  "unicode-xid",
-]
-
-[[package]]
-name = "ptr_meta"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aad980f4bb4053abd4733b1680024a8c71ffde345f6e584c6af9eb6f0067a198"
-dependencies = [
- "ptr_meta_derive",
-]
-
-[[package]]
-name = "ptr_meta_derive"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bcd6232fa7d7fcd15703da5c07c9f10d203ee4fdf6ecf6d7ac5056db78089a3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -416,28 +387,6 @@ checksum = "4a12a859c86dbbcad4eb18daa0465932d907687abfa909c9cc0ca32dc237c8c3"
 dependencies = [
  "bare-metal",
  "bit_field",
-]
-
-[[package]]
-name = "rkyv"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45a6fdbe501948402e00ede914b4dc21d340105b2eff740ed47e3d45ac846f5c"
-dependencies = [
- "memoffset",
- "ptr_meta",
- "rkyv_derive",
-]
-
-[[package]]
-name = "rkyv_derive"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95a169f6bc5a81033e86ed39d0f4150e2608160b73d2b93c6e8e6a3efa873f14"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -600,7 +549,6 @@ dependencies = [
  "bitflags",
  "hex",
  "lazy_static",
- "rkyv",
  "xous-macros",
 ]
 

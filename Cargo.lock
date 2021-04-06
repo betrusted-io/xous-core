@@ -70,10 +70,13 @@ dependencies = [
  "graphics-server",
  "log",
  "log-server",
- "rkyv 0.3.1",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -83,9 +86,12 @@ version = "0.1.0"
 dependencies = [
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -241,11 +247,14 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "typenum",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -374,6 +383,7 @@ dependencies = [
  "typenum",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -415,11 +425,14 @@ dependencies = [
  "keyboard",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "trng",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -479,9 +492,12 @@ dependencies = [
  "log",
  "log-server",
  "minifb",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -554,15 +570,17 @@ dependencies = [
  "blitstr-ref",
  "gam",
  "graphics-server",
- "heapless",
  "ime-plugin-api",
  "keyboard",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -572,8 +590,11 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -585,10 +606,13 @@ dependencies = [
  "ime-plugin-api",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -616,10 +640,13 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -655,13 +682,15 @@ dependencies = [
 name = "llio"
 version = "0.1.0"
 dependencies = [
- "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -679,9 +708,11 @@ name = "log-server"
 version = "0.1.0"
 dependencies = [
  "log",
+ "rkyv 0.4.3",
  "utralib",
  "vergen",
  "xous",
+ "xous-ipc",
 ]
 
 [[package]]
@@ -1068,11 +1099,14 @@ dependencies = [
 name = "rkyv-test-client"
 version = "0.1.0"
 dependencies = [
+ "com",
+ "keyboard",
  "log",
  "log-server",
  "rkyv-test-server",
  "ticktimer-server",
  "xous",
+ "xous-names",
 ]
 
 [[package]]
@@ -1086,6 +1120,7 @@ dependencies = [
  "rkyv 0.4.3",
  "ticktimer-server",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1178,25 +1213,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 
 [[package]]
-name = "shell"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "blitstr-ref",
- "com",
- "graphics-server",
- "heapless",
- "keyboard",
- "log",
- "log-server",
- "ticktimer-server",
- "trng",
- "utralib",
- "xous",
- "xous-names",
-]
-
-[[package]]
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
@@ -1209,10 +1225,13 @@ dependencies = [
  "llio",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1330,6 +1349,8 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "utralib",
  "xous",
 ]
@@ -1365,6 +1386,8 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1646,9 +1669,17 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
- "rkyv 0.4.3",
  "rustc-std-workspace-core",
  "xous-macros",
+]
+
+[[package]]
+name = "xous-ipc"
+version = "0.4.0"
+dependencies = [
+ "bitflags",
+ "rkyv 0.4.3",
+ "xous",
 ]
 
 [[package]]
@@ -1670,10 +1701,13 @@ dependencies = [
  "heapless",
  "log",
  "log-server",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@ num-traits = {version = "0.2", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 
 [features]

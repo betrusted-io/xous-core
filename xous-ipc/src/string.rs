@@ -1,4 +1,4 @@
-use crate::{Error, MemoryMessage, Result, CID};
+use xous::{Error, MemoryMessage, Result, CID};
 
 use core::pin::Pin;
 use rkyv::ser::Serializer;
@@ -59,7 +59,7 @@ impl<const N: usize> String<N> {
     pub fn from_message(
         message: &mut MemoryMessage,
     ) -> core::result::Result<String<N>, core::str::Utf8Error> {
-        let buf = unsafe { crate::XousBuffer::from_memory_message(message) };
+        let buf = unsafe { crate::Buffer::from_memory_message(message) };
         let bytes = Pin::new(buf.as_ref());
         let value = unsafe { archived_value::<String<N>>(&bytes, message.id as usize) };
         let s = String::<N>::from_str(value.as_str());
@@ -78,7 +78,7 @@ impl<const N: usize> String<N> {
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::XousBuffer::new(N));
+        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
         let pos = writer
             .serialize_value(self)
             .expect("xous::String -- couldn't archive self");
@@ -94,7 +94,7 @@ impl<const N: usize> String<N> {
         connection: CID,
         // id: crate::MessageId,
     ) -> core::result::Result<Result, Error> {
-        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::XousBuffer::new(N));
+        let mut writer = rkyv::ser::serializers::BufferSerializer::new(crate::Buffer::new(N));
         let pos = writer
             .serialize_value(&self)
             .expect("xous::String -- couldn't archive self");
@@ -230,6 +230,15 @@ impl<const N: usize> core::convert::AsRef<str> for String<N> {
     }
 }
 
+impl<const N: usize> PartialEq for String<N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes[..self.len as usize] == other.bytes[..other.len as usize]
+            && self.len == other.len
+    }
+}
+
+impl<const N: usize> Eq for String<N> {}
+
 #[repr(C)]
 pub struct ArchivedString {
     ptr: rkyv::RelPtr<str>,
@@ -289,18 +298,9 @@ impl<D: Fallible + ?Sized, const N: usize> rkyv::Deserialize<String<N>, D> for A
     }
 }
 
-impl<const N: usize> PartialEq for String<N> {
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes[..self.len as usize] == other.bytes[..other.len as usize]
-            && self.len == other.len
-    }
-}
-
-impl<const N: usize> Eq for String<N> {}
-
 // a "no-op" deserializer for in-place data, required for rkyv 0.4.1
 // perhaps in rkyv 0.5 this will go away, see https://github.com/djkoloski/rkyv/issues/67
 pub struct XousDeserializer;
 impl rkyv::Fallible for XousDeserializer {
-    type Error = crate::Error;
+    type Error = xous::Error;
 }

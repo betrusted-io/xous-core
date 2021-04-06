@@ -42,13 +42,13 @@ pub struct Canvas {
 #[allow(dead_code)]
 impl Canvas {
     pub fn new(clip_rect: Rectangle, trust_level: u8,
-        trng_conn: xous::CID, pan_offset: Option<Point>) -> Result<Canvas, xous::Error> {
+        trng: &trng::Trng, pan_offset: Option<Point>) -> Result<Canvas, xous::Error> {
 
         let mut gid: [u32; 4] = [0; 4];
-        let g: u64 = trng::get_u64(trng_conn)?;
+        let g: u64 = trng.get_u64()?;
         gid[0] = g as u32;
         gid[1] = (g >> 32) as u32;
-        let g: u64 = trng::get_u64(trng_conn)?;
+        let g: u64 = trng.get_u64()?;
         gid[2] = g as u32;
         gid[3] = (g >> 32) as u32;
 
@@ -146,7 +146,7 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
-pub fn deface(gfx_conn: xous::CID, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<(), xous::Error> {
+pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<(), xous::Error> {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
     for (_, c) in canvases.iter() {

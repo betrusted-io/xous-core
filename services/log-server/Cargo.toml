@@ -1,23 +1,25 @@
 [package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Log output program"
+edition = "2018"
 name = "log-server"
 version = "0.1.0"
-authors = ["Sean Cross <sean@xobs.io>"]
-edition = "2018"
-description = "Log output program"
 
 [dependencies]
-xous = { path = "../../xous-rs" }
 log = "0.4"
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 
 [build-dependencies]
 vergen = "3"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = {path = "../../utralib"}
 
 [features]
-debugprint = []  # adding this allocates the UART for debugging the logger
-logging = []  # adding this allocates the UART for logging of Xous
+debugprint = [] # adding this allocates the UART for debugging the logger
+logging = [] # adding this allocates the UART for logging of Xous
 #default = []
 default = ["logging"]
 # default = ["debugprint", "logging"]
