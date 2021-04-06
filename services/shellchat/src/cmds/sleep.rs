@@ -17,7 +17,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        if ((llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+        if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
             // if power is plugged in, deny powerdown request
             write!(ret, "System can't sleep while charging. Unplug charging cable and try again.").unwrap();
             Ok(Some(ret))

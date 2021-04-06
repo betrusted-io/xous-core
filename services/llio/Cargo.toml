@@ -6,7 +6,6 @@ name = "llio"
 version = "0.1.0"
 
 [dependencies]
-heapless = "0.5"
 log = "0.4"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
@@ -14,10 +13,9 @@ xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 
-[dependencies.rkyv]
-default-features = false
-features = ["const_generics"]
-version = "0.4.1"
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}

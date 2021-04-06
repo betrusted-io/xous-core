@@ -38,7 +38,7 @@ macro_rules! cmd_api {
 /////////////////////////// Command shell integration
 #[derive(Debug)]
 pub struct CommonEnv {
-    //llio: llio::Llio,
+    llio: llio::Llio,
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
@@ -60,8 +60,8 @@ pub struct CommonEnv {
 ///// 1. add your module here, and pull its namespace into the local crate
 mod echo;     use echo::*;
 mod test;     use test::*;
-//mod sleep;    use sleep::*;
-//mod sensors;  use sensors::*;
+mod sleep;    use sleep::*;
+mod sensors;  use sensors::*;
 mod callback; use callback::*;
 
 #[derive(Debug)]
@@ -70,8 +70,8 @@ pub struct CmdEnv {
     lastverb: String::<256>,
     ///// 2. declare storage for your command here.
     test_cmd: Test,
-    //sleep_cmd: Sleep,
-    //sensors_cmd: Sensors,
+    sleep_cmd: Sleep,
+    sensors_cmd: Sensors,
     callback_cmd: CallBack,
 }
 impl CmdEnv {
@@ -79,7 +79,7 @@ impl CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         CmdEnv {
             common_env: CommonEnv {
-                //llio: llio:Llio::new(&xns).expect("CMD: couldn't connect to LLIO"),
+                llio: llio::Llio::new(&xns).expect("CMD: couldn't connect to LLIO"),
                 com: com::Com::new(&xns).expect("CMD: could't connect to COM"),
                 ticktimer: ticktimer,
                 gam: gam::Gam::new(&xns).expect("CMD: couldn't connect to GAM"),
@@ -87,8 +87,8 @@ impl CmdEnv {
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             test_cmd: Test::new(),
-            //sleep_cmd: Sleep::new(),
-            //sensors_cmd: Sensors::new(),
+            sleep_cmd: Sleep::new(),
+            sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
         }
     }
@@ -101,8 +101,8 @@ impl CmdEnv {
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
             &mut self.test_cmd,
-            //&mut self.sleep_cmd,
-            //&mut self.sensors_cmd,
+            &mut self.sleep_cmd,
+            &mut self.sensors_cmd,
             &mut self.callback_cmd,
         ];
 

@@ -4,132 +4,241 @@
 /// are calling these functions inside a different process.
 pub mod api;
 use api::*;
-use rkyv::Deserialize;
 
-use xous::{send_message, CID};
-use xous_ipc::XousDeserializer;
+use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
+use xous_ipc::{String, Buffer};
+use num_traits::{ToPrimitive, FromPrimitive};
 
-// used by the LLIO to send a response to other servers
-pub fn send_i2c_response(cid: CID, transaction: I2cTransaction) -> Result<(), xous::Error> {
-    let op = api::Opcode::I2cResponse(transaction);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cResponse")
-    };
-    let buf = writer.into_inner();
-    buf.lend(cid, pos as u32).expect("LLIO_API: I2cResponse operation failure");
+// this hooks the responce of the I2C bus
+static mut I2C_CB: Option<fn(I2cTransaction)> = None;
 
-    Ok(())
+#[derive(Debug)]
+pub struct Llio {
+    conn: CID,
+    com_sid: Option<xous::SID>,
+    i2c_sid: Option<xous::SID>,
+    rtc_sid: Option<xous::SID>,
+    usb_sid: Option<xous::SID>,
 }
-// used by other servers to request an I2C transaction
-pub fn send_i2c_request(cid: CID, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
-    let op = api::Opcode::I2cTxRx(transaction);
-    let mut writer = rkyv::ser::serializers::BufferSerializer::new(xous::XousBuffer::new(4096));
-    let pos = {
-        use rkyv::ser::Serializer;
-        writer.serialize_value(&op).expect("LLIO_API: couldn't archive I2cTxRx")
-    };
-    let mut buf = writer.into_inner();
+impl Llio {
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to MyServer");
+        Ok(Llio {
+          conn,
+          com_sid: None,
+          i2c_sid: None,
+          rtc_sid: None,
+          usb_sid: None,
+        })
+    }
+    // used to hook a callback for I2c responses
+    pub fn hook_i2c_callback(&mut self, cb: fn(I2cTransaction)) -> Result<(), xous::Error> {
+        if unsafe{I2C_CB}.is_some() {
+            return Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+        unsafe{I2C_CB = Some(cb)};
+        if self.i2c_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.i2c_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(i2c_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            xous::send_message(self.conn,
+                Message::new_scalar(Opcode::I2cRegisterCallback.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
+        Ok(())
+    }
+    // used by other servers to request an I2C transaction
+    pub fn send_i2c_request(&self, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
+        let mut buf = Buffer::into_buf(transaction).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
-    buf.lend_mut(cid, pos as u32).expect("LLIO_API: I2cTxRx operation failure");
+        let status = buf.to_original::<I2cStatus, _>().unwrap();
+        Ok(status)
+    }
 
-    let returned = unsafe { rkyv::archived_value::<api::Opcode>(buf.as_ref(), pos)};
-    if let rkyv::Archived::<api::Opcode>::I2cTxRx(result) = returned {
-        let transaction = result.deserialize(&mut XousDeserializer {}).expect("LLIO_API: Can't deserialize result in send_i2c_request");
-        Ok(transaction.status())
-    } else {
-        log::info!("send_i2c_request saw an unhandled return type of {:?}", buf);
-        Err(xous::Error::InternalError)
+    pub fn allow_power_off(&self, allow: bool) -> Result<(), xous::Error> {
+        let arg = if allow { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PowerSelf.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+
+    pub fn allow_ec_snoop(&self, allow: bool) -> Result<(), xous::Error> {
+        let arg = if allow { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EcSnoopAllow.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+
+    pub fn adc_vbus(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcVbus.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_vccint(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcVccInt.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_vccaux(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcVccAux.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_vccbram(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcVccBram.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_usb_n(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcUsbN.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_usb_p(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcUsbP.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_temperature(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcTemperature.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_gpio5(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcGpio5.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn adc_gpio2(&self) -> Result<u16, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AdcGpio2.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            Ok(val as u16)
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn hook_usb_callback(&mut self, cb: fn(u32), id: u32, cid: CID) -> Result<(), xous::Error> {
+        if self.usb_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.usb_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(usb_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            let hookdata = ScalarHook {
+                sid: sid_tuple,
+                id,
+                cid,
+            };
+            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::EventUsbAttachSubscribe.to_u32().unwrap()).map(|_|())
+        } else {
+            Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+    }
+}
+impl Drop for Llio {
+    fn drop(&mut self) {
+        if let Some(sid) = self.i2c_sid.take() {
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(I2cCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+        if let Some(sid) = self.usb_sid.take() {
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
+        unsafe{xous::disconnect(self.conn).unwrap();}
     }
 }
 
-pub fn allow_power_off(cid: CID, allow: bool) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::PowerSelf(!allow).into()).map(|_| ())
+/// handles callback messages from I2C server, in the library user's process space.
+fn i2c_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(I2cCallback::Result) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let i2cresult = buffer.to_original::<I2cTransaction, _>().unwrap();
+                unsafe {
+                    if let Some(cb) = I2C_CB {
+                        cb(i2cresult)
+                    }
+                }
+            },
+            Some(I2cCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
 }
 
-pub fn allow_ec_snoop(cid: CID, allow: bool) -> Result<(), xous::Error> {
-    send_message(cid, api::Opcode::EcSnoopAllow(allow).into()).map(|_| ())
-}
-
-pub fn adc_vbus(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcVbus.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_vccint(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcVccInt.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_vccaux(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcVccAux.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_vccbram(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcVccBram.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_usb_n(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcUsbN.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_usb_p(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcUsbP.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_temperature(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcTemperature.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_gpio5(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcGpio5.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
-    }
-}
-pub fn adc_gpio2(cid: CID) -> Result<u16, xous::Error> {
-    let response = send_message(cid, api::Opcode::AdcGpio2.into())?;
-    if let xous::Result::Scalar1(val) = response {
-        Ok(val as u16)
-    } else {
-        log::error!("LLIO: unexpected return value: {:#?}", response);
-        Err(xous::Error::InternalError)
+/// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.
+fn usb_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(EventCallback::Event) => msg_scalar_unpack!(msg, cid, id, _, _, {
+                // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                send_message(cid as u32,
+                    Message::new_scalar(id, 0, 0, 0, 0)
+                ).unwrap();
+            }),
+            Some(EventCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
     }
 }
