@@ -1,6 +1,5 @@
 [workspace]
 default-members = [
-  "services/shell",
   "services/log-server",
   "services/graphics-server",
   "services/ticktimer-server",
@@ -28,7 +27,6 @@ members = [
   "xous-rs",
   "tools",
   "macros",
-  "services/shell",
   "services/graphics-server",
   "services/log-server",
   "services/ticktimer-server",

@@ -1207,25 +1207,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 
 [[package]]
-name = "shell"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "blitstr-ref",
- "com",
- "graphics-server",
- "heapless",
- "keyboard",
- "log",
- "log-server",
- "ticktimer-server",
- "trng",
- "utralib",
- "xous",
- "xous-names",
-]
-
-[[package]]
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
