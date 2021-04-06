@@ -1,6 +1,3 @@
-use xous::{Message, ScalarMessage};
-use xous_ipc::String;
-
 /////////////////////// UART TYPE
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum UartType {

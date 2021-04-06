@@ -5,8 +5,8 @@
 pub mod api;
 use api::*;
 
-use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
-use xous_ipc::{String, Buffer};
+use xous::{send_message, CID, Message, msg_scalar_unpack};
+use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 
 // this hooks the responce of the I2C bus
@@ -162,7 +162,7 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
-    pub fn hook_usb_callback(&mut self, cb: fn(u32), id: u32, cid: CID) -> Result<(), xous::Error> {
+    pub fn hook_usb_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
         if self.usb_sid.is_none() {
             let sid = xous::create_server().unwrap();
             self.usb_sid = Some(sid);

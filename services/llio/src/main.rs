@@ -9,7 +9,7 @@ use i2c::*;
 use log::{error, info};
 
 use num_traits::FromPrimitive;
-use xous_ipc::{String, Buffer};
+use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 #[cfg(target_os = "none")]
