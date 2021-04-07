@@ -1,6 +1,5 @@
-use xous::{Message, ScalarMessage};
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum Weekday {
     Sunday,
     Monday,
@@ -32,18 +31,18 @@ pub struct DateTime {
 pub(crate) const SERVER_NAME_RTC: &str       = "_Real time clock application server_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum Opcode {
+pub(crate) enum Opcode {
     /// register a callback for the datetime
     RegisterDateTimeCallback,
 
-    /// register a callback for the RTC alarm event
-    RegisterAlarmCallback,
+    /// sets the datetime
+    SetDateTime, //(DateTime),
 
     /// Get datetime. Causes users with registered callbacks to receive the current DateTime
     RequestDateTime,
 
-    /// sets the datetime
-    SetDateTime, //(DateTime),
+    /// the datetime response, used internally from the callback manager
+    ResponseDateTime,
 
     /// sets a wake-up alarm. This forces the SoC into power-on state, if it happens to be off.
     /// primarily used to trigger cold reboots, but could have other reasons

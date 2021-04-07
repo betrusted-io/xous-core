@@ -2,18 +2,21 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::*;
 
 use num_traits::FromPrimitive;
-use xous_ipc::{String, Buffer};
-use api::{Return, Opcode};
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous_ipc::Buffer;
+use api::{Return, Opcode, DateTime};
+use xous::{CID, msg_scalar_unpack};
 
 #[cfg(target_os = "none")]
 mod implementation {
-    use log::info;
-    #[macro_use]
+    #![allow(dead_code)]
     use bitflags::*;
+    use crate::CB_TO_MAIN_CONN;
+    use llio::{I2cStatus, I2cTransaction, Llio};
+    use crate::api::{Opcode, DateTime, Weekday};
+    use xous_ipc::Buffer;
+    use num_traits::ToPrimitive;
 
     const ABRTCMC_I2C_ADR: u8 = 0x68;
     const ABRTCMC_CONTROL1: u8 = 0x00;
@@ -194,144 +197,256 @@ mod implementation {
         (bcd & 0xf) + ((bcd >> 4) * 10)
     }
 
-    fn to_weekday(bcd: u8) -> Weekdays {
+    fn to_weekday(bcd: u8) -> Weekday {
         match bcd {
-            0 => Weekdays::SUNDAY,
-            1 => Weekdays::MONDAY,
-            2 => Weekdays::TUESDAY,
-            3 => Weekdays::WEDNESDAY,
-            4 => Weekdays::THURSDAY,
-            5 => Weekdays::FRIDAY,
-            6 => Weekdays::SATURDAY,
-            _ => Weekdays::SUNDAY,
+            0 => Weekday::Sunday,
+            1 => Weekday::Monday,
+            2 => Weekday::Tuesday,
+            3 => Weekday::Wednesday,
+            4 => Weekday::Thursday,
+            5 => Weekday::Friday,
+            6 => Weekday::Saturday,
+            _ => Weekday::Sunday,
+        }
+    }
+
+    fn i2c_callback(trans: I2cTransaction) {
+        if trans.status == I2cStatus::ResponseReadOk {
+            if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+                // we expect this to be 0, as we don't set it
+                assert!(trans.callback_id == 0, "callback ID was incorrect!");
+                if let Some(rxbuf) = trans.rxbuf {
+                    let dt = DateTime {
+                        seconds: to_binary(rxbuf[0] & 0x7f),
+                        minutes: to_binary(rxbuf[1] & 0x7f),
+                        hours: to_binary(rxbuf[2] & 0x3f),
+                        days: to_binary(rxbuf[3] & 0x3f),
+                        weekday: to_weekday(rxbuf[4] & 0x7f),
+                        months: to_binary(rxbuf[5] & 0x1f),
+                        years: to_binary(rxbuf[6]),
+                    };
+                    let buf = Buffer::into_buf(dt).unwrap();
+                    buf.send(cb_to_main_conn, Opcode::ResponseDateTime.to_u32().unwrap()).unwrap();
+                } else {
+                    log::error!("i2c_callback: no rx data to unpack!")
+                }
+            } else {
+                log::error!("i2c_callback happened, but no connection to the main server!");
+            }
         }
     }
 
     pub struct Rtc {
-        pub seconds: u8,
-        pub minutes: u8,
-        pub hours: u8,
-        pub days: u8,
-        pub months: u8,
-        pub years: u8,
-        pub weekday: Weekdays,
-        updated_ticks: u64,
+        llio: Llio,
+        rtc_alarm_enabled: bool,
+        wakeup_alarm_enabled: bool,
     }
 
     impl Rtc {
-        pub fn new() -> Rtc {
-            info!("RTC: hardware initialized");
-
+        pub fn new(xns: &xous_names::XousNames) -> Rtc {
+            log::trace!("hardware initialized");
+            let mut llio = Llio::new(xns).expect("can't connect to LLIO");
+            llio.hook_i2c_callback(i2c_callback).expect("can't hook I2C callback");
             Rtc {
-                seconds: 0,
-                minutes: 0,
-                hours: 0,
-                days: 0,
-                months: 0,
-                years: 0,
-                weekday: Weekdays::SUNDAY,
-                updated_ticks: 0,
+                llio,
+                rtc_alarm_enabled: false,
+                wakeup_alarm_enabled: false,
             }
         }
-
 
         /// we only support 24 hour mode
-        /// TODO: sanity check arguments
-        /// TODO: write accesses should happen in a single block, to guarante atomicity of the operation
-        pub fn rtc_set(&mut self, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8, d: Weekdays) -> bool {
-            let mut txbuf: [u8; 2];
+        pub fn rtc_set(&mut self, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8, day: Weekday)
+           -> Result<bool, xous::Error> {
+            let mut transaction = I2cTransaction::new();
+            let mut txbuf: [u8; 258] = [0; 258];
+
+            if secs > 59 { return Ok(false); }
+            if mins > 59 { return Ok(false); }
+            if hours > 23 { return Ok(false); }
+            if days > 31 { return Ok(false); }
+            if months > 12 { return Ok(false); }
+            if years > 99 { return Ok(false); }
+
+            // convert enum to bitfields
+            let d = match day {
+                Weekday::Monday => Weekdays::MONDAY,
+                Weekday::Tuesday => Weekdays::TUESDAY,
+                Weekday::Wednesday => Weekdays::WEDNESDAY,
+                Weekday::Thursday => Weekdays::THURSDAY,
+                Weekday::Friday => Weekdays::FRIDAY,
+                Weekday::Saturday => Weekdays::SATURDAY,
+                Weekday::Sunday => Weekdays::SUNDAY,
+            };
 
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-            txbuf = [ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
+            txbuf[0] = ABRTCMC_CONTROL3;
+            txbuf[1] = (Control3::BATT_STD_BL_EN).bits();
+            txbuf[2] = to_bcd(secs);
+            txbuf[3] = to_bcd(mins);
+            txbuf[4] = to_bcd(hours);
+            txbuf[5] = to_bcd(days);
+            txbuf[6] = to_bcd(d.bits);
+            txbuf[7] = to_bcd(months);
+            txbuf[8] = to_bcd(years);
 
-            txbuf = [ABRTCMC_SECONDS, to_bcd(secs)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.updated_ticks = get_ticks(&self.p);
-            self.seconds = secs;
-
-            txbuf = [ABRTCMC_MINUTES, to_bcd(mins)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.minutes = mins;
-
-            txbuf = [ABRTCMC_HOURS, to_bcd(hours)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.hours = hours;
-
-            txbuf = [ABRTCMC_DAYS, to_bcd(days)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.days = days;
-
-            txbuf = [ABRTCMC_MONTHS, to_bcd(months)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.months = months;
-
-            txbuf = [ABRTCMC_YEARS, to_bcd(years)];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.years = years;
-
-            txbuf = [ABRTCMC_WEEKDAYS, d.bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-            self.weekday = d;
-
-            true  // sanity check args would return false on fail
-        }
-
-        pub fn rtc_update(&mut self) {
-            let txbuf: [u8; 1];
-            let mut rxbuf: [u8; 7] = [0; 7];
-
-            // only update from RTC if more than 1 second has passed since the last update
-            if get_ticks(&self.p) - self.updated_ticks > 1000 {
-                // read as a single block to make the time readout atomic
-                txbuf = [ABRTCMC_SECONDS];
-                i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), Some(&mut rxbuf), I2C_TIMEOUT);
-
-                self.seconds = to_binary(rxbuf[0] & 0x7f);
-                self.minutes = to_binary(rxbuf[1] & 0x7f);
-                self.hours = to_binary(rxbuf[2] & 0x3f);
-                self.days = to_binary(rxbuf[3] & 0x3f);
-                self.weekday = to_weekday(rxbuf[4] & 0x7f);
-                self.months = to_binary(rxbuf[5] & 0x1f);
-                self.years = to_binary(rxbuf[6]);
-
-                self.updated_ticks = get_ticks(&self.p);
+            transaction.bus_addr = ABRTCMC_I2C_ADR;
+            transaction.txbuf = Some(txbuf);
+            transaction.txlen = 9;
+            transaction.status = I2cStatus::RequestIncoming;
+            match self.llio.send_i2c_request(transaction) {
+                Ok(status) => {
+                    match status {
+                        I2cStatus::ResponseInProgress => Ok(true),
+                        I2cStatus::ResponseBusy => Err(xous::Error::ServerQueueFull),
+                        _ => Err(xous::Error::InternalError),
+                    }
+                }
+                _ => Err(xous::Error::InternalError)
             }
         }
 
-        /// testing-only routine -- wakeup self after designated number of seconds
-        pub fn wakeup_alarm(&mut self, seconds: u8) {
-            let mut txbuf: [u8; 2];
-
-            // make sure battery switchover is enabled
-            txbuf = [ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-
-            // set clock units to 1 second, output pulse length to ~218ms
-            txbuf = [ABRTCMC_TIMERB_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-
-            // program elapsed time
-            txbuf = [ABRTCMC_TIMERB, seconds];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-
-            // enable timerb countdown interrupt, also clears any prior interrupt flag
-            txbuf = [ABRTCMC_CONTROL2, (Control2::COUNTDOWN_B_INT).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
-
-            // turn on the timer proper -- the system will restart in 5...4..3....
-            txbuf = [ABRTCMC_CONFIG, (Config::TIMER_B_ENABLE | Config::CLKOUT_DISABLE).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
+        pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
+            let mut transaction = I2cTransaction::new();
+            let mut txbuf = [0; 258];
+            let rxbuf = [0; 258];
+            txbuf[0] = ABRTCMC_SECONDS;
+            transaction.bus_addr = ABRTCMC_I2C_ADR;
+            transaction.txlen = 1;
+            transaction.rxlen = 7;
+            transaction.txbuf = Some(txbuf);
+            transaction.rxbuf = Some(rxbuf);
+            transaction.status = I2cStatus::RequestIncoming;
+            match self.llio.send_i2c_request(transaction) {
+                Ok(status) => {
+                    match status {
+                        I2cStatus::ResponseInProgress => Ok(()),
+                        I2cStatus::ResponseBusy => Err(xous::Error::ServerQueueFull),
+                        _ => Err(xous::Error::InternalError),
+                    }
+                }
+                _ => Err(xous::Error::InternalError)
+            }
         }
 
-        pub fn clear_alarm(&mut self) {
-            // turn off RTC wakeup timer, in case previously set
-            let mut txbuf : [u8; 2] = [ABRTCMC_CONFIG, (Config::CLKOUT_DISABLE).bits()];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
+        fn blocking_i2c_write2(&self, tx: [u8; 2]) -> bool {
+            let mut transaction = I2cTransaction::new();
+            let mut txbuf: [u8; 258] = [0; 258];
+            txbuf[0] = tx[0];
+            txbuf[1] = tx[1];
+            transaction.bus_addr = ABRTCMC_I2C_ADR;
+            transaction.txbuf = Some(txbuf);
+            transaction.txlen = 2;
+            transaction.status = I2cStatus::RequestIncoming;
 
-            // clear all interrupts and flags
-            txbuf = [ABRTCMC_CONTROL2, 0];
-            i2c_controller(&self.p, ABRTCMC_I2C_ADR, Some(&txbuf), None, I2C_TIMEOUT);
+            while self.llio.poll_i2c_busy().unwrap() {
+                xous::yield_slice();
+            }
+            let mut sent = false;
+            while !sent {
+                match self.llio.send_i2c_request(transaction) {
+                    Ok(status) => {
+                        match status {
+                            I2cStatus::ResponseInProgress => sent = true,
+                            I2cStatus::ResponseBusy => sent = false,
+                            _ => {log::error!("try_send_i2c unhandled response"); return false;},
+                        }
+                    }
+                    _ => {log::error!("try_send_i2c unhandled error"); return false;}
+                }
+                xous::yield_slice();
+            }
+            true
+        }
+
+        /// wakeup self after designated number of seconds
+        pub fn wakeup_alarm(&mut self, seconds: u8) {
+            self.wakeup_alarm_enabled = true;
+
+            // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+
+            // set clock units to 1 second, output pulse length to ~218ms
+            self.blocking_i2c_write2([ABRTCMC_TIMERB_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]);
+
+            // program elapsed time
+            self.blocking_i2c_write2([ABRTCMC_TIMERB, seconds]);
+
+            // enable timerb countdown interrupt, also clears any prior interrupt flag
+            let mut control2 = (Control2::COUNTDOWN_B_INT).bits();
+            if self.rtc_alarm_enabled {
+                control2 |= Control2::COUNTDOWN_A_INT.bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+
+            // turn on the timer proper -- the system will wakeup in 5..4..3....
+            let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+            if self.rtc_alarm_enabled {
+                config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+        }
+
+        pub fn clear_wakeup_alarm(&mut self) {
+            self.wakeup_alarm_enabled = false;
+
+            let mut config = Config::CLKOUT_DISABLE.bits();
+            if self.rtc_alarm_enabled {
+                config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+            }
+            // turn off RTC wakeup timer, in case previously set
+            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+
+            // clear my interrupts and flags
+            let mut control2 = 0;
+            if self.rtc_alarm_enabled {
+                control2 |= Control2::COUNTDOWN_A_INT.bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+        }
+
+
+
+        pub fn rtc_alarm(&mut self, seconds: u8) {
+            self.rtc_alarm_enabled = true;
+            // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+
+            // set clock units to 1 second, output pulse length to ~218ms
+            self.blocking_i2c_write2([ABRTCMC_TIMERA_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]);
+
+            // program elapsed time
+            self.blocking_i2c_write2([ABRTCMC_TIMERA, seconds]);
+
+            // enable timerb countdown interrupt, also clears any prior interrupt flag
+            let mut control2 = (Control2::COUNTDOWN_A_INT).bits();
+            if self.wakeup_alarm_enabled {
+                control2 |= Control2::COUNTDOWN_B_INT.bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+
+            // turn on the timer proper -- interrupt in 5..4..3....
+            let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
+            if self.wakeup_alarm_enabled {
+                config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+        }
+
+        pub fn clear_rtc_alarm(&mut self) {
+            self.rtc_alarm_enabled = false;
+            // turn off RTC wakeup timer, in case previously set
+            let mut config = Config::CLKOUT_DISABLE.bits();
+            if self.wakeup_alarm_enabled {
+                config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+
+            // clear my interrupts and flags
+            let mut control2 = 0;
+            if self.wakeup_alarm_enabled {
+                control2 |= Control2::COUNTDOWN_B_INT.bits();
+            }
+            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
         }
     }
 }
@@ -369,39 +484,146 @@ mod implementation {
     }
 }
 
+static mut CB_TO_MAIN_CONN: Option<CID> = None;
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Trace);
-    log::info!("RTC: my PID is {}", xous::process::id());
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC).expect("RTC: can't register server");
-    log::trace!("RTC: registered with NS -- {:?}", rtc_sid);
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", rtc_sid);
+    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(rtc_sid).unwrap())};
 
     #[cfg(target_os = "none")]
-    let rtc = Rtc::new();
+    let mut rtc = Rtc::new(&xns);
 
     #[cfg(not(target_os = "none"))]
     let mut rtc = Rtc::new();
 
-    let mut cb_conns: [Option<CID>; 32] = [None; 32];
-    log::trace!("RTC: ready to accept requests");
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
+    let mut dt_cb_conns: [Option<CID>; 32] = [None; 32];
+    log::trace!("ready to accept requests");
     loop {
         let msg = xous::receive_message(rtc_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SetDateTime) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let dt = buffer.as_flat::<DateTime, _>().unwrap();
+                let dt = buffer.to_original::<DateTime, _>().unwrap();
+                let mut sent = false;
+                while !sent {
+                    match rtc.rtc_set(
+                        dt.seconds,
+                        dt.minutes,
+                        dt.hours,
+                        dt.days,
+                        dt.months,
+                        dt.years,
+                        dt.weekday,
+                    ) {
+                        Ok(true) => {sent = true;},
+                        Ok(false) => {sent = true; log::error!("badly formatted arguments setting RTC date and time");}
+                        Err(xous::Error::ServerQueueFull) => {
+                            sent = false;
+                            log::trace!("I2C interface was busy setting date and time, retrying");
+                            ticktimer.sleep_ms(1).unwrap();  // wait a quanta of time and then retry
+                        },
+                        _ => {
+                            sent = true;
+                            log::error!("error setting RTC date time");
+                        }
+                    }
+                }
+            },
+            Some(Opcode::RegisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                let mut found = false;
+                for entry in dt_cb_conns.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    log::error!("RegisterDateTimeCallback listener ran out of space registering callback");
+                }
+            }),
+            Some(Opcode::ResponseDateTime) => {
+                let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
+                let ret = Return::ReturnDateTime(dt);
+                let outgoing_buf = Buffer::into_buf(ret).or(Err(xous::Error::InternalError)).unwrap();
+                for maybe_conn in dt_cb_conns.iter_mut() {
+                    if let Some(conn) = maybe_conn {
+                        match outgoing_buf.lend(*conn, 0) { // the ID field is ignored on the callback server
+                            Err(xous::Error::ServerNotFound) => {
+                                *maybe_conn = None
+                            },
+                            Ok(_) => {},
+                            _ => panic!("unhandled error or result in callback processing")
+                        }
+                    }
+                }
+            },
+            Some(Opcode::RequestDateTime) => {
+                let mut sent = false;
+                while !sent {
+                    match rtc.rtc_get() {
+                        Ok(_) => sent = true,
+                        Err(xous::Error::ServerQueueFull) => {
+                            sent = false;
+                            log::trace!("I2C interface was busy getting date and time, retrying");
+                            ticktimer.sleep_ms(1).unwrap();
+                        },
+                        _ => {
+                            sent = true;
+                            log::error!("error requesting RTC date and time");
+                        }
+                    }
+                }
+            }
+            Some(Opcode::SetWakeupAlarm) => msg_scalar_unpack!(msg, delay, _, _, _, {
+                rtc.wakeup_alarm(delay as u8); // this will block until finished, no callbacks used
+            }),
+            Some(Opcode::ClearWakeupAlarm) => msg_scalar_unpack!(msg, _, _, _, _, {
+                rtc.clear_wakeup_alarm(); // blocks until transaction is finished
+            }),
+             Some(Opcode::SetRtcAlarm) => msg_scalar_unpack!(msg, delay, _, _, _, {
+                rtc.rtc_alarm(delay as u8); // this will block until finished, no callbacks used
+            }),
+            Some(Opcode::ClearRtcAlarm) => msg_scalar_unpack!(msg, _, _, _, _, {
+                rtc.clear_rtc_alarm(); // blocks until transaction is finished
+            }),
+            None => {
+                log::error!("unknown opcode received, exiting");
+                break;
             }
         }
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    unsafe{
+        if let Some(cb)= CB_TO_MAIN_CONN {
+            xous::disconnect(cb).unwrap();
+        }
+    }
+    for entry in dt_cb_conns.iter_mut() {
+        if let Some(conn) = entry {
+            let dropmsg = Return::Drop;
+            let buf = Buffer::into_buf(dropmsg).unwrap();
+            buf.lend(*conn, 0).unwrap(); // the ID is ignored for this server
+            unsafe{xous::disconnect(*conn).unwrap();}
+        }
+        *entry = None;
+    }
     xns.unregister_server(rtc_sid).unwrap();
     xous::destroy_server(rtc_sid).unwrap();
     log::trace!("quitting");
+    xous::terminate_process(); loop {}
 }

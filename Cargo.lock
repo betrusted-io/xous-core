@@ -1152,6 +1152,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "heapless",
+ "llio",
  "log",
  "log-server",
  "num-derive",

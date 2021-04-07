@@ -19,6 +19,7 @@ mod implementation {
     use utralib::generated::*;
     use num_traits::ToPrimitive;
 
+    #[allow(dead_code)]
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
         crg_csr: utralib::CSR<u32>,
@@ -684,10 +685,9 @@ fn xmain() -> ! {
                     let status = i2c_machine.initiate(i2c_txrx);
                     buffer.replace(status).unwrap();
                 }
-                Some(Opcode::I2cRegisterCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
-                    let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                    let cid = xous::connect(sid).unwrap();
-                    i2c_machine.register_listener(cid).unwrap();
+                Some(Opcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    let busy = if i2c_machine.is_busy() {1} else {0};
+                    xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
                 }),
                 Some(Opcode::EventUsbAttachSubscribe) => {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

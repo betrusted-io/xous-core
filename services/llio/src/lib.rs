@@ -3,13 +3,13 @@
 /// This is the API that other servers use to call the COM. Read this code as if you
 /// are calling these functions inside a different process.
 pub mod api;
-use api::*;
+pub use api::*;
 
 use xous::{send_message, CID, Message, msg_scalar_unpack};
 use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 
-// this hooks the responce of the I2C bus
+// this hooks the response of the I2C bus
 static mut I2C_CB: Option<fn(I2cTransaction)> = None;
 
 #[derive(Debug)]
@@ -44,20 +44,40 @@ impl Llio {
             self.i2c_sid = Some(sid);
             let sid_tuple = sid.to_u32();
             xous::create_thread_4(i2c_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::I2cRegisterCallback.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
+            // note: we don't register a callback, because we hand our SID directly to the i2c request for a 1:1 message return
         }
         Ok(())
     }
     // used by other servers to request an I2C transaction
     pub fn send_i2c_request(&self, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
-        let mut buf = Buffer::into_buf(transaction).or(Err(xous::Error::InternalError))?;
+        // copy the transaction, and annotate with our private callback listener server address
+        // the server is used only for this connection, and shared only to the LLIO server
+        // it's sanitized on the callback response. It's not the end of the world if this server address is
+        // discovered, just unhygenic.
+        let mut local_transaction = transaction;
+        match self.i2c_sid {
+            None => local_transaction.listener = None,
+            Some(sid) => local_transaction.listener = Some(sid.to_u32()),
+        }
+        let mut buf = Buffer::into_buf(local_transaction).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         let status = buf.to_original::<I2cStatus, _>().unwrap();
         Ok(status)
+    }
+    pub fn poll_i2c_busy(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::I2cIsBusy.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(val) = response {
+            if val != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
     }
 
     pub fn allow_power_off(&self, allow: bool) -> Result<(), xous::Error> {
@@ -255,21 +275,29 @@ impl Llio {
         }
     }
 }
+fn drop_conn(sid: xous::SID) {
+    let cid = xous::connect(sid).unwrap();
+    xous::send_message(cid,
+        Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+    unsafe{xous::disconnect(cid).unwrap();}
+    xous::destroy_server(sid).unwrap();
+}
 impl Drop for Llio {
     fn drop(&mut self) {
         if let Some(sid) = self.i2c_sid.take() {
-            let cid = xous::connect(sid).unwrap();
-            xous::send_message(cid,
-                Message::new_blocking_scalar(I2cCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap();}
-            xous::destroy_server(sid).unwrap();
+            drop_conn(sid);
         }
         if let Some(sid) = self.usb_sid.take() {
-            let cid = xous::connect(sid).unwrap();
-            xous::send_message(cid,
-                Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap();}
-            xous::destroy_server(sid).unwrap();
+            drop_conn(sid);
+        }
+        if let Some(sid) = self.rtc_sid.take() {
+            drop_conn(sid);
+        }
+        if let Some(sid) = self.com_sid.take() {
+            drop_conn(sid);
+        }
+        if let Some(sid) = self.gpio_sid.take() {
+            drop_conn(sid);
         }
         unsafe{xous::disconnect(self.conn).unwrap();}
     }
@@ -283,7 +311,8 @@ fn i2c_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(I2cCallback::Result) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let i2cresult = buffer.to_original::<I2cTransaction, _>().unwrap();
+                let mut i2cresult = buffer.to_original::<I2cTransaction, _>().unwrap();
+                i2cresult.listener = None; // don't leak our local server address to the callback
                 unsafe {
                     if let Some(cb) = I2C_CB {
                         cb(i2cresult)

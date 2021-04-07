@@ -24,9 +24,6 @@ impl I2cStateMachine {
     pub fn initiate(&mut self, _transaction: I2cTransaction ) -> I2cStatus {
         I2cStatus::ResponseInProgress
     }
-    pub fn register_listener(&mut self, _listener: xous::CID) -> Result<(), xous::CID> {
-        Ok(())
-    }
     pub fn handler(&mut self) {
     }
 }
@@ -38,13 +35,15 @@ pub struct I2cStateMachine {
     timestamp: u64, // timestamp of the last transaction
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
     i2c_csr: utralib::CSR<u32>,
-    listeners: [Option<xous::CID>; 32],
+    listener: Option<xous::SID>,
 }
 
 #[cfg(target_os = "none")]
-fn send_i2c_response(listener: xous::CID, trans: I2cTransaction) -> Result<(), xous::Error> {
+fn send_i2c_response(listener: xous::SID, trans: I2cTransaction) -> Result<(), xous::Error> {
+    let cid = xous::connect(listener).unwrap();
     let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
-    buf.lend(listener, I2cCallback::Result.to_u32().unwrap()).map(|_|())
+    buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
+    unsafe{xous::disconnect(cid)}
 }
 
 #[cfg(target_os = "none")]
@@ -57,7 +56,7 @@ impl I2cStateMachine {
             ticktimer,
             i2c_csr: CSR::new(i2c_base),
             index: 0,
-            listeners: [None; 32],
+            listener: None,
         }
     }
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
@@ -81,6 +80,10 @@ impl I2cStateMachine {
             }
             self.timestamp = now;
             self.transaction = transaction.clone();
+            match transaction.listener {
+                None => self.listener = None,
+                Some((s0, s1, s2, s3)) => self.listener = Some(xous::SID::from_u32(s0, s1, s2, s3)),
+            }
 
             if self.transaction.status == I2cStatus::RequestIncoming {
                 self.transaction.status = I2cStatus::ResponseInProgress;
@@ -117,57 +120,40 @@ impl I2cStateMachine {
         }
     }
     fn report_nack(&mut self) {
-        // report the NACK situation to all the listeners
+        // report the NACK situation to the listener
         let mut nack = I2cTransaction::new();
         nack.status = I2cStatus::ResponseNack;
-        for &l in self.listeners.iter() {
-            if let Some(listener) = l {
-                send_i2c_response(listener, nack).expect("LLIO|I2C: couldn't send NACK to listeners");
-            };
-        }
+        if let Some(listener) = self.listener {
+            send_i2c_response(listener, nack).expect("LLIO|I2C: couldn't send NACK to listeners");
+        };
     }
     fn report_timeout(&mut self) {
         let mut timeout = I2cTransaction::new();
         timeout.status = I2cStatus::ResponseTimeout;
-        for &l in self.listeners.iter() {
-            if let Some(listener) = l {
-                send_i2c_response(listener, timeout).expect("LLIO|I2c: couldn't send timeout error to liseners");
-            };
-        }
+        if let Some(listener) = self.listener {
+            send_i2c_response(listener, timeout).expect("LLIO|I2c: couldn't send timeout error to liseners");
+        };
     }
     fn report_write_done(&mut self) {
         // report the end of a write-only transaction to all the listeners
         let mut ack = I2cTransaction::new();
         ack.status = I2cStatus::ResponseWriteOk;
-        for &l in self.listeners.iter() {
-            if let Some(listener) = l {
-                send_i2c_response(listener, ack).expect("LLIO|I2C: couldn't send write ACK to listeners");
-            };
-        }
+        if let Some(listener) = self.listener {
+            send_i2c_response(listener, ack).expect("LLIO|I2C: couldn't send write ACK to listeners");
+        };
     }
     fn report_read_done(&mut self) {
         // report the result of a read transaction to all the listeners
         self.transaction.status = I2cStatus::ResponseReadOk;
-        for &l in self.listeners.iter() {
-            if let Some(listener) = l {
-                send_i2c_response(listener, self.transaction).expect("LLIO|I2C: couldn't send read response to listeners");
-            };
-        }
+        if let Some(listener) = self.listener {
+            send_i2c_response(listener, self.transaction).expect("LLIO|I2C: couldn't send read response to listeners");
+        };
     }
-    pub fn register_listener(&mut self, listener: xous::CID) -> Result<(), xous::CID> {
-        let mut found = false;
-        for entry in self.listeners.iter_mut() {
-            if *entry == None {
-                *entry = Some(listener);
-                found = true;
-                break;
-            }
-        }
-        if !found {
-            log::error!("I2cRegisterCallback ran out of space registering callback");
-            Err(listener)
+    pub fn is_busy(&self) -> bool {
+        if self.state == I2cState::Idle {
+            false
         } else {
-            Ok(())
+            true
         }
     }
     pub fn handler(&mut self) {
@@ -246,6 +232,7 @@ impl I2cStateMachine {
                     } else {
                         self.report_read_done();
                         self.state = I2cState::Idle;
+                        self.listener = None;
                     }
                 } else {
                     // we should never get here, because rxbuf was checked as Some() by the setup routine
@@ -255,20 +242,6 @@ impl I2cStateMachine {
             I2cState::Idle => {
                 log::error!("LLIO|I2C: received interrupt event when no transaciton pending!");
             }
-        }
-    }
-}
-
-#[cfg(target_os = "none")]
-impl Drop for I2cStateMachine {
-    fn drop(&mut self) {
-        for &l in self.listeners.iter() {
-            if let Some(listener) = l {
-                let dummy = I2cTransaction::new();
-                let buf = xous_ipc::Buffer::into_buf(dummy).or(Err(xous::Error::InternalError)).unwrap();
-                buf.lend(listener, I2cCallback::Drop.to_u32().unwrap()).map(|_|()).unwrap();
-                unsafe{xous::disconnect(listener).unwrap();}
-            };
         }
     }
 }

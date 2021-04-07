@@ -75,12 +75,14 @@ pub struct I2cTransaction {
     pub txlen: u32,
     pub rxbuf: Option<[u8; 258]>,
     pub rxlen: u32,
+    pub listener: Option<(u32, u32, u32, u32)>, // where Rx split transactions should be routed to
     pub timeout_ms: u32,
     pub status: I2cStatus,
+    pub callback_id: u32, // used by callback routines to help identify a return value
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
     }
 }
 
@@ -195,10 +197,10 @@ pub(crate) enum Opcode {
 
     /// not tested - I2C functions
     I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
-    /// callback repsonses from the I2C engine
-    I2cRegisterCallback, //(String<64>), // if TxRx is issued without first subscribing to responses, the read data is just "lost"
-    /// from i2c interrupt handler
-    IrqI2cTxrxDone, // internal API only
+    /// from i2c interrupt handler (internal API only)
+    IrqI2cTxrxDone,
+    /// checks if the I2C engine is currently busy, for polling implementations
+    I2cIsBusy,
 
     /// not tested -- events
     EventComSubscribe, //(String<64>),

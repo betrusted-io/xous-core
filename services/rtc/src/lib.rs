@@ -2,14 +2,15 @@
 
 pub mod api;
 
-use api::{Return, Opcode}; // if you prefer to map the api into your local namespace
-use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
-use xous_ipc::{String, Buffer};
-use num_traits::{ToPrimitive, FromPrimitive};
+use api::{Return, Opcode, DateTime}; // if you prefer to map the api into your local namespace
+use xous::{send_message, CID, Message};
+use xous_ipc::Buffer;
+use num_traits::ToPrimitive;
 
 pub struct Rtc {
     conn: CID,
     callback_sid: Option<xous::SID>,
+    llio: llio::Llio,
 }
 static mut RTC_CB: Option<fn(DateTime)> = None;
 impl Rtc {
@@ -18,6 +19,7 @@ impl Rtc {
         Ok(Rtc {
           conn,
           callback_sid: None,
+          llio: llio::Llio::new(&xns).expect("Can't connect to LLIO on behalf of RTC library"),
         })
     }
 
@@ -25,7 +27,7 @@ impl Rtc {
         let buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
-    pub fn rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
+    pub fn hook_rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
         if unsafe{RTC_CB}.is_some() {
             return Err(xous::Error::MemoryInUse)
         }
@@ -42,19 +44,36 @@ impl Rtc {
         }
         Ok(())
     }
+    // this simply forwards the hook on to the LLIO library, which actually owns the Event peripheral where the interrupt is generated
+    pub fn hook_rtc_alarm_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
+        self.llio.hook_rtc_alarm_callback(id, cid)
+    }
+
     pub fn request_datetime(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::RequestDateTime.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
-    pub fn set_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
+    /// wakeup alarm will force the system on if it is off, but does not trigger an interrupt on the CPU
+    pub fn set_wakeup_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
         ).map(|_|())
     }
-    pub fn clear_alarm(&self) -> Result<(), xous::Error> {
+    pub fn clear_wakeup_alarm(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_|())
+    }
+    /// the rtc alarm will not turn the system on, but it will trigger an interrupt on the CPU
+    pub fn set_rtc_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+        ).map(|_|())
+    }
+    pub fn clear_rtc_alarm(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
 }

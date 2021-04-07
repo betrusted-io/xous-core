@@ -49,6 +49,7 @@ fn try_main() -> Result<(), DynError> {
         "keyboard",
         "trng",
         "llio",
+        "rtc",
     ];
     let fcc_pkgs = [
         "fcc-agent",

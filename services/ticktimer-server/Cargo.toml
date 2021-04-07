@@ -21,7 +21,7 @@ utralib = {path = "../../utralib"}
 [features]
 debug-print = []
 watchdog = []
-# generally you want to disable watchdog if you're doing development.
+# generally you want to disable watchdog if you're doing development
 default = ["watchdog"]
-#default = []
+# default = []
 # default = ["debug-print"]
