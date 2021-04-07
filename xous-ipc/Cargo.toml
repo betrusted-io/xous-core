@@ -8,6 +8,5 @@ version = "0.8.0"
 
 [dependencies]
 bitflags = {version = "1"}
-# log = {version = "0.4"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
-xous = {path = "../xous-rs"}
+xous = "0.8.0"
