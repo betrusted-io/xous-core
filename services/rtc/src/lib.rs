@@ -2,11 +2,13 @@
 
 pub mod api;
 
-use api::{Return, Opcode, DateTime}; // if you prefer to map the api into your local namespace
+pub use api::*;
+use api::{Return, Opcode};
 use xous::{send_message, CID, Message};
 use xous_ipc::Buffer;
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Rtc {
     conn: CID,
     callback_sid: Option<xous::SID>,
@@ -28,6 +30,7 @@ impl Rtc {
         buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
     pub fn hook_rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
+        log::trace!("hooking rtc callback");
         if unsafe{RTC_CB}.is_some() {
             return Err(xous::Error::MemoryInUse)
         }
@@ -101,6 +104,7 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {
         let msg = xous::receive_message(sid).unwrap();
+        log::trace!("rtc callback got msg: {:?}", msg);
         let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
         let response = buffer.to_original::<Return,_>().unwrap();
         match response {

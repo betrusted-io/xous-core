@@ -1233,6 +1233,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "rtc",
  "ticktimer-server",
  "utralib",
  "xous",

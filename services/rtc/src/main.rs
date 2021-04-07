@@ -455,6 +455,7 @@ mod implementation {
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use log::info;
+    use crate::api::Weekday;
 
     pub struct Rtc {
         pub seconds: u8,
@@ -463,12 +464,12 @@ mod implementation {
         pub days: u8,
         pub months: u8,
         pub years: u8,
-        pub weekday: Weekdays,
+        pub weekday: Weekday,
         updated_ticks: u64,
     }
 
     impl Rtc {
-        pub fn new() -> Rtc {
+        pub fn new(_xns: &xous_names::XousNames) -> Rtc {
             Rtc {
                 seconds: 0,
                 minutes: 0,
@@ -476,11 +477,19 @@ mod implementation {
                 days: 0,
                 months: 0,
                 years: 0,
-                weekday: Weekdays::SUNDAY,
+                weekday: Weekday::Sunday,
                 updated_ticks: 0,
             }
         }
-
+        pub fn rtc_set(&mut self, _secs: u8, _mins: u8, _hours: u8, _days: u8, _months: u8, _years: u8, _day: Weekday)
+           -> Result<bool, xous::Error> {
+               Ok(true)
+        }
+        pub fn rtc_get(&mut self) -> Result<(), xous::Error> { Ok(()) }
+        pub fn wakeup_alarm(&mut self, _seconds: u8) { }
+        pub fn clear_wakeup_alarm(&mut self) { }
+        pub fn rtc_alarm(&mut self, _seconds: u8) { }
+        pub fn clear_rtc_alarm(&mut self) { }
     }
 }
 
@@ -502,7 +511,7 @@ fn xmain() -> ! {
     let mut rtc = Rtc::new(&xns);
 
     #[cfg(not(target_os = "none"))]
-    let mut rtc = Rtc::new();
+    let mut rtc = Rtc::new(&xns);
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
     let mut dt_cb_conns: [Option<CID>; 32] = [None; 32];
@@ -538,6 +547,7 @@ fn xmain() -> ! {
                         }
                     }
                 }
+                log::trace!("rtc_set of {:?} successful", dt);
             },
             Some(Opcode::RegisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -552,11 +562,14 @@ fn xmain() -> ! {
                 }
                 if !found {
                     log::error!("RegisterDateTimeCallback listener ran out of space registering callback");
+                } else {
+                    log::trace!("RegisterDateTimeCallback completed");
                 }
             }),
             Some(Opcode::ResponseDateTime) => {
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
+                log::trace!("ResponseDateTime received: {:?}", dt);
                 let ret = Return::ReturnDateTime(dt);
                 let outgoing_buf = Buffer::into_buf(ret).or(Err(xous::Error::InternalError)).unwrap();
                 for maybe_conn in dt_cb_conns.iter_mut() {
@@ -587,6 +600,7 @@ fn xmain() -> ! {
                         }
                     }
                 }
+                log::trace!("RequestDateTime completed");
             }
             Some(Opcode::SetWakeupAlarm) => msg_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.wakeup_alarm(delay as u8); // this will block until finished, no callbacks used

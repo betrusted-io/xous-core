@@ -423,6 +423,7 @@ mod implementation {
     use llio::api::*;
     use log::{error, info};
 
+    #[derive(Copy, Clone, Debug)]
     pub struct Llio {
     }
     pub fn log_init() -> *mut u32 { 0 as *mut u32 }
@@ -511,7 +512,7 @@ fn xmain() -> ! {
     let gpio_base = crate::implementation::log_init();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

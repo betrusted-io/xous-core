@@ -26,6 +26,7 @@ impl I2cStateMachine {
     }
     pub fn handler(&mut self) {
     }
+    pub fn is_busy(&self) -> bool { false }
 }
 #[cfg(target_os = "none")]
 pub struct I2cStateMachine {
@@ -60,6 +61,7 @@ impl I2cStateMachine {
         }
     }
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
+        log::trace!("I2C initated with {:?}", transaction);
         // sanity-check the bounds limits
         if transaction.txlen > 258 || transaction.rxlen > 258 {
             return I2cStatus::ResponseFormatError
@@ -157,6 +159,7 @@ impl I2cStateMachine {
         }
     }
     pub fn handler(&mut self) {
+        log::trace!("I2C handler called");
         // check if the transaction had actually timed out
         let now = self.ticktimer.elapsed_ms();
         if now - self.timestamp > self.transaction.timeout_ms as u64 {
@@ -172,6 +175,7 @@ impl I2cStateMachine {
 
         match self.state {
             I2cState::Write => {
+                log::trace!("I2C handler: WRITE");
                 if let Some(txbuf) = self.transaction.txbuf {
                     // check ack bit
                     if self.i2c_csr.rf(utra::i2c::STATUS_RXACK) != 1 {
@@ -213,6 +217,7 @@ impl I2cStateMachine {
                 }
             },
             I2cState::Read => {
+                log::trace!("I2C handler: READ");
                 if let Some(mut rxbuf) = self.transaction.rxbuf {
                     if self.index > 0 {
                         // we are re-entering from a previous call, store the read value from the previous call
@@ -230,6 +235,7 @@ impl I2cStateMachine {
                         }
                         self.index += 1;
                     } else {
+                        log::trace!("I2C handler: read done {:?}", self.transaction);
                         self.report_read_done();
                         self.state = I2cState::Idle;
                         self.listener = None;
