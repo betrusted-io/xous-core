@@ -1,6 +1,6 @@
 [package]
 name = "kernel"
-version = "0.1.0"
+version = "0.8.0"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 description = "Core kernel for Xous, including task switching and memory management"

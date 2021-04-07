@@ -241,7 +241,7 @@ checksum = "67c21572b4949434e4fc1e1978b99c5f77064153c59d998bf13ecd96fb5ecba7"
 
 [[package]]
 name = "kernel"
-version = "0.1.0"
+version = "0.8.0"
 dependencies = [
  "bitflags",
  "crossbeam-channel",
@@ -544,7 +544,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "xous"
-version = "0.1.2"
+version = "0.8.0"
 dependencies = [
  "bitflags",
  "hex",
