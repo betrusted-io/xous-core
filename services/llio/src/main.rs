@@ -8,7 +8,7 @@ use i2c::*;
 
 use log::{error, info};
 
-use num_traits::FromPrimitive;
+use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
@@ -38,14 +38,48 @@ mod implementation {
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
         // just clear the pending request for now and return
+        if xl.event_csr.rf(utra::btevents::EV_PENDING_COM_INT) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventComHappened.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: COM interrupt, but no connection for notification!")
+            }
+        }
+        if xl.event_csr.rf(utra::btevents::EV_PENDING_RTC_INT) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventRtcHappened.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: RTC interrupt, but no connection for notification!")
+            }
+        }
         xl.event_csr
             .wo(utra::btevents::EV_PENDING, xl.event_csr.r(utra::btevents::EV_PENDING));
     }
     fn handle_gpio_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        // just clear the pending request for now and return
+        if let Some(conn) = xl.handler_conn {
+            xous::try_send_message(conn,
+                xous::Message::new_scalar(Opcode::GpioIntHappened.to_usize().unwrap(),
+                    xl.gpio_csr.r(utra::gpio::EV_PENDING) as _, 0, 0, 0)).map(|_|()).unwrap();
+        } else {
+            log::error!("|handle_event_irq: GPIO interrupt, but no connection for notification!")
+        }
         xl.gpio_csr
             .wo(utra::gpio::EV_PENDING, xl.gpio_csr.r(utra::gpio::EV_PENDING));
+    }
+    fn handle_power_irq(_irq_no: usize, arg: *mut usize) {
+        let xl = unsafe { &mut *(arg as *mut Llio) };
+        if let Some(conn) = xl.handler_conn {
+            xous::try_send_message(conn,
+                xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
+                    0, 0, 0, 0)).map(|_|()).unwrap();
+        } else {
+            log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
+        }
+        xl.power_csr
+            .wo(utra::power::EV_PENDING, xl.power_csr.r(utra::power::EV_PENDING));
     }
     // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
@@ -54,7 +88,7 @@ mod implementation {
             xous::try_send_message(conn,
                 xous::Message::new_scalar(Opcode::IrqI2cTxrxDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
         } else {
-            log::error!("LLIO|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
+            log::error!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
         }
         xl.i2c_csr
             .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
@@ -174,6 +208,13 @@ mod implementation {
                 (&mut xl) as *mut Llio as *mut usize,
             )
             .expect("couldn't claim GPIO irq");
+
+            xous::claim_interrupt(
+                utra::power::POWER_IRQ,
+                handle_power_irq,
+                (&mut xl) as *mut Llio as *mut usize,
+            )
+            .expect("couldn't claim Power irq");
 
             // disable interrupt, just in case it's enabled from e.g. a warm boot
             xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
@@ -360,6 +401,18 @@ mod implementation {
         pub fn xadc_gpio2(&self) -> u16 {
             self.xadc_csr.rf(utra::trng::XADC_GPIO2_XADC_GPIO2) as u16
         }
+        pub fn rtc_int_ena(&mut self, ena: bool) {
+            let value = if ena {1} else {0};
+            self.event_csr.rmwf(utra::btevents::EV_ENABLE_RTC_INT, value);
+        }
+        pub fn com_int_ena(&mut self, ena: bool) {
+            let value = if ena {1} else {0};
+            self.event_csr.rmwf(utra::btevents::EV_ENABLE_COM_INT, value);
+        }
+        pub fn usb_int_ena(&mut self, ena: bool) {
+            let value = if ena {1} else {0};
+            self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
+        }
     }
 }
 
@@ -432,6 +485,13 @@ mod implementation {
         pub fn xadc_gpio2(&self) -> u16 {
             0
         }
+
+        pub fn rtc_int_ena(self, _ena: bool) {
+        }
+        pub fn com_int_ena(self, _ena: bool) {
+        }
+        pub fn usb_int_ena(self, _ena: bool) {
+        }
     }
 }
 
@@ -467,6 +527,9 @@ fn xmain() -> ! {
     let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut com_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut rtc_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut gpio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
     log::trace!("starting main loop");
     let mut reboot_requested: bool = false;
@@ -629,26 +692,56 @@ fn xmain() -> ! {
                 Some(Opcode::EventUsbAttachSubscribe) => {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                     let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                    let (s0, s1, s2, s3) = hookdata.sid;
-                    let sid = xous::SID::from_u32(s0, s1, s2, s3);
-                    let server_to_cb_cid = xous::connect(sid).unwrap();
-                    let cb_dat = Some(ScalarCallback {
-                        server_to_cb_cid,
-                        cb_to_client_cid: hookdata.cid,
-                        cb_to_client_id: hookdata.id,
-                    });
-                    let mut found = false;
-                    for entry in usb_cb_conns.iter_mut() {
-                        if entry.is_none() {
-                            *entry = cb_dat;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        error!("EventUsbAttachSubscribe ran out of space registering callback");
-                    }
+                    do_hook(hookdata, &mut usb_cb_conns);
                 }
+                Some(Opcode::EventComSubscribe) => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                    do_hook(hookdata, &mut com_cb_conns);
+                }
+                Some(Opcode::EventRtcSubscribe) => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                    do_hook(hookdata, &mut rtc_cb_conns);
+                }
+                Some(Opcode::GpioIntSubscribe) => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                    do_hook(hookdata, &mut gpio_cb_conns);
+                }
+                Some(Opcode::EventComEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                    if ena == 0 {
+                        llio.com_int_ena(false);
+                    } else {
+                        llio.com_int_ena(true);
+                    }
+                }),
+                Some(Opcode::EventRtcEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                    if ena == 0 {
+                        llio.rtc_int_ena(false);
+                    } else {
+                        llio.rtc_int_ena(true);
+                    }
+                }),
+                Some(Opcode::EventUsbAttachEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                    if ena == 0 {
+                        llio.usb_int_ena(false);
+                    } else {
+                        llio.usb_int_ena(true);
+                    }
+                }),
+                Some(Opcode::EventComHappened) => {
+                    send_event(&com_cb_conns, 0);
+                },
+                Some(Opcode::EventRtcHappened) => {
+                    send_event(&rtc_cb_conns, 0);
+                },
+                Some(Opcode::EventUsbHappened) => {
+                    send_event(&usb_cb_conns, 0);
+                },
+                Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
+                    send_event(&gpio_cb_conns, channel as usize);
+                }),
                 None => {
                     error!("couldn't convert opcode");
                     break;
@@ -657,8 +750,56 @@ fn xmain() -> ! {
         }
     }
     log::trace!("main loop exit, destroying servers");
+    unhook(&mut com_cb_conns);
+    unhook(&mut rtc_cb_conns);
+    unhook(&mut usb_cb_conns);
+    unhook(&mut gpio_cb_conns);
     xns.unregister_server(llio_sid).unwrap();
     xous::destroy_server(llio_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(); loop {}
+}
+
+fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
+    let (s0, s1, s2, s3) = hookdata.sid;
+    let sid = xous::SID::from_u32(s0, s1, s2, s3);
+    let server_to_cb_cid = xous::connect(sid).unwrap();
+    let cb_dat = Some(ScalarCallback {
+        server_to_cb_cid,
+        cb_to_client_cid: hookdata.cid,
+        cb_to_client_id: hookdata.id,
+    });
+    let mut found = false;
+    for entry in cb_conns.iter_mut() {
+        if entry.is_none() {
+            *entry = cb_dat;
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        error!("ran out of space registering callback");
+    }
+}
+fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
+    for entry in cb_conns.iter_mut() {
+        if let Some(scb) = entry {
+            xous::send_message(scb.server_to_cb_cid,
+                xous::Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+            ).unwrap();
+            unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
+        }
+        *entry = None;
+    }
+}
+fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
+    for entry in cb_conns.iter() {
+        if let Some(scb) = entry {
+            // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
+            xous::send_message(scb.server_to_cb_cid,
+                xous::Message::new_scalar(EventCallback::Event.to_usize().unwrap(),
+                   scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, which, 0)
+            ).unwrap();
+        };
+    }
 }

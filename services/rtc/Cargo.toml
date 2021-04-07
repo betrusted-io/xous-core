@@ -14,6 +14,11 @@ xous-names = { path = "../xous-names" }
 log = "0.4"
 bitflags = "1.2.1"
 
+xous-ipc = {path = "../../xous-ipc"}
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 

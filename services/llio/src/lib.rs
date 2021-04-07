@@ -19,6 +19,7 @@ pub struct Llio {
     i2c_sid: Option<xous::SID>,
     rtc_sid: Option<xous::SID>,
     usb_sid: Option<xous::SID>,
+    gpio_sid: Option<xous::SID>,
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -29,6 +30,7 @@ impl Llio {
           i2c_sid: None,
           rtc_sid: None,
           usb_sid: None,
+          gpio_sid: None,
         })
     }
     // used to hook a callback for I2c responses
@@ -162,6 +164,7 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
+    // USB hooks
     pub fn hook_usb_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
         if self.usb_sid.is_none() {
             let sid = xous::create_server().unwrap();
@@ -175,6 +178,78 @@ impl Llio {
             };
             let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
             buf.lend(self.conn, Opcode::EventUsbAttachSubscribe.to_u32().unwrap()).map(|_|())
+        } else {
+            Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+    }
+    pub fn usb_event_enable(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EventUsbAttachEnable.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    // RTC alarm hooks
+    pub fn hook_rtc_alarm_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
+        if self.rtc_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.rtc_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            let hookdata = ScalarHook {
+                sid: sid_tuple,
+                id,
+                cid,
+            };
+            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::EventRtcSubscribe.to_u32().unwrap()).map(|_|())
+        } else {
+            Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+    }
+    pub fn rtc_alarm_enable(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EventRtcEnable.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    // COM IRQ hooks
+    pub fn hook_com_event_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
+        if self.com_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.com_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(com_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            let hookdata = ScalarHook {
+                sid: sid_tuple,
+                id,
+                cid,
+            };
+            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::EventComSubscribe.to_u32().unwrap()).map(|_|())
+        } else {
+            Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+    }
+    pub fn com_event_enable(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::EventComEnable.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    // GPIO IRQ hooks
+    pub fn hook_gpio_event_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
+        if self.gpio_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.gpio_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(gpio_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            let hookdata = ScalarHook {
+                sid: sid_tuple,
+                id,
+                cid,
+            };
+            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
+            buf.lend(self.conn, Opcode::GpioIntSubscribe.to_u32().unwrap()).map(|_|())
         } else {
             Err(xous::Error::MemoryInUse) // can't hook it twice
         }
@@ -225,6 +300,66 @@ fn i2c_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
 /// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.
 fn usb_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(EventCallback::Event) => msg_scalar_unpack!(msg, cid, id, _, _, {
+                // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                send_message(cid as u32,
+                    Message::new_scalar(id, 0, 0, 0, 0)
+                ).unwrap();
+            }),
+            Some(EventCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
+}
+
+/// handles callback messages that indicate a RTC interrupt has happened, in the library user's process space.
+fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(EventCallback::Event) => msg_scalar_unpack!(msg, cid, id, _, _, {
+                // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                send_message(cid as u32,
+                    Message::new_scalar(id, 0, 0, 0, 0)
+                ).unwrap();
+            }),
+            Some(EventCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
+}
+
+/// handles callback messages that indicate a COM interrupt has happened, in the library user's process space.
+fn com_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(EventCallback::Event) => msg_scalar_unpack!(msg, cid, id, _, _, {
+                // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                send_message(cid as u32,
+                    Message::new_scalar(id, 0, 0, 0, 0)
+                ).unwrap();
+            }),
+            Some(EventCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
+        }
+    }
+}
+
+/// handles callback messages that indicate a GPIO interrupt has happened, in the library user's process space.
+fn gpio_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {
         let msg = xous::receive_message(sid).unwrap();

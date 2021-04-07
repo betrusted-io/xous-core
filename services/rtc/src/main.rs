@@ -4,10 +4,10 @@
 mod api;
 use api::*;
 
-use core::convert::TryFrom;
-
-use log::{error, info};
-
+use num_traits::FromPrimitive;
+use xous_ipc::{String, Buffer};
+use api::{Return, Opcode};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 #[cfg(target_os = "none")]
 mod implementation {
@@ -374,11 +374,12 @@ fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
-    info!("RTC: my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Trace);
+    log::info!("RTC: my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let rtc_sid = xns.register_name(xous::names::SERVER_NAME_RTC).expect("RTC: can't register server");
-    info!("RTC: registered with NS -- {:?}", rtc_sid);
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC).expect("RTC: can't register server");
+    log::trace!("RTC: registered with NS -- {:?}", rtc_sid);
 
     #[cfg(target_os = "none")]
     let rtc = Rtc::new();
@@ -386,20 +387,16 @@ fn xmain() -> ! {
     #[cfg(not(target_os = "none"))]
     let mut rtc = Rtc::new();
 
-    info!("RTC: ready to accept requests");
-
+    let mut cb_conns: [Option<CID>; 32] = [None; 32];
+    log::trace!("RTC: ready to accept requests");
     loop {
-        let envelope = xous::receive_message(rtc_sid).unwrap();
-        if let Ok(opcode) = Opcode::try_from(&envelope.body) {
-            match opcode {
-                Opcode::GetRtc(count) => {
-                    let val: [u32; 2] = rtc.get_rtc(count);
-                    xous::return_scalar2(envelope.sender, val[0] as _, val[1] as _)
-                       .expect("RTC: couldn't return GetRtc request");
-                },
+        let msg = xous::receive_message(rtc_sid).unwrap();
+        log::trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SetDateTime) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dt = buffer.as_flat::<DateTime, _>().unwrap();
             }
-        } else {
-            error!("KBD: couldn't convert opcode");
         }
     }
     // clean up our program

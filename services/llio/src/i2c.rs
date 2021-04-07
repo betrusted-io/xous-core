@@ -258,3 +258,17 @@ impl I2cStateMachine {
         }
     }
 }
+
+#[cfg(target_os = "none")]
+impl Drop for I2cStateMachine {
+    fn drop(&mut self) {
+        for &l in self.listeners.iter() {
+            if let Some(listener) = l {
+                let dummy = I2cTransaction::new();
+                let buf = xous_ipc::Buffer::into_buf(dummy).or(Err(xous::Error::InternalError)).unwrap();
+                buf.lend(listener, I2cCallback::Drop.to_u32().unwrap()).map(|_|()).unwrap();
+                unsafe{xous::disconnect(listener).unwrap();}
+            };
+        }
+    }
+}

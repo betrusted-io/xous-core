@@ -156,7 +156,8 @@ pub(crate) enum Opcode {
     GpioIntAsFalling, //(u32),
     GpioIntPending,
     GpioIntEna, //(u32),
-    //TODO GpioIntSubscribe, //(String<64>), // TODO
+    GpioIntSubscribe, //(String<64>), // TODO
+    GpioIntHappened,
 
     /// not tested - set UART mux
     UartMux, //(UartType),
@@ -200,12 +201,17 @@ pub(crate) enum Opcode {
     IrqI2cTxrxDone, // internal API only
 
     /// not tested -- events
-    //TODO EventComSubscribe, //(String<64>),
-    //TODO EventRtcSubscribe, //(String<64>),
+    EventComSubscribe, //(String<64>),
+    EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
-    //TODO EventComEnable, //(bool),
-    //TODO EventRtcEnable, //(bool),
-    //TODO EventUsbAttachEnable, //(bool),
+    EventComEnable, //(bool),
+    EventRtcEnable, //(bool),
+    EventUsbAttachEnable, //(bool),
+
+    /// internal from handler to main loop
+    EventComHappened,
+    EventRtcHappened,
+    EventUsbHappened,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {
@@ -213,8 +219,14 @@ pub(crate) enum EventCallback {
     Drop,
 }
 
+/*
+Implementation note: we use a ScalarHook with a two-stage message passing so we don't leak
+the local SID. The local SID should be considered a secret, and not shared. A two-stage
+message passing system creates a dedicated, one-time use server and shares this SID with
+the LLIO server, thus protecting the local SID from disclosure.
+*/
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub struct ScalarHook {
+pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
     pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
     pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
