@@ -62,7 +62,7 @@ mod echo;     use echo::*;
 mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
-mod callback; use callback::*;
+//mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
 
 #[derive(Debug)]
@@ -73,7 +73,7 @@ pub struct CmdEnv {
     test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
-    callback_cmd: CallBack,
+    //callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
 }
 impl CmdEnv {
@@ -91,7 +91,7 @@ impl CmdEnv {
             test_cmd: Test::new(),
             sleep_cmd: Sleep::new(),
             sensors_cmd: Sensors::new(),
-            callback_cmd: CallBack::new(),
+            //callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
         }
     }
@@ -106,7 +106,7 @@ impl CmdEnv {
             &mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
-            &mut self.callback_cmd,
+            //&mut self.callback_cmd,
             &mut self.rtc_cmd,
         ];
 
