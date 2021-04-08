@@ -82,7 +82,7 @@ pub struct I2cTransaction {
 }
 impl I2cTransaction {
     pub fn new() -> Self {
-        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 100, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
+        I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
     }
 }
 

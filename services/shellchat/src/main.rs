@@ -234,6 +234,17 @@ fn imef_cb(s: String::<4000>) {
 
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 
+fn test_thread() {
+    let xns = xous_names::XousNames::new().unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    ticktimer.sleep_ms(5000);
+    let rtc = rtc::Rtc::new(&xns).unwrap();
+    loop {
+        rtc.request_datetime().unwrap();
+        ticktimer.sleep_ms(2000);
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -250,6 +261,11 @@ fn xmain() -> ! {
 
     let mut repl = Repl::new(&xns, SERVER_NAME_SHELLCHAT);
     let mut update_repl = false;
+
+    if false {
+        xous::create_thread_0(test_thread);
+    }
+
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();

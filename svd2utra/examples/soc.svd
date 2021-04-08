@@ -1328,10 +1328,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``79ae30c6``, so this value is 2041458886, which should be enough to check out
+``844488ab``, so this value is 2219083947, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x79ae30c6</resetValue>
+                    <resetValue>0x844488ab</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1348,7 +1348,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x10</resetValue>
+                    <resetValue>0x11</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3060,7 +3060,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x505c16c1</resetValue>
+                    <resetValue>0x7f01c208</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3075,7 +3075,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x578f7014</resetValue>
+                    <resetValue>0x5a7fce0a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

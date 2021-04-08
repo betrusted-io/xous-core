@@ -27,7 +27,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
             match sub_cmd {
                 "hook" => {
                     write!(ret, "{}", "Hooked RTC responder...").unwrap();
-                    //self.rtc.hook_rtc_callback(dt_callback).unwrap();
+                    self.rtc.hook_rtc_callback(dt_callback).unwrap();
                 }
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
@@ -124,6 +124,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 static mut CB_CONN: Option<xous::CID> = None;
 pub fn dt_callback(dt: rtc::DateTime) {
     if let Some(conn) = unsafe{CB_CONN} {
+        // interesting: log calls in the callback cause the kernel to panic
         log::info!("got datetime: {:?}", dt);
         let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
         buf.lend(conn, 0xdeadbeef).unwrap();
