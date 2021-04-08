@@ -14,6 +14,9 @@ enum StatusOpcode {
     // for passing battstats on to the main thread from the callback
     BattStats,
 
+    // for passing DateTime
+    DateTime,
+
     // indicates time for periodic update of the status bar
     Pump,
 }
@@ -26,6 +29,14 @@ fn battstats_cb(stats: BattStats) {
             xous::Message::new_scalar(StatusOpcode::BattStats.to_usize().unwrap(),
             rawstats[0], rawstats[1], 0, 0
         )).unwrap();
+    }
+}
+
+pub fn dt_callback(dt: rtc::DateTime) {
+    //log::trace!("dt_callback received with {:?}", dt);
+    if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+        let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
+        buf.lend(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap()).unwrap();
     }
 }
 
@@ -102,6 +113,12 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     com.hook_batt_stats(battstats_cb).expect("|status: couldn't hook callback for events from COM");
     // prime the loop
     com.req_batt_stats().expect("Can't get battery stats from COM");
+
+    let mut rtc = rtc::Rtc::new(&xns).unwrap();
+    rtc.hook_rtc_callback(dt_callback).unwrap();
+    let mut datetime: Option<rtc::DateTime> = None;
+    let mut dt_pump_modulus = 15;
+
     last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("|status: starting main loop");
     loop {
@@ -118,21 +135,39 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 } else {
                     write!(&mut battstats_tv, "{}mAh {}%", stats.remaining_capacity, stats.soc).expect("|status: can't write string");
                 }
-                stats_phase = (stats_phase + 1) % 8;
-                gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
-                gam.redraw().expect("|status: couldn't redraw");
             }),
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
                 let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
                 if now_seconds != last_seconds {
+                    dt_pump_modulus += 1;
+                    if dt_pump_modulus > 15 {
+                        dt_pump_modulus = 0;
+                        rtc.request_datetime().expect("|status: can't request datetime from RTC");
+                    }
                     last_seconds = now_seconds;
                     uptime_tv.clear_str();
-                    write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
-                        (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds).expect("|status: can't write string");
+                    if (stats_phase > 3) && datetime.is_some() {
+                        let dt = datetime.unwrap();
+                        let day = match dt.weekday {
+                            rtc::Weekday::Monday => "Mon",
+                            rtc::Weekday::Tuesday => "Tue",
+                            rtc::Weekday::Wednesday => "Wed",
+                            rtc::Weekday::Thursday => "Thu",
+                            rtc::Weekday::Friday => "Fri",
+                            rtc::Weekday::Saturday => "Sat",
+                            rtc::Weekday::Sunday => "Sun",
+                        };
+                        write!(&mut uptime_tv, "{:02}:{:02} {} {}/{}", dt.hours, dt.minutes, day, dt.months, dt.days).unwrap();
+                    } else {
+                        write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
+                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds).expect("|status: can't write string");
+                    }
                     log::trace!("|status: requesting draw of '{}'", uptime_tv);
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");
+                    gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
                     gam.redraw().expect("|status: couldn't redraw");
+                    stats_phase = (stats_phase + 1) % 8;
                 }
                 if elapsed_time - last_time > 500 {
                     //info!("|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
@@ -140,6 +175,12 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     last_time = elapsed_time;
                     com.req_batt_stats().expect("Can't get battery stats from COM");
                 }
+            }
+            Some(StatusOpcode::DateTime) => {
+                //log::trace!("got DateTime update");
+                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
+                datetime = Some(dt);
             }
             None => {log::error!("|status: received unknown Opcode"); break}
         }

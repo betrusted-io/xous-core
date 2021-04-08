@@ -127,6 +127,7 @@ impl I2cStateMachine {
             }
         }
     }
+    #[allow(dead_code)] // keep this around in case we figure out the NACK issue
     fn report_nack(&mut self) {
         log::trace!("NACK");
         // report the NACK situation to the listener
@@ -251,6 +252,7 @@ impl I2cStateMachine {
                         // we are re-entering from a previous call, store the read value from the previous call
                         rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
                         log::trace!("READ got 0x{:02x}", rxbuf[self.index as usize - 1]);
+                        self.transaction.rxbuf = Some(rxbuf);
                     }
                     if self.index < self.transaction.rxlen {
                         if self.index == (self.transaction.rxlen - 1) {

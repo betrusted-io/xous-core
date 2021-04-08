@@ -235,11 +235,11 @@ fn imef_cb(s: String::<4000>) {
 fn test_thread() {
     let xns = xous_names::XousNames::new().unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    ticktimer.sleep_ms(5000);
+    ticktimer.sleep_ms(5000).unwrap();
     let rtc = rtc::Rtc::new(&xns).unwrap();
     loop {
         rtc.request_datetime().unwrap();
-        ticktimer.sleep_ms(2000);
+        ticktimer.sleep_ms(2000).unwrap();
     }
 }
 

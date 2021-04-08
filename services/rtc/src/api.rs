@@ -17,7 +17,7 @@ pub enum TimeUnits {
     Hours,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct DateTime {
     pub seconds: u8,
     pub minutes: u8,

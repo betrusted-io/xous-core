@@ -29,6 +29,20 @@ impl Rtc {
         let buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
+    pub fn unhook_rtc_callback(&mut self) -> Result<(), xous::Error> {
+        if let Some(sid) = self.callback_sid.take() {
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).expect("can't connect to CB server for disconnect message");
+            let msg = Return::Drop;
+            let buf = Buffer::into_buf(msg).expect("can't send convert drop message");
+            buf.lend(self.conn, 0).expect("can't send Drop message to CB server"); // there is only one message type, so ID field is disregarded
+            unsafe{xous::disconnect(cid).expect("can't disconnect from CB server");}
+            xous::destroy_server(sid).expect("can't destroy CB server");
+        }
+        self.callback_sid = None;
+        unsafe{RTC_CB = None};
+        Ok(())
+    }
     pub fn hook_rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
         log::trace!("hooking rtc callback");
         if unsafe{RTC_CB}.is_some() {
@@ -113,6 +127,8 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 unsafe {
                     if let Some(cb) = RTC_CB {
                         cb(dt)
+                    } else {
+                        break;
                     }
                 }
             }

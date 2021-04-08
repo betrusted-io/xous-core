@@ -454,38 +454,67 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use log::info;
     use crate::api::Weekday;
+    use chrono::prelude::*;
+    use crate::CB_TO_MAIN_CONN;
+    use num_traits::ToPrimitive;
+
+    fn rtc_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+        let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+        log::trace!("rtc callback server started");
+        loop {
+            let msg = xous::receive_message(sid).unwrap();
+            log::trace!("rtc callback got msg: {:?}", msg);
+            // we only have one purpose, and that's to send this message.
+            if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+                log::trace!("rtc_get sending time to main server");
+                let now = Local::now();
+                let wday: Weekday = match now.weekday() {
+                    chrono::Weekday::Mon => Weekday::Monday,
+                    chrono::Weekday::Tue => Weekday::Tuesday,
+                    chrono::Weekday::Wed => Weekday::Wednesday,
+                    chrono::Weekday::Thu => Weekday::Thursday,
+                    chrono::Weekday::Fri => Weekday::Friday,
+                    chrono::Weekday::Sat => Weekday::Saturday,
+                    chrono::Weekday::Sun => Weekday::Sunday,
+                };
+                let dt = crate::api::DateTime {
+                    seconds: now.second() as u8,
+                    minutes: now.minute() as u8,
+                    hours: now.hour() as u8,
+                    months: now.month() as u8,
+                    days: now.day() as u8,
+                    years: (now.year() - 2000) as u8,
+                    weekday: wday,
+                };
+                let buf = xous_ipc::Buffer::into_buf(dt).unwrap();
+                buf.send(cb_to_main_conn, crate::api::Opcode::ResponseDateTime.to_u32().unwrap()).unwrap();
+            }
+        }
+    }
 
     pub struct Rtc {
-        pub seconds: u8,
-        pub minutes: u8,
-        pub hours: u8,
-        pub days: u8,
-        pub months: u8,
-        pub years: u8,
-        pub weekday: Weekday,
-        updated_ticks: u64,
+        cb_conn: xous::CID,
     }
 
     impl Rtc {
         pub fn new(_xns: &xous_names::XousNames) -> Rtc {
+            let sid = xous::create_server().unwrap();
+            let sid_tuple = sid.to_u32();
+            let cid = xous::connect(sid).unwrap();
+            xous::create_thread_4(rtc_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
             Rtc {
-                seconds: 0,
-                minutes: 0,
-                hours: 0,
-                days: 0,
-                months: 0,
-                years: 0,
-                weekday: Weekday::Sunday,
-                updated_ticks: 0,
+                cb_conn: cid,
             }
         }
         pub fn rtc_set(&mut self, _secs: u8, _mins: u8, _hours: u8, _days: u8, _months: u8, _years: u8, _day: Weekday)
            -> Result<bool, xous::Error> {
                Ok(true)
         }
-        pub fn rtc_get(&mut self) -> Result<(), xous::Error> { Ok(()) }
+        pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
+            xous::send_message(self.cb_conn, xous::Message::new_scalar(0, 0, 0, 0, 0)).unwrap();
+            Ok(())
+        }
         pub fn wakeup_alarm(&mut self, _seconds: u8) { }
         pub fn clear_wakeup_alarm(&mut self) { }
         pub fn rtc_alarm(&mut self, _seconds: u8) { }
@@ -499,7 +528,7 @@ fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -574,6 +603,7 @@ fn xmain() -> ! {
                 let outgoing_buf = Buffer::into_buf(ret).or(Err(xous::Error::InternalError)).unwrap();
                 for maybe_conn in dt_cb_conns.iter_mut() {
                     if let Some(conn) = maybe_conn {
+                        //log::trace!("ResponeDateTime sending to {}", *conn);
                         match outgoing_buf.lend(*conn, 0) { // the ID field is ignored on the callback server
                             Err(xous::Error::ServerNotFound) => {
                                 *maybe_conn = None
@@ -583,6 +613,7 @@ fn xmain() -> ! {
                         }
                     }
                 }
+                //log::trace!("ResponeDateTime done");
             },
             Some(Opcode::RequestDateTime) => {
                 let mut sent = false;

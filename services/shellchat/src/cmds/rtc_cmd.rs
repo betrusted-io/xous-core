@@ -9,6 +9,8 @@ pub fn dt_callback(dt: rtc::DateTime) {
     //log::info!("got datetime: {:?}", dt);
     let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
     buf.lend(callback_conn, 0xdeadbeef).unwrap();
+
+    unsafe{xous::disconnect(callback_conn).unwrap()};
 }
 
 #[derive(Debug)]
@@ -17,8 +19,7 @@ pub struct RtcCmd {
 }
 impl RtcCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
-        let mut rtc = rtc::Rtc::new(&xns).unwrap();
-        rtc.hook_rtc_callback(dt_callback).unwrap();
+        let rtc = rtc::Rtc::new(&xns).unwrap();
         RtcCmd {
             rtc,
         }
@@ -38,6 +39,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
             match sub_cmd {
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
+                    self.rtc.hook_rtc_callback(dt_callback).unwrap();
                     self.rtc.request_datetime().unwrap();
                 },
                 "set" => {
@@ -69,13 +71,13 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                     }
 
                     if let Some(tok_str) = tokens.next() {
-                        day = if let Ok(n) = tok_str.parse::<u8>() { n } else { success = false; 0 }
+                        month = if let Ok(n) = tok_str.parse::<u8>() { n } else { success = false; 0 }
                     } else {
                         success = false;
                     }
 
                     if let Some(tok_str) = tokens.next() {
-                        month = if let Ok(n) = tok_str.parse::<u8>() { n } else { success = false; 0 }
+                        day = if let Ok(n) = tok_str.parse::<u8>() { n } else { success = false; 0 }
                     } else {
                         success = false;
                     }
@@ -101,7 +103,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                         success = false;
                     }
                     if !success {
-                        write!(ret, "{}", "usage: rtc set hh mm ss DD MM YY day\n'day' is three-day code, eg. mon tue").unwrap();
+                        write!(ret, "{}", "usage: rtc set hh mm ss MM DD YY day\n'day' is three-day code, eg. mon tue").unwrap();
                     } else {
                         let dt = rtc::DateTime {
                             seconds: sec,
@@ -112,7 +114,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                             years: year,
                             weekday,
                         };
-                         write!(ret, "Setting {}:{}:{}, {}/{}/{}, {:?}", hour, min, sec, day, month, year, weekday).unwrap();
+                         write!(ret, "Setting {}:{}:{}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
                         self.rtc.set_rtc(dt).unwrap();
                     }
                 },
@@ -132,19 +134,12 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 
         let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
         let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
-/*
-        let dt = rtc::DateTime {
-            seconds: 0,
-            minutes: 0,
-            hours: 0,
-            days: 0,
-            months: 0,
-            years: 0,
-            weekday: rtc::Weekday::Friday,
-        };*/
+
         let mut ret = String::<1024>::new();
-        //write!(ret, "{}", dt.hours);
-        write!(ret, "{}:{}:{}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();
+        write!(ret, "{}:{:02}:{:02}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();
+
+        // this currently doesn't work, under suspicion of perhaps one of the destroy/disconnect functions not working right
+        self.rtc.unhook_rtc_callback().expect("can't unhook callback after completion");
         Ok(Some(ret))
     }
 

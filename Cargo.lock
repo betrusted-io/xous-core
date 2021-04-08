@@ -428,6 +428,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "rtc",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -1151,6 +1152,7 @@ name = "rtc"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "chrono",
  "heapless",
  "llio",
  "log",
