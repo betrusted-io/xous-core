@@ -232,8 +232,6 @@ fn imef_cb(s: String::<4000>) {
 }
 //////////////////
 
-pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
-
 fn test_thread() {
     let xns = xous_names::XousNames::new().unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
@@ -244,6 +242,8 @@ fn test_thread() {
         ticktimer.sleep_ms(2000);
     }
 }
+
+pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -263,7 +263,7 @@ fn xmain() -> ! {
     let mut update_repl = false;
 
     if false {
-        xous::create_thread_0(test_thread);
+        xous::create_thread_0(test_thread).unwrap();
     }
 
     log::trace!("starting main loop");

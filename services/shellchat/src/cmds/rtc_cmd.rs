@@ -1,6 +1,16 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 
+pub fn dt_callback(dt: rtc::DateTime) {
+    let xns = xous_names::XousNames::new().unwrap();
+    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+
+    // interesting: log calls in the callback cause the kernel to panic
+    //log::info!("got datetime: {:?}", dt);
+    let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
+    buf.lend(callback_conn, 0xdeadbeef).unwrap();
+}
+
 #[derive(Debug)]
 pub struct RtcCmd {
     rtc: rtc::Rtc,
@@ -8,8 +18,9 @@ pub struct RtcCmd {
 impl RtcCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let mut rtc = rtc::Rtc::new(&xns).unwrap();
+        rtc.hook_rtc_callback(dt_callback).unwrap();
         RtcCmd {
-            rtc: rtc,
+            rtc,
         }
     }
 }
@@ -19,16 +30,12 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
     fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "rtc options: set, get, hook";
+        let helpstring = "rtc options: set, get";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                "hook" => {
-                    write!(ret, "{}", "Hooked RTC responder...").unwrap();
-                    self.rtc.hook_rtc_callback(dt_callback).unwrap();
-                }
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
                     self.rtc.request_datetime().unwrap();
@@ -119,16 +126,26 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         }
         Ok(Some(ret))
     }
-}
 
-static mut CB_CONN: Option<xous::CID> = None;
-pub fn dt_callback(dt: rtc::DateTime) {
-    if let Some(conn) = unsafe{CB_CONN} {
-        // interesting: log calls in the callback cause the kernel to panic
-        log::info!("got datetime: {:?}", dt);
-        let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-        buf.lend(conn, 0xdeadbeef).unwrap();
-    } else {
-        log::info!("callback not set, but got datetime: {:?}", dt);
+    fn callback(&mut self, msg: &xous::MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        use core::fmt::Write;
+
+        let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+        let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
+/*
+        let dt = rtc::DateTime {
+            seconds: 0,
+            minutes: 0,
+            hours: 0,
+            days: 0,
+            months: 0,
+            years: 0,
+            weekday: rtc::Weekday::Friday,
+        };*/
+        let mut ret = String::<1024>::new();
+        //write!(ret, "{}", dt.hours);
+        write!(ret, "{}:{}:{}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();
+        Ok(Some(ret))
     }
+
 }
