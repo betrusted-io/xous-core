@@ -82,7 +82,7 @@ fn try_main() -> Result<(), DynError> {
     ];
     let task = env::args().nth(1);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false, &minimal_pkgs)?,
+        Some("renode-image") => renode_image(false, &hw_pkgs)?,
         Some("renode-test") => renode_image(
             false,
             &[
