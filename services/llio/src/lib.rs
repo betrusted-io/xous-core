@@ -278,7 +278,7 @@ impl Llio {
 fn drop_conn(sid: xous::SID) {
     let cid = xous::connect(sid).unwrap();
     xous::send_message(cid,
-        Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        Message::new_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
 }
 impl Drop for Llio {

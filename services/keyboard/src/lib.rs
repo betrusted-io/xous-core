@@ -81,7 +81,7 @@ impl Drop for Keyboard {
             // tell my handler thread to quit
             let cid = xous::connect(sid).unwrap();
             send_message(cid,
-                Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
             unsafe{xous::disconnect(cid).unwrap();}
         }
 
@@ -92,7 +92,7 @@ impl Drop for Keyboard {
             // tell my handler thread to quit
             let cid = xous::connect(sid).unwrap();
             send_message(cid,
-                Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
             unsafe{xous::disconnect(cid).unwrap();}
         }
 
