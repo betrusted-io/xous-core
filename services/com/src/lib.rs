@@ -35,6 +35,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }
 #[derive(Debug)]
 pub struct Com {
@@ -132,11 +133,9 @@ impl Drop for Com {
             xous::send_message(cid,
                 Message::new_blocking_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
             unsafe{xous::disconnect(cid).unwrap();}
-            xous::destroy_server(sid).unwrap();
         }
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
         unsafe{xous::disconnect(self.conn).unwrap();}
-
     }
 }

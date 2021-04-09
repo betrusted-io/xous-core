@@ -280,7 +280,6 @@ fn drop_conn(sid: xous::SID) {
     xous::send_message(cid,
         Message::new_blocking_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
-    xous::destroy_server(sid).unwrap();
 }
 impl Drop for Llio {
     fn drop(&mut self) {
@@ -325,6 +324,7 @@ fn i2c_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }
 
 /// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.
@@ -345,6 +345,7 @@ fn usb_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }
 
 /// handles callback messages that indicate a RTC interrupt has happened, in the library user's process space.
@@ -365,6 +366,7 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }
 
 /// handles callback messages that indicate a COM interrupt has happened, in the library user's process space.
@@ -385,6 +387,7 @@ fn com_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }
 
 /// handles callback messages that indicate a GPIO interrupt has happened, in the library user's process space.
@@ -405,4 +408,5 @@ fn gpio_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
+    xous::destroy_server(sid).unwrap();
 }

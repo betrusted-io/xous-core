@@ -58,9 +58,9 @@ pub(crate) enum Opcode {
     ClearRtcAlarm,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Return {
-    ReturnDateTime(DateTime),
+    ReturnDateTime,
     Drop,
 }
 

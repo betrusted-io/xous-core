@@ -6,7 +6,7 @@ pub use api::*;
 use api::{Return, Opcode};
 use xous::{send_message, CID, Message};
 use xous_ipc::Buffer;
-use num_traits::ToPrimitive;
+use num_traits::{ToPrimitive, FromPrimitive};
 
 #[derive(Debug)]
 pub struct Rtc {
@@ -34,23 +34,12 @@ impl Rtc {
             // tell my handler thread to quit
             log::trace!("connect for unhook");
             let cid = xous::connect(sid).expect("can't connect to CB server for disconnect message");
-            let msg = Return::Drop;
-            let buf = Buffer::into_buf(msg).expect("can't send convert drop message");
             log::trace!("sending drop");
-            buf.send(self.conn, 0).expect("can't send Drop message to CB server"); // there is only one message type, so ID field is disregarded
+            send_message(cid,
+                Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+            ).unwrap();
             log::trace!("disconnecting");
             unsafe{xous::disconnect(cid).expect("can't disconnect from CB server");}
-            log::trace!("destroying");
-            let mut destroyed = false;
-            loop {
-                match xous::destroy_server(sid) {
-                    Ok(_) => destroyed = true,
-                    Err(e) => {log::trace!("destroy resulted in {:?}", e); xous::yield_slice()},  // wait a bit for the queue to empty
-                }
-                if destroyed {
-                    break;
-                }
-            }
         }
         log::trace!("nullifying");
         self.callback_sid = None;
@@ -115,11 +104,10 @@ impl Drop for Rtc {
         if let Some(sid) = self.callback_sid.take() {
             // tell my handler thread to quit
             let cid = xous::connect(sid).unwrap();
-            let msg = Return::Drop;
-            let buf = Buffer::into_buf(msg).unwrap();
-            buf.lend(self.conn, 0).unwrap(); // there is only one message type, so ID field is disregarded
+            xous::send_message(cid,
+                xous::Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+            ).unwrap();
             unsafe{xous::disconnect(cid).unwrap();}
-            xous::destroy_server(sid).unwrap();
         }
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
@@ -134,10 +122,10 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::trace!("rtc callback got msg: {:?}", msg);
-        let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-        let response = buffer.to_original::<Return,_>().unwrap();
-        match response {
-            Return::ReturnDateTime(dt) => {
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Return::ReturnDateTime) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let dt = buffer.to_original::<DateTime,_>().unwrap();
                 unsafe {
                     if let Some(cb) = RTC_CB {
                         cb(dt)
@@ -146,9 +134,13 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     }
                 }
             }
-            Return::Drop => {
+            Some(Return::Drop) => {
                 break;
+            }
+            None => {
+                log::error!("got unrecognized message in rtc CB server, ignoring");
             }
         }
     }
+    xous::destroy_server(sid).expect("can't destroy my server on exit!");
 }

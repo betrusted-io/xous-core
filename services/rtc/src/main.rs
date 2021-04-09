@@ -3,7 +3,7 @@
 
 mod api;
 
-use num_traits::FromPrimitive;
+use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use api::{Return, Opcode, DateTime};
 use xous::{CID, msg_scalar_unpack};
@@ -599,12 +599,11 @@ fn xmain() -> ! {
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
                 log::trace!("ResponseDateTime received: {:?}", dt);
-                let ret = Return::ReturnDateTime(dt);
-                let outgoing_buf = Buffer::into_buf(ret).or(Err(xous::Error::InternalError)).unwrap();
+                let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
                 for maybe_conn in dt_cb_conns.iter_mut() {
                     if let Some(conn) = maybe_conn {
                         //log::trace!("ResponeDateTime sending to {}", *conn);
-                        match outgoing_buf.lend(*conn, 0) { // the ID field is ignored on the callback server
+                        match outgoing_buf.lend(*conn, Return::ReturnDateTime.to_u32().unwrap()) {
                             Err(xous::Error::ServerNotFound) => {
                                 *maybe_conn = None
                             },
@@ -660,9 +659,9 @@ fn xmain() -> ! {
     }
     for entry in dt_cb_conns.iter_mut() {
         if let Some(conn) = entry {
-            let dropmsg = Return::Drop;
-            let buf = Buffer::into_buf(dropmsg).unwrap();
-            buf.lend(*conn, 0).unwrap(); // the ID is ignored for this server
+            xous::send_message(*conn,
+                xous::Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+            ).unwrap();
             unsafe{xous::disconnect(*conn).unwrap();}
         }
         *entry = None;
