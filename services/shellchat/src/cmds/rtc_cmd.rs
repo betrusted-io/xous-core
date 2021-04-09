@@ -5,10 +5,8 @@ pub fn dt_callback(dt: rtc::DateTime) {
     let xns = xous_names::XousNames::new().unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
-    // interesting: log calls in the callback cause the kernel to panic
-    //log::info!("got datetime: {:?}", dt);
     let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-    buf.lend(callback_conn, 0xdeadbeef).unwrap();
+    buf.lend(callback_conn, 0xdead_beef).unwrap(); // send an "unknown ID" so it's routed to the callback handler
 
     unsafe{xous::disconnect(callback_conn).unwrap()};
 }
