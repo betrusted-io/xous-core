@@ -8,7 +8,7 @@ pub trait ShellCmdApi<'a> {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error>;
     // called to process incoming messages that may have been origniated by the most recently issued command
     fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        log::info!("SHCH: received unhandled message {:?}", msg);
+        log::info!("received unhandled message {:?}", msg);
         Ok(None)
     }
 
@@ -62,7 +62,7 @@ mod echo;     use echo::*;
 //mod test;     use test::*;
 mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
-//mod callback; use callback::*;
+mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
 
 #[derive(Debug)]
@@ -73,7 +73,7 @@ pub struct CmdEnv {
     //test_cmd: Test,
     sleep_cmd: Sleep,
     sensors_cmd: Sensors,
-    //callback_cmd: CallBack,
+    callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
 }
 impl CmdEnv {
@@ -81,17 +81,17 @@ impl CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         CmdEnv {
             common_env: CommonEnv {
-                llio: llio::Llio::new(&xns).expect("CMD: couldn't connect to LLIO"),
-                com: com::Com::new(&xns).expect("CMD: could't connect to COM"),
+                llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
+                com: com::Com::new(&xns).expect("could't connect to COM"),
                 ticktimer: ticktimer,
-                gam: gam::Gam::new(&xns).expect("CMD: couldn't connect to GAM"),
+                gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             },
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             //test_cmd: Test::new(),
             sleep_cmd: Sleep::new(),
             sensors_cmd: Sensors::new(),
-            //callback_cmd: CallBack::new(),
+            callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
         }
     }
@@ -106,7 +106,7 @@ impl CmdEnv {
             //&mut self.test_cmd,
             &mut self.sleep_cmd,
             &mut self.sensors_cmd,
-            //&mut self.callback_cmd,
+            &mut self.callback_cmd,
             &mut self.rtc_cmd,
         ];
 

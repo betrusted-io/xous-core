@@ -34,14 +34,19 @@ impl Rtc {
             // tell my handler thread to quit
             log::trace!("connect for unhook");
             let cid = xous::connect(sid).expect("can't connect to CB server for disconnect message");
-            log::trace!("sending drop");
+            log::trace!("sending drop to conn {}", cid);
             send_message(cid,
                 Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
             ).unwrap();
-            log::trace!("disconnecting");
-            unsafe{xous::disconnect(cid).expect("can't disconnect from CB server");}
+            log::trace!("disconnecting unhook connection");
+            unsafe{
+                match xous::disconnect(cid) {
+                    Ok(_) => log::trace!("disconnected unhook connection"),
+                    Err(e) => log::error!("unhook rtc got error: {:?}", e),
+                };
+            }
         }
-        log::trace!("nullifying");
+        log::trace!("nullifying local state");
         self.callback_sid = None;
         unsafe{RTC_CB = None};
         Ok(())
@@ -142,5 +147,6 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }
         }
     }
+    log::trace!("rtc callback server exiting");
     xous::destroy_server(sid).expect("can't destroy my server on exit!");
 }

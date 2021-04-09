@@ -8,11 +8,15 @@ use xous_ipc::Buffer;
 use api::{Return, Opcode, DateTime};
 use xous::{CID, msg_scalar_unpack};
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
+
 #[cfg(target_os = "none")]
 mod implementation {
     #![allow(dead_code)]
     use bitflags::*;
     use crate::CB_TO_MAIN_CONN;
+    use core::sync::atomic::Ordering;
     use llio::{I2cStatus, I2cTransaction, Llio};
     use crate::api::{Opcode, DateTime, Weekday};
     use xous_ipc::Buffer;
@@ -212,7 +216,8 @@ mod implementation {
 
     fn i2c_callback(trans: I2cTransaction) {
         if trans.status == I2cStatus::ResponseReadOk {
-            if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+            let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
+            if cb_to_main_conn != 0 {
                 // we expect this to be 0, as we don't set it
                 assert!(trans.callback_id == 0, "callback ID was incorrect!");
                 if let Some(rxbuf) = trans.rxbuf {
@@ -457,6 +462,7 @@ mod implementation {
     use crate::api::Weekday;
     use chrono::prelude::*;
     use crate::CB_TO_MAIN_CONN;
+    use core::sync::atomic::Ordering;
     use num_traits::ToPrimitive;
 
     fn rtc_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
@@ -466,7 +472,8 @@ mod implementation {
             let msg = xous::receive_message(sid).unwrap();
             log::trace!("rtc callback got msg: {:?}", msg);
             // we only have one purpose, and that's to send this message.
-            if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
+            let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
+            if cb_to_main_conn != 0 {
                 log::trace!("rtc_get sending time to main server");
                 let now = Local::now();
                 let wday: Weekday = match now.weekday() {
@@ -522,19 +529,18 @@ mod implementation {
     }
 }
 
-static mut CB_TO_MAIN_CONN: Option<CID> = None;
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
     let rtc_sid = xns.register_name(api::SERVER_NAME_RTC).expect("can't register server");
     log::trace!("registered with NS -- {:?}", rtc_sid);
-    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(rtc_sid).unwrap())};
+    CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 
     #[cfg(target_os = "none")]
     let mut rtc = Rtc::new(&xns);
@@ -599,20 +605,23 @@ fn xmain() -> ! {
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
                 log::trace!("ResponseDateTime received: {:?}", dt);
-                let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
                 for maybe_conn in dt_cb_conns.iter_mut() {
                     if let Some(conn) = maybe_conn {
-                        //log::trace!("ResponeDateTime sending to {}", *conn);
+                        let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
+                        log::trace!("ResponeDateTime sending to {}", *conn);
                         match outgoing_buf.lend(*conn, Return::ReturnDateTime.to_u32().unwrap()) {
                             Err(xous::Error::ServerNotFound) => {
+                                log::trace!("ServerNotFound, dropping connection");
                                 *maybe_conn = None
                             },
-                            Ok(_) => {},
+                            Ok(_) => {
+                                log::trace!("RespondeDateTime sent successfully");
+                            },
                             _ => panic!("unhandled error or result in callback processing")
                         }
                     }
                 }
-                //log::trace!("ResponeDateTime done");
+                log::trace!("ResponeDateTime done");
             },
             Some(Opcode::RequestDateTime) => {
                 let mut sent = false;
@@ -653,8 +662,9 @@ fn xmain() -> ! {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     unsafe{
-        if let Some(cb)= CB_TO_MAIN_CONN {
-            xous::disconnect(cb).unwrap();
+        let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
+        if cb_to_main_conn != 0 {
+            xous::disconnect(cb_to_main_conn).unwrap();
         }
     }
     for entry in dt_cb_conns.iter_mut() {

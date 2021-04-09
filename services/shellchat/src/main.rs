@@ -114,6 +114,7 @@ impl Repl{
 
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(mut local) = self.input {
+            log::trace!("processing line: {}", local);
             if let Some(res) = self.env.dispatch(Some(&mut local), None).expect("command dispatch failed") {
                 let mut response = String::<1024>::new();
                 write!(response, "{}", res).expect("can't copy result to history");
@@ -124,7 +125,8 @@ impl Repl{
                 self.circular_push(output_history);
             }
         } else if let Some(msg) = &self.msg {
-            if let Some(res) = self.env.dispatch(None, Some(msg)).expect("SCHC: callback failed") {
+            log::trace!("processing callback msg: {:?}", msg);
+            if let Some(res) = self.env.dispatch(None, Some(msg)).expect("callback failed") {
                 let mut response = String::<1024>::new();
                 write!(response, "{}", res).expect("can't copy result to history");
                 let output_history = History {
@@ -279,12 +281,15 @@ fn xmain() -> ! {
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
             }
             Some(ShellOpcode::Redraw) => {
+                log::trace!("got Redraw");
                 repl.redraw().expect("REPL couldn't redraw");
             }
             Some(ShellOpcode::Quit) => {
+                log::trace!("got Quit");
                 break;
             }
             _ => {
+                log::trace!("got unknown message, treating as callback");
                 repl.msg(msg);
                 update_repl = true;
             }
@@ -293,6 +298,7 @@ fn xmain() -> ! {
             repl.update().expect("REPL had problems updating");
             update_repl = false;
         }
+        log::trace!("reached bottom of main loop");
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");

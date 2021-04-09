@@ -1,14 +1,12 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static SHELLCONN: AtomicU32 = AtomicU32::new(0);
 pub fn dt_callback(dt: rtc::DateTime) {
-    let xns = xous_names::XousNames::new().unwrap();
-    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
-
     let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-    buf.lend(callback_conn, 0xdead_beef).unwrap(); // send an "unknown ID" so it's routed to the callback handler
-
-    unsafe{xous::disconnect(callback_conn).unwrap()};
+    log::trace!("SHELLCONN: {}", SHELLCONN.load(Ordering::Relaxed));
+    buf.send(SHELLCONN.load(Ordering::Relaxed), 0xdead_beef).unwrap(); // send an "unknown ID" so it's routed to the callback handler
 }
 
 #[derive(Debug)]
@@ -17,6 +15,8 @@ pub struct RtcCmd {
 }
 impl RtcCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
+        let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+        SHELLCONN.store(callback_conn, Ordering::Relaxed);
         let rtc = rtc::Rtc::new(&xns).unwrap();
         RtcCmd {
             rtc,
@@ -112,7 +112,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                             years: year,
                             weekday,
                         };
-                         write!(ret, "Setting {}:{}:{}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
+                        write!(ret, "Setting {}:{}:{}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
                         self.rtc.set_rtc(dt).unwrap();
                     }
                 },
@@ -136,7 +136,6 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
         let mut ret = String::<1024>::new();
         write!(ret, "{}:{:02}:{:02}, {}/{}/{}, {:?}", dt.hours, dt.minutes, dt.seconds, dt.months, dt.days, dt.years, dt.weekday).unwrap();
 
-        // this currently doesn't work, under suspicion of perhaps one of the destroy/disconnect functions not working right
         self.rtc.unhook_rtc_callback().expect("can't unhook callback after completion");
         Ok(Some(ret))
     }
