@@ -36,7 +36,7 @@ pub fn dt_callback(dt: rtc::DateTime) {
     //log::trace!("dt_callback received with {:?}", dt);
     if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
         let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-        buf.lend(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap()).unwrap();
+        buf.send(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap()).unwrap();
     }
 }
 

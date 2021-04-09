@@ -81,7 +81,7 @@ impl Llio {
     }
 
     pub fn allow_power_off(&self, allow: bool) -> Result<(), xous::Error> {
-        let arg = if allow { 1 } else { 0 };
+        let arg = if allow { 0 } else { 1 };
         send_message(self.conn,
             Message::new_scalar(Opcode::PowerSelf.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())

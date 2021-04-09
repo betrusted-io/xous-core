@@ -356,8 +356,10 @@ impl Server {
                         let mut result = Ok(xous_kernel::Result::Ok);
                         let virt = server_memory_addr;
                         let size = memory_length;
-                        if virt & 0xfff != 0 {
-                            return Err(xous_kernel::Error::BadAlignment);
+                        if !cfg!(baremetal) {
+                            if virt & 0xfff != 0 {
+                                return Err(xous_kernel::Error::BadAlignment);
+                            }
                         }
                         for addr in (virt..(virt + size)).step_by(crate::mem::PAGE_SIZE) {
                             if let Err(e) = mm.unmap_page(addr as *mut usize) {

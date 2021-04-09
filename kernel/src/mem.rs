@@ -620,8 +620,10 @@ impl MemoryManager {
         let addr = addr as usize;
 
         // Ensure the address lies on a page boundary
-        if addr & 0xfff != 0 {
-            return Err(xous_kernel::Error::BadAlignment);
+        if cfg!(baremetal) {
+            if addr & 0xfff != 0 {
+                return Err(xous_kernel::Error::BadAlignment);
+            }
         }
 
         let mut offset = 0;

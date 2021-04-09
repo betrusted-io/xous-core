@@ -657,8 +657,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             let mut result = Ok(xous_kernel::Result::Ok);
             let virt = range.as_ptr() as usize;
             let size = range.len();
-            if virt & 0xfff != 0 {
-                return Err(xous_kernel::Error::BadAlignment);
+            if cfg!(baremetal) {
+                if virt & 0xfff != 0 {
+                    return Err(xous_kernel::Error::BadAlignment);
+                }
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
                 if let Err(e) = mm.unmap_page(addr as *mut usize) {
