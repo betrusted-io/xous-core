@@ -32,13 +32,27 @@ impl Rtc {
     pub fn unhook_rtc_callback(&mut self) -> Result<(), xous::Error> {
         if let Some(sid) = self.callback_sid.take() {
             // tell my handler thread to quit
+            log::trace!("connect for unhook");
             let cid = xous::connect(sid).expect("can't connect to CB server for disconnect message");
             let msg = Return::Drop;
             let buf = Buffer::into_buf(msg).expect("can't send convert drop message");
-            buf.lend(self.conn, 0).expect("can't send Drop message to CB server"); // there is only one message type, so ID field is disregarded
+            log::trace!("sending drop");
+            buf.send(self.conn, 0).expect("can't send Drop message to CB server"); // there is only one message type, so ID field is disregarded
+            log::trace!("disconnecting");
             unsafe{xous::disconnect(cid).expect("can't disconnect from CB server");}
-            xous::destroy_server(sid).expect("can't destroy CB server");
+            log::trace!("destroying");
+            let mut destroyed = false;
+            loop {
+                match xous::destroy_server(sid) {
+                    Ok(_) => destroyed = true,
+                    Err(e) => {log::trace!("destroy resulted in {:?}", e); xous::yield_slice()},  // wait a bit for the queue to empty
+                }
+                if destroyed {
+                    break;
+                }
+            }
         }
+        log::trace!("nullifying");
         self.callback_sid = None;
         unsafe{RTC_CB = None};
         Ok(())
