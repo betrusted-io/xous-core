@@ -128,6 +128,8 @@ pub(crate) const MY_SERVER_NAME: &str = "_Example server_"; // the underscores a
 Client state is held in an object defined in lib.rs.
 
 ```rust
+#![cfg_attr(target_os = "none", no_std)]
+pub mod api;
 use api::{Callback, Opcode}; // if you prefer to map the api into your local namespace
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
@@ -287,6 +289,8 @@ a memory message with return value).
 Note that all message types block the caller until they are returned.
 
 ```rust
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 use num_traits::FromPrimitive;
 use xous_ipc::{String, Buffer};
 use api::Opcode;

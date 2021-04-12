@@ -1,39 +1,62 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod api;
+use num_traits::{FromPrimitive, ToPrimitive};
+use cb_test_srv::*;
 
-use num_traits::FromPrimitive;
+const SERVER_NAME: &str = "_CB test client 1_";
 
-use log::info;
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+enum Opcode {
+    Tick,
+    Sum,
+}
+
+use core::sync::atomic::{AtomicU32, Ordering};
+static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
+fn do_add(sum: u32) {
+    let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
+    if cb_to_main_conn != 0 {
+        xous::send_message(cb_to_main_conn,
+            xous::Message::new_scalar(Opcode::Sum.to_usize().unwrap(), sum as usize, 0, 0, 0)
+        ).unwrap();
+    }
+}
 
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
-    info!("my PID is {}", xous::process::id());
+    log::set_max_level(log::LevelFilter::Trace);
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", trng_sid);
+    let sid = xns.register_name(SERVER_NAME).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", sid);
 
-    #[cfg(target_os = "none")]
-    let trng = Trng::new();
+    CB_TO_MAIN_CONN.store(xous::connect(sid).unwrap(), Ordering::Relaxed);
 
-    #[cfg(not(target_os = "none"))]
-    let mut trng = Trng::new();
+    let mut cb_serv = CbTestServer::new(&xns).unwrap();
+    let tick_cid = xous::connect(sid).unwrap();
+    cb_serv.hook_tick_callback(Opcode::Tick.to_u32().unwrap(), tick_cid).unwrap();
 
-    // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
-    trng.get_trng(2);
     log::trace!("ready to accept requests");
-
+    let mut state = 0;
     loop {
-        let msg = xous::receive_message(trng_sid).unwrap();
+        let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::GetTrng) => xous::msg_blocking_scalar_unpack!(msg, count, _, _, _, {
-                let val: [u32; 2] = trng.get_trng(count);
-                xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
-                    .expect("couldn't return GetTrng request");
+            Some(Opcode::Tick) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                if (state % 2) == 0 {
+                    log::trace!("hook1");
+                    cb_serv.hook_add_callback(do_add).unwrap();
+                    cb_serv.add(1).unwrap();
+                } else {
+                    log::trace!("unhook1");
+                    cb_serv.unhook_add_callback().unwrap();
+                }
+                state += 1;
+            }),
+            Some(Opcode::Sum) => xous::msg_scalar_unpack!(msg, s, _, _, _, {
+                log::info!("C1 sum: {}", s);
             }),
             None => {
                 log::error!("couldn't convert opcode");
@@ -43,8 +66,8 @@ fn xmain() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
-    xns.unregister_server(trng_sid).unwrap();
-    xous::destroy_server(trng_sid).unwrap();
+    xns.unregister_server(sid).unwrap();
+    xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(); loop {}
 }

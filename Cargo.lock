@@ -168,6 +168,7 @@ checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
 name = "cb-test-c1"
 version = "0.1.0"
 dependencies = [
+ "cb-test-srv",
  "heapless",
  "log",
  "log-server",
@@ -185,6 +186,7 @@ dependencies = [
 name = "cb-test-c2"
 version = "0.1.0"
 dependencies = [
+ "cb-test-srv",
  "heapless",
  "log",
  "log-server",

@@ -4,6 +4,18 @@
 mod api;
 use api::*;
 
+use num_traits::{ToPrimitive, FromPrimitive};
+use xous_ipc::*;
+use api::Opcode;
+use xous::{CID, msg_scalar_unpack};
+
+#[derive(Copy, Clone, Debug)]
+struct ScalarCallback {
+    server_to_cb_cid: CID,
+    cb_to_client_cid: CID,
+    cb_to_client_id: u32,
+}
+
 fn pump_thread() {
     log::info!("starting pump thread");
 
@@ -11,141 +23,109 @@ fn pump_thread() {
 
     let xns = xous_names::XousNames::new().unwrap();
     let server_conn = xns.request_connection_blocking(api::SERVER_NAME).expect("can't connect to main program");
-    let mut last_time: u64 = ticktimer.elapsed_ms();
-    let mut start_sent = false;
     loop {
-        let elapsed_time = ticktimer.elapsed_ms();
-        if false {
-            if elapsed_time - last_time > 500 && !start_sent {
-                last_time = elapsed_time;
-                xous::send_message(shell_conn,
-                    xous::Message::new_scalar(Opcode::Start.to_usize().unwrap(), 0, 0, 0, 0)).expect("BENCHMARK|stopwatch: couldn't send Start message");
-                start_sent = true;
-            } else if elapsed_time - last_time > 10_000 && start_sent {
-                last_time = elapsed_time;
-                start_sent = false;
-                xous::send_message(shell_conn,
-                    xous::Message::new_scalar(Opcode::Stop.to_usize().unwrap(), 0, 0, 0, 0)).expect("BENCHMARK|stopwatch: couldn't send Start message");
-            }
-        } else {
-            // send a start loop message
-            xous::send_message(shell_conn,
-                xous::Message::new_scalar(Opcode::Start.to_usize().unwrap(), 0, 0, 0, 0)).expect("BENCHMARK|stopwatch: couldn't send Start message");
-            ticktimer.sleep_ms(10_000).expect("couldn't sleep");
-            // send a stop loop message
-            xous::send_message(shell_conn,
-                xous::Message::new_scalar(Opcode::Stop.to_usize().unwrap(), 0, 0, 0, 0)).expect("BENCHMARK|stopwatch: couldn't send Start message");
-            // give a moment for the result to update
-            ticktimer.sleep_ms(500).expect("couldn't sleep");
-        }
-        xous::yield_slice();
+        xous::send_message(server_conn,
+            xous::Message::new_scalar(Opcode::Tick.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send Tick message");
+        ticktimer.sleep_ms(2_000).expect("couldn't sleep");
     }
 }
 
 #[xous::xous_main]
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
-    info!("BENCHMARK: my PID is {}", xous::process::id());
-
-    info!("BENCHMARK: ticktimer");
-    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let shell_server = xns.register_name(SERVER_NAME_SHELL).expect("BENCHMARK: can't register server");
+    let server = xns.register_name(api::SERVER_NAME).expect("can't register server");
 
-    let gfx = graphics_server::Gfx::new(&xns).unwrap();
-    let target_conn = xns.request_connection_blocking(benchmark_target::api::SERVER_NAME_BENCHMARK).expect("BENCHMARK: can't connect to COM");
+    xous::create_thread_0(pump_thread).unwrap();
+    log::info!("pump thread started");
 
-    xous::create_thread_0(stopwatch_thread).unwrap();
-    info!("BENCHMARK: stopwatch thread started");
+    let mut tick_cb: [Option<ScalarCallback>; 32] = [None; 32];
+    let mut add_cb: [Option<CID>; 32] = [None; 32];
 
-    let screensize = gfx.screen_size().expect("Couldn't get screen size");
-
-    let font_h: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
-
-    let status_clipregion =
-        Rectangle::new_coords_with_style(4, 0, screensize.x, font_h as i16 * 4, DrawStyle::new(PixelColor::Light, PixelColor::Light, 1));
-
-    gfx.draw_rectangle(Rectangle::new_with_style(Point::new(0, 0), screensize,
-            DrawStyle::new(PixelColor::Light, PixelColor::Light, 0)
-        ))
-        .expect("unable to clear region");
-
-    let mut result_tv = TextView::new(graphics_server::Gid::new([0, 0, 0, 0]),
-        TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
-                Point::new(screensize.x, screensize.y - 1))));
-    result_tv.set_op(TextOp::Render);
-    result_tv.clip_rect = Some(status_clipregion.into());
-    result_tv.untrusted = false;
-    result_tv.style = blitstr::GlyphStyle::Small;
-    result_tv.draw_border = false;
-    result_tv.margin = Point::new(3, 0);
-    write!(result_tv, "Initializing...").expect("couldn't init text");
-    gfx.draw_textview(&mut result_tv).unwrap();
-
-    gfx.flush().expect("unable to draw to screen");
-
-    let mut start_time: u64 = 0;
-    let mut stop_time: u64 = 0;
-    let mut update_result: bool = false;
-    let mut count: u32 = 0;
-    let mut check_count: u32 = 0;
+    let mut sum = 0;
     loop {
-        let maybe_env = xous::try_receive_message(shell_server).unwrap();
-        match maybe_env {
-            Some(envelope) => {
-                info!("BENCHMARK: Message: {:?}", envelope);
-                match FromPrimitive::from_usize(envelope.body.id()) {
-                    Some(Opcode::Start) => {
-                        start_time = ticktimer.elapsed_ms();
-                    },
-                    Some(Opcode::Stop) => {
-                        stop_time = ticktimer.elapsed_ms();
-                        update_result = true;
-                    },
-                    None => {
-                        error!("BENCHMARK: couldn't convert opcode");
+        let msg = xous::receive_message(server).unwrap();
+        log::trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::Tick) => {
+                // pump the tick callbacks
+                for maybe_conn in tick_cb.iter_mut() {
+                if let Some(scb) = maybe_conn {
+                    match xous::send_message(scb.server_to_cb_cid,
+                        xous::Message::new_scalar(api::TickCallback::Tick.to_usize().unwrap(),
+                           scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, 0, 0)) {
+                            Err(xous::Error::ServerNotFound) => {
+                                *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+                            },
+                            Ok(xous::Result::Ok) => {}
+                            _ => panic!("unhandled error or result in callback processing")
+                        }
                     }
                 }
+            },
+            Some(Opcode::RegisterTickListener) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut tick_cb);
+            },
+            Some(Opcode::RegisterAddListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = Some(xous::connect(sid).unwrap());
+                let mut found = false;
+                for entry in add_cb.iter_mut() {
+                    if *entry == None {
+                        *entry = cid;
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    log::error!("RegisterTickListener ran out of space registering callback");
+                }
+            }),
+            Some(Opcode::Add) => msg_scalar_unpack!(msg, s, _, _, _, {
+                sum += s;
+                // send results to add listeners
+                for maybe_conn in add_cb.iter_mut() {
+                    if let Some(conn) = maybe_conn {
+                        match xous::send_message(*conn,
+                            xous::Message::new_scalar(api::AddCallback::Sum.to_usize().unwrap(), sum, 0, 0, 0)) {
+                                Err(xous::Error::ServerNotFound) => {
+                                    *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+                                },
+                                Ok(xous::Result::Ok) => {}
+                                _ => panic!("unhandled error or result in callback processing")
+                        }
+                    }
+                }
+            }),
+            None => {
+                log::error!("couldn't convert opcode");
             }
-            None => (), // don't yield, we are trying to run the loop as fast as we can...
         }
+    }
+}
 
-        // actual benchmark
-        // get a scalar message
-        if true {
-            // measured at 1479.2 iterations per second in this loop (hardware); 55/s (hosted)
-
-            // xous v0.8
-            // 29729 per 10s = 2972.9/s (hardware)
-            // 485 per 10s = 48.5/s (hosted)
-            count = benchmark_target::test_scalar(target_conn, count).expect("BENCHMARK: couldn't send test message");
-            check_count = check_count + 1;
-        } else {
-            // works on hosted mode, 35/s (hosted)
-            // measured at 762.6 iterations per second (hardware)
-
-            // xous v0.8
-            // 9,928 per 10s = 992.8/s (hardware)
-            // 243 per 10s = 24.3/s (hosted)
-            count = benchmark_target::test_memory(target_conn, count).expect("BENCHMARK: couldn't send test message");
-            check_count = check_count + 1;
+fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
+    let (s0, s1, s2, s3) = hookdata.sid;
+    let sid = xous::SID::from_u32(s0, s1, s2, s3);
+    let server_to_cb_cid = xous::connect(sid).unwrap();
+    let cb_dat = Some(ScalarCallback {
+        server_to_cb_cid,
+        cb_to_client_cid: hookdata.cid,
+        cb_to_client_id: hookdata.id,
+    });
+    let mut found = false;
+    for entry in cb_conns.iter_mut() {
+        if entry.is_none() {
+            *entry = cb_dat;
+            found = true;
+            break;
         }
-
-        if update_result {
-            update_result = false;
-
-            gfx.draw_rectangle(status_clipregion)
-            .expect("unable to clear region");
-
-            result_tv.clear_str();
-            write!(&mut result_tv, "Elapsed: {}, count: {}, check: {}",
-                stop_time - start_time, count, check_count).unwrap();
-            gfx.draw_textview(&mut result_tv).unwrap();
-            gfx.flush().expect("unable to draw to screen");
-
-            count = 0;
-            check_count = 0;
-        }
+    }
+    if !found {
+        log::error!("ran out of space registering callback");
     }
 }
