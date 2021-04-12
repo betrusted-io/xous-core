@@ -5,6 +5,7 @@
 mod args;
 use args::{KernelArgument, KernelArguments};
 
+use core::num::NonZeroUsize;
 use core::{mem, ptr, slice};
 
 pub type XousPid = u8;
@@ -210,7 +211,7 @@ impl MiniElf {
         println!("Mapping PID {} starting at offset {:08x}", pid, load_offset);
         let mut allocated_bytes = 0;
 
-        let mut page_addr: usize = 0;
+        let mut current_page_addr: usize = 0;
         let mut previous_addr: usize = 0;
 
         // The load offset is the end of this process.  Shift it down by one page
@@ -223,21 +224,15 @@ impl MiniElf {
         allocator.change_owner(pid as XousPid, satp_address);
 
         // Turn the satp address into a pointer
-        println!("    Pagetable");
+        println!("    Pagetable @ {:08x}", satp_address);
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
         allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W);
 
         // Allocate thread 1 for this process
-        println!("    Thread");
         let thread_address = allocator.alloc() as usize;
+        println!("    Thread 1 @ {:08x}", thread_address);
         allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
         allocator.change_owner(pid as XousPid, thread_address as usize);
-
-        // Ensure the pagetables are mapped as well
-        println!("    Pagetables");
-        let pt_addr = allocator.alloc() as usize;
-        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
-        allocator.change_owner(pid as XousPid, pt_addr as usize);
 
         // Allocate stack pages.
         println!("    Stack");
@@ -263,7 +258,7 @@ impl MiniElf {
         // Example: Page starts at 0xf000 and is 128 bytes long
         // 1. Copy 128 bytes to page 1
         //
-        // Example: Page starts at oxf0c0 and is 128 bytes long
+        // Example: Page starts at 0xf0c0 and is 128 bytes long
         // 1. Copy 128 bytes to page 1
         for section in self.sections {
             println!("    Section @ {:08x}", section.virt as usize);
@@ -281,23 +276,46 @@ impl MiniElf {
 
             // If this is not a new page, ensure the uninitialized values from between
             // this section and the previous one are all zeroed out.
-            if this_page != page_addr {
+            if this_page != current_page_addr {
+                println!("1       {:08x} -> {:08x}", top as usize, this_page);
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
                 top -= PAGE_SIZE;
                 this_page += PAGE_SIZE;
-            }
 
-            // Part 1: Copy the first chunk over.
-            let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
-            if first_chunk_size > section.len() {
-                first_chunk_size = section.len();
+                // Part 1: Copy the first chunk over.
+                let mut first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                if first_chunk_size > section.len() {
+                    first_chunk_size = section.len();
+                }
+                bytes_to_copy -= first_chunk_size;
+            } else {
+                println!(
+                    "This page is {:08x}, and last page was {:08x}",
+                    this_page, current_page_addr
+                );
+                // This is a continuation of the previous section, and as a result
+                // the memory will have been copied already. Avoid copying this data
+                // to a new page.
+                let first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
+                println!("First chunk size: {}", first_chunk_size);
+                if bytes_to_copy < first_chunk_size {
+                    bytes_to_copy = 0;
+                    println!("Clamping to 0 bytes");
+                } else {
+                    bytes_to_copy -= first_chunk_size;
+                    println!(
+                        "Clamping to {} bytes by cutting off {} bytes",
+                        bytes_to_copy, first_chunk_size
+                    );
+                }
+                this_page += PAGE_SIZE;
             }
-            bytes_to_copy -= first_chunk_size;
 
             // Part 2: Copy any full pages.
             while bytes_to_copy > PAGE_SIZE {
+                println!("2       {:08x} -> {:08x}", top as usize, this_page);
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
@@ -309,6 +327,7 @@ impl MiniElf {
             // Part 3: Copy the final residual partial page
             if bytes_to_copy > 0 {
                 let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
+                println!("3       {:08x} -> {:08x}", top as usize, this_page);
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
@@ -316,7 +335,7 @@ impl MiniElf {
             }
 
             previous_addr = section.virt as usize + section.len();
-            page_addr = previous_addr & !(PAGE_SIZE - 1);
+            current_page_addr = previous_addr & !(PAGE_SIZE - 1);
         }
 
         let mut process = &mut allocator.processes[pid as usize - 1];
@@ -416,13 +435,12 @@ impl ProgramDescription {
         allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
         allocator.change_owner(pid as XousPid, thread_address as usize);
 
-        // Ensure the pagetables are mapped as well
-        let pt_addr = allocator.alloc() as usize;
-        allocator.map_page(satp, pt_addr, PAGE_TABLE_OFFSET, FLG_R | FLG_W);
-        allocator.change_owner(pid as XousPid, pt_addr as usize);
-
         // Allocate stack pages.
-        for i in 0..if is_kernel { KERNEL_STACK_PAGE_COUNT} else { STACK_PAGE_COUNT } {
+        for i in 0..if is_kernel {
+            KERNEL_STACK_PAGE_COUNT
+        } else {
+            STACK_PAGE_COUNT
+        } {
             let sp_page = allocator.alloc() as usize;
             allocator.map_page(
                 satp,
@@ -710,7 +728,11 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 // Part 3: Copy the final residual partial page
                 if bytes_to_copy > 0 {
-                    println!("Copying final section -- {} bytes", bytes_to_copy);
+                    println!(
+                        "Copying final section -- {} bytes @ {:08x}",
+                        bytes_to_copy,
+                        section.virt + (section.len() as u32) - (bytes_to_copy as u32)
+                    );
                     cfg.extra_pages += 1;
                     top = cfg.get_top() as *mut u8;
                     if !section.no_copy() {
@@ -905,38 +927,52 @@ impl BootConfig {
         assert!(vpo < 4096);
 
         let l1_pt = &mut root.entries;
-        let mut new_addr = 0;
+        let mut new_addr = None;
 
         // Allocate a new level 1 pagetable entry if one doesn't exist.
         if l1_pt[vpn1] & FLG_VALID == 0 {
-            new_addr = self.alloc() as usize;
+            let na = self.alloc() as usize;
+            println!("The Level 1 page table is invalid ({:08x}) @ {:08x} -- allocating a new one @ {:08x}",
+                unsafe { l1_pt.as_ptr().add(vpn1) } as usize, l1_pt[vpn1], na);
             // Mark this entry as a leaf node (WRX as 0), and indicate
             // it is a valid page by setting "V".
-            l1_pt[vpn1] = ((new_addr >> 12) << 10) | FLG_VALID;
+            l1_pt[vpn1] = ((na >> 12) << 10) | FLG_VALID;
+            new_addr = Some(NonZeroUsize::new(na).unwrap());
         }
 
         let l0_pt_idx =
             unsafe { &mut (*(((l1_pt[vpn1] << 2) & !((1 << 12) - 1)) as *mut PageTable)) };
         let l0_pt = &mut l0_pt_idx.entries;
 
-        // Ensure the entry hasn't already been mapped.
-        // if l0_pt[vpn0] & 1 != 0 {
-        //     panic!("Page already allocated!");
-        // }
+        // Ensure the entry hasn't already been mapped to a different address.
+        if l0_pt[vpn0] & 1 != 0 && (l0_pt[vpn0] & 0xffff_fc00) != ((ppn1 << 20) | (ppn0 << 10)) {
+            panic!(
+                "Page {:08x} was already allocated to {:08x}, so cannot map to {:08x}!",
+                phys,
+                (l0_pt[vpn0] >> 10) << 12,
+                virt
+            );
+        }
         let previous_flags = l0_pt[vpn0] & 0xf;
         l0_pt[vpn0] =
             (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_VALID | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's
-        // mapped into our address space.
-        if new_addr != 0 {
+        // mapped into our address space, owned by PID 1.
+        if let Some(addr) = new_addr {
+            println!(
+                ">>> Mapping new address {:08x} -> {:08x}",
+                addr.get(),
+                PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE
+            );
             self.map_page(
                 root,
-                new_addr,
+                addr.get(),
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE,
                 FLG_R | FLG_W,
             );
-            self.change_owner(1 as XousPid, new_addr as usize);
+            self.change_owner(1 as XousPid, addr.get());
+            println!("<<< Done mapping new address");
         }
     }
 }
@@ -1042,7 +1078,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     println!("Font maps located as follows:");
     println!("  Hanzi @ {:08x}", fonts::hanzi::DATA_HANZI.as_ptr() as u32);
     println!("  Emoji @ {:08x}", fonts::emoji::DATA_EMOJI.as_ptr() as u32);
-    println!("  Regular @ {:08x}", fonts::regular::DATA_REGULAR.as_ptr() as u32);
+    println!(
+        "  Regular @ {:08x}",
+        fonts::regular::DATA_REGULAR.as_ptr() as u32
+    );
     println!("  Small @ {:08x}", fonts::small::DATA_SMALL.as_ptr() as u32);
     println!("  Bold @ {:08x}", fonts::bold::DATA_BOLD.as_ptr() as u32);
 

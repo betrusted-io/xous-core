@@ -1,9 +1,15 @@
 #![cfg_attr(target_os = "none", no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
-use xous_ipc::{String, Buffer};
+use xous_ipc::{Buffer, String};
 
 pub mod api;
+
+#[derive(Debug)]
+pub enum LogError {
+    LoggerExists,
+    NoConnection,
+}
 
 static XOUS_LOGGER: XousLogger = XousLogger {
     locked: AtomicBool::new(false),
@@ -13,33 +19,41 @@ struct XousLogger {
     locked: AtomicBool,
 }
 
-static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
-    conn: 0,
-    initialized: false,
-    buffer: None,
-};
+// static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
+//     conn: 0,
+//     initialized: false,
+//     buffer: None,
+// };
+
+static mut XOUS_LOGGER_BACKING: Option<XousLoggerBacking> = None;
 
 struct XousLoggerBacking<'a> {
     conn: xous::CID,
-    buffer: Option<Buffer<'a>>,
-    initialized: bool,
+    buffer: Buffer<'a>,
+}
+
+impl<'a> XousLoggerBacking<'a> {
+    pub fn new() -> Result<Self, xous::Error> {
+        Ok(XousLoggerBacking {
+            conn: xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?,
+            // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
+            buffer: Buffer::new(4000),
+        })
+    }
+}
+
+impl Default for XousLoggerBacking<'_> {
+    fn default() -> Self {
+        XousLoggerBacking {
+            conn: xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap(),
+            // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
+            buffer: Buffer::new(4000),
+        }
+    }
 }
 
 impl XousLoggerBacking<'_> {
-    fn init(&mut self) -> Result<(), xous::Error> {
-        if self.initialized {
-            return Ok(());
-        }
-        self.conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?;
-        self.buffer = Some(Buffer::new(4000)); // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
-        self.initialized = true;
-        Ok(())
-    }
-
     fn log_impl(&mut self, record: &log::Record) {
-        if !self.initialized && self.init().is_err() {
-            return;
-        }
         let mut args = String::<2800>::new();
         write!(args, "{}", record.args()).unwrap();
         let lr = api::LogRecord {
@@ -50,10 +64,8 @@ impl XousLoggerBacking<'_> {
             args,
         };
 
-        if let Some(buf) = self.buffer.as_mut() {
-            buf.rewrite(lr).unwrap();
-            buf.lend(self.conn, 0).unwrap(); // there is only one type of buffer we should be sending!
-        }
+        self.buffer.rewrite(lr).unwrap();
+        self.buffer.lend(self.conn, 0).unwrap(); // there is only one type of buffer we should be sending!
     }
 }
 
@@ -71,7 +83,10 @@ impl log::Log for XousLogger {
             xous::yield_slice();
         }
 
-        unsafe { XOUS_LOGGER_BACKING.log_impl(record) };
+        if unsafe { XOUS_LOGGER_BACKING.is_none() } {
+            unsafe { XOUS_LOGGER_BACKING = Some(XousLoggerBacking::default()) };
+        }
+        unsafe { XOUS_LOGGER_BACKING.as_mut().unwrap().log_impl(record) };
         self.locked
             .compare_exchange(true, false, Ordering::SeqCst, Ordering::Acquire)
             .expect("LOG: logger became unlocked somehow");
@@ -79,19 +94,30 @@ impl log::Log for XousLogger {
     fn flush(&self) {}
 }
 
-pub fn init() -> Result<(), log::SetLoggerError> {
-    log::set_logger(&XOUS_LOGGER)?;
-    log::set_max_level(log::LevelFilter::Info);
-    Ok(())
+pub fn init() -> Result<(), LogError> {
+    if let Ok(backing) = XousLoggerBacking::new() {
+        unsafe {
+            XOUS_LOGGER_BACKING = Some(backing);
+        }
+        log::set_logger(&XOUS_LOGGER).map_err(|_| LogError::LoggerExists)?;
+        log::set_max_level(log::LevelFilter::Info);
+        Ok(())
+    } else {
+        Err(LogError::NoConnection)
+    }
 }
 
 pub fn init_wait() -> Result<(), log::SetLoggerError> {
+    loop {
+        if let Ok(backing) = XousLoggerBacking::new() {
+            unsafe {
+                XOUS_LOGGER_BACKING = Some(backing);
+                break;
+            }
+        }
+        xous::yield_slice();
+    }
     log::set_logger(&XOUS_LOGGER)?;
     log::set_max_level(log::LevelFilter::Info);
-    unsafe {
-        while XOUS_LOGGER_BACKING.init().is_err() {
-            xous::yield_slice();
-        }
-    }
     Ok(())
 }
