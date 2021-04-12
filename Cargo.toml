@@ -21,6 +21,9 @@ default-members = [
   "services/llio",
   "services/rtc",
   "services/trng-tester",
+  "services/cb-test-srv",
+  "services/cb-test-c1",
+  "services/cb-test-c2",
 ]
 members = [
   "xous-ipc",
@@ -53,6 +56,9 @@ members = [
   "services/llio",
   "services/rtc",
   "services/trng-tester",
+  "services/cb-test-srv",
+  "services/cb-test-c1",
+  "services/cb-test-c2",
 ]
 resolver = "2"
 

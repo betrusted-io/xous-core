@@ -80,6 +80,16 @@ fn try_main() -> Result<(), DynError> {
         "rkyv-test-client",
         "rkyv-test-server",
     ];
+    let cbtest_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "xous-names",
+        "trng",
+        "llio",
+        "cb-test-srv",
+        "cb-test-c1",
+        "cb-test-c2",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
@@ -99,6 +109,7 @@ fn try_main() -> Result<(), DynError> {
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs)?,
+        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs)?,
         Some("debug") => run(true, &hw_pkgs)?,
         _ => print_help(),
     }
@@ -117,6 +128,7 @@ debug                   runs a debug build using a hosted environment
 benchmark [soc.svd]     builds a benchmarking image for real hardware
 fcc-agent [soc.svd]     builds a version suitable for FCC testing
 minimal [soc.svd]       builds a minimal image for API testing
+cbtest                  builds an image for callback testing
 "
     )
 }
