@@ -1,11 +1,12 @@
 use utralib::generated::*;
 pub struct Uart {
-    pub base: *mut u32,
+    // pub base: *mut u32,
 }
 
 impl Uart {
     pub fn putc(&self, c: u8) {
-        let mut uart = CSR::new(self.base);
+        let base = utra::uart::HW_UART_BASE as *mut u32;
+        let mut uart = CSR::new(base);
         // Wait until TXFULL is `0`
         while uart.r(utra::uart::TXFULL) != 0 {}
         uart.wo(utra::uart::RXTX, c as u32)
@@ -25,17 +26,12 @@ impl Write for Uart {
 #[macro_use]
 #[cfg(all(not(test), feature = "debug-print"))]
 pub mod debug_print_hardware {
-    use crate::debug::*;
-    pub const SUPERVISOR_UART: Uart = Uart {
-        base: utra::uart::HW_UART_BASE as *mut u32,
-    };
-
     #[macro_export]
     macro_rules! print
     {
         ($($args:tt)+) => ({
                 use core::fmt::Write;
-                let _ = write!(crate::debug::debug_print_hardware::SUPERVISOR_UART, $($args)+);
+                let _ = write!(crate::debug::Uart {}, $($args)+);
         });
     }
 }
