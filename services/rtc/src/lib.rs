@@ -30,25 +30,14 @@ impl Rtc {
         buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())
     }
     pub fn unhook_rtc_callback(&mut self) -> Result<(), xous::Error> {
-        if let Some(sid) = self.callback_sid.take() {
-            // tell my handler thread to quit
-            log::trace!("connect for unhook");
-            let cid = xous::connect(sid).expect("can't connect to CB server for disconnect message");
-            log::trace!("sending drop to conn {}", cid);
-            send_message(cid,
-                Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
-            ).unwrap();
-            log::trace!("disconnecting unhook connection");
-            unsafe{
-                match xous::disconnect(cid) {
-                    Ok(_) => log::trace!("disconnected unhook connection"),
-                    Err(e) => log::error!("unhook rtc got error: {:?}", e),
-                };
-            }
-        }
-        log::trace!("nullifying local state");
-        self.callback_sid = None;
         unsafe{RTC_CB = None};
+        if let Some(sid) = self.callback_sid {
+            let sid_tuple = sid.to_u32();
+            xous::send_message(self.conn,
+            Message::new_scalar(Opcode::UnregisterDateTimeCallback.to_usize().unwrap(),
+            sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
         Ok(())
     }
     pub fn hook_rtc_callback(&mut self, cb: fn(DateTime)) -> Result<(), xous::Error> {
@@ -57,7 +46,13 @@ impl Rtc {
             return Err(xous::Error::MemoryInUse)
         }
         unsafe{RTC_CB = Some(cb)};
-        if self.callback_sid.is_none() {
+        if let Some(sid) = self.callback_sid {
+            let sid_tuple = sid.to_u32();
+            xous::send_message(self.conn,
+                Message::new_scalar(Opcode::RegisterDateTimeCallback.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        } else {
             let sid = xous::create_server().unwrap();
             self.callback_sid = Some(sid);
             let sid_tuple = sid.to_u32();
@@ -135,7 +130,10 @@ fn rtc_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     if let Some(cb) = RTC_CB {
                         cb(dt)
                     } else {
-                        break;
+                        // callback happened after we unregistered
+                        // this is a race condition, but it's also a harmless side effect
+                        // we handle it by just ignoring the message
+                        continue;
                     }
                 }
             }

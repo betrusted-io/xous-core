@@ -4,6 +4,7 @@ pub(crate) const SERVER_NAME: &str    = "_Callback test server_";
 pub(crate) enum Opcode {
     RegisterTickListener,
     RegisterReqListener,
+    UnregisterReqListener,
     Tick,
     Req,
 }

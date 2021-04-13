@@ -43,12 +43,18 @@ impl CbTestServer {
         }
     }
     pub fn hook_req_callback(&mut self, cb: fn(u32)) -> Result<(), xous::Error> {
-        log::trace!("hooking req callback");
+        log::info!("hooking req callback");
         if unsafe{REQ_CB}.is_some() {
             return Err(xous::Error::MemoryInUse)
         }
         unsafe{REQ_CB = Some(cb)};
-        if self.req_cb_sid.is_none() {
+        if let Some(sid) = self.req_cb_sid {
+            let sid_tuple = sid.to_u32();
+            xous::send_message(self.conn,
+                Message::new_scalar(Opcode::RegisterReqListener.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        } else {
             let sid = xous::create_server().unwrap();
             self.req_cb_sid = Some(sid);
             let sid_tuple = sid.to_u32();
@@ -61,6 +67,10 @@ impl CbTestServer {
         Ok(())
     }
     pub fn unhook_req_callback(&mut self) -> Result<(), xous::Error> {
+        log::info!("UNhooking req callback");
+        unsafe{REQ_CB = None};
+
+        /*
         if let Some(sid) = self.req_cb_sid.take() {
             // tell my handler thread to quit
             log::trace!("connect for unhook");
@@ -78,8 +88,14 @@ impl CbTestServer {
             }
         }
         log::trace!("nullifying local state");
-        self.req_cb_sid = None;
-        unsafe{REQ_CB = None};
+        self.req_cb_sid = None; */
+        if let Some(sid) = self.req_cb_sid {
+            let sid_tuple = sid.to_u32();
+            xous::send_message(self.conn,
+            Message::new_scalar(Opcode::UnregisterReqListener.to_usize().unwrap(),
+            sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
         Ok(())
     }
 }
@@ -124,7 +140,7 @@ fn tick_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
 fn req_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    log::trace!("req callback server started");
+    log::info!("req callback server started with SID {:x?}", sid);
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::trace!("req callback got msg: {:?}", msg);
@@ -134,7 +150,10 @@ fn req_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     if let Some(cb) = REQ_CB {
                         cb(result as u32)
                     } else {
-                        break;
+                        // we got a callback message after we unregistered
+                        // not fatal, it just means the server may not have received
+                        // our unregistration message in time
+                        continue;
                     }
                 }
             }),
@@ -146,6 +165,6 @@ fn req_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }
         }
     }
-    log::trace!("req callback server exiting");
+    log::info!("req callback server exiting");
     xous::destroy_server(sid).expect("can't destroy my server on exit!");
 }

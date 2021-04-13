@@ -26,14 +26,14 @@ fn pump_thread() {
     loop {
         xous::send_message(server_conn,
             xous::Message::new_scalar(Opcode::Tick.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send Tick message");
-        ticktimer.sleep_ms(500).expect("couldn't sleep");
+        ticktimer.sleep_ms(100).expect("couldn't sleep");
     }
 }
 
 #[xous::xous_main]
 fn shell_main() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -43,7 +43,7 @@ fn shell_main() -> ! {
     log::info!("pump thread started");
 
     let mut tick_cb: [Option<ScalarCallback>; 32] = [None; 32];
-    let mut req_cb: [bool; 32] = [false; 32];
+    let mut req_cb: [bool; 34] = [false; 34];
 
     let mut ticks = 0;
     let mut state = 0;
@@ -83,21 +83,20 @@ fn shell_main() -> ! {
                 } else {
                     log::error!("cid out of allowable range");
                 }
-                /*
-                let mut found = false;
-                for entry in req_cb.iter_mut() {
-                    if *entry == None {
-                        *entry = cid;
-                        found = true;
-                        break;
-                    }
+            }),
+            Some(Opcode::UnregisterReqListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = xous::connect(sid).unwrap(); // if the connection already exists, this just looks it up in the table
+                log::info!("UnregisterReqListener cid {}", cid);
+                if (cid as usize) < req_cb.len() {
+                    req_cb[cid as usize] = false;
+                } else {
+                    log::error!("cid out of allowable range");
                 }
-                if !found {
-                    log::error!("RegisterTickListener ran out of space registering callback");
-                }*/
+                unsafe{xous::disconnect(cid).unwrap()};
             }),
             Some(Opcode::Req) => msg_scalar_unpack!(msg, _, _, _, _, {
-                //log::debug!("req_cb: {:?}", req_cb);
+                log::debug!("req_cb: {:?}", req_cb);
                 // send results to request listeners
                 for cid in 1..req_cb.len() { // 0 is not a valid connection
                     if req_cb[cid as usize] {

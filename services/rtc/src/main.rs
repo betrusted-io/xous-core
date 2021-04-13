@@ -6,7 +6,7 @@ mod api;
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use api::{Return, Opcode, DateTime};
-use xous::{CID, msg_scalar_unpack};
+use xous::msg_scalar_unpack;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
@@ -534,7 +534,7 @@ fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -549,7 +549,7 @@ fn xmain() -> ! {
     let mut rtc = Rtc::new(&xns);
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
-    let mut dt_cb_conns: [Option<CID>; 32] = [None; 32];
+    let mut dt_cb_conns: [bool; 34] = [false; 34];
     log::trace!("ready to accept requests");
     loop {
         let msg = xous::receive_message(rtc_sid).unwrap();
@@ -586,33 +586,35 @@ fn xmain() -> ! {
             },
             Some(Opcode::RegisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                let cid = Some(xous::connect(sid).unwrap());
-                let mut found = false;
-                for entry in dt_cb_conns.iter_mut() {
-                    if *entry == None {
-                        *entry = cid;
-                        found = true;
-                        break;
-                    }
-                }
-                if !found {
-                    log::error!("RegisterDateTimeCallback listener ran out of space registering callback");
+                let cid = xous::connect(sid).unwrap();
+                if (cid as usize) < dt_cb_conns.len() {
+                    dt_cb_conns[cid as usize] = true;
                 } else {
-                    log::trace!("RegisterDateTimeCallback completed");
+                    // this should "never" happen because we only have up to 32 connections possible per server
+                    log::error!("RegisterDateTimeCallback received a CID out of range");
+                }
+            }),
+            Some(Opcode::UnregisterDateTimeCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                let cid = xous::connect(sid).unwrap();
+                if (cid as usize) < dt_cb_conns.len() {
+                    dt_cb_conns[cid as usize] = false;
+                } else {
+                    log::error!("UnregisterDateTimeCallback CID out of allowable range");
                 }
             }),
             Some(Opcode::ResponseDateTime) => {
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
                 log::trace!("ResponseDateTime received: {:?}", dt);
-                for maybe_conn in dt_cb_conns.iter_mut() {
-                    if let Some(conn) = maybe_conn {
+                for cid in 1..dt_cb_conns.len() { // 0 is not a valid connection
+                    if dt_cb_conns[cid as usize] {
                         let outgoing_buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
-                        log::trace!("ResponeDateTime sending to {}", *conn);
-                        match outgoing_buf.lend(*conn, Return::ReturnDateTime.to_u32().unwrap()) {
+                        log::trace!("ResponeDateTime sending to {}", cid);
+                        match outgoing_buf.lend(cid as u32, Return::ReturnDateTime.to_u32().unwrap()) {
                             Err(xous::Error::ServerNotFound) => {
                                 log::trace!("ServerNotFound, dropping connection");
-                                *maybe_conn = None
+                                dt_cb_conns[cid] = false;
                             },
                             Ok(_) => {
                                 log::trace!("RespondeDateTime sent successfully");
@@ -667,14 +669,14 @@ fn xmain() -> ! {
             xous::disconnect(cb_to_main_conn).unwrap();
         }
     }
-    for entry in dt_cb_conns.iter_mut() {
-        if let Some(conn) = entry {
-            xous::send_message(*conn,
+    for cid in 1..dt_cb_conns.len() {
+        if dt_cb_conns[cid as usize] {
+            xous::send_message(cid as u32,
                 xous::Message::new_scalar(Return::Drop.to_usize().unwrap(), 0, 0, 0, 0)
             ).unwrap();
-            unsafe{xous::disconnect(*conn).unwrap();}
+            unsafe{xous::disconnect(cid as u32).unwrap();}
+            dt_cb_conns[cid as usize] = false;
         }
-        *entry = None;
     }
     xns.unregister_server(rtc_sid).unwrap();
     xous::destroy_server(rtc_sid).unwrap();

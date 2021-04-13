@@ -35,6 +35,9 @@ pub(crate) enum Opcode {
     /// register a callback for the datetime
     RegisterDateTimeCallback,
 
+    /// unregister a callback for the datetime
+    UnregisterDateTimeCallback,
+
     /// sets the datetime
     SetDateTime, //(DateTime),
 

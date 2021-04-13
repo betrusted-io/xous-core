@@ -98,7 +98,7 @@ fn try_main() -> Result<(), DynError> {
             &cbtest_pkgs,
         )?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
-        Some("run") => run(false, &cbtest_pkgs)?,
+        Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
