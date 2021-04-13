@@ -3,9 +3,9 @@ pub(crate) const SERVER_NAME: &str    = "_Callback test server_";
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     RegisterTickListener,
-    RegisterAddListener,
+    RegisterReqListener,
     Tick,
-    Add,
+    Req,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -15,8 +15,8 @@ pub enum TickCallback {
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum AddCallback {
-    Sum,
+pub enum ResultCallback {
+    Result,
     Drop,
 }
 

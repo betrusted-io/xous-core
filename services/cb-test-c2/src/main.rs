@@ -9,16 +9,16 @@ const SERVER_NAME: &str = "_CB test client 2_";
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum Opcode {
     Tick,
-    Sum,
+    Result,
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
-fn do_add(sum: u32) {
+fn do_result(result: u32) {
     let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
     if cb_to_main_conn != 0 {
         xous::send_message(cb_to_main_conn,
-            xous::Message::new_scalar(Opcode::Sum.to_usize().unwrap(), sum as usize, 0, 0, 0)
+            xous::Message::new_scalar(Opcode::Result.to_usize().unwrap(), result as usize, 0, 0, 0)
         ).unwrap();
     }
 }
@@ -26,7 +26,7 @@ fn do_add(sum: u32) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -41,24 +41,29 @@ fn xmain() -> ! {
 
     log::trace!("ready to accept requests");
     let mut state = 0;
+    let mut hooked = false;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::Tick) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
-                if (state % 3) == 0 {
+                if (state % 4) == 0 {
                     log::trace!("hook2");
-                    cb_serv.hook_add_callback(do_add).unwrap();
-                    cb_serv.add(1).unwrap();
-                } else if (state % 3) == 2 {
-                    log::trace!("unhook2");
-                    cb_serv.unhook_add_callback().unwrap();
+                    cb_serv.hook_req_callback(do_result).unwrap();
+                    hooked = true;
+                    cb_serv.req().unwrap();
                 } else {
                     log::trace!("idle2");
                 }
                 state += 1;
             }),
-            Some(Opcode::Sum) => xous::msg_scalar_unpack!(msg, s, _, _, _, {
-                log::info!("C2 sum: {}", s);
+            Some(Opcode::Result) => xous::msg_scalar_unpack!(msg, result, _, _, _, {
+                log::info!("C2 result: {}", result);
+                if hooked == false {
+                    log::info!("**C2 without hook");
+                }
+                cb_serv.unhook_req_callback().unwrap();
+                hooked = false;
+                log::trace!("unhook1");
             }),
             None => {
                 log::error!("couldn't convert opcode");
