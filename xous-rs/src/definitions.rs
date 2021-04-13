@@ -9,6 +9,8 @@ pub type MessageId = usize;
 pub type PID = NonZeroU8;
 pub type Connection = usize;
 
+pub const MAX_CID: usize = 34;
+
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
     data: usize,
