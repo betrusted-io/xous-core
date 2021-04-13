@@ -43,7 +43,7 @@ fn shell_main() -> ! {
     log::info!("pump thread started");
 
     let mut tick_cb: [Option<ScalarCallback>; 32] = [None; 32];
-    let mut req_cb: [bool; 34] = [false; 34];
+    let mut req_cb: [bool; xous::MAX_CID] = [false; xous::MAX_CID];
 
     let mut ticks = 0;
     let mut state = 0;

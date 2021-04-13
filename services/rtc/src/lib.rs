@@ -46,22 +46,19 @@ impl Rtc {
             return Err(xous::Error::MemoryInUse)
         }
         unsafe{RTC_CB = Some(cb)};
+        let sid_tuple: (u32, u32, u32, u32);
         if let Some(sid) = self.callback_sid {
-            let sid_tuple = sid.to_u32();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterDateTimeCallback.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
+            sid_tuple = sid.to_u32();
         } else {
             let sid = xous::create_server().unwrap();
             self.callback_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
+            sid_tuple = sid.to_u32();
             xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterDateTimeCallback.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
         }
+        xous::send_message(self.conn,
+            Message::new_scalar(Opcode::RegisterDateTimeCallback.to_usize().unwrap(),
+            sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+        )).unwrap();
         Ok(())
     }
     // this simply forwards the hook on to the LLIO library, which actually owns the Event peripheral where the interrupt is generated

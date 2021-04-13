@@ -48,22 +48,19 @@ impl CbTestServer {
             return Err(xous::Error::MemoryInUse)
         }
         unsafe{REQ_CB = Some(cb)};
+        let sid_tuple: (u32, u32, u32, u32);
         if let Some(sid) = self.req_cb_sid {
-            let sid_tuple = sid.to_u32();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterReqListener.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
+            sid_tuple = sid.to_u32();
         } else {
             let sid = xous::create_server().unwrap();
             self.req_cb_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
+            sid_tuple = sid.to_u32();
             xous::create_thread_4(req_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            xous::send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterReqListener.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
         }
+        xous::send_message(self.conn,
+            Message::new_scalar(Opcode::RegisterReqListener.to_usize().unwrap(),
+            sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+        )).unwrap();
         Ok(())
     }
     pub fn unhook_req_callback(&mut self) -> Result<(), xous::Error> {

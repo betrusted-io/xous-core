@@ -79,6 +79,7 @@ pub(crate) enum Opcode {
    ExampleMemory,
    ExampleMemoryWithReturn,
    RegisterCallback,
+   UnregisterCallback,
 }
 ```
 
@@ -219,18 +220,32 @@ impl MyServer {
       if unsafe{MYSERVER_CB}.is_some() {
           return Err(xous::Error::MemoryInUse) // can't hook it twice
       }
+      let sid_tuple = (u32, u32, u32, u32);
       unsafe{MYSERVER_CB = Some(cb)};
-      if self.callback_sid.is_none() {
-          let sid = xous::create_server().unwrap();
-          self.callback_sid = Some(sid);
-          let sid_tuple = sid.to_u32();
-          xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-          xous::send_message(self.conn,
-              Message::new_scalar(Opcode::RegisterCallback.to_usize().unwrap(),
-              sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-          )).unwrap();
+      if let Some(sid) = self.callback_sid {
+        sid_tuple = sid.to_u32();
+      } else {
+        let sid = xous::create_server().unwrap();
+        self.callback_sid = Some(sid);
+        sid_tuple = sid.to_u32();
+        xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
       }
+      xous::send_message(self.conn,
+          Message::new_scalar(Opcode::RegisterCallback.to_usize().unwrap(),
+          sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+      )).unwrap();
       Ok(())
+  }
+  pub fn unhook_callback(&mut self) -> Result<(), xous::Error> {
+    unsafe{MYSERVER_CB = None};
+    if let Some(sid) = self.callback_sid {
+      let sid_tuple = sid.to_u32();
+      xous::send_message(self.conn,
+        Message::new_scalar(Opcode::UnregisterCallback.to_usize().unwrap(),
+        sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+      )).unwrap();
+    }
+    Ok(())
   }
 }
 
@@ -244,6 +259,10 @@ fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 unsafe {
                     if let Some(cb) = MYSERVER_CB {
                         cb(a as u32)
+                    } else {
+                      // this results in a race condition between the unregister message and the actual
+                      // unregistration. In this case, just ignore the message.
+                      continue;
                     }
                 }
             }),
@@ -306,7 +325,7 @@ fn xmain() -> ! {
     trace!("registered with NS -- {:?}", sid);
 
     // only needed if doing callbacks
-    let mut cb_conns: [Option<CID>; 32] = [None; 32];
+    let mut cb_conns: [bool; xous::MAX_CID] = [false; xous::MAX_CID]; // 34 to hold maximum connection ID number
 
     loop {
       let msg = xous::receive_message(sid).unwrap(); // this blocks until we get a message
@@ -342,20 +361,24 @@ fn xmain() -> ! {
         // only needed if doing callbacks
         Some(Opcode::RegisterCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
             let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-            let cid = Some(xous::connect(sid).unwrap());
-            let mut found = false;
-            for entry in cb_conns.iter_mut() {
-                if *entry == None {
-                    *entry = cid;
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                error!("RegisterCallback listener ran out of space registering callback");
+            let cid = xous::connect(sid).unwrap();
+            if (cid as usize) < cb_conns.len() {
+              cb_conns[cid as usize] = true;
+            } else {
+              error!("RegisterCallback CID out of range");
             }
           }
         ),
+        Some(Opcode::UnregisterCallback) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+            let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+            let cid = xous::connect(sid).unwrap();
+            if (cid as usize) < cb_conns.len() {
+              cb_conns[cid as usize] = false;
+            } else {
+              error!("UnregisterCallback CID out of range");
+            }
+            unsafe{xous::disconnect(cid).unwrap()};
+        })
         None => log::error!("couldn't convert opcode")
       }
 
@@ -374,15 +397,15 @@ fn xmain() -> ! {
 ///  1. Define a crate-local API to pass the messages
 ///  2. Use Atomic data types (only applicable if you have primitive data to send)
 ///  3. Do some static mut unsafe thing because we don't have a Mutex data type yet.
-fn do_callback(cb_conns: &mut [Option<CID>; 32]) {
+fn do_callback(cb_conns: &mut [bool; xous::MAX_CID]) {
   let a = useful_computation();
-  for maybe_conn in cb_conns.iter_mut() { // this code is notional and probably doesn't work
-    if let Some(conn) = maybe_conn {
-       match xous::send_message(*conn,
+  for cid in 1..cb_conns {
+    if cb_conns[cid] {
+       match xous::send_message(cid,
          xous::Message::new_scalar(api::Callback::Hello.to_usize().unwrap(), a, 0, 0, 0)
        ) {
          Err(xous::Error::ServerNotFound) => {
-           *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+           cb_conns[cid] = false // automatically de-allocate callbacks for clients that have dropped
          },
          Ok(xous::Result::Ok) => {}
          _ => panic!("unhandled error or result in callback processing")

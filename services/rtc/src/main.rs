@@ -549,7 +549,7 @@ fn xmain() -> ! {
     let mut rtc = Rtc::new(&xns);
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer");
-    let mut dt_cb_conns: [bool; 34] = [false; 34];
+    let mut dt_cb_conns: [bool; xous::MAX_CID] = [false; xous::MAX_CID];
     log::trace!("ready to accept requests");
     loop {
         let msg = xous::receive_message(rtc_sid).unwrap();
@@ -602,6 +602,7 @@ fn xmain() -> ! {
                 } else {
                     log::error!("UnregisterDateTimeCallback CID out of allowable range");
                 }
+                unsafe{xous::disconnect(cid).unwrap()};
             }),
             Some(Opcode::ResponseDateTime) => {
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
