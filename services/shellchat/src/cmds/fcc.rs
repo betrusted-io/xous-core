@@ -2,6 +2,7 @@ use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 use com::Com;
 use ticktimer_server::Ticktimer;
+use llio::Llio;
 
 use crate::cmds::pds::PDS_DATA;
 use crate::cmds::pds::PDS_STOP_DATA;
@@ -44,8 +45,8 @@ impl Fcc {
     pub fn new() -> Fcc {
         xous::create_thread_0(callback_thread).expect("couldn't create callback generator thread");
         Fcc {
-            channel: Some(2), // default to simplify testing, replace with None
-            rate: Some(Rate::B1Mbps),  // default to simplify testing, replace with None
+            channel: None, //Some(2), // default to simplify testing, replace with None
+            rate: None, //Some(Rate::B1Mbps),  // default to simplify testing, replace with None
             pds_list: [None; 8],
             go: false,
             tx_start_time: 0,
@@ -66,13 +67,15 @@ impl Fcc {
             *pds = None;
         }
     }
-    fn stop_tx(&mut self, com: &com::Com, ticktimer: &Ticktimer) {
+    fn stop_tx(&mut self, _com: &com::Com, ticktimer: &Ticktimer, llio: &Llio) {
         CB_RUN.store(false, Ordering::Relaxed); // make sure the callback function is disabled
         self.go = false;
         self.clear_pds();
-        self.pds_list[0] = Some(String::<512>::from_str(PDS_STOP_DATA));
-        self.send_pds(&com, &ticktimer);
-        self.clear_pds();
+        //self.pds_list[0] = Some(String::<512>::from_str(PDS_STOP_DATA));
+        //self.send_pds(&com, &ticktimer);
+        //self.clear_pds();
+        llio.ec_reset().unwrap();
+        ticktimer.sleep_ms(2000).unwrap();
     }
 }
 impl<'a> ShellCmdApi<'a> for Fcc {
@@ -99,7 +102,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                     write!(ret, "Wf200 fw rev {}.{}.{}", maj, min, rev).unwrap();
                 }
                 "stop" => {
-                    self.stop_tx(&env.com, &env.ticktimer);
+                    self.stop_tx(&env.com, &env.ticktimer, &env.llio);
                     write!(ret, "{}", "Transmission stopped").unwrap();
                 },
                 "go" => {
@@ -161,8 +164,26 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                             "b2" => self.rate = Some(Rate::B2Mbps),
                             "b5.5" => self.rate = Some(Rate::B5_5Mbps),
                             "b11" => self.rate = Some(Rate::B11Mbps),
-                            // fill in remainder later
+                            "g6" => self.rate = Some(Rate::G6Mbps),
+                            "g9" => self.rate = Some(Rate::G9Mbps),
+                            "g12" => self.rate = Some(Rate::G12Mbps),
+                            "g18" => self.rate = Some(Rate::G18Mbps),
+                            "g24" => self.rate = Some(Rate::G24Mbps),
+                            "g36" => self.rate = Some(Rate::G36Mbps),
+                            "g48" => self.rate = Some(Rate::G48Mbps),
+                            "g54" => self.rate = Some(Rate::G54Mbps),
+                            "mcs0" => self.rate = Some(Rate::NMCS0),
+                            "mcs1" => self.rate = Some(Rate::NMCS1),
+                            "mcs2" => self.rate = Some(Rate::NMCS2),
+                            "mcs3" => self.rate = Some(Rate::NMCS3),
+                            "mcs4" => self.rate = Some(Rate::NMCS4),
+                            "mcs5" => self.rate = Some(Rate::NMCS5),
+                            "mcs6" => self.rate = Some(Rate::NMCS6),
+                            "mcs7" => self.rate = Some(Rate::NMCS7),
                             _ => write!(ret, "Rate code {} invalid, pick one of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]", rate_str).unwrap(),
+                        }
+                        if let Some(rate) = self.rate {
+                            write!(ret, "Rate set to {:?}", rate).unwrap();
                         }
                     } else {
                         write!(ret, "Specify rate code of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]").unwrap();
@@ -182,7 +203,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
         let mut ret = String::<1024>::new();
         if self.go {
             if (env.ticktimer.elapsed_ms() - self.tx_start_time) > (1000 * 60 * 5) {
-                self.stop_tx(&env.com, &env.ticktimer);
+                self.stop_tx(&env.com, &env.ticktimer, &env.llio);
                 write!(ret, "5 minute timeout on TX, stopping for TX overheat safety!").unwrap();
             } else {
                 self.send_pds(&env.com, &env.ticktimer);
