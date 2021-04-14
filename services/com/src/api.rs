@@ -93,6 +93,12 @@ pub(crate) enum Opcode {
 
     /// request for a listener to BattStats events
     RegisterBattStatsListener, //String<64>
+
+    /// Reset the wifi chip
+    Wf200Reset,
+
+    /// Disable the wifi chip
+    Wf200Disable,
 }
 
 /// These enums indicate what kind of callback type we're sending.

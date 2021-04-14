@@ -359,6 +359,14 @@ fn xmain() -> ! {
                 )
                 .expect("couldn't return WF200 firmware rev");
             }
+            Some(Opcode::Wf200Reset) => {
+                com.txrx(ComState::WF200_RESET.verb);
+                com.txrx(0);
+            }
+            Some(Opcode::Wf200Disable) => {
+                com.txrx(ComState::WF200_RESET.verb);
+                com.txrx(1);
+            }
             None => {error!("unknown opcode"); break},
         }
 

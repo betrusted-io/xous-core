@@ -41,6 +41,7 @@ fn battstats_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,
+    ticktimer: ticktimer_server::Ticktimer,
 }
 impl Com {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -48,6 +49,7 @@ impl Com {
         Ok(Com {
             conn,
             battstats_sid: None,
+            ticktimer: ticktimer_server::Ticktimer::new().expect("Can't connect to ticktimer"),
         })
     }
 
@@ -118,6 +120,17 @@ impl Com {
         }
         Ok(())
     }
+
+    pub fn wifi_disable(&self) -> Result<(), xous::Error> {
+        send_message(self.conn, Message::new_scalar(Opcode::Wf200Disable.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
+    }
+    // as wifi_reset() re-initializes the wifi chip, call this after wifi_disable() to re-enable wifi
+    pub fn wifi_reset(&self) -> Result<(), xous::Error> {
+        send_message(self.conn, Message::new_scalar(Opcode::Wf200Reset.to_usize().unwrap(), 0, 0, 0, 0,)).expect("couldn't send reset opcode");
+        self.ticktimer.sleep_ms(2000).expect("failed in waiting for wifi chip to reset");
+        Ok(())
+    }
+
     // note to future self: add other event listener registrations (such as network events) here
 }
 
