@@ -64,7 +64,8 @@ mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
 mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
-//mod fcc;      use fcc::*;
+mod fcc;      use fcc::*;
+mod pds; // dependency of the FCC file
 
 #[derive(Debug)]
 pub struct CmdEnv {
@@ -76,7 +77,7 @@ pub struct CmdEnv {
     sensors_cmd: Sensors,
     callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
-    //fcc_cmd: Fcc,
+    fcc_cmd: Fcc,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -95,7 +96,7 @@ impl CmdEnv {
             sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
-            //fcc_cmd: Fcc::new(),
+            fcc_cmd: Fcc::new(),
         }
     }
 
@@ -111,7 +112,7 @@ impl CmdEnv {
             &mut self.sensors_cmd,
             &mut self.callback_cmd,
             &mut self.rtc_cmd,
-            //&mut self.fcc_cmd,
+            &mut self.fcc_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

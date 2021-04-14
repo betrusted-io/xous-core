@@ -130,6 +130,13 @@ impl Com {
         self.ticktimer.sleep_ms(2000).expect("failed in waiting for wifi chip to reset");
         Ok(())
     }
+    pub fn set_ssid_scanning(&self, enable: bool) -> Result<(), xous::Error> {
+        if enable {
+            send_message(self.conn, Message::new_scalar(Opcode::ScanOn.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
+        } else {
+            send_message(self.conn, Message::new_scalar(Opcode::ScanOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
+        }
+    }
 
     // note to future self: add other event listener registrations (such as network events) here
 }

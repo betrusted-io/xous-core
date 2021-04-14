@@ -1,0 +1,197 @@
+use crate::{ShellCmdApi, CommonEnv};
+use xous_ipc::String;
+use com::Com;
+use ticktimer_server::Ticktimer;
+
+use crate::cmds::pds::PDS_DATA;
+use crate::cmds::pds::PDS_STOP_DATA;
+use crate::cmds::pds::Rate;
+
+use core::fmt::Write;
+
+use xous::{Message, ScalarMessage, MessageEnvelope};
+use core::sync::atomic::{AtomicBool, Ordering};
+static CB_RUN: AtomicBool = AtomicBool::new(false);
+pub fn callback_thread() {
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    let xns = xous_names::XousNames::new().unwrap();
+    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+
+    log::info!("callback initiator test thread started");
+    loop {
+        if CB_RUN.load(Ordering::Relaxed) {
+            CB_RUN.store(false, Ordering::Relaxed);
+            ticktimer.sleep_ms(20_000).unwrap();
+            // just send a bogus message
+            xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
+                id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+            })).unwrap();
+        } else {
+            ticktimer.sleep_ms(250).unwrap(); // a little more polite than simply busy-waiting
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Fcc {
+    channel: Option<u8>,
+    rate: Option<Rate>,
+    pds_list: [Option<String::<512>>; 8],
+    go: bool,
+    tx_start_time: u64,
+}
+impl Fcc {
+    pub fn new() -> Fcc {
+        xous::create_thread_0(callback_thread).expect("couldn't create callback generator thread");
+        Fcc {
+            channel: Some(2), // default to simplify testing, replace with None
+            rate: Some(Rate::B1Mbps),  // default to simplify testing, replace with None
+            pds_list: [None; 8],
+            go: false,
+            tx_start_time: 0,
+        }
+    }
+    fn send_pds(&self, com: &Com, ticktimer: &Ticktimer) {
+        for &maybe_pds in self.pds_list.iter() {
+            if let Some(pds) = maybe_pds {
+                if pds.len() > 0 {
+                    com.send_pds_line(&pds).unwrap();
+                    ticktimer.sleep_ms(50).expect("couldn't sleep during send_pds");
+                }
+            }
+        }
+    }
+    fn clear_pds(&mut self) {
+        for pds in self.pds_list.iter_mut() {
+            *pds = None;
+        }
+    }
+    fn stop_tx(&mut self, com: &com::Com, ticktimer: &Ticktimer) {
+        CB_RUN.store(false, Ordering::Relaxed); // make sure the callback function is disabled
+        self.go = false;
+        self.clear_pds();
+        self.pds_list[0] = Some(String::<512>::from_str(PDS_STOP_DATA));
+        self.send_pds(&com, &ticktimer);
+        self.clear_pds();
+    }
+}
+impl<'a> ShellCmdApi<'a> for Fcc {
+    cmd_api!(fcc); // inserts boilerplate for command API
+
+    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        let mut ret = String::<1024>::new();
+        let helpstring = "fcc [ch 1-14] [rate <code>] [go] [stop] [rev] [res]\nrate code: b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]";
+
+        // no matter what, we want SSID scanning to be off
+        env.com.set_ssid_scanning(false).expect("couldn't turn of SSID scanning");
+
+        let mut tokens = args.as_str().unwrap().split(' ');
+
+        if let Some(sub_cmd) = tokens.next() {
+            match sub_cmd {
+                "res" => {
+                    env.llio.ec_reset().unwrap();
+                    //env.com.wifi_reset().unwrap(); // doesn't work right now :-/
+                    write!(ret, "EC has been reset").unwrap();
+                }
+                "rev" => {
+                    let (maj, min, rev) = env.com.get_wf200_fw_rev().unwrap();
+                    write!(ret, "Wf200 fw rev {}.{}.{}", maj, min, rev).unwrap();
+                }
+                "stop" => {
+                    self.stop_tx(&env.com, &env.ticktimer);
+                    write!(ret, "{}", "Transmission stopped").unwrap();
+                },
+                "go" => {
+                    if let Some(channel) = self.channel {
+                        if channel < 1 || channel > 14 {
+                            write!(ret, "Channel {} out of bounds", channel).unwrap();
+                        } else {
+                            if let Some(rate) = self.rate {
+                                let mut found = false;
+                                self.clear_pds();
+                                for record in PDS_DATA.iter() {
+                                    if record.rate == rate {
+                                        let mut index: usize = 0;
+                                        for &line in record.pds_data[(channel-1) as usize].iter() {
+                                            self.pds_list[index] = Some(String::<512>::from_str(line));
+                                            index += 1;
+                                        }
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if found {
+                                    self.send_pds(&env.com, &env.ticktimer);
+                                    write!(ret, "TX live: ch {} rate {:?}", channel, rate).unwrap();
+                                    self.go = true;
+                                    self.tx_start_time = env.ticktimer.elapsed_ms();
+                                    CB_RUN.store(true, Ordering::Relaxed); // initiate the callback for the next wakeup
+                                } else {
+                                    write!(ret, "Rate/channel combo not found: ch {} rate {:?}", channel, rate).unwrap();
+                                }
+                            } else {
+                                write!(ret, "{}", "No rate selected").unwrap();
+                            }
+                        }
+                    } else {
+                        write!(ret, "{}", "No channel selected").unwrap();
+                    }
+                },
+                "ch" => {
+                    if let Some(ch_str) = tokens.next() {
+                        if let Ok(ch) = ch_str.parse::<u8>() {
+                            if ch >= 1 && ch <= 14 {
+                                self.channel = Some(ch);
+                                write!(ret, "Channel set to {}", ch).unwrap();
+                            } else {
+                                write!(ret, "Channel {} is out of range (1-14)", ch).unwrap();
+                            }
+                        } else {
+                            write!(ret, "Couldn't parse channel: {}", ch_str).unwrap();
+                        }
+                    } else {
+                        write!(ret, "Specify channel number of 1-14").unwrap();
+                    }
+                }
+                "rate" => {
+                    if let Some(rate_str) = tokens.next() {
+                        match rate_str {
+                            "b1" => self.rate = Some(Rate::B1Mbps),
+                            "b2" => self.rate = Some(Rate::B2Mbps),
+                            "b5.5" => self.rate = Some(Rate::B5_5Mbps),
+                            "b11" => self.rate = Some(Rate::B11Mbps),
+                            // fill in remainder later
+                            _ => write!(ret, "Rate code {} invalid, pick one of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]", rate_str).unwrap(),
+                        }
+                    } else {
+                        write!(ret, "Specify rate code of b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]").unwrap();
+                    }
+                }
+                _ => {
+                    write!(ret, "{}", helpstring).unwrap();
+                }
+            }
+        } else {
+            write!(ret, "{}", helpstring).unwrap();
+        }
+        Ok(Some(ret))
+    }
+
+    fn callback(&mut self, _msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        let mut ret = String::<1024>::new();
+        if self.go {
+            if (env.ticktimer.elapsed_ms() - self.tx_start_time) > (1000 * 60 * 5) {
+                self.stop_tx(&env.com, &env.ticktimer);
+                write!(ret, "5 minute timeout on TX, stopping for TX overheat safety!").unwrap();
+            } else {
+                self.send_pds(&env.com, &env.ticktimer);
+                write!(ret, "TX renewed: ch {} rate {:?}", self.channel.unwrap(), self.rate.unwrap()).unwrap();
+                CB_RUN.store(true, Ordering::Relaxed); // re-initiate the callback
+            }
+        } else {
+            write!(ret, "Info: passing on TX renewal").unwrap();
+        }
+        Ok(Some(ret))
+    }
+}

@@ -336,7 +336,7 @@ mod implementation {
         }
         pub fn ec_reset(&mut self) {
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
-            self.ticktimer.sleep_ms(100).unwrap();
+            self.ticktimer.sleep_ms(20).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
         }
         pub fn ec_power_on(&mut self) {

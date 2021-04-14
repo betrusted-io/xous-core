@@ -367,6 +367,12 @@ fn xmain() -> ! {
                 com.txrx(ComState::WF200_RESET.verb);
                 com.txrx(1);
             }
+            Some(Opcode::ScanOn) => {
+                com.txrx(ComState::SSID_SCAN_ON.verb);
+            }
+            Some(Opcode::ScanOff) => {
+                com.txrx(ComState::SSID_SCAN_OFF.verb);
+            }
             None => {error!("unknown opcode"); break},
         }
 

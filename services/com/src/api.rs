@@ -99,6 +99,12 @@ pub(crate) enum Opcode {
 
     /// Disable the wifi chip
     Wf200Disable,
+
+    /// start passive SSID scanning
+    ScanOn,
+
+    /// stop passive SSID scanning
+    ScanOff,
 }
 
 /// These enums indicate what kind of callback type we're sending.

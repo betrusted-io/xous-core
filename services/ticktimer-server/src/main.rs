@@ -79,6 +79,7 @@ mod implementation {
         #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
             if xtt.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
+                xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
                 while xtt.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
                     xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
                 }
