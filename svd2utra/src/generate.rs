@@ -579,7 +579,7 @@ where
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         let value_as_usize: usize = value.try_into().unwrap_or_default() << field.offset;
         let previous =
-            unsafe { usize_base.add(field.register.offset).read_volatile() } & !field.mask;
+            unsafe { usize_base.add(field.register.offset).read_volatile() } & !(field.mask << field.offset);
         unsafe {
             usize_base
                 .add(field.register.offset)
