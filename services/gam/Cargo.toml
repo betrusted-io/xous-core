@@ -32,5 +32,6 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
+slowstatus = [] # used for braille mode, so console isn't overwhelmed with status
 # default = ["debugprint"] # "debugprint"
-default = []
+default = ["slowstatus"]

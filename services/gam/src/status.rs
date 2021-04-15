@@ -119,6 +119,16 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let mut datetime: Option<rtc::DateTime> = None;
     let mut dt_pump_modulus = 15;
 
+    let secs_interval;
+    let batt_interval;
+    if cfg!(feature = "slowstatus") {
+        secs_interval = 10;
+        batt_interval = 5000;
+    } else {
+        secs_interval = 1;
+        batt_interval = 500;
+    }
+
     last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("|status: starting main loop");
     loop {
@@ -139,7 +149,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
             Some(StatusOpcode::Pump) => {
                 let elapsed_time = ticktimer.elapsed_ms();
                 let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
-                if now_seconds != last_seconds {
+                if (now_seconds / secs_interval) != (last_seconds / secs_interval) {
                     dt_pump_modulus += 1;
                     if dt_pump_modulus > 15 {
                         dt_pump_modulus = 0;
@@ -169,7 +179,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     gam.redraw().expect("|status: couldn't redraw");
                     stats_phase = (stats_phase + 1) % 8;
                 }
-                if elapsed_time - last_time > 500 {
+                if elapsed_time - last_time > batt_interval {
                     //info!("|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
                     log::trace!("|status: periodic tasks: updating uptime, requesting battstats");
                     last_time = elapsed_time;
