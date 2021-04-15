@@ -14,6 +14,7 @@ use core::fmt::Write;
 use xous::{Message, ScalarMessage, MessageEnvelope};
 use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
+static CB_GO: AtomicBool = AtomicBool::new(false);
 pub fn callback_thread() {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let xns = xous_names::XousNames::new().unwrap();
@@ -24,10 +25,13 @@ pub fn callback_thread() {
         if CB_RUN.load(Ordering::Relaxed) {
             CB_RUN.store(false, Ordering::Relaxed);
             ticktimer.sleep_ms(20_000).unwrap();
-            // just send a bogus message
-            xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
-                id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
-            })).unwrap();
+            // after we wait, check and see if we still need the callback...
+            if CB_GO.load(Ordering::Relaxed) {
+                // just send a bogus message
+                xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
+                    id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+                })).unwrap();
+            }
         } else {
             ticktimer.sleep_ms(250).unwrap(); // a little more polite than simply busy-waiting
         }
@@ -69,8 +73,9 @@ impl Fcc {
         }
     }
     fn stop_tx(&mut self, _com: &com::Com, ticktimer: &Ticktimer, llio: &Llio) {
-        CB_RUN.store(false, Ordering::Relaxed); // make sure the callback function is disabled
         self.go = false;
+        CB_GO.store(false, Ordering::Relaxed);
+        CB_RUN.store(false, Ordering::Relaxed); // make sure the callback function is disabled
         self.clear_pds();
         //self.pds_list[0] = Some(String::<512>::from_str(PDS_STOP_DATA));
         //self.send_pds(&com, &ticktimer);
@@ -129,6 +134,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                                     self.send_pds(&env.com, &env.ticktimer);
                                     write!(ret, "TX live: ch {} rate {:?}", channel, rate).unwrap();
                                     self.go = true;
+                                    CB_GO.store(true, Ordering::Relaxed);
                                     self.tx_start_time = env.ticktimer.elapsed_ms();
                                     CB_RUN.store(true, Ordering::Relaxed); // initiate the callback for the next wakeup
                                 } else {
@@ -145,17 +151,33 @@ impl<'a> ShellCmdApi<'a> for Fcc {
                 "ch" => {
                     if let Some(ch_str) = tokens.next() {
                         if let Ok(ch) = ch_str.parse::<u8>() {
-                            if ch >= 1 && ch <= 14 {
+                            if ch >= 1 && ch <= 11 {
                                 self.channel = Some(ch);
                                 write!(ret, "Channel set to {}", ch).unwrap();
                             } else {
-                                write!(ret, "Channel {} is out of range (1-14)", ch).unwrap();
+                                write!(ret, "Channel {} is out of range (1-11)", ch).unwrap();
                             }
                         } else {
                             write!(ret, "Couldn't parse channel: {}", ch_str).unwrap();
                         }
                     } else {
-                        write!(ret, "Specify channel number of 1-14").unwrap();
+                        write!(ret, "Specify channel number of 1-11").unwrap();
+                    }
+                }
+                "euch" => {
+                    if let Some(ch_str) = tokens.next() {
+                        if let Ok(ch) = ch_str.parse::<u8>() {
+                            if ch >= 1 && ch <= 13 {
+                                self.channel = Some(ch);
+                                write!(ret, "Channel set to {}", ch).unwrap();
+                            } else {
+                                write!(ret, "Channel {} is out of range (1-13)", ch).unwrap();
+                            }
+                        } else {
+                            write!(ret, "Couldn't parse channel: {}", ch_str).unwrap();
+                        }
+                    } else {
+                        write!(ret, "Specify channel number of 1-13").unwrap();
                     }
                 }
                 "rate" => {

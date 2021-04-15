@@ -70,23 +70,20 @@ mod implementation {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
         // disarm the WDT -- do it in an interrupt context, to make sure we aren't interrupted while doing this.
 
-        // why do we have this weird interlock dance?
+        // This WDT is a query/response type. There are two possible states, and to unlock it,
+        // the CPU must query the state and provide the right response. Why this is the case:
         //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
         //    (so you can't defeat the WDT by just pausing the external clock sourc)
         //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
         //  - the CPU runs at 100MHz with a tight tolerance
-        //  - thus we have to confirm the write of the watchdog data before moving to the next state
+        //  - thus it is impossible to guarantee sync between the domains, so we do a two-step query/response interlock
         #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
-            if xtt.wdt.rf(utra::wdt::STATE_DISARMED) != 1 {
+            if xtt.wdt.rf(utra::wdt::STATE_ARMED1) != 0 {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-                while xtt.wdt.rf(utra::wdt::STATE_ARMED1) == 1 {
-                    xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-                }
+            }
+            if xtt.wdt.rf(utra::wdt::STATE_ARMED2) != 0 {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-                while xtt.wdt.rf(utra::wdt::STATE_ARMED2) == 1 {
-                    xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-                }
             }
         }
         // Clear the interrupt
@@ -240,6 +237,14 @@ mod implementation {
             // this triggers an interrupt, and the handler of the interrupt does the actual reset
             // this is done because we don't want the WDT reset to be interrupted
             self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
+        }
+
+        #[cfg(feature = "watchdog")]
+        pub fn check_wdt(&mut self) {
+            let state = self.wdt.r(utra::wdt::STATE);
+            if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
+                log::trace!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
+            }
         }
     }
 }
@@ -432,7 +437,7 @@ fn xmain() -> ! {
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
@@ -450,6 +455,8 @@ fn xmain() -> ! {
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
+        //#[cfg(feature = "watchdog")] // for debugging the watchdog
+        //ticktimer.check_wdt();
 
         let msg = xous::receive_message(ticktimer_server).unwrap();
         match num_traits::FromPrimitive::from_usize(msg.body.id()) {
