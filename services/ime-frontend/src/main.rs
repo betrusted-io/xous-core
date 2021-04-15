@@ -598,7 +598,7 @@ fn handle_keyevents(keys: [char; 4]) {
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;
-    let dbglistener = true;
+    let dbglistener = false;
     let dbgcanvas = false;
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
