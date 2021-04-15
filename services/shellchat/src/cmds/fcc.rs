@@ -4,8 +4,9 @@ use com::Com;
 use ticktimer_server::Ticktimer;
 use llio::Llio;
 
-use crate::cmds::pds::PDS_DATA;
+#[allow(unused_imports)]
 use crate::cmds::pds::PDS_STOP_DATA;
+use crate::cmds::pds::PDS_DATA;
 use crate::cmds::pds::Rate;
 
 use core::fmt::Write;
