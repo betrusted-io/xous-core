@@ -65,7 +65,7 @@ impl Keyboard {
     #[cfg(not(target_os = "none"))]
     pub fn hostmode_inject_key(&self, c: char) {
         send_message(self.conn,
-            Message::new_scalar(Opcode::HostModeInjectKey.to_usize().unwrap(),
+            Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(),
                c as u32 as usize, 0, 0, 0
         )).unwrap();
     }

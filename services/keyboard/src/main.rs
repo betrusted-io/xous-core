@@ -215,11 +215,20 @@ mod implementation {
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
         let kbd = unsafe { &mut *(arg as *mut Keyboard) };
-        kbd.new_state = kbd.kbd_getcodes();
-        kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear the interrupt
+        if kbd.csr.rf(utra::keyboard::EV_PENDING_KEYPRESSED) != 0 {
+            kbd.new_state = kbd.kbd_getcodes();
+            kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear the interrupt
 
-        xous::try_send_message(kbd.conn,
-            xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+            xous::try_send_message(kbd.conn,
+                xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)).ok();
+        }
+        if kbd.csr.rf(utra::keyboard::EV_PENDING_INJECT) != 0 {
+            let c = kbd.csr.rf(utra::keyboard::UART_CHAR_CHAR);
+            kbd.csr.wfo(utra::keyboard::EV_PENDING_INJECT, 1); // clear the interrupt
+            xous::try_send_message(kbd.conn,
+                xous::Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(), c as _, 0, 0, 0)
+            ).ok();
+        }
     }
 
     impl Keyboard {
@@ -241,7 +250,7 @@ mod implementation {
                 new_state: RowColVec::new(),
                 last_state: RowColVec::new(),
                 ticktimer,
-                map: KeyMap::Qwerty,
+                map: KeyMap::Braille,
                 delay: 500,
                 rate: 20,
                 shift_down: false,
@@ -262,9 +271,11 @@ mod implementation {
                 (&mut kbd) as *mut Keyboard as *mut usize,
             )
             .expect("couldn't claim irq");
-            kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear in case it's pending for some reason
-            kbd.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 1);
-
+            kbd.csr.wo(utra::keyboard::EV_PENDING, kbd.csr.r(utra::keyboard::EV_PENDING)); // clear in case it's pending for some reason
+            kbd.csr.wo(utra::keyboard::EV_ENABLE,
+                kbd.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
+                kbd.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
+            );
             log::trace!("hardware initialized");
 
             kbd
@@ -389,21 +400,18 @@ mod implementation {
                     self.chord[rc.r as usize][rc.c as usize] = true;
                 }
             }
-            if let Some(kus) = &keyups {
-                for &rc in kus.iter() {
-                    self.chord[rc.r as usize][rc.c as usize] = false;
-                }
-            }
-
+            log::trace!("self.chord: {:?}", self.chord);
             let mut keystates: Vec<char, U4> = Vec::new();
 
             if self.chord_active || keydowns.is_some() {
                 let now = self.ticktimer.elapsed_ms();
 
                 if !self.chord_active && keydowns.is_some() {
+                    log::trace!("chord_active set");
                     self.chord_active = true;
                     self.chord_timestamp = now;
                 } else if self.chord_active && ((now - self.chord_timestamp) >= self.chord_interval as u64) {
+                    log::trace!("interpreting chords");
                     // extract chord state
                     /*
                      keyboard:
@@ -427,6 +435,7 @@ mod implementation {
                             keycode |= 1 << i;
                         }
                     }
+                    log::trace!("keycode: 0x{:x}", keycode);
                     let keychar = match keycode {
                         0b000_001 => 'a',
                         0b000_011 => 'b',
@@ -487,9 +496,15 @@ mod implementation {
                     if func { keystates.push('🏁').unwrap(); }
                 }
             }
+            if let Some(kus) = &keyups {
+                for &rc in kus.iter() {
+                    self.chord[rc.r as usize][rc.c as usize] = false;
+                }
+            }
             // not sure if this is the right way to handle keyups, but let's try it.
             if keyups.is_some() {
                 self.chord_active = false;
+                log::trace!("chord_active going false");
             }
 
             keystates
@@ -776,7 +791,7 @@ fn send_rawstates(cb_conns: &mut [Option<CID>; 16], krs: &KeyRawStates) {
 fn xmain() -> ! {
     use crate::implementation::Keyboard;
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -834,30 +849,27 @@ fn xmain() -> ! {
             Some(Opcode::SetChordInterval) => msg_scalar_unpack!(msg, delay, _, _, _, {
                 kbd.set_chord_interval(delay as u32);
             }),
-            Some(Opcode::HostModeInjectKey) => msg_scalar_unpack!(msg, _k, _, _, _, {
-                #[cfg(not(target_os = "none"))]
-                {
-                    let key = if let Some(a) = core::char::from_u32(_k as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    };
-                    info!("injecting emulation key press '{}'", key);
-                    for maybe_conn in normal_conns.iter_mut() {
-                        if let Some(conn) = maybe_conn {
-                            match xous::send_message(*conn,
-                                xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
-                                key as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                                '\u{0000}' as u32 as usize,
-                            )) {
-                                Err(xous::Error::ServerNotFound) => {
-                                    *maybe_conn = None
-                                },
-                                Ok(xous::Result::Ok) => {},
-                                _ => log::error!("unhandled error in key event sending")
-                            }
+            Some(Opcode::InjectKey) => msg_scalar_unpack!(msg, _k, _, _, _, {
+                let key = if let Some(a) = core::char::from_u32(_k as u32) {
+                    a
+                } else {
+                    '\u{0000}'
+                };
+                info!("injecting emulation key press '{}'", key);
+                for maybe_conn in normal_conns.iter_mut() {
+                    if let Some(conn) = maybe_conn {
+                        match xous::send_message(*conn,
+                            xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
+                            key as u32 as usize,
+                            '\u{0000}' as u32 as usize,
+                            '\u{0000}' as u32 as usize,
+                            '\u{0000}' as u32 as usize,
+                        )) {
+                            Err(xous::Error::ServerNotFound) => {
+                                *maybe_conn = None
+                            },
+                            Ok(xous::Result::Ok) => {},
+                            _ => log::error!("unhandled error in key event sending")
                         }
                     }
                 }

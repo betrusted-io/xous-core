@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-15 17:50:22]]></description>
+    <description><![CDATA[Litex SoC 2021-04-16 03:02:27]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1070,10 +1070,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``79edd899``, so this value is 2045630617, which should be enough to check out
+``d2990a8c``, so this value is 3533245068, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x79edd899</resetValue>
+                    <resetValue>0xd2990a8c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1090,7 +1090,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x16</resetValue>
+                    <resetValue>0x17</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2585,9 +2585,31 @@ checked]]></description>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
+                    <name>UART_CHAR</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>char</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[character value being injected]]></description>
+                        </field>
+                        <field>
+                            <name>stb</name>
+                            <msb>8</msb>
+                            <bitRange>[8:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[current strobe value (for debugging)]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>ROW0DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0000</addressOffset>
+                    <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2602,7 +2624,7 @@ checked]]></description>
                 <register>
                     <name>ROW1DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2617,7 +2639,7 @@ checked]]></description>
                 <register>
                     <name>ROW2DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2632,7 +2654,7 @@ checked]]></description>
                 <register>
                     <name>ROW3DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2647,7 +2669,7 @@ checked]]></description>
                 <register>
                     <name>ROW4DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0010</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2662,7 +2684,7 @@ checked]]></description>
                 <register>
                     <name>ROW5DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2677,7 +2699,7 @@ checked]]></description>
                 <register>
                     <name>ROW6DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2692,7 +2714,7 @@ checked]]></description>
                 <register>
                     <name>ROW7DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2707,7 +2729,7 @@ checked]]></description>
                 <register>
                     <name>ROW8DAT</name>
                     <description><![CDATA[Column data for the given row]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2721,8 +2743,8 @@ checked]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
-                    <addressOffset>0x0024</addressOffset>
+                    <description><![CDATA[Key injection request received]]></description>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2733,12 +2755,19 @@ checked]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Level of the ``keypressed`` event]]></description>
                         </field>
+                        <field>
+                            <name>inject</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``inject`` event]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
-                    <addressOffset>0x0028</addressOffset>
+                    <description><![CDATA[Key injection request received]]></description>
+                    <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2749,12 +2778,19 @@ checked]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
                         </field>
+                        <field>
+                            <name>inject</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Key injection request received]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[Triggered every time there is a difference in the row state]]></description>
-                    <addressOffset>0x002c</addressOffset>
+                    <description><![CDATA[Key injection request received]]></description>
+                    <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2765,13 +2801,20 @@ checked]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``keypressed`` Event]]></description>
                         </field>
+                        <field>
+                            <name>inject</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``inject`` Event]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>ROWCHANGE</name>
                     <description><![CDATA[The rows that changed at the point of interrupt generation. Does not update
 again until the interrupt is serviced.]]></description>
-                    <addressOffset>0x0030</addressOffset>
+                    <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2786,7 +2829,7 @@ again until the interrupt is serviced.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x34</size>
+                <size>0x38</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -2795,15 +2838,51 @@ again until the interrupt is serviced.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>SEED</name>
+            <name>KEYINJECT</name>
             <baseAddress>0xF0015000</baseAddress>
+            <groupName>KEYINJECT</groupName>
+            <registers>
+                <register>
+                    <name>UART_CHAR</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>char</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[character value to inject. Automatically raises an interrupt upon write. There
+is no interlock or FIFO buffering on this, so you can lose characters if you
+inject too fast.]]></description>
+                        </field>
+                        <field>
+                            <name>disable</name>
+                            <msb>8</msb>
+                            <bitRange>[8:8]</bitRange>
+                            <lsb>8</lsb>
+                            <description><![CDATA[writing a 1 permanently disables the block, until the next cold boot]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>SEED</name>
+            <baseAddress>0xF0016000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x35b7f4fa</resetValue>
+                    <resetValue>0x5b50bb74</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2818,7 +2897,7 @@ again until the interrupt is serviced.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x10dd44b4</resetValue>
+                    <resetValue>0x1b383b56</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2838,7 +2917,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>KEYROM</name>
-            <baseAddress>0xF0016000</baseAddress>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>KEYROM</groupName>
             <registers>
                 <register>
@@ -2880,7 +2959,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -3252,7 +3331,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG_KERNEL</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>TRNG_KERNEL</groupName>
             <registers>
                 <register>
@@ -3388,7 +3467,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG_SERVER</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>TRNG_SERVER</groupName>
             <registers>
                 <register>
@@ -3720,7 +3799,7 @@ to max field size]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>TRNG</groupName>
             <registers>
                 <register>
@@ -4033,7 +4112,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>SHA512</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
@@ -4528,7 +4607,7 @@ in bits]]></description>
         </peripheral>
         <peripheral>
             <name>ENGINE</name>
-            <baseAddress>0xF001C000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>ENGINE</groupName>
             <registers>
                 <register>
@@ -4757,7 +4836,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
         </peripheral>
         <peripheral>
             <name>JTAG</name>
-            <baseAddress>0xF001D000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>JTAG</groupName>
             <registers>
                 <register>
@@ -4815,7 +4894,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
         </peripheral>
         <peripheral>
             <name>WDT</name>
-            <baseAddress>0xF001E000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>WDT</groupName>
             <registers>
                 <register>
@@ -4975,7 +5054,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>IDENTIFIER_MEM</name>
-            <baseAddress>0xF001F000</baseAddress>
+            <baseAddress>0xF0020000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -5002,7 +5081,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>TIMER0</name>
-            <baseAddress>0xF0020000</baseAddress>
+            <baseAddress>0xF0021000</baseAddress>
             <groupName>TIMER0</groupName>
             <registers>
                 <register>

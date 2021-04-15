@@ -174,8 +174,8 @@ pub(crate) enum Opcode {
     /// set chording interval (how long to wait for all keydowns to happen before interpreting as a chord), in ms (for braille keyboards)
     SetChordInterval, //(u32),
 
-    /// used by host mode emulation to inject keys
-    HostModeInjectKey, //(char),
+    /// used by host mode emulation and debug UART to inject keys
+    InjectKey, //(char),
 
     /// used by the interrupt handler to transfer results to the main loop
     HandlerTrigger,

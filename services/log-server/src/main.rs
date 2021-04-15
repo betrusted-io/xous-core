@@ -119,11 +119,20 @@ mod implementation {
             println!("Process: map success!");
             crate::debug::DEFAULT.enable_rx();
 
+            let inject_mem = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::keyinject::HW_KEYINJECT_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map keyinjection CSR range");
+            println!("Note: character injection via console UART is enabled.");
+
             println!("Allocating IRQ...");
             xous::syscall::claim_interrupt(
                 utra::console::CONSOLE_IRQ,
                 handle_irq,
-                core::ptr::null_mut::<usize>(),
+                inject_mem.as_mut_ptr() as *mut usize,
             )
             .expect("couldn't claim interrupt");
             println!("Claimed IRQ {}", utra::console::CONSOLE_IRQ);
@@ -143,12 +152,14 @@ mod implementation {
         }
     }
 
-    fn handle_irq(irq_no: usize, arg: *mut usize) {
+    fn handle_irq(_irq_no: usize, arg: *mut usize) {
         if cfg!(feature = "logging") {
-            print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
+            let mut inject_csr = CSR::new(arg as *mut u32);
+            //print!("Handling IRQ {} (arg: {:08x}): ", irq_no, arg as usize);
 
             while let Some(c) = crate::debug::DEFAULT.getc() {
-                print!("0x{:02x}", c);
+                //print!("0x{:02x} ", c);
+                inject_csr.wfo(utra::keyinject::UART_CHAR_CHAR, c as u32);
             }
             println!();
         }

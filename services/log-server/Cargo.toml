@@ -19,7 +19,7 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = [] # adding this allocates the UART for debugging the logger
-logging = [] # adding this allocates the UART for logging of Xous
+logging = [] # adding this allocates the hardware UART for console interactions
 #default = []
 default = ["logging"]
 # default = ["debugprint", "logging"]

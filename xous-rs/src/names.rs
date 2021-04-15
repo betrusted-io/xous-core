@@ -2,7 +2,7 @@
 
 /*
 A list of descriptions of servers ("names") that are used as keys by the xous-names server
-to refer to servers that are not statically bound into the kernel
+to refer to servers that are not statically bound into the kernel, or have a special debug purpose.
 */
 
 pub const SERVER_NAME_IME_PLUGIN_SHELL: &str = "_IME shell plugin_";
