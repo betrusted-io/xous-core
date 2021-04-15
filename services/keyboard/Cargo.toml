@@ -24,4 +24,5 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
-default = [] # "debugprint"
+debuginject = [] # used only if you want key injection via the UART
+default = ["debuginject"] # "debugprint"

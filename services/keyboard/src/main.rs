@@ -260,7 +260,7 @@ mod implementation {
                 repeating_key: None,
                 rate_timestamp: timestamp,
                 chord_timestamp: timestamp,
-                chord_interval: 50,
+                chord_interval: 100,
                 chord: [[false; KBD_COLS]; KBD_ROWS],
                 chord_active: false,
             };
@@ -437,42 +437,42 @@ mod implementation {
                     }
                     log::trace!("keycode: 0x{:x}", keycode);
                     let keychar = match keycode {
-                        0b000_001 => 'a',
-                        0b000_011 => 'b',
-                        0b001_001 => 'c',
-                        0b011_001 => 'd',
-                        0b010_001 => 'e',
-                        0b001_011 => 'f',
-                        0b011_011 => 'g',
-                        0b010_011 => 'h',
-                        0b001_010 => 'i',
-                        0b011_010 => 'j',
+                        0b000_001 => Some('a'),
+                        0b000_011 => Some('b'),
+                        0b001_001 => Some('c'),
+                        0b011_001 => Some('d'),
+                        0b010_001 => Some('e'),
+                        0b001_011 => Some('f'),
+                        0b011_011 => Some('g'),
+                        0b010_011 => Some('h'),
+                        0b001_010 => Some('i'),
+                        0b011_010 => Some('j'),
 
-                        0b000_101 => 'k',
-                        0b000_111 => 'l',
-                        0b001_101 => 'm',
-                        0b011_101 => 'n',
-                        0b010_101 => 'o',
-                        0b001_111 => 'p',
-                        0b011_111 => 'q',
-                        0b010_111 => 'r',
-                        0b001_110 => 's',
-                        0b011_110 => 't',
+                        0b000_101 => Some('k'),
+                        0b000_111 => Some('l'),
+                        0b001_101 => Some('m'),
+                        0b011_101 => Some('n'),
+                        0b010_101 => Some('o'),
+                        0b001_111 => Some('p'),
+                        0b011_111 => Some('q'),
+                        0b010_111 => Some('r'),
+                        0b001_110 => Some('s'),
+                        0b011_110 => Some('t'),
 
-                        0b100_101 => 'u',
-                        0b100_111 => 'v',
-                        0b101_101 => 'x',
-                        0b111_101 => 'y',
-                        0b110_101 => 'z',
-                        //0b101_111 => '',
-                        //0b111_111 => '',
-                        //0b1010_111 => '',
-                        //0b101_110 => '',
-                        0b111_010 => 'w',
-                        _ => '🈯',
+                        0b100_101 => Some('u'),
+                        0b100_111 => Some('v'),
+                        0b101_101 => Some('x'),
+                        0b111_101 => Some('y'),
+                        0b110_101 => Some('z'),
+                        //0b101_111 => Some(''),
+                        //0b111_111 => Some(''),
+                        //0b1010_111 => Some(''),
+                        //0b101_110 => Some(''),
+                        0b111_010 => Some('w'),
+                        _ => None,
                     };
-                    if keychar != '🈯' {
-                        keystates.push(keychar).unwrap();
+                    if let Some(key) = keychar {
+                        keystates.push(key).unwrap();
                     }
 
                     let up = self.chord[6][4];
@@ -491,9 +491,15 @@ mod implementation {
                     if space { keystates.push(' ').unwrap(); }
 
                     let esc = self.chord[8][6];
-                    if esc { keystates.push('🔙').unwrap(); }
+                    let bs: char = 0x8_u8.into();  // back space
+                    if esc { keystates.push(bs).unwrap(); }
+
                     let func = self.chord[7][5];
-                    if func { keystates.push('🏁').unwrap(); }
+                    let cr: char = 0xd_u8.into();  // carriage return
+                    if func { keystates.push(cr).unwrap(); }
+
+                    log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
+                       up, left, right, down, center, space, esc, func);
                 }
             }
             if let Some(kus) = &keyups {

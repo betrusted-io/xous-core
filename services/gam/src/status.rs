@@ -122,6 +122,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let secs_interval;
     let batt_interval;
     if cfg!(feature = "slowstatus") {
+        // lower the status output rate for braille mode, debugging, etc.
         secs_interval = 10;
         batt_interval = 5000;
     } else {
