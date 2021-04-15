@@ -239,6 +239,7 @@ mod implementation {
             self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
         }
 
+        #[allow(dead_code)]
         #[cfg(feature = "watchdog")]
         pub fn check_wdt(&mut self) {
             let state = self.wdt.r(utra::wdt::STATE);
