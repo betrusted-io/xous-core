@@ -11,7 +11,7 @@ use log::{error, info, trace};
 use com_rs_ref as com_rs;
 use com_rs::*;
 
-use xous::{CID, msg_scalar_unpack};
+use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
 
 const STD_TIMEOUT: u32 = 100;
@@ -49,6 +49,7 @@ mod implementation {
         ticktimer: ticktimer_server::Ticktimer,
         pub workqueue: Vec<WorkRequest, U64>,
         busy: bool,
+        stby_current: Option<i16>,
     }
 
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
@@ -78,6 +79,7 @@ mod implementation {
                 //tx_queue: Vec::new(),
                 //rx_queue: Vec::new(),
                 //in_progress: false,
+                stby_current: None,
             };
 
             xous::claim_interrupt(
@@ -155,12 +157,14 @@ mod implementation {
             }
         }
 
+        pub fn stby_current(&self) -> Option<i16> { self.stby_current }
+
         pub fn get_battstats(&mut self) -> BattStats {
             let mut stats = BattStats::default();
 
             self.txrx(ComState::GAS_GAUGE.verb);
             stats.current = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as i16;
-            self.wait_txrx(ComState::LINK_READ.verb, Some(100)); // stby_current, not used here
+            self.stby_current = Some(self.wait_txrx(ComState::LINK_READ.verb, Some(100)) as i16);
             stats.voltage = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
             self.wait_txrx(ComState::LINK_READ.verb, Some(100)); // power register value, not used
 
@@ -216,6 +220,7 @@ mod implementation {
                 remaining_capacity: 750,
             }
         }
+        pub fn stby_current(&self) -> Option<i16> { None }
 
         pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
@@ -287,6 +292,13 @@ fn xmain() -> ! {
                     }
                 }
             ),
+            Some(Opcode::StandbyCurrent) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if let Some(i) = com.stby_current() {
+                    xous::return_scalar2(msg.sender, 1, i as usize).expect("couldn't return StandbyCurrent");
+                } else {
+                    xous::return_scalar2(msg.sender, 0, 0).expect("couldn't return StandbyCurrent");
+                }
+            }),
             Some(Opcode::Wf200PdsLine) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let l = buffer.to_original::<String::<512>, _>().unwrap();

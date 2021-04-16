@@ -138,6 +138,18 @@ impl Com {
         }
     }
 
+    pub fn get_standby_current(&self) -> Result<Option<i16>, xous::Error> {
+        if let xous::Result::Scalar2(valid, current) =
+            send_message(self.conn, Message::new_blocking_scalar(Opcode::StandbyCurrent.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+            if valid != 0 {
+                Ok(Some(current as i16))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
     // note to future self: add other event listener registrations (such as network events) here
 }
 

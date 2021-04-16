@@ -40,6 +40,9 @@ pub(crate) enum Opcode {
     /// Battery stats
     BattStats,
 
+    /// Standby current -- only valid if a BattStats command was previously issued
+    StandbyCurrent,
+
     /// Battery stats, non-blocking
     BattStatsNb,
 
