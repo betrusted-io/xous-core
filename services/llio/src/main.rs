@@ -457,7 +457,9 @@ mod implementation {
         pub fn ec_reset(&self, ) {}
         pub fn ec_power_on(&self, ) {}
         pub fn self_destruct(&self, _code: u32) {}
-        pub fn vibe(&self, _pattern: VibePattern) {}
+        pub fn vibe(&self, pattern: VibePattern) {
+            log::info!("Imagine your keyboard vibrating: {:?}", pattern);
+        }
 
 
         pub fn xadc_vbus(&self) -> u16 {
