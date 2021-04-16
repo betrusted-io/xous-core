@@ -16,7 +16,9 @@ pub fn callback_thread() {
 
     loop {
         if CB_RUN.load(Ordering::Relaxed) {
+            log::trace!("checking ssid status");
             if com.ssid_scan_updated().unwrap() {
+                log::trace!("initiating callback check");
                 // just send a bogus message
                 xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
                     id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
@@ -68,6 +70,7 @@ impl<'a> ShellCmdApi<'a> for Ssid {
 
     fn callback(&mut self, _msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
+        log::trace!("fetching SSID");
         write!(ret, "{}", env.com.ssid_fetch_as_string().unwrap()).unwrap();
         Ok(Some(ret))
     }

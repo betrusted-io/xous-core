@@ -393,28 +393,39 @@ fn xmain() -> ! {
                 ).expect("couldn't return SsidCheckUpdate");
             },
             Some(Opcode::SsidFetchAsString) => {
+                use core::fmt::Write;
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
 
                 com.txrx(ComState::SSID_FETCH.verb);
                 let mut ssid_list: [[u8; 32]; 6] = [[0; 32]; 6]; // index as ssid_list[6][32]
                 for i in 0..16 * 6 {
                     let data = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                    let mut lsb : u8 = (data & 0xff) as u8;
-                    let mut msb : u8 = ((data >> 8) & 0xff) as u8;
-                    if lsb == 0 { lsb = 0x20; }
-                    if msb == 0 { msb = 0x20; }
+                    let lsb : u8 = (data & 0xff) as u8;
+                    let msb : u8 = ((data >> 8) & 0xff) as u8;
+                    //if lsb == 0 { lsb = 0x20; }
+                    //if msb == 0 { msb = 0x20; }
                     ssid_list[i / 16][(i % 16) * 2] = lsb;
                     ssid_list[i / 16][(i % 16) * 2 + 1] = msb;
                 }
                 // this is a questionably useful return format -- maybe it's actually more useful to return the raw characters??
                 // for now, this is good enough for human eyes, but a scrollable list of SSIDs might be more useful with the raw u8 representation
-                let mut ssid_str = xous_ipc::String::<256>::new();
+                let mut ssid_str = xous_ipc::String::<256>::from_str("Top 6 SSIDs:\n");
+                let mut itemized = xous_ipc::String::<256>::new();
                 for i in 0..6 {
-                    let ssid = core::str::from_utf8(&ssid_list[i]);
+                    let mut stop = 0;
+                    // truncate the nulls
+                    for l in 0..ssid_list[i].len() {
+                        stop = l;
+                        if ssid_list[i][l] == 0 {
+                            break;
+                        }
+                    }
+                    let ssid = core::str::from_utf8(&ssid_list[i][0..stop]);
                     match ssid {
                         Ok(textid) => {
-                            ssid_str.append(textid).unwrap();
-                            ssid_str.append("\n").unwrap();
+                            itemized.clear();
+                            write!(itemized, "{}. {}\n", i+1, textid).unwrap();
+                            ssid_str.append(itemized.as_str().unwrap()).unwrap();
                         },
                         _ => {
                             ssid_str.append("-Parse Error-\n").unwrap();
