@@ -252,7 +252,7 @@ mod implementation {
                 new_state: RowColVec::new(),
                 last_state: RowColVec::new(),
                 ticktimer,
-                map: KeyMap::Braille,
+                map: KeyMap::Qwerty,
                 delay: 500,
                 rate: 20,
                 shift_down: false,

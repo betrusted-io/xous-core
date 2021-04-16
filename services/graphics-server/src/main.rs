@@ -298,7 +298,7 @@ fn xmain() -> ! {
 
                 let mut ref_cursor = blitstr::Cursor::from_top_left_of(cr.into());
                 if debugtv { log::trace!("(TV): paint_str with {:?} | {:?} | {:?} | {:?} len: {}", cr, ref_cursor, tv.style, tv.text, tv.text.as_str().unwrap().len()); }
-                log::info!("{}", tv);
+                log::debug!("{}", tv);
                 blitstr::paint_str(
                     display.native_buffer(),
                     cr.into(),
