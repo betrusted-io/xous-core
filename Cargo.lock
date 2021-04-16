@@ -692,6 +692,7 @@ name = "keyboard"
 version = "0.1.0"
 dependencies = [
  "heapless",
+ "llio",
  "log",
  "log-server",
  "num-derive",
@@ -1282,6 +1283,7 @@ dependencies = [
  "graphics-server",
  "heapless",
  "ime-plugin-api",
+ "keyboard",
  "llio",
  "log",
  "log-server",

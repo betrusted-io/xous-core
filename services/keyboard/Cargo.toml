@@ -12,6 +12,7 @@ ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
+llio = {path = "../llio"}
 
 heapless = "0.5.6"
 

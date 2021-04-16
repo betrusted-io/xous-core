@@ -33,6 +33,11 @@ impl Llio {
           gpio_sid: None,
         })
     }
+    pub fn vibe(&self, pattern: VibePattern) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Vibe.to_usize().unwrap(), pattern.into(), 0, 0, 0)
+        ).map(|_|())
+    }
     // used to hook a callback for I2c responses
     pub fn hook_i2c_callback(&mut self, cb: fn(I2cTransaction)) -> Result<(), xous::Error> {
         if unsafe{I2C_CB}.is_some() {

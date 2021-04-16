@@ -11,6 +11,7 @@ use xous_ipc::Buffer;
 static mut KBD_EVENT_CB: Option<fn([char; 4])> = None;
 static mut KBD_RAW_CB: Option<fn(KeyRawStates)> = None;
 
+#[derive(Debug)]
 pub struct Keyboard {
     conn: xous::CID,
     event_cb_sid: Option<xous::SID>,
@@ -60,6 +61,16 @@ impl Keyboard {
             )).unwrap();
         }
         Ok(())
+    }
+
+    pub fn set_vibe(&self, enable: bool) -> Result<(), xous::Error> {
+        let ena =
+            if enable { 1 }
+            else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Vibe.to_usize().unwrap(),
+            ena, 0, 0, 0,)
+        ).map(|_| ())
     }
 
     #[cfg(not(target_os = "none"))]

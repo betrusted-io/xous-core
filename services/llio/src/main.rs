@@ -356,7 +356,7 @@ mod implementation {
             match pattern {
                 VibePattern::Short => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(250).unwrap();
+                    self.ticktimer.sleep_ms(80).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
                 VibePattern::Long => {
@@ -366,11 +366,11 @@ mod implementation {
                 },
                 VibePattern::Double => {
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(250).unwrap();
+                    self.ticktimer.sleep_ms(150).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                     self.ticktimer.sleep_ms(250).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 1);
-                    self.ticktimer.sleep_ms(250).unwrap();
+                    self.ticktimer.sleep_ms(150).unwrap();
                     self.power_csr.wfo(utra::power::VIBE_VIBE, 0);
                 },
             }

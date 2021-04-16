@@ -64,6 +64,7 @@ mod sleep;    use sleep::*;
 mod sensors;  use sensors::*;
 mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
+mod vibe;     use vibe::*;
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
 
@@ -77,6 +78,7 @@ pub struct CmdEnv {
     sensors_cmd: Sensors,
     callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
+    vibe_cmd: Vibe,
     fcc_cmd: Fcc,
 }
 impl CmdEnv {
@@ -96,6 +98,7 @@ impl CmdEnv {
             sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
+            vibe_cmd: Vibe::new(&xns),
             fcc_cmd: Fcc::new(),
         }
     }
@@ -112,6 +115,7 @@ impl CmdEnv {
             &mut self.sensors_cmd,
             &mut self.callback_cmd,
             &mut self.rtc_cmd,
+            &mut self.vibe_cmd,
             &mut self.fcc_cmd,
         ];
 

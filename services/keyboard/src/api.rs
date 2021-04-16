@@ -179,6 +179,9 @@ pub(crate) enum Opcode {
 
     /// used by the interrupt handler to transfer results to the main loop
     HandlerTrigger,
+
+    /// used to turn keyboard vibrate on and off
+    Vibe,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

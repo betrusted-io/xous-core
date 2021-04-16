@@ -817,12 +817,18 @@ fn xmain() -> ! {
     let mut normal_conns: [Option<CID>; 16] = [None; 16];
     let mut raw_conns: [Option<CID>; 16] = [None; 16];
 
-    log::trace!("starting main loop");
+    let mut vibe = false;
+    let llio = llio::Llio::new(&xns).unwrap();
 
+    log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::Vibe) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
+                if ena != 0 { vibe = true }
+                else { vibe = false }
+            }),
             Some(Opcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = Some(xous::connect(sid).unwrap());
@@ -938,6 +944,9 @@ fn xmain() -> ! {
 
                 // send keys, if any
                 if kc.len() > 0 {
+                    if vibe {
+                        llio.vibe(llio::VibePattern::Short).unwrap();
+                    }
                     let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
                     for i in 0..kc.len() {
                         // info!("sending key '{}'", kc[i]);
