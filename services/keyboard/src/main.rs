@@ -209,8 +209,10 @@ mod implementation {
         chord_interval: u32,
         /// chord state array
         chord: [[bool; KBD_COLS]; KBD_ROWS],
-        /// memoize when chord is all false
-        chord_active: bool,
+        /// memoize number of keys that have been pressed
+        chord_active: u32,
+        /// indicate if the chord has been captured. Once captured, further presses are ignored, until all keys are let up.
+        chord_captured: bool,
     }
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -260,9 +262,10 @@ mod implementation {
                 repeating_key: None,
                 rate_timestamp: timestamp,
                 chord_timestamp: timestamp,
-                chord_interval: 100,
+                chord_interval: 50,
                 chord: [[false; KBD_COLS]; KBD_ROWS],
-                chord_active: false,
+                chord_active: 0,
+                chord_captured: false,
             };
 
             xous::claim_interrupt(
@@ -395,122 +398,126 @@ mod implementation {
             5. Extract chord state and turn into scancode using lookup table
             6. Return scancodes
              */
+            let was_idle = self.chord_active == 0;
             if let Some(kds) = &keydowns {
                 for &rc in kds.iter() {
                     self.chord[rc.r as usize][rc.c as usize] = true;
+                    self.chord_active += 1;
                 }
             }
             log::trace!("self.chord: {:?}", self.chord);
             let mut keystates: Vec<char, U4> = Vec::new();
 
-            if self.chord_active || keydowns.is_some() {
-                let now = self.ticktimer.elapsed_ms();
+            let now = self.ticktimer.elapsed_ms();
+            if was_idle && self.chord_active != 0 {
+                // "rising edge" of chord_active
+                self.chord_timestamp = now; // record the beginning of the chord active interval
+            }
 
-                if !self.chord_active && keydowns.is_some() {
-                    log::trace!("chord_active set");
-                    self.chord_active = true;
-                    self.chord_timestamp = now;
-                } else if self.chord_active && ((now - self.chord_timestamp) >= self.chord_interval as u64) {
-                    log::trace!("interpreting chords");
-                    // extract chord state
-                    /*
-                     keyboard:
-                        2 1 0 space 3 4 5
-                     braille dots:
-                        0 3
-                        1 4
-                        2 5
-                    */
-                    let keys: [bool; 6] = [
-                        self.chord[5][7],
-                        self.chord[4][8],
-                        self.chord[3][9],
-                        self.chord[1][2],
-                        self.chord[0][1],
-                        self.chord[8][0],
-                    ];
-                    let mut keycode: usize = 0;
-                    for i in 0..keys.len() {
-                        if keys[i] {
-                            keycode |= 1 << i;
-                        }
+            if self.chord_active != 0 && ((now - self.chord_timestamp) >= self.chord_interval as u64) && !self.chord_captured {
+                self.chord_captured = true;
+                log::trace!("interpreting chords");
+                // extract chord state
+                /*
+                    keyboard:
+                    2 1 0 space 3 4 5
+                    braille dots:
+                    0 3
+                    1 4
+                    2 5
+                */
+                let keys: [bool; 6] = [
+                    self.chord[5][7],
+                    self.chord[4][8],
+                    self.chord[3][9],
+                    self.chord[1][2],
+                    self.chord[0][1],
+                    self.chord[8][0],
+                ];
+                let mut keycode: usize = 0;
+                for i in 0..keys.len() {
+                    if keys[i] {
+                        keycode |= 1 << i;
                     }
-                    log::trace!("keycode: 0x{:x}", keycode);
-                    let keychar = match keycode {
-                        0b000_001 => Some('a'),
-                        0b000_011 => Some('b'),
-                        0b001_001 => Some('c'),
-                        0b011_001 => Some('d'),
-                        0b010_001 => Some('e'),
-                        0b001_011 => Some('f'),
-                        0b011_011 => Some('g'),
-                        0b010_011 => Some('h'),
-                        0b001_010 => Some('i'),
-                        0b011_010 => Some('j'),
-
-                        0b000_101 => Some('k'),
-                        0b000_111 => Some('l'),
-                        0b001_101 => Some('m'),
-                        0b011_101 => Some('n'),
-                        0b010_101 => Some('o'),
-                        0b001_111 => Some('p'),
-                        0b011_111 => Some('q'),
-                        0b010_111 => Some('r'),
-                        0b001_110 => Some('s'),
-                        0b011_110 => Some('t'),
-
-                        0b100_101 => Some('u'),
-                        0b100_111 => Some('v'),
-                        0b101_101 => Some('x'),
-                        0b111_101 => Some('y'),
-                        0b110_101 => Some('z'),
-                        //0b101_111 => Some(''),
-                        //0b111_111 => Some(''),
-                        //0b1010_111 => Some(''),
-                        //0b101_110 => Some(''),
-                        0b111_010 => Some('w'),
-                        _ => None,
-                    };
-                    if let Some(key) = keychar {
-                        keystates.push(key).unwrap();
-                    }
-
-                    let up = self.chord[6][4];
-                    if up { keystates.push('↑').unwrap(); }
-
-                    let left = self.chord[8][3];
-                    if left { keystates.push('←').unwrap(); }
-                    let right = self.chord[3][6];
-                    if right { keystates.push('→').unwrap(); }
-                    let down = self.chord[8][2];
-                    if down { keystates.push('↓').unwrap(); }
-                    let center = self.chord[5][2];
-                    if center { keystates.push('∴').unwrap(); }
-
-                    let space = self.chord[2][3];
-                    if space { keystates.push(' ').unwrap(); }
-
-                    let esc = self.chord[8][6];
-                    let bs: char = 0x8_u8.into();  // back space
-                    if esc { keystates.push(bs).unwrap(); }
-
-                    let func = self.chord[7][5];
-                    let cr: char = 0xd_u8.into();  // carriage return
-                    if func { keystates.push(cr).unwrap(); }
-
-                    log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
-                       up, left, right, down, center, space, esc, func);
                 }
+                log::trace!("keycode: 0x{:x}", keycode);
+                let keychar = match keycode {
+                    0b000_001 => Some('a'),
+                    0b000_011 => Some('b'),
+                    0b001_001 => Some('c'),
+                    0b011_001 => Some('d'),
+                    0b010_001 => Some('e'),
+                    0b001_011 => Some('f'),
+                    0b011_011 => Some('g'),
+                    0b010_011 => Some('h'),
+                    0b001_010 => Some('i'),
+                    0b011_010 => Some('j'),
+
+                    0b000_101 => Some('k'),
+                    0b000_111 => Some('l'),
+                    0b001_101 => Some('m'),
+                    0b011_101 => Some('n'),
+                    0b010_101 => Some('o'),
+                    0b001_111 => Some('p'),
+                    0b011_111 => Some('q'),
+                    0b010_111 => Some('r'),
+                    0b001_110 => Some('s'),
+                    0b011_110 => Some('t'),
+
+                    0b100_101 => Some('u'),
+                    0b100_111 => Some('v'),
+                    0b101_101 => Some('x'),
+                    0b111_101 => Some('y'),
+                    0b110_101 => Some('z'),
+                    //0b101_111 => Some(''),
+                    //0b111_111 => Some(''),
+                    //0b1010_111 => Some(''),
+                    //0b101_110 => Some(''),
+                    0b111_010 => Some('w'),
+                    _ => None,
+                };
+                if let Some(key) = keychar {
+                    keystates.push(key).unwrap();
+                }
+
+                let up = self.chord[6][4];
+                if up { keystates.push('↑').unwrap(); }
+
+                let left = self.chord[8][3];
+                if left { keystates.push('←').unwrap(); }
+                let right = self.chord[3][6];
+                if right { keystates.push('→').unwrap(); }
+                let down = self.chord[8][2];
+                if down { keystates.push('↓').unwrap(); }
+                let center = self.chord[5][2];
+                if center { keystates.push('∴').unwrap(); }
+
+                let space = self.chord[2][3];
+                if space { keystates.push(' ').unwrap(); }
+
+                let esc = self.chord[8][6];
+                let bs: char = 0x8_u8.into();  // back space
+                if esc { keystates.push(bs).unwrap(); }
+
+                let func = self.chord[7][5];
+                let cr: char = 0xd_u8.into();  // carriage return
+                if func { keystates.push(cr).unwrap(); }
+
+                log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
+                    up, left, right, down, center, space, esc, func);
             }
             if let Some(kus) = &keyups {
                 for &rc in kus.iter() {
                     self.chord[rc.r as usize][rc.c as usize] = false;
+                    if self.chord_active > 0 {
+                        self.chord_active -= 1;
+                    } else {
+                        log::error!("received more keyups than we had keydowns!")
+                    }
                 }
             }
-            // not sure if this is the right way to handle keyups, but let's try it.
-            if keyups.is_some() {
-                self.chord_active = false;
-                log::trace!("chord_active going false");
+            if self.chord_active == 0 {
+                self.chord_captured = false;
             }
 
             keystates
@@ -797,7 +804,7 @@ fn send_rawstates(cb_conns: &mut [Option<CID>; 16], krs: &KeyRawStates) {
 fn xmain() -> ! {
     use crate::implementation::Keyboard;
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
