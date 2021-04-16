@@ -137,6 +137,25 @@ impl Com {
             send_message(self.conn, Message::new_scalar(Opcode::ScanOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
         }
     }
+    pub fn ssid_scan_updated(&self) -> Result<bool, xous::Error> {
+        if let xous::Result::Scalar1(avail) =
+            send_message(self.conn, Message::new_blocking_scalar(Opcode::SsidCheckUpdate.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+            if avail != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn ssid_fetch_as_string(&self) -> Result<xous_ipc::String::<256>, xous::Error> {
+        let ssid_list = xous_ipc::String::<256>::new();
+        let mut buf = Buffer::into_buf(ssid_list).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::SsidFetchAsString.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original::<xous_ipc::String::<256>, _>().unwrap();
+        Ok(response)
+    }
 
     pub fn get_standby_current(&self) -> Result<Option<i16>, xous::Error> {
         if let xous::Result::Scalar2(valid, current) =

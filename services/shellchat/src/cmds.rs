@@ -65,6 +65,8 @@ mod sensors;  use sensors::*;
 mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
+mod ssid;     use ssid::*;
+
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
 
@@ -79,6 +81,8 @@ pub struct CmdEnv {
     callback_cmd: CallBack,
     rtc_cmd: RtcCmd,
     vibe_cmd: Vibe,
+    ssid_cmd: Ssid,
+
     fcc_cmd: Fcc,
 }
 impl CmdEnv {
@@ -99,6 +103,8 @@ impl CmdEnv {
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
             vibe_cmd: Vibe::new(&xns),
+            ssid_cmd: Ssid::new(),
+
             fcc_cmd: Fcc::new(),
         }
     }
@@ -116,6 +122,8 @@ impl CmdEnv {
             &mut self.callback_cmd,
             &mut self.rtc_cmd,
             &mut self.vibe_cmd,
+            &mut self.ssid_cmd,
+
             &mut self.fcc_cmd,
         ];
 

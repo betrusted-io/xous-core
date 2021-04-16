@@ -79,11 +79,11 @@ pub(crate) enum Opcode {
     /// Program a page of FLASH
     //FlashProgram(&'a [u8]),
 
-    /// Update the SSID list
-    //SsidScan,
+    /// Checks if an updated SSID list is available
+    SsidCheckUpdate,
 
     /// Return the latest SSID list
-    //SsidFetch,
+    SsidFetchAsString,
 
     /// Fetch the git ID of the EC
     EcGitRev,
