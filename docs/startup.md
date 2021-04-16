@@ -3,10 +3,10 @@
 This document describes how a running system is established.  It is, broadly,
 divided into four stages:
 
-0: Pre-boot -- setting the machine up to run
-1: Initializing the allocator
-2: Loading the kernel and PID1
-3: Userspace setup
+0. Pre-boot -- setting the machine up to run
+1. Initializing the allocator
+2. Loading the kernel and PID1
+3. Userspace setup
 
 Once userspace is set up, it will continue to spawn additional processes
 and maintain the system.  However, after this point there is no longer a
