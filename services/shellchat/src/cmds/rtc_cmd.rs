@@ -112,7 +112,7 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
                             years: year,
                             weekday,
                         };
-                        write!(ret, "Setting {}:{}:{}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
+                        write!(ret, "Setting {}:{:02}:{:02}, {}/{}/{}, {:?}", hour, min, sec, month, day, year, weekday).unwrap();
                         self.rtc.set_rtc(dt).unwrap();
                     }
                 },
