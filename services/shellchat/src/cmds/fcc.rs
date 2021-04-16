@@ -20,7 +20,6 @@ pub fn callback_thread() {
     let xns = xous_names::XousNames::new().unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
 
-    log::info!("callback initiator test thread started");
     loop {
         if CB_RUN.load(Ordering::Relaxed) {
             CB_RUN.store(false, Ordering::Relaxed);
@@ -92,7 +91,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
         let helpstring = "fcc [ch 1-14] [rate <code>] [go] [stop] [rev] [res]\nrate code: b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]";
 
         // no matter what, we want SSID scanning to be off
-        env.com.set_ssid_scanning(false).expect("couldn't turn of SSID scanning");
+        env.com.set_ssid_scanning(false).expect("couldn't turn off SSID scanning");
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
