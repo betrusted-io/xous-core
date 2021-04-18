@@ -90,6 +90,19 @@ fn try_main() -> Result<(), DynError> {
         "cb-test-c1",
         "cb-test-c2",
     ];
+    let trng_pkgs = [
+        "gam",
+        "ime-frontend",
+        "ime-plugin-shell",
+        "trng-tester",
+        "graphics-server",
+        "ticktimer-server",
+        "log-server",
+        "com",
+        "xous-names",
+        "keyboard",
+        "trng",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
@@ -104,6 +117,7 @@ fn try_main() -> Result<(), DynError> {
         Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs)?,
         Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs)?,
+        Some("trng-test") => build_hw_image(false, env::args().nth(2), &trng_pkgs)?,
         Some("debug") => run(true, &hw_pkgs)?,
         _ => print_help(),
     }
@@ -123,6 +137,7 @@ benchmark [soc.svd]     builds a benchmarking image for real hardware
 fcc-agent [soc.svd]     builds a version suitable for FCC testing
 minimal [soc.svd]       builds a minimal image for API testing
 cbtest                  builds an image for callback testing
+trng-test [soc.svd]     builds an image for TRNG testing
 "
     )
 }

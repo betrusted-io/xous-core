@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use log::{error, info};
+use log::info;
 
 pub enum WhichMessible {
     One,
@@ -142,6 +142,7 @@ mod implementation {
                 WhichMessible::Two => self.messible2_csr.wfo(utra::messible2::IN_IN, value as u32),
             }
         }
+        #[allow(dead_code)]
         pub fn messible_get(&mut self, which: WhichMessible) -> u8 {
             match which {
                 WhichMessible::One => self.messible_csr.rf(utra::messible::OUT_OUT) as u8,
@@ -233,9 +234,8 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
-
-    let log_server_id = xous::SID::from_bytes(b"xous-log-server ").unwrap();
-    let log_conn = xous::connect(log_server_id).unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    info!("my PID is {}", xous::process::id());
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
@@ -243,8 +243,8 @@ fn xmain() -> ! {
     let mut trng = Trng::new();
     trng.init();
     // just create buffers out of pointers. Definitely. Unsafe.
-    let mut buff_a = trng.get_buff_a() as *mut u32;
-    let mut buff_b = trng.get_buff_b() as *mut u32;
+    let buff_a = trng.get_buff_a() as *mut u32;
+    let buff_b = trng.get_buff_b() as *mut u32;
 
     for i in 0..TRNG_BUFF_LEN / 4 {
         // buff_a[i] = trng.get_data_eager();
