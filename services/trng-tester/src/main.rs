@@ -18,7 +18,6 @@ mod implementation {
 
     pub struct Trng {
         server_csr: utralib::CSR<u32>,
-        xadc_csr: utralib::CSR<u32>,
         messible_csr: utralib::CSR<u32>,
         messible2_csr: utralib::CSR<u32>,
         buffer_a: MemoryRange,
@@ -40,14 +39,6 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map TRNG Server CSR range");
-
-            let xadc_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::trng::HW_TRNG_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map TRNG xadc CSR range");
 
             let buff_a = xous::syscall::map_memory(
                 xous::MemoryAddress::new(0x4020_0000), // fix this at a known physical address
@@ -83,7 +74,6 @@ mod implementation {
 
             let mut trng = Trng {
                 server_csr: CSR::new(server_csr.as_mut_ptr() as *mut u32),
-                xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 buffer_a: buff_a,
                 buffer_b: buff_b,
                 messible_csr: CSR::new(messible.as_mut_ptr() as *mut u32),
@@ -184,28 +174,6 @@ mod implementation {
                 xous::yield_slice();
             }
         }
-        pub fn read_temperature(&self) -> f32 {
-            (self.xadc_csr.rf(utra::trng::XADC_TEMPERATURE_XADC_TEMPERATURE) as f32 * 503.975) / 4096.0 - 273.15
-        }
-        pub fn read_vccint(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_VCCINT_XADC_VCCINT) * 3000) / 4096
-        }
-        pub fn read_vccaux(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_VCCAUX_XADC_VCCAUX) * 3000) / 4096
-        }
-        pub fn read_vccbram(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_VCCBRAM_XADC_VCCBRAM) * 3000) / 4096
-        }
-        pub fn read_vbus(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_VBUS_XADC_VBUS) * 5033) / 1000
-        }
-        pub fn read_usb_p(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_USB_P_XADC_USB_P) * 1000) / 4096
-        }
-        pub fn read_usb_n(&self) -> u32 {
-            (self.xadc_csr.rf(utra::trng::XADC_USB_N_XADC_USB_N) * 1000) / 4096
-        }
-
     }
 }
 
@@ -229,6 +197,14 @@ mod implementation {
     }
 }
 
+fn wdt_thread() {
+    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+
+    loop {
+        ticktimer.sleep_ms(100).unwrap();
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::Trng;
@@ -238,6 +214,8 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+
+    xous::create_thread_0(wdt_thread).expect("couldn't create waking thread");
 
     // Create a new com object
     let mut trng = Trng::new();
@@ -263,18 +241,6 @@ fn xmain() -> ! {
             // to test the powerdown feature
             trng.wait_full();
             ticktimer.sleep_ms(5000).expect("couldn't sleep");
-        }
-
-        if false {
-            // select this to print XADC data to info!()
-            ticktimer.sleep_ms(20).expect("couldn't sleep"); // sleep to allow xadc sampling in case we're in a very tight TRNG request loop
-            info!("temperature: {}C", trng.read_temperature());
-            info!("vccint: {}mV", trng.read_vccint());
-            info!("vccaux: {}mV", trng.read_vccaux());
-            info!("vccbram: {}mV", trng.read_vccbram());
-            info!("vbus: {}mV", trng.read_vbus());
-            info!("usb_p: {}mV", trng.read_usb_p());
-            info!("usb_n: {}mV", trng.read_usb_n());
         }
 
         // to test the full loop

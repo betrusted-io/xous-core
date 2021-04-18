@@ -91,17 +91,20 @@ fn try_main() -> Result<(), DynError> {
         "cb-test-c2",
     ];
     let trng_pkgs = [
-        "gam",
-        "ime-frontend",
-        "ime-plugin-shell",
-        "trng-tester",
+        //"gam",
+        //"shellchat",
+        //"ime-frontend",
+        //"ime-plugin-shell",
         "graphics-server",
         "ticktimer-server",
         "log-server",
         "com",
         "xous-names",
         "keyboard",
-        "trng",
+        "llio",
+        "rtc",
+
+        "trng-tester",
     ];
     let task = env::args().nth(1);
     match task.as_deref() {
