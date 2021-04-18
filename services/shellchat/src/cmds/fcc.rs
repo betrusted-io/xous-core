@@ -88,7 +88,7 @@ impl<'a> ShellCmdApi<'a> for Fcc {
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "fcc [ch 1-14] [rate <code>] [go] [stop] [rev] [res]\nrate code: b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]";
+        let helpstring = "fcc [ch 1-11] [euch 1-13] [rate <code>] [go] [stop] [rev] [res]\nrate code: b[1,2,5.5,11], g[6,9,12,18,24,36,48,54], mcs[0-7]";
 
         // no matter what, we want SSID scanning to be off
         env.com.set_ssid_scanning(false).expect("couldn't turn off SSID scanning");

@@ -14,6 +14,7 @@ pub fn callback_thread() {
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
     let com = Com::new(&xns).unwrap();
 
+    let mut iters = 0; // count how long we've been waiting
     loop {
         if CB_RUN.load(Ordering::Relaxed) {
             log::trace!("checking ssid status");
@@ -24,10 +25,17 @@ pub fn callback_thread() {
                     id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
                 })).unwrap();
                 CB_RUN.store(false, Ordering::Relaxed);
+            } else {
+                iters += 1;
+                if iters > 11 { // should have gotten a result within 20 seconds...
+                    // there may have been stale data in the scan cache, clear it
+                    let _ = com.ssid_fetch_as_string().unwrap();
+                }
             }
             ticktimer.sleep_ms(2_000).unwrap();
         } else {
             ticktimer.sleep_ms(1_000).unwrap();
+            iters = 0;
         }
     }
 }
