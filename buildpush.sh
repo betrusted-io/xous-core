@@ -13,6 +13,8 @@ CSR_CSV=../betrusted-soc/build/csr.csv.1
 USE_IDENTITY=0
 USE_NIGHTLY=
 IMAGE=hw-image
+SOC_SVD=../betrusted-soc/build/software/soc.svd
+OVERRIDE_SVD=
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -67,6 +69,11 @@ do
 	  IMAGE=av-test
 	  shift
 	  ;;
+      -s|--socsvd)
+	  OVERRIDE_SVD=$2
+    shift
+	  shift
+	  ;;
       -h|--help)
 		echo "$0 provisions betrusted. --kernel-skip skips the kernel, --fpga-skip skips the FPGA. --current-csr indicates to use the CSR for the new FPGA image to do the update (normally you want to use the one corresponding to the older, currently installed version)."
 		echo "Alternatively, using --copy-to <hostname> copies the files to a remote host and skips provisioning."
@@ -90,11 +97,15 @@ DESTDIR=code/precursors
 # full rebuild, and not just an incremental rebuild. :-/
 #touch services/log-server/src/main.rs # bump the build time in the log server
 
-cargo $USE_NIGHTLY xtask $IMAGE ../betrusted-soc/build/software/soc.svd
-
+if [ -z "$OVERRIDE_SVD" ]
+then
+  cargo $USE_NIGHTLY xtask $IMAGE $SOC_SVD
 # only copy if changed, othrewise it seems to trigger extra build effort...
-rsync -a --no-times --checksum ../betrusted-soc/build/software/soc.svd svd2utra/examples/soc.svd
-rsync -a --no-times --checksum ../betrusted-soc/build/software/soc.svd emulation/renode.svd
+  rsync -a --no-times --checksum $SOC_SVD svd2utra/examples/soc.svd
+  rsync -a --no-times --checksum $SOC_SVD emulation/renode.svd
+else
+  cargo $USE_NIGHTLY xtask $IMAGE $OVERRIDE_SVD
+fi
 
 if [ $? -ne 0 ]
 then
