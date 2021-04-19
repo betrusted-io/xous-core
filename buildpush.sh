@@ -59,6 +59,14 @@ do
 	  IMAGE=trng-test
 	  shift
 	  ;;
+      -r|--rotest)
+	  IMAGE=ro-test
+	  shift
+	  ;;
+      -a|--avtest)
+	  IMAGE=av-test
+	  shift
+	  ;;
       -h|--help)
 		echo "$0 provisions betrusted. --kernel-skip skips the kernel, --fpga-skip skips the FPGA. --current-csr indicates to use the CSR for the new FPGA image to do the update (normally you want to use the one corresponding to the older, currently installed version)."
 		echo "Alternatively, using --copy-to <hostname> copies the files to a remote host and skips provisioning."
