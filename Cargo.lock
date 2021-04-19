@@ -1458,19 +1458,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "trng-tester"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "log",
- "log-server",
- "ticktimer-server",
- "typenum",
- "utralib",
- "xous",
-]
-
-[[package]]
 name = "typenum"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

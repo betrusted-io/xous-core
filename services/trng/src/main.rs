@@ -34,12 +34,38 @@ mod implementation {
             };
 
             ///// configure power settings and which generator to use
-            trng.csr.wo(utra::trng_server::CONTROL,
-                trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
-                | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
-               // | self.server_csr.ms(utra::trng_server::CONTROL_AV_DIS, 1)  // disable the AV generator to characterize the RO
-               // | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
-            );
+            if !(cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest")) {
+                trng.csr.wo(utra::trng_server::CONTROL,
+                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                   // | self.server_csr.ms(utra::trng_server::CONTROL_AV_DIS, 1)  // disable the AV generator to characterize the RO
+                   // | self.server_csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
+                );
+                log::trace!("TRNG configured for normal operation (av+ro): 0x{:08x}", trng.csr.r(utra::trng_server::CONTROL));
+            } else if cfg!(feature = "avalanchetest") && ! cfg!(feature = "ringosctest") {
+                // avalanche test only
+                trng.csr.wo(utra::trng_server::CONTROL,
+                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1) // question: do we want power save on or off for testing?? let's leave it on for now, it will make the test run slower but maybe more accurate to our usual use case
+                    | trng.csr.ms(utra::trng_server::CONTROL_RO_DIS, 1)  // disable the RO to characterize only the AV
+                );
+                log::info!("TRNG configured for avalanche testing: 0x{:08x}", trng.csr.r(utra::trng_server::CONTROL));
+            } else if ! cfg!(feature = "avalanchetest") && cfg!(feature = "ringosctest") {
+                // ring osc test only
+                trng.csr.wo(utra::trng_server::CONTROL,
+                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_AV_DIS, 1)  // disable the AV generator to characterize the RO
+                );
+                log::info!("TRNG configured for ring oscillator testing: 0x{:08x}", trng.csr.r(utra::trng_server::CONTROL));
+            } else {
+                // both on
+                trng.csr.wo(utra::trng_server::CONTROL,
+                    trng.csr.ms(utra::trng_server::CONTROL_ENABLE, 1)
+                    | trng.csr.ms(utra::trng_server::CONTROL_POWERSAVE, 1)
+                );
+                log::info!("TRNG configured for both avalanche and ring oscillator testing: 0x{:08x}", trng.csr.r(utra::trng_server::CONTROL));
+            }
 
             /*** TRNG tuning parameters: these were configured and tested in a long run against Dieharder
                  There is a rate of TRNG generation vs. quality trade-off. The tuning below is toward quality of
@@ -64,6 +90,11 @@ mod implementation {
             info!("hardware initialized");
 
             trng
+        }
+        // for the test procedure
+        #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+        pub fn get_trng_csr(&self) -> *mut u32 {
+            self.csr.base
         }
 
         pub fn get_data_eager(&self) -> u32 {
@@ -145,6 +176,166 @@ mod implementation {
     }
 }
 
+#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+pub const TRNG_BUFF_LEN: usize = 512*1024;
+#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+pub enum WhichMessible {
+    One,
+    Two,
+}
+#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+struct Tester {
+    server_csr: utralib::CSR<u32>,
+    messible_csr: utralib::CSR<u32>,
+    messible2_csr: utralib::CSR<u32>,
+    buffer_a: xous::MemoryRange,
+    buffer_b: xous::MemoryRange,
+    ticktimer: ticktimer_server::Ticktimer,
+}
+#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+impl Tester {
+    pub fn new(server_csr: *mut u32) -> Tester {
+        use utralib::generated::*;
+        let buff_a = xous::syscall::map_memory(
+            xous::MemoryAddress::new(0x4020_0000), // fix this at a known physical address
+            None,
+            crate::TRNG_BUFF_LEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map TRNG comms buffer A");
+
+        let buff_b = xous::syscall::map_memory(
+            xous::MemoryAddress::new(0x4030_0000), // fix this at a known physical address
+            None,
+            crate::TRNG_BUFF_LEN,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map TRNG comms buffer B");
+
+        let messible = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::messible::HW_MESSIBLE_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map messible");
+
+        let messible2 = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::messible2::HW_MESSIBLE2_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map messible");
+
+        Tester {
+            server_csr: CSR::new(server_csr),
+            buffer_a: buff_a,
+            buffer_b: buff_b,
+            messible_csr: CSR::new(messible.as_mut_ptr() as *mut u32),
+            messible2_csr: CSR::new(messible2.as_mut_ptr() as *mut u32),
+            ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+        }
+    }
+
+    pub fn messible_send(&mut self, which: WhichMessible, value: u8) {
+        use utralib::generated::*;
+        match which {
+            WhichMessible::One => self.messible_csr.wfo(utra::messible::IN_IN, value as u32),
+            WhichMessible::Two => self.messible2_csr.wfo(utra::messible2::IN_IN, value as u32),
+        }
+    }
+    #[allow(dead_code)]
+    pub fn messible_get(&mut self, which: WhichMessible) -> u8 {
+        use utralib::generated::*;
+        match which {
+            WhichMessible::One => self.messible_csr.rf(utra::messible::OUT_OUT) as u8,
+            WhichMessible::Two => self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8,
+        }
+    }
+    pub fn messible_wait_get(&mut self, which: WhichMessible) -> u8 {
+        use utralib::generated::*;
+        match which {
+            WhichMessible::One => {
+                while self.messible_csr.rf(utra::messible::STATUS_HAVE) == 0 {
+                    //xous::yield_slice();
+                    self.ticktimer.sleep_ms(50).unwrap();
+                }
+                self.messible_csr.rf(utra::messible::OUT_OUT) as u8
+            },
+            WhichMessible::Two => {
+                while self.messible2_csr.rf(utra::messible2::STATUS_HAVE) == 0 {
+                    //xous::yield_slice();
+                    self.ticktimer.sleep_ms(50).unwrap();
+                }
+                self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8
+            },
+        }
+    }
+
+    pub fn get_buff_a(&self) -> *mut u32 {
+        self.buffer_a.as_mut_ptr() as *mut u32
+    }
+    pub fn get_buff_b(&self) -> *mut u32 {
+        self.buffer_b.as_mut_ptr() as *mut u32
+    }
+
+    pub fn get_data_eager(&self) -> u32 {
+        use utralib::generated::*;
+        while self.server_csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+            xous::yield_slice();
+        }
+        self.server_csr.rf(utra::trng_server::DATA_DATA)
+    }
+    #[allow(dead_code)]
+    pub fn wait_full(&self) {
+        use utralib::generated::*;
+        while self.server_csr.rf(utra::trng_server::STATUS_FULL) == 0 {
+            xous::yield_slice();
+        }
+    }
+}
+#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+fn tester_thread(csr: usize) {
+    let mut trng = Tester::new(csr as *mut u32);
+
+    // just create buffers out of pointers. Definitely. Unsafe.
+    let buff_a = trng.get_buff_a() as *mut u32;
+    let buff_b = trng.get_buff_b() as *mut u32;
+
+    for i in 0..TRNG_BUFF_LEN / 4 {
+        // buff_a[i] = trng.get_data_eager();
+        unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
+    }
+    for i in 0..TRNG_BUFF_LEN / 4 {
+        // buff_b[i] = trng.get_data_eager();
+        unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
+    }
+    log::info!("TRNG_TESTER: starting service");
+    let mut phase = 1;
+    trng.messible_send(WhichMessible::One, phase); // indicate buffer A is ready to go
+
+    loop {
+        trng.messible_wait_get(WhichMessible::Two);
+        phase += 1;
+        if phase % 2 == 1 {
+            log::info!("TRNG_TESTER: filling A");
+            for i in 0..TRNG_BUFF_LEN / 4 {
+                //buff_a[i] = trng.get_data_eager();
+                unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
+            }
+            trng.messible_send(WhichMessible::One, phase);
+        } else {
+            log::info!("TRNG_TESTER: filling B");
+            for i in 0..TRNG_BUFF_LEN / 4 {
+                //buff_b[i] = trng.get_data_eager();
+                unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
+            }
+            trng.messible_send(WhichMessible::One, phase);
+        }
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::Trng;
@@ -162,6 +353,10 @@ fn xmain() -> ! {
 
     #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
+
+    if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
+        xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
+    }
 
     // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
     trng.get_trng(2);

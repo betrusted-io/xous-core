@@ -90,22 +90,6 @@ fn try_main() -> Result<(), DynError> {
         "cb-test-c1",
         "cb-test-c2",
     ];
-    let trng_pkgs = [
-        //"gam",
-        //"shellchat",
-        //"ime-frontend",
-        //"ime-plugin-shell",
-        "graphics-server",
-        "ticktimer-server",
-        "log-server",
-        "com",
-        "xous-names",
-        "keyboard",
-        "llio",
-        "rtc",
-
-        "trng-tester",
-    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
@@ -115,12 +99,17 @@ fn try_main() -> Result<(), DynError> {
         )?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
-        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs)?,
-        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs)?,
-        Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs)?,
-        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs)?,
-        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs)?,
-        Some("trng-test") => build_hw_image(false, env::args().nth(2), &trng_pkgs)?,
+        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
+        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, None)?,
+        Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs, None)?,
+        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, None)?,
+        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, None)?,
+        Some("trng-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
+            Some(&["--features", "ringosctest", "--features", "avalanchetest"]))?,
+        Some("ro-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
+        Some(&["--features", "ringosctest"]))?,
+        Some("av-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
+            Some(&["--features", "avalanchetest"]))?,
         Some("debug") => run(true, &hw_pkgs)?,
         _ => print_help(),
     }
@@ -140,12 +129,14 @@ benchmark [soc.svd]     builds a benchmarking image for real hardware
 fcc-agent [soc.svd]     builds a version suitable for FCC testing
 minimal [soc.svd]       builds a minimal image for API testing
 cbtest                  builds an image for callback testing
-trng-test [soc.svd]     builds an image for TRNG testing
+trng-test [soc.svd]     builds an image for TRNG testing (both avalanche and ring oscillator on)
+ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
+av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
 "
     )
 }
 
-fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result<(), DynError> {
+fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_args: Option<&[&str]>) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),
@@ -163,13 +154,13 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None)?;
+    let base_path = build(packages, debug, Some(TARGET), None, extra_args)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
-    let mut loader = build(&["loader"], debug, Some(TARGET), Some("loader".into()))?;
+    let mut loader = build(&["loader"], debug, Some(TARGET), Some("loader".into()), None)?;
     loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
@@ -192,8 +183,7 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str]) -> Result
             "--",
             loader.as_os_str().to_str().unwrap(),
             loader_bin.as_os_str().to_str().unwrap(),
-        ])
-        .status()?;
+        ]).status()?;
     if !status.success() {
         return Err("cargo build failed".into());
     }
@@ -221,13 +211,13 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None)?;
+    let base_path = build(packages, debug, Some(TARGET), None, None)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
-    build(&["loader"], debug, Some(TARGET), Some("loader".into()))?;
+    build(&["loader"], debug, Some(TARGET), Some("loader".into()), None)?;
 
     create_image(
         &kernel,
@@ -242,7 +232,7 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
 
-    build(&init, debug, None, None)?;
+    build(&init, debug, None, None, None)?;
 
     // Build and run the kernel
     let mut args = vec!["run"];
@@ -283,7 +273,7 @@ fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
 }
 
 fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    let mut path = build(&["kernel"], debug, Some(TARGET), Some("kernel".into()))?;
+    let mut path = build(&["kernel"], debug, Some(TARGET), Some("kernel".into()), None)?;
     path.push("kernel");
     Ok(path)
 }
@@ -293,6 +283,7 @@ fn build(
     debug: bool,
     target: Option<&str>,
     directory: Option<PathBuf>,
+    extra_args: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
@@ -312,6 +303,12 @@ fn build(
 
     if !debug {
         args.push("--release");
+    }
+
+    if let Some(extra) = extra_args {
+        for &a in extra {
+            args.push(a);
+        }
     }
 
     let mut dir = project_root();
