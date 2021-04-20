@@ -6,10 +6,10 @@ UPDATE_FPGA=1
 UPDATE_KERNEL=1
 UPDATE_LOADER=1
 USE_USB=1
-FPGA_IMAGE=../betrusted-soc/build/gateware/encrypted.bin
+FPGA_IMAGE=../betrusted-soc/build/gateware/soc_csr.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
 LOADER_IMAGE=target/riscv32imac-unknown-none-elf/release/loader.bin
-CSR_CSV=../betrusted-soc/build/csr.csv.1
+CSR_CSV=
 USE_IDENTITY=0
 USE_NIGHTLY=
 IMAGE=hw-image
@@ -46,7 +46,7 @@ do
 	  shift
 	  ;;
       --current-csr)
-	  CSR_CSV=../betrusted-soc/build/csr.csv
+	  CSR_CSV="--csr-csv ../betrusted-soc/build/csr.csv"
 	  shift
 	  ;;
       -n|--nightly)
@@ -119,19 +119,19 @@ then
     if [ $UPDATE_FPGA -eq 1 ]
     then
       echo "Burning FPGA image"
-      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $FPGA_IMAGE --load-address 0x0 --load-flash
+      sudo wishbone-tool $CSR_CSV --load-name $FPGA_IMAGE --load-address 0x0 --load-flash
       echo "*** Manual power cycle required to reload SoC FPGA configuration ***"
       echo " -> Either issue a power cycle command, or insert paper clip in the hole on the right hand side!"
     fi
     if [ $UPDATE_LOADER -eq 1 ]
     then
       echo "Burning loader"
-      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $LOADER_IMAGE --load-address 0x500000 --load-flash
+      sudo wishbone-tool $CSR_CSV --load-name $LOADER_IMAGE --load-address 0x500000 --load-flash
     fi
     if [ $UPDATE_KERNEL -eq 1 ]
     then
       echo "Burning kernel"
-      sudo wishbone-tool --csr-csv $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x980000 --load-flash
+      sudo wishbone-tool $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x980000 --load-flash
     fi
 else
 

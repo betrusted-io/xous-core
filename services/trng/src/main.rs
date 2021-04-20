@@ -354,9 +354,8 @@ fn xmain() -> ! {
     #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
 
-    if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
-        xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
-    }
+    #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+    xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
 
     // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
     trng.get_trng(2);
