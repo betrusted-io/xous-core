@@ -1,12 +1,22 @@
 # Xous Startup Sequence
 
+The loader broadly runs in two phases, called phase 1 and phase 2:
+
+1. Allocate memory and copy stuff into RAM. This is where the tags are copied, and executable data is unpacked into memory. This is almost entirely a copying phase.
+2. Allocate and configure pagetables. This more or less does a second pass over the args table (so there's a possible TOCTOU here).
+
+After this it jumps to PID1.
+
+------------
+Below is historical notes
+
 This document describes how a running system is established.  It is, broadly,
 divided into four stages:
 
-0: Pre-boot -- setting the machine up to run
-1: Initializing the allocator
-2: Loading the kernel and PID1
-3: Userspace setup
+0. Pre-boot -- setting the machine up to run
+1. Initializing the allocator
+2. Loading the kernel and PID1
+3. Userspace setup
 
 Once userspace is set up, it will continue to spawn additional processes
 and maintain the system.  However, after this point there is no longer a

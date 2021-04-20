@@ -35,7 +35,13 @@ of wear leveling, however.
 + 2000_0000 |   Primary FPGA bitstream               |
 + 2021_7287 |   2,192,008 bytes                      |
 +-----------+----------------------------------------+
-+ 2021_7288 |   Reserved for bitstreams              |
++ 2021_7288 |   Padding                              |
++ 2027_7FFF |                                        |
++-----------+----------------------------------------+
++ 2027_8000 |   csr.csv corresponding to bitstream   |
++ 2027_FFFF |   (32kiB max, see below)               |
++-----------+----------------------------------------+
++ 2028_0000 |   Reserved for backup bitstream        |
 + 204F_FFFF |                                        |
 +-----------+----------------------------------------+
 + 2050_0000 |   loader.bin - Xous loader             |
@@ -54,4 +60,22 @@ of wear leveling, however.
 + 27FF_FFFF |                                        |
 +-----------+----------------------------------------+
 
+```
+
+The csr.csv block is further structured as follows:
+
+```
++-----------+----------------------------------------+
++ 2027_8000 |   Length of csr.csv data               |
++ 2027_8003 |   4 bytes, little-endian               |
++-----------+----------------------------------------+
++ 2027_8004 |   csr.csv data (variable length)       |
++ 2027_8xxx |   Typically ~12kiB, byte ordered       |
++-----------+----------------------------------------+
++ 2027_8xxx |   padding to 0xFF                      |
++ 2027_FFBF |   padding included in sha512           |
++-----------+----------------------------------------+
++ 2027_FFC0 |   sha512 of 2027_8000:2027_FFBF        |
++ 2027_FFFF |   64 bytes, network order              |
++-----------+----------------------------------------+
 ```
