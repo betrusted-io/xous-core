@@ -39,7 +39,7 @@ of wear leveling, however.
 + 2027_7FFF |                                        |
 +-----------+----------------------------------------+
 + 2027_8000 |   csr.csv corresponding to bitstream   |
-+ 2027_FFFF |   (32kiB max)                          |
++ 2027_FFFF |   (32kiB max, see below)               |
 +-----------+----------------------------------------+
 + 2028_0000 |   Reserved for backup bitstream        |
 + 204F_FFFF |                                        |
