@@ -73,9 +73,9 @@ The csr.csv block is further structured as follows:
 + 2027_8xxx |   Typically ~12kiB, byte ordered       |
 +-----------+----------------------------------------+
 + 2027_8xxx |   padding to 0xFF                      |
-+ 2027_FFDF |   padding included in sha512           |
++ 2027_FFBF |   padding included in sha512           |
 +-----------+----------------------------------------+
-+ 2027_FFE0 |   sha512 of 2027_8000:2027_FFDF        |
-+ 2027_FFFF |   truncated to 32 bytes, network order |
++ 2027_FFC0 |   sha512 of 2027_8000:2027_FFBF        |
++ 2027_FFFF |   64 bytes, network order              |
 +-----------+----------------------------------------+
 ```
