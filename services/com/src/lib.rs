@@ -59,10 +59,16 @@ impl Com {
         ).map(|_| ())
     }
 
+    /// ship mode is synchronous, so that we can schedule order-of-operation dependent tasks around it
     pub fn ship_mode(&self) -> Result<(), xous::Error> {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::ShipMode.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_| ())
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ShipMode.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(_) = response {
+            Ok(())
+        } else {
+            log::error!("ship_mode failed to execute");
+            Err(xous::Error::InternalError)
+        }
     }
 
     pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {

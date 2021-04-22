@@ -350,6 +350,8 @@ fn xmain() -> ! {
             }
             Some(Opcode::ShipMode) => {
                 com.txrx(ComState::POWER_SHIPMODE.verb);
+                xous::return_scalar(msg.sender, 1)
+                    .expect("couldn't ack ship mode");
             }
             Some(Opcode::Wf200Rev) => {
                 com.txrx(ComState::WFX_FW_REV_GET.verb);

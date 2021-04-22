@@ -14,20 +14,26 @@ impl Sleep {
     }
 }
 
-fn kill_thread() {
+fn kill_thread(bounce: usize) {
     log::info!("Self destruct thread active.");
 
     let xns = xous_names::XousNames::new().unwrap();
     let llio = llio::Llio::new(&xns).unwrap();
+    let com = com::Com::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     ticktimer.sleep_ms(3000).unwrap();
 
     loop {
         log::info!("Initiating self destruct sequence...");
+        if bounce != 0 {
+            // slip in a ship mode command. should take long enough to execute that the kill goes through
+            com.ship_mode().unwrap();
+            ticktimer.sleep_ms(100).unwrap();
+        }
         llio.self_destruct(0x2718_2818).unwrap();
-        ticktimer.sleep_ms(10).unwrap();
         llio.self_destruct(0x3141_5926).unwrap();
-        ticktimer.sleep_ms(10).unwrap();
+        com.power_off_soc().unwrap();
+        ticktimer.sleep_ms(100).unwrap();
         log::info!("If you can read this, we failed to destroy ourselves!");
     }
 }
@@ -39,7 +45,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot]";
+        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -129,7 +135,16 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                 }
                 "kill" => {
                     write!(ret, "Killing this device in 3 seconds.\nGoodbye cruel world!").unwrap();
-                    xous::create_thread_0(kill_thread).unwrap();
+                    xous::create_thread_1(kill_thread, 0).unwrap();
+                }
+                "killbounce" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "Unplug charging cable and try again.").unwrap();
+                    } else {
+                        write!(ret, "Killing this device in 3 seconds, then bouncing into ship mode\n").unwrap();
+                        xous::create_thread_1(kill_thread, 1).unwrap();
+                    }
                 }
                 _ =>  write!(ret, "{}", helpstring).unwrap(),
             }

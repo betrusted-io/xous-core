@@ -344,6 +344,7 @@ mod implementation {
         }
         pub fn self_destruct(&mut self, code: u32) {
             if self.destruct_armed && code == 0x3141_5926 {
+                self.ticktimer.sleep_ms(100).unwrap(); // give a moment for any last words (like clearing the screen, powering down, etc.)
                 self.power_csr.rmwf(utra::power::POWER_SELFDESTRUCT, 1);
             } else if !self.destruct_armed && code == 0x2718_2818 {
                 self.destruct_armed = true;
