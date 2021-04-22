@@ -43,6 +43,19 @@ impl Gam {
             panic!("GAM_API: unexpected return value: {:#?}", response);
         }
     }
+    pub fn shipmode_blank_request(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::ShipModeBlankRequest.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar1(confirmed) = response {
+            if confirmed != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            panic!("GAM_API: unexpected return value: {:#?}", response);
+        }
+    }
 
     /// this "posts" a textview -- it's not a "draw" as the update is neither guaranteed nor instantaneous
     /// the GAM first has to check that the textview is allowed to be updated, and then it will decide when
