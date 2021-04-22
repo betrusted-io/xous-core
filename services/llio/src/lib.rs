@@ -284,6 +284,15 @@ impl Llio {
             Message::new_scalar(Opcode::EcReset.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn self_destruct(&self, code: usize) -> Result<(), xous::Error> {
+        // it's up to the caller to know the code sequence, which is:
+        // 0x2718_2818
+        // followed by
+        // 0x3141_5926
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SelfDestruct.to_usize().unwrap(), code, 0, 0, 0)
+        ).map(|_| ())
+    }
 }
 
 

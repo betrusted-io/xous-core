@@ -3,10 +3,32 @@ use xous_ipc::String;
 
 #[derive(Debug)]
 pub struct Sleep {
+    rtc: rtc::Rtc,
 }
 impl Sleep {
-    pub fn new() -> Self {
-        Sleep {}
+    pub fn new(xns: &xous_names::XousNames) -> Self {
+        let rtc = rtc::Rtc::new(&xns).unwrap();
+        Sleep {
+            rtc,
+        }
+    }
+}
+
+fn kill_thread() {
+    log::info!("Self destruct thread active.");
+
+    let xns = xous_names::XousNames::new().unwrap();
+    let llio = llio::Llio::new(&xns).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    ticktimer.sleep_ms(3000).unwrap();
+
+    loop {
+        log::info!("Initiating self destruct sequence...");
+        llio.self_destruct(0x2718_2818).unwrap();
+        ticktimer.sleep_ms(10).unwrap();
+        llio.self_destruct(0x3141_5926).unwrap();
+        ticktimer.sleep_ms(10).unwrap();
+        log::info!("If you can read this, we failed to destroy ourselves!");
     }
 }
 
@@ -17,7 +39,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        let helpstring = "sleep [now] [current] [hard]";
+        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -53,8 +75,61 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         write!(ret, "Standby current measurement not initialized.").unwrap();
                     }
                 }
-                "hard" => {
-                    write!(ret, "Hard shutdown not yet implemented").unwrap();
+                "ship" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
+                    } else {
+                        if Ok(true) == env.gam.shipmode_blank_request() {
+                            env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                            // allow EC to snoop, so that it can wake up the system
+                            env.llio.allow_ec_snoop(true).unwrap();
+                            // allow the EC to power me down
+                            env.llio.allow_power_off(true).unwrap();
+                            // now send the power off command
+                            env.com.ship_mode().unwrap();
+
+                            // now send the power off command
+                            env.com.power_off_soc().unwrap();
+
+                            log::info!("CMD: ship mode now!");
+                            // pause execution, nothing after this should be reachable
+                            env.ticktimer.sleep_ms(10000).unwrap(); // ship mode happens in 10 seconds
+                            log::info!("CMD: if you can read this, ship mode failed!");
+                        }
+                        write!(ret, "Ship mode request denied").unwrap();
+                    }
+                }
+                "coldboot" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "System can't cold boot while charging. Unplug charging cable and try again.").unwrap();
+                    } else {
+                        if Ok(true) == env.gam.powerdown_request() {
+                            env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                            // set a wakeup alarm a couple seconds from now -- this is the coldboot
+                            self.rtc.set_wakeup_alarm(3).unwrap();
+
+                            // allow EC to snoop, so that it can wake up the system
+                            env.llio.allow_ec_snoop(true).unwrap();
+                            // allow the EC to power me down
+                            env.llio.allow_power_off(true).unwrap();
+                            // now send the power off command
+                            env.com.power_off_soc().unwrap();
+
+                            log::info!("CMD: reboot in 3 seconds!");
+                            // pause execution, nothing after this should be reachable
+                            env.ticktimer.sleep_ms(3000).unwrap();
+                            log::info!("CMD: if you can read this, reboot failed!");
+                        }
+                        write!(ret, "Cold boot request denied").unwrap();
+                    }
+                }
+                "kill" => {
+                    write!(ret, "Killing this device in 3 seconds.\nGoodbye cruel world!").unwrap();
+                    xous::create_thread_0(kill_thread).unwrap();
                 }
                 _ =>  write!(ret, "{}", helpstring).unwrap(),
             }

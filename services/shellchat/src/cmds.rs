@@ -98,7 +98,7 @@ impl CmdEnv {
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             //test_cmd: Test::new(),
-            sleep_cmd: Sleep::new(),
+            sleep_cmd: Sleep::new(&xns),
             sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
