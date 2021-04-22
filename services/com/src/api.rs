@@ -62,7 +62,7 @@ pub(crate) enum Opcode {
     PowerOffSoc,
 
     /// Ship mode (battery disconnect)
-    //ShipMode,
+    ShipMode,
 
     /// Is the battery charging?
     //IsCharging,

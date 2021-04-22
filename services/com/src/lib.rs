@@ -59,6 +59,12 @@ impl Com {
         ).map(|_| ())
     }
 
+    pub fn ship_mode(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::ShipMode.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
+
     pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::Wf200Rev.to_usize().unwrap(), 0, 0, 0, 0))?;

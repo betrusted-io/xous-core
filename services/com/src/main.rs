@@ -348,6 +348,9 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::ShipMode) => {
+                com.txrx(ComState::POWER_SHIPMODE.verb);
+            }
             Some(Opcode::Wf200Rev) => {
                 com.txrx(ComState::WFX_FW_REV_GET.verb);
                 let major = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u8;
