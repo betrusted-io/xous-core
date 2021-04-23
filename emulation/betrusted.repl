@@ -4,26 +4,22 @@ cpu: CPU.VexRiscv @ sysbus
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
 
 uart: UART.LiteX_UART @ {
-        sysbus 0x60007000;
-        sysbus 0xF0007000 // shadow
+        sysbus 0xF0004000 // shadow
     }
     -> cpu@1002
 
-uartconsole: UART.LiteX_UART @ {
-        sysbus 0x60009000;
-        sysbus 0xF0009000 // shadow
+console: UART.LiteX_UART @ {
+        sysbus 0xF0006000
     }
     -> cpu@1003
 
-uartserver0: UART.LiteX_UART @ {
-        sysbus 0x6000B000;
-        sysbus 0xF000B000 // shadow
+app_uart: UART.LiteX_UART @ {
+        sysbus 0xF0008000
     }
     -> cpu@1004
 
 timer0: Timers.LiteX_Timer_32 @ {
-        sysbus 0x60002000;
-        sysbus 0xF0002000 // shadow
+        sysbus 0xF0021000
     }
     frequency: 100000000
     -> cpu@1001
@@ -43,25 +39,25 @@ sram: Memory.MappedMemory @ {
 fbmem: Memory.MappedMemory @ sysbus 0xB0000000
     size: 0x6000
 
-memlcd: Video.BetrustedLCD @ sysbus 0xF000E000
+memlcd: Video.BetrustedLCD @ sysbus 0xF000B000
 
-keyboard: Input.BetrustedKbd @ sysbus 0xF0017000
+keyboard: Input.BetrustedKbd @ sysbus 0xF0014000
+    -> cpu @ 1010
 
-trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF001B000
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF0019000
 
-trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001C000
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001A000
 
+// This peripheral doesn't actually exist, but is required
+// in order to keep the CPU running.
 cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
     frequency: 100000000
     // IRQ #100 is Machine Timer Interrupt
     -> cpu@100
 
-ticktimer: Timers.TickTimer @ sysbus 0xF0014000
+ticktimer: Timers.TickTimer @ sysbus 0xF0011000
     periodInMs: 1
     -> cpu @ 1008
-
-//flash: SPI.Micron_MT25Q @ spi
-//    underlyingMemory: flash_mem
 
 flash_mem: Memory.MappedMemory @ {
         sysbus 0x20000000;
