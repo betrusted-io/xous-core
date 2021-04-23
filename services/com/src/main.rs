@@ -328,6 +328,12 @@ fn xmain() -> ! {
                 com.txrx(ComState::POWER_OFF.verb);
                 com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)); // consume the obligatory return value, even if not used
             }
+            Some(Opcode::BoostOff) => {
+                com.txrx(ComState::CHG_BOOST_OFF.verb);
+            }
+            Some(Opcode::BoostOn) => {
+                com.txrx(ComState::CHG_BOOST_ON.verb);
+            }
             Some(Opcode::BattStats) => {
                 info!("batt stats request received");
                 let stats = com.get_battstats();

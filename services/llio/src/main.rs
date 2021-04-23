@@ -320,8 +320,8 @@ mod implementation {
                 self.power_csr.rmwf(utra::power::POWER_SELF, 0);
             }
         }
-        pub fn power_boost_mode(&mut self, power_on: bool) {
-            if power_on {
+        pub fn power_boost_mode(&mut self, boost_on: bool) {
+            if boost_on {
                 self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 1);
             } else {
                 self.power_csr.rmwf(utra::power::POWER_BOOSTMODE, 0);

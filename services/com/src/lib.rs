@@ -181,6 +181,14 @@ impl Com {
             Err(xous::Error::InternalError)
         }
     }
+
+    pub fn set_boost(&self, on: bool) -> Result<(), xous::Error> {
+        if on {
+            send_message(self.conn, Message::new_scalar(Opcode::BoostOn.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
+        } else {
+            send_message(self.conn, Message::new_scalar(Opcode::BoostOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
+        }
+    }
     // note to future self: add other event listener registrations (such as network events) here
 }
 

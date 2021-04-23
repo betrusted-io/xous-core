@@ -384,7 +384,7 @@ mod implementation {
             self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
 
             // turn on the timer proper -- the system will wakeup in 5..4..3....
-            let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+            let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
             if self.rtc_alarm_enabled {
                 config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
             }

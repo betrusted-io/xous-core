@@ -49,6 +49,13 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
+        // try powering on the audio block to help to discharge the 3.3VA line
+        env.llio.audio_on(true).unwrap();
+
+        // in all cases, we want the boost to be off to ensure a clean shutdown
+        env.com.set_boost(false).unwrap();
+        env.llio.boost_on(false).unwrap();
+
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "now" => {
@@ -116,7 +123,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                             env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
 
                             // set a wakeup alarm a couple seconds from now -- this is the coldboot
-                            self.rtc.set_wakeup_alarm(3).unwrap();
+                            self.rtc.set_wakeup_alarm(4).unwrap();
 
                             // allow EC to snoop, so that it can wake up the system
                             env.llio.allow_ec_snoop(true).unwrap();

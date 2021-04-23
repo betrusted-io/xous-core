@@ -293,6 +293,18 @@ impl Llio {
             Message::new_scalar(Opcode::SelfDestruct.to_usize().unwrap(), code, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn boost_on(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PowerBoostMode.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn audio_on(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
 }
 
 
