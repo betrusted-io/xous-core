@@ -658,12 +658,15 @@ fn xmain() -> ! {
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_wakeup_alarm(); // blocks until transaction is finished
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
              Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.rtc_alarm(delay as u8); // this will block until finished, no callbacks used
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_rtc_alarm(); // blocks until transaction is finished
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             None => {
                 log::error!("unknown opcode received, exiting");
