@@ -22,7 +22,10 @@ namespace Antmicro.Renode.Peripherals.Video
 
             RegistersCollection = new DoubleWordRegisterCollection(this);
             Reconfigure(336, 536, PixelFormat.RGB565, true);
-            for (int i = 0; i < buffer.Length; i++) buffer[i] = 0;
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                buffer[i] = 0;
+            }
             DoRepaint();
             DefineRegisters();
             Reset();
@@ -43,7 +46,7 @@ namespace Antmicro.Renode.Peripherals.Video
             RegistersCollection.Reset();
         }
 
-        public long Size { get { return 0x800; } }
+        public long Size { get { return 0x1000; } }
         public DoubleWordRegisterCollection RegistersCollection { get; private set; }
 
         protected override void Repaint()
@@ -56,11 +59,14 @@ namespace Antmicro.Renode.Peripherals.Video
                 // 1) The `updateDirty` bit is set and the current line is dirty, or
                 // 2) The `updateAll` bit is set.
                 bool shouldRedrawLine = updateAll;
-                foreach (int i in Enumerable.Range(41, 22)) {
-                    if (shouldRedrawLine) {
+                foreach (int i in Enumerable.Range(41, 22))
+                {
+                    if (shouldRedrawLine)
+                    {
                         break;
                     }
-                    if (updateDirty && (newbuf[y * 44 + i] != 0)) {
+                    if (updateDirty && (newbuf[y * 44 + i] != 0))
+                    {
                         shouldRedrawLine = true;
                     }
                 }
@@ -96,6 +102,9 @@ namespace Antmicro.Renode.Peripherals.Video
             Registers.BUSY.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return 0; })
             ;
+            Registers.PRESCALER.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return 0; })
+            ;
         }
 
         private bool updateDirty = false;
@@ -108,7 +117,8 @@ namespace Antmicro.Renode.Peripherals.Video
         private enum Registers
         {
             COMMAND = 0x0,
-            BUSY = 0x04
+            BUSY = 0x04,
+            PRESCALER = 0x08,
         }
     }
 }
