@@ -74,23 +74,23 @@ impl Rtc {
     /// wakeup alarm will force the system on if it is off, but does not trigger an interrupt on the CPU
     pub fn set_wakeup_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::SetWakeupAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
         ).map(|_|())
     }
     pub fn clear_wakeup_alarm(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::ClearWakeupAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
     /// the rtc alarm will not turn the system on, but it will trigger an interrupt on the CPU
     pub fn set_rtc_alarm(&self, seconds_from_now: u8) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::SetRtcAlarm.to_usize().unwrap(), seconds_from_now as _, 0, 0, 0)
         ).map(|_|())
     }
     pub fn clear_rtc_alarm(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::ClearRtcAlarm.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
 }

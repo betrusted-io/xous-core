@@ -6,7 +6,7 @@ mod api;
 use num_traits::{FromPrimitive, ToPrimitive};
 use xous_ipc::Buffer;
 use api::{Return, Opcode, DateTime};
-use xous::msg_scalar_unpack;
+use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
@@ -360,6 +360,9 @@ mod implementation {
                 }
                 xous::yield_slice();
             }
+            while self.llio.poll_i2c_busy().unwrap() {
+                xous::yield_slice();
+            }
             true
         }
 
@@ -367,15 +370,19 @@ mod implementation {
         pub fn wakeup_alarm(&mut self, seconds: u8) {
             self.wakeup_alarm_enabled = true;
 
+            log::trace!("wakeup: switchover");
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
             self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
 
+            log::trace!("wakeup: timerb_clk");
             // set clock units to 1 second, output pulse length to ~218ms
             self.blocking_i2c_write2([ABRTCMC_TIMERB_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]);
 
+            log::trace!("wakeup: timerb");
             // program elapsed time
             self.blocking_i2c_write2([ABRTCMC_TIMERB, seconds]);
 
+            log::trace!("wakeup: b_int");
             // enable timerb countdown interrupt, also clears any prior interrupt flag
             let mut control2 = (Control2::COUNTDOWN_B_INT).bits();
             if self.rtc_alarm_enabled {
@@ -383,6 +390,7 @@ mod implementation {
             }
             self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
 
+            log::trace!("wakeup: config");
             // turn on the timer proper -- the system will wakeup in 5..4..3....
             let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_B_ENABLE).bits();
             if self.rtc_alarm_enabled {
@@ -432,7 +440,7 @@ mod implementation {
             // turn on the timer proper -- interrupt in 5..4..3....
             let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
             if self.wakeup_alarm_enabled {
-                config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
+                config |= (Config::TIMER_B_ENABLE).bits();
             }
             self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
         }
@@ -644,16 +652,17 @@ fn xmain() -> ! {
                 }
                 log::trace!("RequestDateTime completed");
             }
-            Some(Opcode::SetWakeupAlarm) => msg_scalar_unpack!(msg, delay, _, _, _, {
+            Some(Opcode::SetWakeupAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.wakeup_alarm(delay as u8); // this will block until finished, no callbacks used
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
-            Some(Opcode::ClearWakeupAlarm) => msg_scalar_unpack!(msg, _, _, _, _, {
+            Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_wakeup_alarm(); // blocks until transaction is finished
             }),
-             Some(Opcode::SetRtcAlarm) => msg_scalar_unpack!(msg, delay, _, _, _, {
+             Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.rtc_alarm(delay as u8); // this will block until finished, no callbacks used
             }),
-            Some(Opcode::ClearRtcAlarm) => msg_scalar_unpack!(msg, _, _, _, _, {
+            Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_rtc_alarm(); // blocks until transaction is finished
             }),
             None => {
