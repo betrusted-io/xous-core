@@ -39,8 +39,8 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private enum Registers
         {
             CONTROL = 0x0,
-            STATUS = 0x8,
             DATA = 0x4,
+            STATUS = 0x8,
             AV_CONFIG = 0xc,
             RO_CONFIG = 0x10,
             ERRORS = 0x14,
