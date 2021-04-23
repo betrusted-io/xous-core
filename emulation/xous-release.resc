@@ -21,11 +21,22 @@ machine LoadPlatformDescription @betrusted.repl
 
 machine StartGdbServer 3333 true
 showAnalyzer uart
-showAnalyzer uartconsole
-# showAnalyzer uartserver0
-# showAnalyzer memlcd
+showAnalyzer console
+# showAnalyzer app_uart
+showAnalyzer memlcd
 
-logLevel -1 kbd
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+
+# Silence COM messages
+sysbus SilenceRange <0xF000C000, 0xF000CFFF>
+
+# Silence WDT
+sysbus SilenceRange <0xF001F000, 0xF001FFFF>
+
+# Silence I2C
+sysbus SilenceRange <0xF000D000, 0xF000DFFF>
+
+# logLevel -1 keyboard
 # logLevel -1 ticktimer
 
 # The macro `reset` gets called implicitly when running `machine Reset`
