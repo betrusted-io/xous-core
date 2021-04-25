@@ -305,6 +305,36 @@ impl Llio {
             Message::new_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn soc_gitrev(&self) -> Result<(u8, u8, u8, u8, u32), xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::InfoGit.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(val1, val2) = response {
+            Ok(
+                (
+                    ((val1 >> 24) as u8), // major
+                    ((val1 >> 16) as u8), // minor
+                    ((val1 >> 8) as u8),  // rev
+                    (val1 >> 0) as u8,    // gitextra
+                    val2 as u32  // gitrev
+                )
+            )
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn soc_dna(&self) -> Result<u64, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::InfoDna.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(val1, val2) = response {
+            Ok(
+                (val1 as u64) | ((val2 as u64) << 32)
+            )
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
 }
 
 
