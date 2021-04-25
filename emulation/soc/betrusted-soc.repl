@@ -1,7 +1,7 @@
 cpu: CPU.VexRiscv @ sysbus
-    timeProvider: cpu_timer
     cpuType: "rv32imac"
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
+    PerformanceInMips: 120
 
 uart: UART.LiteX_UART @ {
         sysbus 0xF0004000 // shadow
@@ -48,13 +48,6 @@ trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF0019000
 
 trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001A000
 
-// This peripheral doesn't actually exist, but is required
-// in order to keep the CPU running.
-cpu_timer: Timers.LiteX_CPUTimer @ sysbus 0xf0000800
-    frequency: 100000000
-    // IRQ #100 is Machine Timer Interrupt
-    -> cpu@100
-
 ticktimer: Timers.TickTimer @ sysbus 0xF0011000
     periodInMs: 1
     -> cpu @ 1008
@@ -67,4 +60,4 @@ flash_mem: Memory.MappedMemory @ {
 
 sysbus:
     init:
-        ApplySVD @renode.svd
+        ApplySVD @soc/renode.svd

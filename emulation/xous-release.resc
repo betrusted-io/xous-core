@@ -5,19 +5,20 @@
 path add $ORIGIN
 
 using sysbus
-mach create
 
 # Add peripherals that are defined in C#.  You must restart Renode
 # if you modify these files.
+i @peripherals/i2c_lattice_hip.cs
+i @peripherals/keyboard.cs
 i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
-i @peripherals/keyboard.cs
 i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
 
-# Load the Betrusted Renode Platform file
-machine LoadPlatformDescription @betrusted.repl
+############### Define the Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
 
 machine StartGdbServer 3333 true
 showAnalyzer uart
@@ -50,4 +51,22 @@ macro reset
 """
 
 runMacro $reset
+mach clear
+
+############### Define the Betrusted EC ###############
+mach create "EC"
+machine LoadPlatformDescription @ec/betrusted-ec.repl
+showAnalyzer uart
+macro reset
+"""
+    sysbus LoadBinary @ec/kernel.bin 0x10000000
+    cpu PC 0x10000000
+"""
+runMacro $reset
+
+# Silence I2C for now while we work on the driver
+sysbus SilenceRange <0xB0000000, 0xB000FFFF>
+
+mach clear
+
 start
