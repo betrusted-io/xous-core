@@ -8,7 +8,6 @@ using sysbus
 
 # Add peripherals that are defined in C#.  You must restart Renode
 # if you modify these files.
-i @peripherals/i2c_lattice_hip.cs
 i @peripherals/keyboard.cs
 i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
@@ -47,7 +46,6 @@ macro reset
     sysbus LoadBinary @../target/riscv32imac-unknown-none-elf/release/args.bin 0x40800000
     # Set $a0 to point at the args binary
     cpu SetRegisterUnsafe 10 0x40800000
-    # cpu PC 0x20500000
 """
 
 runMacro $reset

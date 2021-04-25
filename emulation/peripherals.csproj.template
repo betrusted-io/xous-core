@@ -1,0 +1,144 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PlatformTarget>AMD64</PlatformTarget>
+    <RenodePath>$PATH_TO_RENODE</RenodePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AdvancedLoggerViewerPlugin">
+      <HintPath>$(RenodePath)/AdvancedLoggerViewerPlugin.dll</HintPath>
+    </Reference>
+    <Reference Include="AntShell">
+      <HintPath>$(RenodePath)/AntShell.dll</HintPath>
+    </Reference>
+    <Reference Include="AsyncIO">
+      <HintPath>$(RenodePath)/AsyncIO.dll</HintPath>
+    </Reference>
+    <Reference Include="CookComputing.XmlRpcV2">
+      <HintPath>$(RenodePath)/CookComputing.XmlRpcV2.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-arm">
+      <HintPath>$(RenodePath)/cores-arm.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-arm-m">
+      <HintPath>$(RenodePath)/cores-arm-m.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-i386">
+      <HintPath>$(RenodePath)/cores-i386.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-ppc">
+      <HintPath>$(RenodePath)/cores-ppc.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-ppc64">
+      <HintPath>$(RenodePath)/cores-ppc64.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-riscv">
+      <HintPath>$(RenodePath)/cores-riscv.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-riscv64">
+      <HintPath>$(RenodePath)/cores-riscv64.dll</HintPath>
+    </Reference>
+    <Reference Include="cores-sparc">
+      <HintPath>$(RenodePath)/cores-sparc.dll</HintPath>
+    </Reference>
+    <Reference Include="CxxDemangler">
+      <HintPath>$(RenodePath)/CxxDemangler.dll</HintPath>
+    </Reference>
+    <Reference Include="Dynamitey">
+      <HintPath>$(RenodePath)/Dynamitey.dll</HintPath>
+    </Reference>
+    <Reference Include="ELFSharp">
+      <HintPath>$(RenodePath)/ELFSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Emulator">
+      <HintPath>$(RenodePath)/Emulator.dll</HintPath>
+    </Reference>
+    <Reference Include="Extensions">
+      <HintPath>$(RenodePath)/Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="FdtSharp">
+      <HintPath>$(RenodePath)/FdtSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="IronPython">
+      <HintPath>$(RenodePath)/IronPython.dll</HintPath>
+    </Reference>
+    <Reference Include="IronPython.Modules">
+      <HintPath>$(RenodePath)/IronPython.Modules.dll</HintPath>
+    </Reference>
+    <Reference Include="libtftp">
+      <HintPath>$(RenodePath)/libtftp.dll</HintPath>
+    </Reference>
+    <Reference Include="LLVMDisassembler">
+      <HintPath>$(RenodePath)/LLVMDisassembler.dll</HintPath>
+    </Reference>
+    <Reference Include="Lucene.Net">
+      <HintPath>$(RenodePath)/Lucene.Net.dll</HintPath>
+    </Reference>
+    <Reference Include="LZ4">
+      <HintPath>$(RenodePath)/LZ4.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Dynamic">
+      <HintPath>$(RenodePath)/Microsoft.Dynamic.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Scripting">
+      <HintPath>$(RenodePath)/Microsoft.Scripting.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Scripting.Metadata">
+      <HintPath>$(RenodePath)/Microsoft.Scripting.Metadata.dll</HintPath>
+    </Reference>
+    <Reference Include="Migrant">
+      <HintPath>$(RenodePath)/Migrant.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>$(RenodePath)/Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="NetMQ">
+      <HintPath>$(RenodePath)/NetMQ.dll</HintPath>
+    </Reference>
+    <Reference Include="Nini">
+      <HintPath>$(RenodePath)/Nini.dll</HintPath>
+    </Reference>
+    <Reference Include="OptionsParser">
+      <HintPath>$(RenodePath)/OptionsParser.dll</HintPath>
+    </Reference>
+    <Reference Include="PacketDotNet">
+      <HintPath>$(RenodePath)/PacketDotNet.dll</HintPath>
+    </Reference>
+    <Reference Include="Renode">
+      <HintPath>$(RenodePath)/Renode.exe</HintPath>
+    </Reference>
+    <Reference Include="Renode-peripherals">
+      <HintPath>$(RenodePath)/Renode-peripherals.dll</HintPath>
+    </Reference>
+    <Reference Include="SampleCommandPlugin">
+      <HintPath>$(RenodePath)/SampleCommandPlugin.dll</HintPath>
+    </Reference>
+    <Reference Include="Sprache">
+      <HintPath>$(RenodePath)/Sprache.dll</HintPath>
+    </Reference>
+    <Reference Include="TermSharp">
+      <HintPath>$(RenodePath)/TermSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="TracePlugin">
+      <HintPath>$(RenodePath)/TracePlugin.dll</HintPath>
+    </Reference>
+    <Reference Include="UI">
+      <HintPath>$(RenodePath)/UI.dll</HintPath>
+    </Reference>
+    <Reference Include="VerilatorPlugin">
+      <HintPath>$(RenodePath)/VerilatorPlugin.dll</HintPath>
+    </Reference>
+    <Reference Include="WiresharkPlugin">
+      <HintPath>$(RenodePath)/WiresharkPlugin.dll</HintPath>
+    </Reference>
+    <Reference Include="Xwt">
+      <HintPath>$(RenodePath)/Xwt.dll</HintPath>
+    </Reference>
+    <Reference Include="Xwt.WPF">
+      <HintPath>$(RenodePath)/Xwt.WPF.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
