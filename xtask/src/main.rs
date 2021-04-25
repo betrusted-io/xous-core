@@ -90,6 +90,15 @@ fn try_main() -> Result<(), DynError> {
         "cb-test-c1",
         "cb-test-c2",
     ];
+    let sr_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "xous-names",
+        "trng",
+        "llio",
+        "rkyv-test-client",
+        "rkyv-test-server",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
@@ -110,6 +119,7 @@ fn try_main() -> Result<(), DynError> {
         Some(&["--features", "ringosctest"]))?,
         Some("av-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
             Some(&["--features", "avalanchetest"]))?,
+        Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, None)?,
         Some("debug") => run(true, &hw_pkgs)?,
         _ => print_help(),
     }

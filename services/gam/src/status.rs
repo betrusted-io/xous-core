@@ -115,6 +115,10 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     com.req_batt_stats().expect("Can't get battery stats from COM");
 
     let mut rtc = rtc::Rtc::new(&xns).unwrap();
+
+    #[cfg(target_os = "none")]
+    rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
+
     rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<rtc::DateTime> = None;
     let mut dt_pump_modulus = 15;

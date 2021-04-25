@@ -62,6 +62,9 @@ pub(crate) enum Opcode {
     // Requests setting the UI to the power down screen
     PowerDownRequest,
 
+    // Request blank screen for ship mode
+    ShipModeBlankRequest,
+
     /////// planned
 
     // hides a canvas with a given GID

@@ -138,15 +138,16 @@ else
   md5sum $FPGA_IMAGE
   md5sum $KERNEL_IMAGE
   md5sum $LOADER_IMAGE
-  md5sum $CSR_CSV
 
   if [ $USE_IDENTITY -eq 1 ]
   then
-    # there is a private key
+      # there is a private key
+      echo "Copying to $DEST_HOST:$DESTDIR/ with public key $IDENTITY"
       scp -i $IDENTITY $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
-      scp -i $IDENTITY $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
+      # scp -i $IDENTITY $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   else
+      echo "Copying to $DEST_HOST:$DESTDIR/ without public key"
       scp $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
-      scp $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
+      # scp $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   fi
 fi

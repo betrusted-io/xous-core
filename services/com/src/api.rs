@@ -50,10 +50,10 @@ pub(crate) enum Opcode {
     //BattFullCapacity,
 
     /// Turn Boost Mode On
-    //BoostOn,
+    BoostOn,
 
     /// Turn Boost Mode Off
-    //BoostOff,
+    BoostOff,
 
     /// Read the current accelerations off the IMU
     //ImuAccelRead,
@@ -62,7 +62,7 @@ pub(crate) enum Opcode {
     PowerOffSoc,
 
     /// Ship mode (battery disconnect)
-    //ShipMode,
+    ShipMode,
 
     /// Is the battery charging?
     //IsCharging,

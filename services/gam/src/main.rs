@@ -273,6 +273,14 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 1).expect("couldn't confirm power down UI request");
                 })
             }
+            Some(Opcode::ShipModeBlankRequest) => {
+                msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                    powerdown_requested = true;
+                    gfx.draw_rectangle(Rectangle::new_with_style(Point::new(0,0), screensize, DrawStyle::new(PixelColor::Light, PixelColor::Light, 0))).expect("couldn't clear screen");
+                    gfx.flush().expect("couldn't refresh blank screen");
+                    xous::return_scalar(msg.sender, 1).expect("couldn't confirm power down UI request");
+                })
+            }
             Some(Opcode::Redraw) => {
                 msg_scalar_unpack!(msg, _, _, _, _, {
                     log::trace!("redraw message received");
