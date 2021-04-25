@@ -66,6 +66,7 @@ mod callback; use callback::*;
 mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
 mod ssid;     use ssid::*;
+mod ver;      use ver::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -113,6 +114,7 @@ impl CmdEnv {
         let mut ret = String::<1024>::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
+        let mut ver_cmd = Ver{};
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
@@ -123,6 +125,7 @@ impl CmdEnv {
             &mut self.rtc_cmd,
             &mut self.vibe_cmd,
             &mut self.ssid_cmd,
+            &mut ver_cmd,
 
             &mut self.fcc_cmd,
         ];
