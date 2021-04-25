@@ -7,7 +7,7 @@ use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::services::SystemServices;
-use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
+use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous_kernel::{SysCall, PID, TID};
 
 extern "Rust" {
