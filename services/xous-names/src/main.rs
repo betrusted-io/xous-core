@@ -103,7 +103,7 @@ fn xmain() -> ! {
                     info!("deterministic timeout done");
                     response = api::Return::Failure
                 }
-                buffer.replace(response).unwrap();
+                buffer.replace(response).expect("Register can't serialize return value");
             }
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
@@ -152,7 +152,7 @@ fn xmain() -> ! {
                     };
                     response = api::Return::AuthenticateRequest(auth_request) // this code just exists to exercise the return path
                 }
-                buffer.replace(response).unwrap();
+                buffer.replace(response).expect("Lookup can't serialize return value");
             }
             Some(api::Opcode::AuthenticatedLookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
