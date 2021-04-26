@@ -10,6 +10,10 @@ _start:
     lw          t0, 16(a0) // SRAM start
     lw          t1, 20(a0) // SRAM length
     add         sp, t0, t1
+    // kernel RAM is two pages lower than the absolute end.
+    // add two pages to the sp so we are at the loader's private stack area
+    li          t0, 0x2000
+    add         sp, sp, t0
 
     // Install a machine mode trap handler
     la          t0, abort
