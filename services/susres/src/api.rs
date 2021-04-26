@@ -2,12 +2,23 @@ use utralib::generated::*;
 
 pub(crate) const SERVER_NAME_SUSRES: &str     = "_Suspend/resume manager_";
 
-/*
-#[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    Placeholder,
-}*/
+    /// requests a suspend
+    SuspendRequest,
+
+    /// register a subscriber to the suspend event
+    /// (if you don't register, you just get suspend without any warning!)
+    SuspendEventSubscribe,
+
+    /// indicate we're ready to suspend
+    SuspendReady,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum ExecGateOpcode {
+    SuspendNow,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum RegOrField {

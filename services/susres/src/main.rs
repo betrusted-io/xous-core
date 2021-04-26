@@ -20,6 +20,8 @@ mod implementation {
     pub struct SusResHw {
         /// our CSR
         csr: utralib::CSR<u32>,
+        /// memory region for the "clean suspend" marker
+        marker: xous::MemoryRange,
         /// backing store for the ticktimer value
         time_backing: Option<[u32; 2]>,
     }
@@ -33,9 +35,16 @@ mod implementation {
             )
             .expect("couldn't map SusRes CSR range");
 
+            let marker = xous::syscall::map_memory(
+                xous::MemoryAddress::new(0x40FFE000), // this is a special, hard-coded location
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            ).expect("couldn't map clean suspend page");
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 time_backing: None,
+                marker,
             };
 
             xous::claim_interrupt(
