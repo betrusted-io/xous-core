@@ -160,7 +160,7 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_arg
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
 
-    // std::fs::copy(path, std::path::Path::new("emulation/renode.svd"))?;
+    // std::fs::copy(path, std::path::Path::new("emulation/soc/renode.svd"))?;
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -217,7 +217,7 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_arg
 }
 
 fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
-    let path = std::path::Path::new("emulation/renode.svd");
+    let path = std::path::Path::new("emulation/soc/renode.svd");
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -233,7 +233,7 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         &kernel,
         &init,
         debug,
-        MemorySpec::SvdFile("emulation/renode.svd".into()),
+        MemorySpec::SvdFile("emulation/soc/renode.svd".into()),
     )?;
 
     Ok(())
