@@ -70,7 +70,7 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         if let Some(sp) = self.sus_prologue {
             sp(self);
         }
-        for entry in self.registers.iter_mut() {
+        for entry in self.registers.iter_mut().rev() {
             if let Some(reg) = entry {
                 // masking is done on the write side
                 match reg.item {
@@ -87,7 +87,7 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         if let Some(rp) = self.res_prologue {
             rp(self);
         }
-        for entry in self.registers.iter().rev() { // this is in reverse order to the suspend
+        for entry in self.registers.iter() { // this is in reverse order to the suspend
             if let Some(reg) = entry {
                 if let Some(mut value) = reg.value {
                     if let Some(mask) = reg.mask {
@@ -105,12 +105,14 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         }
     }
 }
-/*
+
+// because the volatile memory regions can be potentially large (128kiB), but fewer (maybe 5-6 total in the system),
+// we allocate these as stand-alone structures and manage them explicitly.
 pub struct ManagedMem<const N: usize> {
     pub mem: xous::MemoryRange,
     pub backing: [u32; N],
 }
-pub trait SusResMem {
+impl<const N: usize> SuspendResume for ManagedMem<N> {
     fn suspend(&mut self) {
         let src = self.mem.as_ptr() as *const u32;
         for words in 0..self.mem.len() {
@@ -124,7 +126,6 @@ pub trait SusResMem {
         }
     }
 }
-*/
 
 
 

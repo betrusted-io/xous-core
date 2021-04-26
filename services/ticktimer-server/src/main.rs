@@ -137,7 +137,7 @@ mod implementation {
             )
             .expect("couldn't map Watchdog timer CSR range");
 
-            let susres = RegManager::<TICKTIMER_NUMREGS>::new(csr.as_mut_ptr() as *mut u32);
+            let susres = RegManager::new(csr.as_mut_ptr() as *mut u32);
 
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),

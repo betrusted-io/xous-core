@@ -143,6 +143,7 @@ cbtest                  builds an image for callback testing
 trng-test [soc.svd]     builds an image for TRNG testing (both avalanche and ring oscillator on)
 ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
 av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
+sr-test [soc.svd]       builds the suspend/resume testing image
 "
     )
 }
