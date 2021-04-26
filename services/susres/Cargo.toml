@@ -3,7 +3,7 @@ name = "susres"
 version = "0.1.0"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
-description = "Manager suspend/resume operations"
+description = "Manager of suspend/resume operations"
 
 [dependencies]
 xous = { path = "../../xous-rs" }

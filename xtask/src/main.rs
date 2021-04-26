@@ -98,6 +98,7 @@ fn try_main() -> Result<(), DynError> {
         "llio",
         "rkyv-test-client",
         "rkyv-test-server",
+        "susres",
     ];
     let task = env::args().nth(1);
     match task.as_deref() {

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-23 14:43:41]]></description>
+    <description><![CDATA[Litex SoC 2021-04-27 00:24:37]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1104,7 +1104,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3086,7 +3086,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x468ba085</resetValue>
+                    <resetValue>0x77083f9a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3101,7 +3101,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5f84de45</resetValue>
+                    <resetValue>0x9411178</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -5257,8 +5257,50 @@ register to disable individual events.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>IDENTIFIER_MEM</name>
+            <name>D11CTIME</name>
             <baseAddress>0xF0021000</baseAddress>
+            <groupName>D11CTIME</groupName>
+            <registers>
+                <register>
+                    <name>CONTROL</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x666</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>count</name>
+                            <msb>14</msb>
+                            <bitRange>[14:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Number of 1/32768 second ticks before creating a heart beat]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>HEARTBEAT</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>beat</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Set to `1` at the next `count` interval rollover since `clear` was set.]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>IDENTIFIER_MEM</name>
+            <baseAddress>0xF0022000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -5285,7 +5327,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>TIMER0</name>
-            <baseAddress>0xF0022000</baseAddress>
+            <baseAddress>0xF0023000</baseAddress>
             <groupName>TIMER0</groupName>
             <registers>
                 <register>

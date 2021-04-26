@@ -10,8 +10,8 @@ pub struct Susres {
     conn: CID,
 }
 impl Susres {
-    pub fn new() -> Result<Self, xous::Error> {
-        let conn = xous::connect(xous::SID::from_bytes(b"xoussusresserver").unwrap()).expect("Can't connect to SUSRES server");
+    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         Ok(Susres {
             conn
         })
