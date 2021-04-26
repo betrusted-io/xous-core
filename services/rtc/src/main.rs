@@ -402,6 +402,9 @@ mod implementation {
         pub fn clear_wakeup_alarm(&mut self) {
             self.wakeup_alarm_enabled = false;
 
+            // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+
             let mut config = Config::CLKOUT_DISABLE.bits();
             if self.rtc_alarm_enabled {
                 config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
