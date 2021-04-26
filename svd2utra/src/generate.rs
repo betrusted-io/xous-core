@@ -479,15 +479,20 @@ fn print_header<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
 #![allow(dead_code)]
 use core::convert::TryInto;
+
+#[derive(Debug, Copy, Clone)]
 pub struct Register {
     /// Offset of this register within this CSR
     offset: usize,
+    /// Mask of SVD-specified bits for the register
+    mask: usize,
 }
 impl Register {
-    pub const fn new(offset: usize) -> Register {
-        Register { offset }
+    pub const fn new(offset: usize, mask: usize) -> Register {
+        Register { offset, mask }
     }
 }
+#[derive(Debug, Copy, Clone)]
 pub struct Field {
     /// A bitmask we use to AND to the value, unshifted.
     /// E.g. for a width of `3` bits, this mask would be 0b111.
@@ -680,107 +685,13 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
 
     let s = r####"
 pub mod utra {
-    pub enum Error {
-        OutOfMemory,
-    }
-
-    #[derive(Debug, Copy, Clone)]
-    pub struct ManagedReg<T> {
-        pub offset: T,
-        pub mask: usize,
-        pub value: usize,
-    }
-    //#[derive(Debug)]
-    pub struct SusResRegManager<T, const N: usize> {
-        pub csr: crate::CSR<u32>,
-        pub registers: [Option<ManagedReg<T>>; N],
-        pub sus_prologue: Option<fn(&mut Self)>,
-        pub sus_epilogue: Option<fn(&mut Self)>,
-        pub res_prologue: Option<fn(&mut Self)>,
-        pub res_epilogue: Option<fn(&mut Self)>,
-    }
-    impl<T, const N: usize> SusResRegManager::<T, N> where ManagedReg<T>: core::marker::Copy {
-        pub fn new(reg_base: *mut u32) -> SusResRegManager<T, N> {
-            SusResRegManager::<T, N> {
-                csr: crate::CSR::new(reg_base),
-                registers: [None; N],
-                sus_prologue: None,
-                sus_epilogue: None,
-                res_prologue: None,
-                res_epilogue: None,
-            }
-        }
-    }
-    pub trait SusResReg<T> {
-        fn push(&mut self, mr: ManagedReg<T>) -> Result<(), Error>;
-        fn suspend(&mut self);
-        fn resume(&mut self);
-    }
-    impl<T, const N: usize> SusResReg<T> for SusResRegManager<T, N> where T: core::convert::Into<usize> + Copy {
-        // push registers into the manager in the order you want them suspended
-        fn push(&mut self, mr: ManagedReg<T>) -> Result<(), Error> {
-            for entry in self.registers.iter_mut() {
-                if entry.is_none() {
-                    *entry = Some(mr);
-                    return Ok(())
-                }
-            }
-            Err(Error::OutOfMemory)
-        }
-        fn suspend(&mut self) {
-            if let Some(sp) = self.sus_prologue {
-                sp(self);
-            }
-            for entry in self.registers.iter_mut() {
-                if let Some(reg) = entry {
-                    // masking is done on the write side
-                    reg.value = self.csr.r(crate::Register{offset: reg.offset.into()}) as usize;
-                }
-            }
-            if let Some(se) = self.sus_epilogue {
-                se(self);
-            }
-        }
-        fn resume(&mut self) {
-            if let Some(rp) = self.res_prologue {
-                rp(self);
-            }
-            for entry in self.registers.iter().rev() { // this is in reverse order to the suspend
-                if let Some(reg) = entry {
-                    self.csr.wo(crate::Register{offset: reg.offset.into()}, (reg.value & reg.mask) as u32);
-                }
-            }
-            if let Some(re) = self.res_epilogue {
-                re(self);
-            }
-        }
-    }
-/*
-    pub struct ManagedMem<const N: usize> {
-        pub mem: xous::MemoryRange,
-        pub backing: [u32; N],
-    }
-    pub trait SusResMem {
-        fn suspend(&mut self) {
-            let src = self.mem.as_ptr() as *const u32;
-            for words in 0..self.mem.len() {
-                self.backing[words] = unsafe{src.add(words).read_volatile()};
-            }
-        }
-        fn resume(&mut self) {
-            let dst = self.mem.as_ptr() as *mut u32;
-            for words in 0..self.mem.len() {
-                unsafe{dst.add(words).write_volatile(self.backing[words])};
-            }
-        }
-    }
-*/
 "####;
     out.write_all(s.as_bytes())?;
 
     for peripheral in peripherals {
         writeln!(out)?;
         writeln!(out, "    pub mod {} {{", peripheral.name.to_lowercase())?;
+        writeln!(out, "        // this enum is vestigal, and currently not used by anything")?;
         writeln!(out, "        #[derive(Debug, Copy, Clone)]")?;
         writeln!(out, "        pub enum {}Offset {{", peripheral.name.to_case(Case::UpperCamel))?;
         for register in &peripheral.registers {
@@ -793,11 +704,16 @@ pub mod utra {
             if let Some(description) = &register.description {
                 writeln!(out, "        /// {}", description)?;
             }
+            let mut mask: usize = 0;
+            for field in &register.fields {
+                mask |= ((1 << (field.msb + 1 - field.lsb)) - 1) << field.lsb;
+            }
             writeln!(
                 out,
-                "        pub const {}: crate::Register = crate::Register::new({});",
+                "        pub const {}: crate::Register = crate::Register::new({}, 0x{:x});",
                 register.name.to_uppercase(),
-                register.offset / 4
+                register.offset / 4,
+                mask,
             )?;
             for field in &register.fields {
                 writeln!(
