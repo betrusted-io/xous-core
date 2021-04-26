@@ -61,6 +61,17 @@ assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 Note that the stack pointer is not necessarily fixed, and may be changed
 in a later revision.
 
+## Special Physical Memory Addresses
+
+| Address    | Description
+| ---------- | -----------
+| 0x40000000 | Bottom of battery-backed main RAM (16MiB)
+| 0x40FFDFFF | Top of memory available to Xous
+| 0x40FFE000 | Clean suspend record - used by the system to indicate if we are coming out of a clean suspend state
+| 0x40FFF000 | Loader stack - this is corrupted by a reboot, and should not be allocated by the kernel
+| 0x40FFFFFF | Top of battery-backed main RAM
+
+
 ## Memory Whitelist
 
 Memory is kept in a whitelist.  That is, when calling
