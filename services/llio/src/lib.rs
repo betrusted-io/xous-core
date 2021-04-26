@@ -23,7 +23,7 @@ pub struct Llio {
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to MyServer");
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to LLIO");
         Ok(Llio {
           conn,
           com_sid: None,
