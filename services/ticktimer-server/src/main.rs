@@ -52,56 +52,13 @@ impl core::cmp::PartialEq for SleepRequest {
     }
 }
 
-/*
-// "suspend/resume u32"
-struct SrU32 {
-    /// offset of the register
-    offset: crate::Register,
-    /// the saved value of the register
-    value: u32,
-    /// the order in which this register should be written. If none, it's written at any convenient time.
-    resume_order: Option<u8>,
-    /// if this register should be in the suspend/resume set
-    do_sr: bool,
-}
-
-/* sketching some structs for suspend/resume */
-struct TicktimerSusres {
-    csr: utralib::CSR<u32>, // new(csr_base) will allocate this register, from the virtual CSR base given to us by the owning server
-    pub control: Option<u32>,
-    pub time1: Option<u32>,
-    pub time0: Option<u32>,
-    pub resume_time1: Option<u32>,
-    pub resume_time0: Option<u32>,
-    pub status: Option<u32>,
-    pub msleep_target1: Option<u32>,
-    pub msleep_target0: Option<u32>,
-    pub ev_status: Option<u32>,
-    pub ev_pending: Option<u32>,
-    pub ev_enable: Option<u32>,
-    pub ticktimer_irq: Option<bool>, // whether to enable or not after resume
-    pub wait_suspend: Option<fn(timeout: u32) -> bool>, // function to call to check if a block can suspend
-}
-pub trait SuspendResume {
-    pub fn suspend(&mut self) {
-        /*
-        go through each item of the structure, and if the item is Some(item), access the corresponding
-        register and save it into the register
-         */
-    }
-    pub fn resume(&mut self) {
-        /*
-        go through each item of the stucture, and if the item is Some(item), unwrap the value and
-        poke it into the register
-        */
-    }
-}
-*/
 #[cfg(target_os = "none")]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::SleepRequest;
     use utralib::generated::*;
+    use utra::ticktimer::*;
+    use susres::*;
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
@@ -109,6 +66,7 @@ mod implementation {
         wdt: utralib::CSR<u32>,
         current_response: Option<SleepRequest>,
         connection: xous::CID,
+        susres: RegManager<TICKTIMER_NUMREGS>,
     }
 
     fn handle_wdt(_irq_no: usize, arg: *mut usize) {
@@ -179,16 +137,22 @@ mod implementation {
             )
             .expect("couldn't map Watchdog timer CSR range");
 
+            let susres = RegManager::<TICKTIMER_NUMREGS>::new(csr.as_mut_ptr() as *mut u32);
+
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 #[cfg(feature = "watchdog")]
                 wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
                 current_response: None,
                 connection,
+                susres,
             };
 
             #[cfg(feature = "watchdog")]
-            xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+            {
+                xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+                xtt.susres.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
+            }
 
             xous::claim_interrupt(
                 utra::ticktimer::TICKTIMER_IRQ,
@@ -205,7 +169,10 @@ mod implementation {
             .expect("couldn't claim irq");
 
             #[cfg(feature = "watchdog")]
-            xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+            {
+                xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+                xtt.susres.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+            }
 
             xtt
         }
