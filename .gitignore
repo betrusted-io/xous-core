@@ -8,3 +8,6 @@
 
 # Emacs
 *~
+
+# local utility shellscripts
+update-precursors.sh

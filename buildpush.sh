@@ -30,9 +30,9 @@ do
 	  shift
 	  ;;
       -l|--loader-skip)
-    UPDATE_LOADER=0
-    shift
-    ;;
+	  UPDATE_LOADER=0
+	  shift
+	  ;;
       -c|--copy-to)
 	  DEST_HOST=$2
 	  USE_USB=0
@@ -69,9 +69,8 @@ do
 	  IMAGE=av-test
 	  shift
 	  ;;
-      -s|--socsvd)
-	  OVERRIDE_SVD=$2
-    shift
+      -p|--prebuild)
+	  OVERRIDE_SVD=precursors/soc.svd
 	  shift
 	  ;;
       -h|--help)
@@ -135,6 +134,10 @@ then
     fi
 else
 
+  if [ -n "$OVERRIDE_SVD" ]
+  then
+      FPGA_IMAGE=precursors/soc_csr.bin
+  fi
   if [ -e "$FPGA_IMAGE" ]
   then
       md5sum $FPGA_IMAGE
@@ -147,10 +150,8 @@ else
       # there is a private key
       echo "Copying to $DEST_HOST:$DESTDIR/ with public key $IDENTITY"
       scp -i $IDENTITY $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
-      # scp -i $IDENTITY $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   else
       echo "Copying to $DEST_HOST:$DESTDIR/ without public key"
       scp $KERNEL_IMAGE $FPGA_IMAGE $LOADER_IMAGE $DEST_HOST:$DESTDIR/
-      # scp $CSR_CSV $DEST_HOST:$DESTDIR/soc-csr.csv
   fi
 fi

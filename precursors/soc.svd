@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-27 00:24:37]]></description>
+    <description><![CDATA[Litex SoC 2021-04-27 19:11:31]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1070,10 +1070,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``4878d3c3``, so this value is 1215878083, which should be enough to check out
+``e820c7eb``, so this value is 3894462443, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x4878d3c3</resetValue>
+                    <resetValue>0xe820c7eb</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1090,7 +1090,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x1f</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1104,7 +1104,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x01</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3086,7 +3086,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x77083f9a</resetValue>
+                    <resetValue>0x7da57e92</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3101,7 +3101,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x9411178</resetValue>
+                    <resetValue>0x63e59e7b</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
