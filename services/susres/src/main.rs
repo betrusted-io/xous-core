@@ -22,6 +22,8 @@ mod implementation {
         csr: utralib::CSR<u32>,
         /// memory region for the "clean suspend" marker
         marker: xous::MemoryRange,
+        /// loader stack region -- this data is dirtied on every resume; claim it in this process so no others accidentally use it
+        loader_stack: xous::MemoryRange,
         /// backing store for the ticktimer value
         time_backing: Option<[u32; 2]>,
     }
@@ -41,11 +43,21 @@ mod implementation {
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map clean suspend page");
+            let loader_stack = xous::syscall::map_memory(
+                xous::MemoryAddress::new(0x40FFF000), // this is a special, hard-coded location
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            ).expect("couldn't map clean suspend page");
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 time_backing: None,
                 marker,
+                loader_stack,
             };
+
+            // check that the marker has been zerod by map_memory
+            // TODO
 
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
