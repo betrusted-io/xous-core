@@ -1,7 +1,7 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{BufRead, BufReader, Read, Write};
-
+use convert_case::{Case, Casing};
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedTag,
@@ -477,16 +477,22 @@ fn parse_vendor_extensions<T: BufRead>(
 
 fn print_header<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
+#![allow(dead_code)]
 use core::convert::TryInto;
+
+#[derive(Debug, Copy, Clone)]
 pub struct Register {
     /// Offset of this register within this CSR
     offset: usize,
+    /// Mask of SVD-specified bits for the register
+    mask: usize,
 }
 impl Register {
-    pub const fn new(offset: usize) -> Register {
-        Register { offset }
+    pub const fn new(offset: usize, mask: usize) -> Register {
+        Register { offset, mask }
     }
 }
+#[derive(Debug, Copy, Clone)]
 pub struct Field {
     /// A bitmask we use to AND to the value, unshifted.
     /// E.g. for a width of `3` bits, this mask would be 0b111.
@@ -549,6 +555,7 @@ impl Field {
         }
     }
 }
+#[derive(Debug, Copy, Clone)]
 pub struct CSR<T> {
     pub base: *mut T,
 }
@@ -676,20 +683,37 @@ fn print_peripherals<U: Write>(peripherals: &[Peripheral], out: &mut U) -> std::
     }
     writeln!(out)?;
 
-    writeln!(out, "pub mod utra {{")?;
+    let s = r####"
+pub mod utra {
+"####;
+    out.write_all(s.as_bytes())?;
+
     for peripheral in peripherals {
         writeln!(out)?;
         writeln!(out, "    pub mod {} {{", peripheral.name.to_lowercase())?;
+        writeln!(out, "        // this enum is vestigal, and currently not used by anything")?;
+        writeln!(out, "        #[derive(Debug, Copy, Clone)]")?;
+        writeln!(out, "        pub enum {}Offset {{", peripheral.name.to_case(Case::UpperCamel))?;
+        for register in &peripheral.registers {
+            writeln!(out, "            {} = {},", register.name.to_case(Case::UpperCamel), register.offset / 4)?;
+        }
+        writeln!(out, "        }}")?;
+        writeln!(out, "        pub const {}_NUMREGS: usize = {};", peripheral.name.to_uppercase(), peripheral.registers.len())?;
         for register in &peripheral.registers {
             writeln!(out)?;
             if let Some(description) = &register.description {
                 writeln!(out, "        /// {}", description)?;
             }
+            let mut mask: usize = 0;
+            for field in &register.fields {
+                mask |= ((1 << (field.msb + 1 - field.lsb)) - 1) << field.lsb;
+            }
             writeln!(
                 out,
-                "        pub const {}: crate::Register = crate::Register::new({});",
+                "        pub const {}: crate::Register = crate::Register::new({}, 0x{:x});",
                 register.name.to_uppercase(),
-                register.offset / 4
+                register.offset / 4,
+                mask,
             )?;
             for field in &register.fields {
                 writeln!(

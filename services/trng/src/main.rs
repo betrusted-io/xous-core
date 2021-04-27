@@ -354,6 +354,12 @@ fn xmain() -> ! {
     #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
 
+    #[cfg(feature = "avalanchetest")]
+    log::info!("TRNG built with avalanche test enabled");
+
+    #[cfg(feature = "ringosctest")]
+    log::info!("TRNG built with ring oscillator test enabled");
+
     #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
     xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
 

@@ -19,7 +19,7 @@ app_uart: UART.LiteX_UART @ {
     -> cpu@1004
 
 timer0: Timers.LiteX_Timer_32 @ {
-        sysbus 0xF0021000
+        sysbus 0xF0022000
     }
     frequency: 100000000
     -> cpu@1001
@@ -41,12 +41,12 @@ fbmem: Memory.MappedMemory @ sysbus 0xB0000000
 
 memlcd: Video.BetrustedLCD @ sysbus 0xF000B000
 
-keyboard: Input.BetrustedKbd @ sysbus 0xF0014000
+keyboard: Input.BetrustedKbd @ sysbus 0xF0015000
     -> cpu @ 1010
 
-trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF0019000
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF001A000
 
-trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001A000
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001B000
 
 ticktimer: Timers.TickTimer @ sysbus 0xF0011000
     periodInMs: 1

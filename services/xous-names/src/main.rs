@@ -15,11 +15,52 @@ use xous_ipc::{String, Buffer};
 
 use log::{error, info};
 
-const FAIL_TIMEOUT_MS: u64 = 100;
+#[cfg(target_os = "none")]
+mod implementation {
+    use utralib::generated::*;
 
+    pub struct D11cTimeout {
+        d11t_csr: utralib::CSR<u32>,
+    }
+    impl D11cTimeout {
+        pub fn new() -> Self {
+            let csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::d11ctime::HW_D11CTIME_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map D11cTimeout CSR range");
+
+            D11cTimeout {
+                d11t_csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+            }
+        }
+        pub fn deterministic_busy_wait(&self) {
+            let phase = self.d11t_csr.rf(utra::d11ctime::HEARTBEAT_BEAT);
+            while phase == self.d11t_csr.rf(utra::d11ctime::HEARTBEAT_BEAT) {
+                xous::yield_slice();
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "none"))]
+mod implementation {
+    pub struct D11cTimeout {}
+    impl D11cTimeout {
+        pub fn new() -> Self {
+            D11cTimeout {}
+        }
+        pub fn deterministic_busy_wait(&self) {
+            // don't do anything for hosted mode
+        }
+    }
+}
 
 #[xous::xous_main]
 fn xmain() -> ! {
+    use implementation::*;
     let debug1 = false;
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -28,7 +69,7 @@ fn xmain() -> ! {
     let name_server = xous::create_server_with_address(b"xous-name-server")
         .expect("Couldn't create xousnames-server");
 
-    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+    let d11ctimeout = D11cTimeout::new();
 
     // this limits the number of available servers to be requested to 128...!
     let mut name_table = FnvIndexMap::<_, _, U128>::new();
@@ -57,19 +98,12 @@ fn xmain() -> ! {
 
                     response = api::Return::SID(new_sid.into());
                 } else {
-                    // compute the next interval, rounded to a multiple of FAIL_TIMEOUT_MS to reduce timing side channels
-                    let target_time: u64 = ((ticktimer.elapsed_ms()
-                        / FAIL_TIMEOUT_MS)
-                        + 1)
-                        * FAIL_TIMEOUT_MS;
                     info!("request failed, waiting for deterministic timeout");
-                    while ticktimer.elapsed_ms() < target_time {
-                        xous::yield_slice();
-                    }
+                    d11ctimeout.deterministic_busy_wait();
                     info!("deterministic timeout done");
                     response = api::Return::Failure
                 }
-                buffer.replace(response).unwrap();
+                buffer.replace(response).expect("Register can't serialize return value");
             }
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
@@ -118,7 +152,7 @@ fn xmain() -> ! {
                     };
                     response = api::Return::AuthenticateRequest(auth_request) // this code just exists to exercise the return path
                 }
-                buffer.replace(response).unwrap();
+                buffer.replace(response).expect("Lookup can't serialize return value");
             }
             Some(api::Opcode::AuthenticatedLookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();

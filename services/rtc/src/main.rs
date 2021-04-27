@@ -402,6 +402,9 @@ mod implementation {
         pub fn clear_wakeup_alarm(&mut self) {
             self.wakeup_alarm_enabled = false;
 
+            // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
+            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+
             let mut config = Config::CLKOUT_DISABLE.bits();
             if self.rtc_alarm_enabled {
                 config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
@@ -658,12 +661,15 @@ fn xmain() -> ! {
             }),
             Some(Opcode::ClearWakeupAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_wakeup_alarm(); // blocks until transaction is finished
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
              Some(Opcode::SetRtcAlarm) => msg_blocking_scalar_unpack!(msg, delay, _, _, _, {
                 rtc.rtc_alarm(delay as u8); // this will block until finished, no callbacks used
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             Some(Opcode::ClearRtcAlarm) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 rtc.clear_rtc_alarm(); // blocks until transaction is finished
+                xous::return_scalar(msg.sender, 0).expect("couldn't return to caller");
             }),
             None => {
                 log::error!("unknown opcode received, exiting");

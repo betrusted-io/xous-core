@@ -344,6 +344,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,11 +1329,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
+name = "susres"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "svd2utra"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "convert_case",
  "quick-xml",
 ]
 
@@ -1414,6 +1435,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "susres",
  "utralib",
  "xous",
 ]
@@ -1754,7 +1776,6 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
- "ticktimer-server",
  "utralib",
  "xous",
  "xous-ipc",

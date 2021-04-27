@@ -135,7 +135,10 @@ then
     fi
 else
 
-  md5sum $FPGA_IMAGE
+  if [ -e "$FPGA_IMAGE" ]
+  then
+      md5sum $FPGA_IMAGE
+  fi
   md5sum $KERNEL_IMAGE
   md5sum $LOADER_IMAGE
 

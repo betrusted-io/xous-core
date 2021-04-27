@@ -1116,6 +1116,8 @@ fn phase_1(cfg: &mut BootConfig) {
     // prior to jumping to our program, so allocate one page of data for
     // stack.
     // All other allocations will be placed below the stack pointer.
+    //
+    // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
     cfg.init_size += PAGE_SIZE * 2;
 
     // The first region is defined as being "main RAM", which will be used
@@ -1152,8 +1154,11 @@ fn phase_1(cfg: &mut BootConfig) {
     // will require us to transfer ownership in `stage3`.
     // Note also that we skip the first index, causing the stack to be
     // returned to the process pool.
+    // We also skip the second index as that is the clean suspend page. This
+    // needs to be claimed by the susres server before the kernel allocates it.
+    // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
-    for i in 1..(cfg.init_size / PAGE_SIZE) {
+    for i in 3..(cfg.init_size / PAGE_SIZE) {
         cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = 1;
     }
 }
@@ -1229,5 +1234,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
         "Runtime Page Tracker: {} bytes",
         cfg.runtime_page_tracker.len()
     );
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 0;
+    // mark pages used by suspend/resume as unused for later allocation by the susres server
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 0; // loader stack
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // clean suspend page
 }

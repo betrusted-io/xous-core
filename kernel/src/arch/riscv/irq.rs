@@ -7,7 +7,7 @@ use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
 use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::services::SystemServices;
-use riscv::register::{scause, sepc, sie, sstatus, stval, vexriscv::sim, vexriscv::sip};
+use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous_kernel::{SysCall, PID, TID};
 
 extern "Rust" {
@@ -18,14 +18,17 @@ extern "C" {
     fn flush_mmu();
 }
 
+// use RAM-based backing so this variable is automatically saved on suspend
+static mut SIM_BACKING: usize = 0;
 /// Disable external interrupts
 pub fn disable_all_irqs() {
-    unsafe { sie::clear_sext() };
+    unsafe{SIM_BACKING = sim::read()};
+    sim::write(0x0);
 }
 
 /// Enable external interrupts
 pub fn enable_all_irqs() {
-    unsafe { sie::set_sext() };
+    sim::write(unsafe{SIM_BACKING});
 }
 
 pub fn enable_irq(irq_no: usize) {
