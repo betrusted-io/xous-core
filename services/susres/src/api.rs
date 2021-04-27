@@ -2,6 +2,7 @@
 use utralib::generated::*;
 
 pub(crate) const SERVER_NAME_SUSRES: &str     = "_Suspend/resume manager_";
+pub(crate) const SERVER_NAME_EXEC_GATE: &str  = "_Suspend/resume execution gate_";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -14,13 +15,36 @@ pub(crate) enum Opcode {
 
     /// indicate we're ready to suspend
     SuspendReady,
+
+    /// from the timeout thread
+    SuspendTimeout,
+
+    /// exit the server
+    Quit,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub(crate) struct ScalarHook {
+    pub sid: (u32, u32, u32, u32),
+    pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
+    pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum SuspendEventCallback {
+    Event, // this contains a token as well which must be returned to indicate you're ready for the suspend
+    Drop,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum ExecGateOpcode {
-    SuspendNow,
+    SuspendingNow,
+    Drop,
 }
 
+/////////////////////////////////////////////////////////////////////////
+/////////////////////////// suspend-resume hardware management primitives
+/////////////////////////////////////////////////////////////////////////
 #[cfg(target_os = "none")]
 #[derive(Debug, Copy, Clone)]
 pub enum RegOrField {

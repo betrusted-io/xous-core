@@ -1339,6 +1339,7 @@ dependencies = [
  "rkyv 0.4.3",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-27 19:37:49]]></description>
+    <description><![CDATA[Litex SoC 2021-04-28 03:19:07]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1104,7 +1104,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2275,8 +2275,23 @@ indicates we are on the resume half of a suspend/resume.]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>INTERRUPT</name>
+                    <name>POWERDOWN</name>
                     <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>powerdown</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a `1` to force an immediate powerdown. Use with care.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>INTERRUPT</name>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2294,7 +2309,7 @@ suspend/resume from an interrupt context.]]></description>
                     <name>EV_STATUS</name>
                     <description><![CDATA[This register contains the current raw level of the soft_int event trigger.
 Writes to this register have no effect.]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2311,7 +2326,7 @@ Writes to this register have no effect.]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[When a  soft_int event occurs, the corresponding bit will be set in this
 register.  To clear the Event, set the corresponding bit in this register.]]></description>
-                    <addressOffset>0x0024</addressOffset>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2329,7 +2344,7 @@ edge.]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[This register enables the corresponding soft_int events.  Write a ``0`` to this
 register to disable individual events.]]></description>
-                    <addressOffset>0x0028</addressOffset>
+                    <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2345,7 +2360,7 @@ register to disable individual events.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x2c</size>
+                <size>0x30</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3086,7 +3101,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x54a7f2ac</resetValue>
+                    <resetValue>0x4a3e2334</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3101,7 +3116,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x7c67acbc</resetValue>
+                    <resetValue>0x2fa94a6a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
