@@ -207,9 +207,6 @@ fn main() {
         csr_to_config(tools::utils::CsrConfig { regions: map }, &mut ram_config);
     }
 
-    // reserve top two pages for bootloader stack, and for the "clean suspend" page
-    ram_config.size -= 4096 * 2;
-
     let mut args = XousArguments::new(ram_config.offset, ram_config.size, ram_config.name);
 
     if !ram_config.regions.is_empty() {
