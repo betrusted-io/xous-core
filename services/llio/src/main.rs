@@ -30,7 +30,6 @@ mod implementation {
         handler_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
         power_csr: utralib::CSR<u32>,
-        seed_csr: utralib::CSR<u32>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer: ticktimer_server::Ticktimer,
         destruct_armed: bool,
@@ -163,13 +162,6 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Power CSR range");
-            let seed_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Seed CSR range");
             let xadc_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::trng::HW_TRNG_BASE),
                 None,
@@ -190,7 +182,6 @@ mod implementation {
                 handler_conn: Some(handler_conn), // connection for messages from IRQ handler
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
-                seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer,
                 destruct_armed: false,
@@ -298,9 +289,6 @@ mod implementation {
         }
         pub fn get_info_target(&self) -> (usize, usize) {
             (self.info_csr.r(utra::info::PLATFORM_TARGET0) as usize, self.info_csr.r(utra::info::PLATFORM_TARGET1) as usize)
-        }
-        pub fn get_info_seed(&self) -> (usize, usize) {
-            (self.seed_csr.r(utra::seed::SEED0) as usize, self.info_csr.r(utra::seed::SEED1) as usize)
         }
 
         pub fn power_audio(&mut self, power_on: bool) {
@@ -450,7 +438,6 @@ mod implementation {
         pub fn get_info_git(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
-        pub fn get_info_seed(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn power_audio(&self, _power_on: bool) {}
         pub fn power_self(&self, _power_on: bool) {}
         pub fn power_boost_mode(&self, _power_on: bool) {}
@@ -607,10 +594,6 @@ fn xmain() -> ! {
                 Some(Opcode::InfoTarget) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                     let (val1, val2) = llio.get_info_target();
                     xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
-                }),
-                Some(Opcode::InfoSeed) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let (val1, val2) = llio.get_info_seed();
-                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Seed");
                 }),
                 Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
                     if power_on == 0 {

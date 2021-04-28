@@ -1175,7 +1175,7 @@ pub fn create_server() -> core::result::Result<SID, Error> {
 }
 
 /// Fetch a random server ID from the kernel. This is used
-/// exclusively by the name server.  A random server ID is generated
+/// exclusively by the name server and the suspend/resume server.  A random server ID is generated
 /// by the kernel and returned to the caller. This address can then be registered
 /// to a namserver by the caller in their memory space.
 ///

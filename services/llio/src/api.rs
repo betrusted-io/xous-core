@@ -170,7 +170,6 @@ pub(crate) enum Opcode {
     InfoGit,
     InfoPlatform,
     InfoTarget,
-    InfoSeed,
 
     /// not tested -- power
     PowerAudio, //(bool),

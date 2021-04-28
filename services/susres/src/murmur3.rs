@@ -20,7 +20,6 @@ const M: u32 = 5;
 const N: u32 = 0xe654_6b64;
 
 pub fn murmur3_32(source: &[u32], seed: u32) -> u32 {
-    let mut buffer: [u8; 4] = [0; 4];
     let mut processed = 0;
     let mut state = seed;
 
@@ -70,6 +69,10 @@ mod tests {
             Result {
                 slice: &[0x34333231, 0x38373635], // "12345678",
                 hash_32: 0x91b313ce,
+            },
+            Result {
+                slice: &[],
+                hash_32: 0,
             },
         ];
 

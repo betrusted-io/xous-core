@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-//mod os_timer;
+mod murmur3;
 
 mod api;
 use api::*;
@@ -14,11 +14,12 @@ use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
-    use crate::api::*;
+    use crate::{api::*, murmur3::murmur3_32};
     use crate::SHOULD_RESUME;
     use core::sync::atomic::{AtomicBool, Ordering};
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
+    const SYSTEM_TICK_INTERVAL_MS: u32 = 10;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
         let mut timer = CSR::new(arg as *mut u32);
@@ -63,6 +64,8 @@ mod implementation {
         loader_stack: xous::MemoryRange,
         /// backing store for the ticktimer value
         stored_time: Option<u64>,
+        /// so we can access the build seed and detect if the FPGA image was changed on us
+        seed_csr: utralib::CSR<u32>,
     }
     impl SusResHw {
         pub fn new() -> Self {
@@ -101,15 +104,24 @@ mod implementation {
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map clean suspend page");
+            let seed_csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Seed CSR range");
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 os_timer: CSR::new(ostimer_csr.as_mut_ptr() as *mut u32),
                 stored_time: None,
                 marker,
                 loader_stack,
+                seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
             };
+
             // start the OS timer running
-            let ms = 10; // tick every 10 ms
+            let ms = SYSTEM_TICK_INTERVAL_MS;
             sr.os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
             // load its values
             sr.os_timer.wfo(utra::timer0::LOAD_LOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
@@ -137,6 +149,10 @@ mod implementation {
         }
 
         pub fn do_suspend(&mut self, _forced: bool) {
+            // stop pre-emption
+            self.os_timer.wfo(utra::timer0::EN_EN, 0);
+            self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
+
             // make sure we're able to handle a soft interrupt
             self.csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, 1);
 
@@ -152,6 +168,65 @@ mod implementation {
             );
 
             // setup the clean suspend marker, note if things were forced
+            const WORDS_PER_PAGE: usize = 1024;
+            let marker: *mut[u32; WORDS_PER_PAGE] = self.marker.as_mut_ptr() as *mut[u32; 1024];
+
+            // get some entropy from the kernel using a special syscall crafted for this purpose
+            let (r0, r1, r2, r3) = xous::create_server_id().unwrap().to_u32();
+            let (r4, r5, r6, r7) = xous::create_server_id().unwrap().to_u32();
+            const RANGES: usize = 8;
+            let entropy: [u32; RANGES] = [r0, r1, r2, r3, r4, r5, r6, r7];
+            /* now stripe the entropy into the clean suspend marker to create a structure that is
+               likely to be corrupted if power is lost even for a short while, and also unlikely to
+               be reproduced by accident
+
+               The general structure is:
+               - 8x 128-word ranges = 1024 words = 1 page
+               - The first 127 words are one of four fixed word patterns selected by indexing through
+                 a random word
+               - EXCEPT for the 0th range, the first 64 bits (2 words) are the build seed of the current FPGA
+                 The loader will check this seed on the next boot, so if the FPGA image changed it's a clean boot
+               - The 128th word is a murmur3 hash of the previous 127 words
+
+               Rationale:
+               - we use 8x murmur32 hashes to reduce the chance of collisions (effectively 256-bit hash space)
+               - we don't just fill the memory with random numbers because we don't want to exhaust the TRNG
+                 pool during a suspend: generating more entropy takes a lot of time. Generally, the kernel
+                 wil always have at least a few words of entropy on hand, though.
+               - we "stretch out" our random numbers by mapping them into word patterns that are compliments
+                 that have perhaps some chance to exercise the array structure of the RAM on power-up
+               - we include the build seed so that for many use cases we don't accidentally resume from a suspend
+                 built for a different FPGA image. This fails in the case that someone has fixed the seed for
+                 the purpose of reproducible builds.
+            */
+            let seed0 = self.seed_csr.r(utra::seed::SEED0);
+            let seed1 = self.seed_csr.r(utra::seed::SEED1);
+            let range = WORDS_PER_PAGE / RANGES;
+            let mut index: usize = 0;
+            for &e in entropy.iter() {
+                for i in 0..(range - 1) {
+                    let word = match (e >> ((i % 4) * 2)) & 0x3 {
+                        0 => 0x0000_0000,
+                        1 => 0xAA33_33AA,
+                        2 => 0xFFFF_FFFF,
+                        3 => 0xCC55_55CC,
+                        _ => 0x3141_5923, // this should really never happen, but Rust wants it
+                    };
+                    unsafe{(*marker)[index + i] = word};
+                }
+                if index == 0 {
+                    unsafe{(*marker)[index] = seed0};
+                    unsafe{(*marker)[index + 1] = seed1};
+                }
+                let mut hashbuf: [u32; WORDS_PER_PAGE / RANGES - 1] = [0; WORDS_PER_PAGE / RANGES - 1];
+                for i in 0..hashbuf.len() {
+                    hashbuf[i] = unsafe{(*marker)[index + i]};
+                }
+                let hash = murmur3_32( &hashbuf, 0);
+                unsafe{(*marker)[index + range - 1] = hash;}
+                index += range;
+            }
+
 
             // set a wakeup alarm
 
@@ -164,7 +239,21 @@ mod implementation {
             }
         }
         pub fn do_resume(&mut self, _forced: bool) {
+            // resume the ticktimer where it left off
             if let Some(time)= self.stored_time.take() {
+                // zero out the clean-suspend marker
+                let marker: *mut [u32; 1024] = self.marker.as_mut_ptr() as *mut[u32; 1024];
+                for words in 0..1024 {
+                    unsafe{(*marker)[words] = 0x0;}
+                }
+
+                // set up pre-emption timer
+                let ms = SYSTEM_TICK_INTERVAL_MS;
+                self.os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+                // load its values
+                self.os_timer.wfo(utra::timer0::LOAD_LOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+                self.os_timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+
                 // restore the ticktimer
                 self.csr.wo(utra::susres::RESUME_TIME0, time as u32);
                 self.csr.wo(utra::susres::RESUME_TIME1, (time >> 32) as u32);
@@ -173,7 +262,14 @@ mod implementation {
                     self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
                     self.csr.ms(utra::susres::CONTROL_LOAD, 1)
                 );
-                // start the timer running
+
+                // enable the pre-emption timer
+                self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
+
+                // Set EV_ENABLE, this starts pre-emption
+                self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
+
+                // start the tickttimer running
                 self.csr.wo(utra::susres::CONTROL, 0);
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
