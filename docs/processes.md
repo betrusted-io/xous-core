@@ -1,11 +1,25 @@
 # Processes in Xous
 
-Xous supports multiple processes, each with their own address space.
-Xous has no concept of threads, priority, or indeed even a runqueue.  It
+Xous supports multiple processes, each with their own address space, with
+potentially multiple threads inside a single process.
+Xous has no concept of priority, or indeed even a runqueue.  It
 only knows how to pass messages, and that it should call the `idle
 process` when there are no other tasks to run.
 
-Multi-threading is optionally handled in userspace.
+Multitasking is technically co-operative, except that there is a userspace
+server inside `susres` which does nothing but configure `TIMER0` to 
+perform a pre-emption interrupt once every system tick that causes the
+currently running process to return control to th parent. Thus, the system
+has the feel of a pre-emptive multi-tasking operating system, but the
+pre-emption is implemented entirely in userspace. 
+
+In addition, there is a `ticktimer-server` which is used by processes as
+a resource to manage the flow of time, and to implement polling loops.
+Processes which need to periodically check on things start a dedicated
+thread which uses the `sleep_ms` routine on the `ticktimer_server` to
+efficiently de-schedule the process from the run queue. As a result,
+the `ticktimer-server` lays the foundation for a user-space nexus that can implement
+scheduling priority.
 
 This document covers the Xous kernel-native multi-processing
 implementation, along with several possible implementations of the idle
@@ -137,6 +151,9 @@ is no parent process, the kernel will wait for an interrupt, and await a
 message to be delivered from userspace.
 
 ### Implementing Multi Threading
+
+**note** As of Xous 0.8 all the documentation in this article about
+multi-threading is deprecated. These sections need a complete re-write.
 
 A process' parent is allowed several specialized syscalls.  For example,
 it has the ability to change the `sp` of a child process.  In order to
