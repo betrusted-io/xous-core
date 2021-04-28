@@ -3,8 +3,6 @@
 
 mod api;
 
-mod os_timer;
-
 use heapless::binary_heap::{BinaryHeap, Min};
 use heapless::consts::*;
 
@@ -444,9 +442,6 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    // Start the OS timer which is responsible for setting up preemption.
-    os_timer::init();
-
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
