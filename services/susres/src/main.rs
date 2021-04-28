@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-mod os_timer;
+//mod os_timer;
 
 mod api;
 use api::*;
@@ -17,6 +17,20 @@ mod implementation {
     use crate::api::*;
     use crate::SHOULD_RESUME;
     use core::sync::atomic::{AtomicBool, Ordering};
+
+    const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
+
+    fn timer_tick(_irq_no: usize, arg: *mut usize) {
+        let mut timer = CSR::new(arg as *mut u32);
+        // this call forces pre-emption every timer tick
+        // rsyscalls are "raw syscalls" -- used for syscalls that don't have a friendly wrapper around them
+        // since ReturnToParent is only used here, we haven't wrapped it, so we use an rsyscall
+        xous::rsyscall(xous::SysCall::ReturnToParent(xous::PID::new(1).unwrap(), 0))
+            .expect("couldn't return to parent");
+
+        // acknowledge the timer
+        timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);
+    }
 
     // we do all the suspend/resume coordination in an interrupt context
     // the process state is pushed to main memory prior to entering this routine, so it's staged for a resume
@@ -41,6 +55,8 @@ mod implementation {
     pub struct SusResHw {
         /// our CSR
         csr: utralib::CSR<u32>,
+        /// OS timer CSR
+        os_timer: utralib::CSR<u32>,
         /// memory region for the "clean suspend" marker
         marker: xous::MemoryRange,
         /// loader stack region -- this data is dirtied on every resume; claim it in this process so no others accidentally use it
@@ -50,6 +66,21 @@ mod implementation {
     }
     impl SusResHw {
         pub fn new() -> Self {
+            // os timer initializations
+            let ostimer_csr  = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::timer0::HW_TIMER0_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Ticktimer CSR range");
+            xous::claim_interrupt(
+                utra::timer0::TIMER0_IRQ,
+                timer_tick,
+                ostimer_csr.as_mut_ptr() as *mut usize,
+            ).expect("couldn't claim IRQ");
+
+            // everything else
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::susres::HW_SUSRES_BASE),
                 None,
@@ -72,17 +103,28 @@ mod implementation {
             ).expect("couldn't map clean suspend page");
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                os_timer: CSR::new(ostimer_csr.as_mut_ptr() as *mut u32),
                 stored_time: None,
                 marker,
                 loader_stack,
             };
+            // start the OS timer running
+            let ms = 10; // tick every 10 ms
+            sr.os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+            // load its values
+            sr.os_timer.wfo(utra::timer0::LOAD_LOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+            sr.os_timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+            // enable the timer
+            sr.os_timer.wfo(utra::timer0::EN_EN, 0b1);
+
+            // Set EV_ENABLE, this starts pre-emption
+            sr.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
 
             // check that the marker has been zero'd by map_memory. Once this passes we can probably get rid of this code.
             let check_marker =  marker.as_ptr() as *const [u32; 1024];
             for words in 0..1024 {
-                if unsafe{(*check_marker)[words]} != 0 {
-                    log::error!("marker had non-zero entry: 0x{:x} @ 0x{:x}", unsafe{(*check_marker)[words]}, words);
-                }
+                // note to self: don't use log:: here because we're upstream of logging being initialized
+                assert!(unsafe{(*check_marker)[words]} == 0, "marker had non-zero entry!");
             }
 
             xous::claim_interrupt(
@@ -260,7 +302,8 @@ pub fn execution_gate() {
 #[xous::xous_main]
 fn xmain() -> ! {
     // Start the OS timer which is responsible for setting up preemption.
-    os_timer::init();
+    // os_timer::init();
+    let mut susres_hw = implementation::SusResHw::new();
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Trace);
@@ -279,7 +322,6 @@ fn xmain() -> ! {
     xous::create_thread_4(timeout_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't create timeout thread");
     let timeout_outgoing_conn = xous::connect(timeout_sid).expect("couldn't connect to our timeout thread");
 
-    let mut susres_hw = implementation::SusResHw::new();
     let mut suspend_requested = false;
     let mut timeout_pending = false;
 

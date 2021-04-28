@@ -50,6 +50,7 @@ fn try_main() -> Result<(), DynError> {
         "trng",
         "llio",
         "rtc",
+        "susres",
     ];
     let fcc_pkgs = [
         "fcc-agent",
@@ -60,6 +61,7 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
+        "susres",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -70,6 +72,7 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "keyboard",
         "trng",
+        "susres",
     ];
     let minimal_pkgs = [
         "ticktimer-server",
@@ -79,6 +82,7 @@ fn try_main() -> Result<(), DynError> {
         "llio",
         "rkyv-test-client",
         "rkyv-test-server",
+        "susres",
     ];
     let cbtest_pkgs = [
         "ticktimer-server",
@@ -89,6 +93,7 @@ fn try_main() -> Result<(), DynError> {
         "cb-test-srv",
         "cb-test-c1",
         "cb-test-c2",
+        "susres",
     ];
     let sr_pkgs = [
         "ticktimer-server",
