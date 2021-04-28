@@ -138,6 +138,11 @@ mod implementation {
                 // note to self: don't use log:: here because we're upstream of logging being initialized
                 assert!(unsafe{(*check_marker)[words]} == 0, "marker had non-zero entry!");
             }
+            // clear the loader stack, mostly to get rid of unused code warnings
+            let stack = loader_stack.as_ptr() as *mut [u32; 1024];
+            for words in 0..1024 {
+                unsafe{(*stack)[words] = 0;}
+            }
 
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
@@ -148,7 +153,7 @@ mod implementation {
             sr
         }
 
-        pub fn do_suspend(&mut self, _forced: bool) {
+        pub fn do_suspend(&mut self, forced: bool) {
             // stop pre-emption
             self.os_timer.wfo(utra::timer0::EN_EN, 0);
             self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
@@ -184,7 +189,8 @@ mod implementation {
                - 8x 128-word ranges = 1024 words = 1 page
                - The first 127 words are one of four fixed word patterns selected by indexing through
                  a random word
-               - EXCEPT for the 0th range, the first 64 bits (2 words) are the build seed of the current FPGA
+               - EXCEPT for the 0th range, the first word is 0 if the suspend was not forced; then the next
+                 64 bits (2 words) are the build seed of the current FPGA
                  The loader will check this seed on the next boot, so if the FPGA image changed it's a clean boot
                - The 128th word is a murmur3 hash of the previous 127 words
 
@@ -222,8 +228,13 @@ mod implementation {
                     unsafe{(*marker)[index + i] = word};
                 }
                 if index == 0 {
-                    unsafe{(*marker)[index] = seed0};
-                    unsafe{(*marker)[index + 1] = seed1};
+                    if !forced {
+                        unsafe{(*marker)[index + 0] = 0};
+                    } else {
+                        unsafe{(*marker)[index + 0] = 1};
+                    }
+                    unsafe{(*marker)[index + 1] = seed0};
+                    unsafe{(*marker)[index + 2] = seed1};
                 }
                 let mut hashbuf: [u32; WORDS_PER_PAGE / RANGES - 1] = [0; WORDS_PER_PAGE / RANGES - 1];
                 for i in 0..hashbuf.len() {
@@ -234,8 +245,11 @@ mod implementation {
                 index += range;
             }
 
-
-            // set a wakeup alarm
+            // clear the loader stack, for no particular reason other than to be vengeful.
+            let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
+            for words in 0..1024 {
+                unsafe{(*stack)[words] = 0;}
+            }
 
             // trigger an interrupt to process the final suspend bits
             self.csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
@@ -278,6 +292,12 @@ mod implementation {
 
                 // start the tickttimer running
                 self.csr.wo(utra::susres::CONTROL, 0);
+
+                // clear the loader stack, for no other reason other than to be vengeful
+                let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
+                for words in 0..1024 {
+                    unsafe{(*stack)[words] = 0;}
+                }
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
             }
@@ -370,9 +390,9 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }
         }
     }
-    unsafe{xous::disconnect(TIMEOUT_CONN.load(Ordering::Relaxed))};
+    unsafe{xous::disconnect(TIMEOUT_CONN.load(Ordering::Relaxed)).unwrap()};
     TIMEOUT_CONN.store(0, Ordering::Relaxed);
-    xous::destroy_server(sid);
+    xous::destroy_server(sid).unwrap();
 }
 
 static SHOULD_RESUME: AtomicBool = AtomicBool::new(false);
@@ -399,7 +419,7 @@ pub fn execution_gate() {
             }
         }
     }
-    xous::destroy_server(execgate_sid);
+    xous::destroy_server(execgate_sid).unwrap();
 }
 
 #[xous::xous_main]
