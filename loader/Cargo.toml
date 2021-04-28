@@ -6,6 +6,7 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
+utralib = {path = "../utralib"}
 
 [dev-dependencies]
 lazy_static = "1.4.0"

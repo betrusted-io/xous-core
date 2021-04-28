@@ -5,6 +5,8 @@
 mod args;
 use args::{KernelArgument, KernelArguments};
 
+mod murmur3;
+
 use core::num::NonZeroUsize;
 use core::{mem, ptr, slice};
 
@@ -1072,8 +1074,22 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     };
     read_initial_config(&mut cfg);
 
-    phase_1(&mut cfg);
-    phase_2(&mut cfg);
+    if !check_resume(&mut cfg) {
+        phase_1(&mut cfg);
+        phase_2(&mut cfg);
+    } else {
+        use utralib::generated::*;
+        // setup for a resume
+        let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
+        // set the resume marker for the SUSRES server
+        resume_csr.wfo(utra::susres::STATE_RESUME, 1);
+        resume_csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before resuming
+
+        // set the resume marker for the early kernel init
+        ///////////TODO
+
+        // SATP restore is handled by the `start_kernel` assembly pre-amble
+    }
 
     println!("Font maps located as follows:");
     println!("  Hanzi @ {:08x}", fonts::hanzi::DATA_HANZI.as_ptr() as u32);
@@ -1108,6 +1124,45 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             cfg.debug,
         );
     }
+}
+
+fn check_resume(cfg: &mut BootConfig) -> bool {
+    use utralib::generated::*;
+    const WORDS_PER_SECTOR: usize = 127;
+    const NUM_SECTORS: usize = 8;
+    const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
+
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 2;
+    let marker: *mut[u32; WORDS_PER_PAGE] = suspend_marker as *mut[u32; WORDS_PER_PAGE];
+
+    let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
+    let seed0 = boot_seed.r(utra::seed::SEED0);
+    let seed1 = boot_seed.r(utra::seed::SEED1);
+    let was_forced_suspend: bool = if unsafe{(*marker)[0]} != 0 { true } else { false };
+
+    let mut clean = true;
+    let mut hashbuf: [u32; WORDS_PER_SECTOR] = [0; WORDS_PER_SECTOR];
+    let mut index: usize = 0;
+    for sector in 0..NUM_SECTORS {
+        for i in 0..hashbuf.len() {
+            hashbuf[i] = unsafe{(*marker)[index * (WORDS_PER_SECTOR + 1) + i]};
+        }
+        // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before computing the hash
+        if sector == 0 {
+            hashbuf[1] = seed0;
+            hashbuf[2] = seed1;
+        }
+        let hash = crate::murmur3::murmur3_32(&hashbuf, 0);
+        if hash != unsafe{(*marker)[index * (WORDS_PER_SECTOR) + 1]} {
+            clean = false;
+        }
+    }
+    // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume again
+    for i in 0..WORDS_PER_PAGE {
+        unsafe{(*marker)[i] = 0;}
+    }
+
+    clean
 }
 
 fn phase_1(cfg: &mut BootConfig) {
