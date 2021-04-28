@@ -1074,15 +1074,23 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     };
     read_initial_config(&mut cfg);
 
-    if !check_resume(&mut cfg) {
+    let (clean, was_forced_suspend) = check_resume(&mut cfg);
+    if !clean {
         phase_1(&mut cfg);
         phase_2(&mut cfg);
     } else {
         use utralib::generated::*;
         // setup for a resume
         let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
-        // set the resume marker for the SUSRES server
-        resume_csr.wfo(utra::susres::STATE_RESUME, 1);
+        // set the resume marker for the SUSRES server, noting the forced suspend status
+        if was_forced_suspend {
+            resume_csr.wo(utra::susres::STATE,
+                resume_csr.ms(utra::susres::STATE_RESUME, 1) |
+                resume_csr.ms(utra::susres::STATE_WAS_FORCED, 1)
+            );
+        } else {
+            resume_csr.wfo(utra::susres::STATE_RESUME, 1);
+        }
         resume_csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before resuming
 
         // set the resume marker for the early kernel init
@@ -1126,7 +1134,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     }
 }
 
-fn check_resume(cfg: &mut BootConfig) -> bool {
+fn check_resume(cfg: &mut BootConfig) -> (bool, bool) {
     use utralib::generated::*;
     const WORDS_PER_SECTOR: usize = 127;
     const NUM_SECTORS: usize = 8;
@@ -1156,13 +1164,14 @@ fn check_resume(cfg: &mut BootConfig) -> bool {
         if hash != unsafe{(*marker)[index * (WORDS_PER_SECTOR) + 1]} {
             clean = false;
         }
+        index += 1;
     }
     // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume again
     for i in 0..WORDS_PER_PAGE {
         unsafe{(*marker)[i] = 0;}
     }
 
-    clean
+    (clean, was_forced_suspend)
 }
 
 fn phase_1(cfg: &mut BootConfig) {

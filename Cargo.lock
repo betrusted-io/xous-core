@@ -1165,6 +1165,7 @@ dependencies = [
  "log",
  "log-server",
  "rkyv-test-server",
+ "susres",
  "ticktimer-server",
  "xous",
  "xous-names",
@@ -1439,6 +1440,7 @@ dependencies = [
  "susres",
  "utralib",
  "xous",
+ "xous-names",
 ]
 
 [[package]]

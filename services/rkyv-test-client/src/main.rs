@@ -49,6 +49,7 @@ fn rkyv_test_client() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
 
+    let mut susres = susres::Susres::new(&xns).unwrap();
     /*let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
 
@@ -73,6 +74,12 @@ fn rkyv_test_client() -> ! {
         rkyv_test_server::log_message("prefix", sent_str);
 
         //com.req_batt_stats().unwrap();
+
+        // let the loop run a bit, then try a suspend
+        if idx == 2 {
+            // TODO: add a self-wakeup RTC alarm once we're beyond the touch-and-go phase
+            susres.initiate_suspend().unwrap();
+        }
 
         idx += 1;
     }

@@ -13,6 +13,7 @@ ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
 com = {path = "../com"}
 xous-names = {path="../xous-names"}
+susres = {path = "../susres"}
 
 keyboard = {path="../keyboard"}
 

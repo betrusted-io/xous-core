@@ -8,4 +8,7 @@ pub(crate) enum Opcode {
 
     /// Recalculate the sleep time
     RecalculateSleep,
+
+    /// Suspend/resume callback
+    SuspendResume,
 }

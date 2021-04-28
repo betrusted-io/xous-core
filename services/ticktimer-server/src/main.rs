@@ -257,6 +257,12 @@ mod implementation {
                 log::trace!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
             }
         }
+        pub fn suspend(&mut self) {
+            self.susres.suspend();
+        }
+        pub fn resume(&mut self) {
+            self.susres.resume();
+        }
     }
 }
 
@@ -392,6 +398,14 @@ mod implementation {
         pub fn reset_wdt(&self) {
             // dummy function, does nothing
         }
+        pub fn register_suspend_listener(&self, _opcode: u32, _cid: xous::CID) -> Result<(), xous::Error> {
+            Ok(())
+        }
+        pub fn suspend(&self) {
+        }
+        pub fn resume(&self) {
+        }
+
     }
 }
 
@@ -460,6 +474,15 @@ fn xmain() -> ! {
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
     ticktimer.reset(); // make sure the time starts from zero
 
+    // register a suspend/resume listener
+    let xns = xous_names::XousNames::new().unwrap();
+    let mut susres = susres::Susres::new(&xns).expect("couldn't create suspend/resume object");
+    let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
+    {
+        use num_traits::ToPrimitive;
+        susres.hook_suspend_callback(api::Opcode::SuspendResume.to_usize().unwrap() as u32, sr_cid).expect("couldn't register suspend/resume listener");
+    }
+
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
@@ -489,7 +512,12 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::RecalculateSleep) => {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-            }
+            },
+            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                ticktimer.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                ticktimer.resume();
+            }),
             None => {
                 error!("couldn't convert opcode");
                 break

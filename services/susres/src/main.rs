@@ -42,6 +42,12 @@ mod implementation {
         // clear the pending interrupt
         sr.csr.wfo(utra::susres::EV_PENDING_SOFT_INT, 1);
 
+        // set this to true to do a touch-and-go suspend/resume (no actual power off, but the whole prep cycle in play)
+        let touch_and_go = true;
+        if touch_and_go {
+            sr.csr.wfo(utra::susres::STATE_RESUME, 1);
+        }
+
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             // power the system down - this should result in an almost immediate loss of power
             sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
@@ -259,7 +265,7 @@ mod implementation {
                 xous::yield_slice();
             }
         }
-        pub fn do_resume(&mut self, _forced: bool) {
+        pub fn do_resume(&mut self) -> bool { // returns true if the previous suspend was forced
             // resume the ticktimer where it left off
             if let Some(time)= self.stored_time.take() {
                 // zero out the clean-suspend marker
@@ -300,6 +306,12 @@ mod implementation {
                 }
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
+            };
+
+            if self.csr.rf(utra::susres::STATE_WAS_FORCED) == 0 {
+                false
+            } else {
+                true
             }
         }
     }
@@ -484,7 +496,9 @@ fn xmain() -> ! {
                         susres_hw.do_suspend(false);
                         // when do_suspend() returns, it means we've resumed
                         suspend_requested = false;
-                        susres_hw.do_resume(false);
+                        if susres_hw.do_resume() {
+                            log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
+                        }
                         // this now allows all other threads to commence
                         RESUME_EXEC.store(true, Ordering::Relaxed);
                     }
@@ -518,7 +532,11 @@ fn xmain() -> ! {
                     susres_hw.do_suspend(true);
                     // when do_suspend() returns, it means we've resumed
                     suspend_requested = false;
-                    susres_hw.do_resume(true);
+                    if susres_hw.do_resume() {
+                        log::error!("We forced a suspend, some peripherals may be in an unclean state!");
+                    } else {
+                        log::error!("We forced a suspend, but the bootloader is claiming we did a clean suspend. Internal state may be inconsistent.");
+                    }
                     RESUME_EXEC.store(true, Ordering::Relaxed);
                 } else {
                     // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
