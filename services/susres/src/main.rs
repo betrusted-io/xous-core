@@ -198,6 +198,13 @@ mod implementation {
                - we include the build seed so that for many use cases we don't accidentally resume from a suspend
                  built for a different FPGA image. This fails in the case that someone has fixed the seed for
                  the purpose of reproducible builds.
+               - we hash a whole page instead of just checking a couple words because power-off bit corruption
+                 on the RAM will be accumulated faster with a larger sampling size.
+               - we don't hash the entire physical RAM space because we can't, due to process isolation enforced
+                 by the virtual memory system. But that would be a more robust way to do this, if we made some
+                 mechanism to reach around all the protections. But...a mechanism that can reach around all protections
+                 can reach around all protections, and is probably not worth the risk of abuse. So just checking a page of RAM
+                 is probably a reasonable compromise between security and robustness of detecting a short power-down.
             */
             let seed0 = self.seed_csr.r(utra::seed::SEED0);
             let seed1 = self.seed_csr.r(utra::seed::SEED1);
