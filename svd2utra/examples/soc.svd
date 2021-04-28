@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-28 03:19:07]]></description>
+    <description><![CDATA[Litex SoC 2021-04-29 00:33:45]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1070,10 +1070,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``e820c7eb``, so this value is 3894462443, which should be enough to check out
+``18341437``, so this value is 406066231, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xe820c7eb</resetValue>
+                    <resetValue>0x18341437</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1090,7 +1090,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2369,8 +2369,50 @@ register to disable individual events.]]></description>
             </interrupt>
         </peripheral>
         <peripheral>
-            <name>POWER</name>
+            <name>RESUMEKICKER</name>
             <baseAddress>0xF0013000</baseAddress>
+            <groupName>RESUMEKICKER</groupName>
+            <registers>
+                <register>
+                    <name>KICKER</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>kick</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a `1` to trigger the SusRes software interrupt]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>STATE</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>resume</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[A replica of the `resume` field in SusRes]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>POWER</name>
+            <baseAddress>0xF0014000</baseAddress>
             <groupName>POWER</groupName>
             <registers>
                 <register>
@@ -2519,7 +2561,7 @@ reset fashion]]></description>
         </peripheral>
         <peripheral>
             <name>SPINOR</name>
-            <baseAddress>0xF0014000</baseAddress>
+            <baseAddress>0xF0015000</baseAddress>
             <groupName>SPINOR</groupName>
             <registers>
                 <register>
@@ -2800,7 +2842,7 @@ checked]]></description>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
-            <baseAddress>0xF0015000</baseAddress>
+            <baseAddress>0xF0016000</baseAddress>
             <groupName>KEYBOARD</groupName>
             <registers>
                 <register>
@@ -3058,7 +3100,7 @@ again until the interrupt is serviced.]]></description>
         </peripheral>
         <peripheral>
             <name>KEYINJECT</name>
-            <baseAddress>0xF0016000</baseAddress>
+            <baseAddress>0xF0017000</baseAddress>
             <groupName>KEYINJECT</groupName>
             <registers>
                 <register>
@@ -3094,14 +3136,14 @@ inject too fast.]]></description>
         </peripheral>
         <peripheral>
             <name>SEED</name>
-            <baseAddress>0xF0017000</baseAddress>
+            <baseAddress>0xF0018000</baseAddress>
             <groupName>SEED</groupName>
             <registers>
                 <register>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4a3e2334</resetValue>
+                    <resetValue>0x40041b05</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3116,7 +3158,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x2fa94a6a</resetValue>
+                    <resetValue>0x488ec687</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3136,7 +3178,7 @@ inject too fast.]]></description>
         </peripheral>
         <peripheral>
             <name>KEYROM</name>
-            <baseAddress>0xF0018000</baseAddress>
+            <baseAddress>0xF0019000</baseAddress>
             <groupName>KEYROM</groupName>
             <registers>
                 <register>
@@ -3178,7 +3220,7 @@ inject too fast.]]></description>
         </peripheral>
         <peripheral>
             <name>AUDIO</name>
-            <baseAddress>0xF0019000</baseAddress>
+            <baseAddress>0xF001A000</baseAddress>
             <groupName>AUDIO</groupName>
             <registers>
                 <register>
@@ -3550,7 +3592,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG_KERNEL</name>
-            <baseAddress>0xF001A000</baseAddress>
+            <baseAddress>0xF001B000</baseAddress>
             <groupName>TRNG_KERNEL</groupName>
             <registers>
                 <register>
@@ -3686,7 +3728,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG_SERVER</name>
-            <baseAddress>0xF001B000</baseAddress>
+            <baseAddress>0xF001C000</baseAddress>
             <groupName>TRNG_SERVER</groupName>
             <registers>
                 <register>
@@ -4018,7 +4060,7 @@ to max field size]]></description>
         </peripheral>
         <peripheral>
             <name>TRNG</name>
-            <baseAddress>0xF001C000</baseAddress>
+            <baseAddress>0xF001D000</baseAddress>
             <groupName>TRNG</groupName>
             <registers>
                 <register>
@@ -4331,7 +4373,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
         </peripheral>
         <peripheral>
             <name>SHA512</name>
-            <baseAddress>0xF001D000</baseAddress>
+            <baseAddress>0xF001E000</baseAddress>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
@@ -4826,7 +4868,7 @@ in bits]]></description>
         </peripheral>
         <peripheral>
             <name>ENGINE</name>
-            <baseAddress>0xF001E000</baseAddress>
+            <baseAddress>0xF001F000</baseAddress>
             <groupName>ENGINE</groupName>
             <registers>
                 <register>
@@ -5055,7 +5097,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
         </peripheral>
         <peripheral>
             <name>JTAG</name>
-            <baseAddress>0xF001F000</baseAddress>
+            <baseAddress>0xF0020000</baseAddress>
             <groupName>JTAG</groupName>
             <registers>
                 <register>
@@ -5113,7 +5155,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
         </peripheral>
         <peripheral>
             <name>WDT</name>
-            <baseAddress>0xF0020000</baseAddress>
+            <baseAddress>0xF0021000</baseAddress>
             <groupName>WDT</groupName>
             <registers>
                 <register>
@@ -5273,7 +5315,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>D11CTIME</name>
-            <baseAddress>0xF0021000</baseAddress>
+            <baseAddress>0xF0022000</baseAddress>
             <groupName>D11CTIME</groupName>
             <registers>
                 <register>
@@ -5315,7 +5357,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>IDENTIFIER_MEM</name>
-            <baseAddress>0xF0022000</baseAddress>
+            <baseAddress>0xF0023000</baseAddress>
             <groupName>IDENTIFIER_MEM</groupName>
             <registers>
                 <register>
@@ -5342,7 +5384,7 @@ register to disable individual events.]]></description>
         </peripheral>
         <peripheral>
             <name>TIMER0</name>
-            <baseAddress>0xF0023000</baseAddress>
+            <baseAddress>0xF0024000</baseAddress>
             <groupName>TIMER0</groupName>
             <registers>
                 <register>
