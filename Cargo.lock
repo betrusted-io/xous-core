@@ -303,6 +303,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "susres",
  "ticktimer-server",
  "typenum",
  "utralib",

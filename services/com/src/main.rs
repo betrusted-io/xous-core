@@ -38,6 +38,7 @@ mod implementation {
     use com_rs::*;
     use log::error;
     use utralib::generated::*;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     use heapless::Vec;
     use heapless::consts::U64;
@@ -46,6 +47,7 @@ mod implementation {
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
+        susres: RegManager::<{utra::com::COM_NUMREGS}>,
         ticktimer: ticktimer_server::Ticktimer,
         pub workqueue: Vec<WorkRequest, U64>,
         busy: bool,
@@ -73,6 +75,7 @@ mod implementation {
 
             let mut xc = XousCom {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 ticktimer,
                 workqueue: Vec::new(),
                 busy: false,
@@ -88,7 +91,21 @@ mod implementation {
                 (&mut xc) as *mut XousCom as *mut usize,
             )
             .expect("couldn't claim irq");
+
+            xc.susres.push(RegOrField::Reg(utra::com::CONTROL), None);
+            xc.susres.push_fixed_value(RegOrField::Reg(utra::com::EV_PENDING), 0xFFFF_FFFF);
+            xc.susres.push(RegOrField::Reg(utra::com::EV_ENABLE), None);
+
             xc
+        }
+        pub fn suspend(&mut self) {
+            self.susres.suspend();
+            self.csr.wo(utra::com::EV_ENABLE, 0);
+        }
+        pub fn resume(&mut self) {
+            self.susres.resume();
+            // issue a "link sync" command because the COM had continued running, and we may have sent garbage during suspend
+            self.txrx(ComState::LINK_SYNC.verb);
         }
 
         pub fn txrx(&mut self, tx: u16) -> u16 {
@@ -203,6 +220,8 @@ mod implementation {
                 busy: false,
             }
         }
+        pub fn suspend(&self) {}
+        pub fn resume(&self) {}
 
         pub fn txrx(&mut self, _tx: u16) -> u16 {
             0xDEAD as u16
@@ -267,6 +286,10 @@ fn xmain() -> ! {
     // Create a new com object
     let mut com = XousCom::new();
 
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(com_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     // create an array to track return connections for battery stats
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
@@ -276,6 +299,11 @@ fn xmain() -> ! {
         let mut msg = xous::receive_message(com_sid).unwrap();
         trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                com.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                com.resume();
+            }),
             Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                     let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                     let cid = Some(xous::connect(sid).unwrap());
