@@ -384,12 +384,8 @@ fn xmain() -> ! {
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
-    let mut susres = susres::Susres::new(&xns).expect("couldn't create suspend/resume object");
     let sr_cid = xous::connect(trng_sid).expect("couldn't create suspend callback connection");
-    {
-        use num_traits::ToPrimitive;
-        susres.hook_suspend_callback(api::Opcode::SuspendResume.to_usize().unwrap() as u32, sr_cid).expect("couldn't register suspend/resume listener");
-    }
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();

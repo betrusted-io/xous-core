@@ -213,6 +213,9 @@ pub(crate) enum Opcode {
     EventComHappened,
     EventRtcHappened,
     EventUsbHappened,
+
+    /// SuspendResume callback
+    SuspendResume,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {

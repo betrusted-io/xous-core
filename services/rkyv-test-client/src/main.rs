@@ -49,7 +49,7 @@ fn rkyv_test_client() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
 
-    let mut susres = susres::Susres::new(&xns).unwrap();
+    let mut susres = susres::Susres::new_without_hook(&xns).unwrap();
     let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
     /*

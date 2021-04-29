@@ -177,6 +177,7 @@ mod implementation {
 
             xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
             xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+            xtt.ticktimer_sr_manager.push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
             xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
 
             xtt
@@ -500,12 +501,8 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let xns = xous_names::XousNames::new().unwrap();
-    let mut susres = susres::Susres::new(&xns).expect("couldn't create suspend/resume object");
     let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
-    {
-        use num_traits::ToPrimitive;
-        susres.hook_suspend_callback(api::Opcode::SuspendResume.to_usize().unwrap() as u32, sr_cid).expect("couldn't register suspend/resume listener");
-    }
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
         #[cfg(feature = "watchdog")]

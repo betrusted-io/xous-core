@@ -13,32 +13,36 @@ pub struct Susres {
     execution_gate_conn: CID,
 }
 impl Susres {
-    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
+
+        let sid = xous::create_server().unwrap();
+        let sid_tuple = sid.to_u32();
+        xous::create_thread_4(suspend_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+        let hookdata = ScalarHook {
+            sid: sid_tuple,
+            id: cb_discriminant,
+            cid,
+        };
+        let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
+        buf.lend(conn, Opcode::SuspendEventSubscribe.to_u32().unwrap())?;
+
         Ok(Susres {
             conn,
-            suspend_cb_sid: None,
+            suspend_cb_sid: Some(sid),
             execution_gate_conn,
         })
     }
-    pub fn hook_suspend_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
-        if self.suspend_cb_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.suspend_cb_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(suspend_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            let hookdata = ScalarHook {
-                sid: sid_tuple,
-                id,
-                cid,
-            };
-            let buf = Buffer::into_buf(hookdata).or(Err(xous::Error::InternalError))?;
-            buf.lend(self.conn, Opcode::SuspendEventSubscribe.to_u32().unwrap()).map(|_|())
-        } else {
-            Err(xous::Error::MemoryInUse) // can't hook it twice
-        }
+    pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;
+        Ok(Susres {
+            conn,
+            suspend_cb_sid: None,
+            execution_gate_conn: 0,
+        })
     }
+
     pub fn initiate_suspend(&mut self) -> Result<(), xous::Error> {
         log::trace!("suspend initiated");
         send_message(self.conn,
@@ -46,6 +50,9 @@ impl Susres {
         ).map(|_|())
     }
     pub fn suspend_until_resume(&mut self, token: usize) -> Result<(), xous::Error> {
+        if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
+            return Err(xous::Error::UseBeforeInit)
+        }
         log::trace!("telling the server we're ready to suspend");
         // first tell the susres server that we're ready to suspend
         send_message(self.conn,

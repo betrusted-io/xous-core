@@ -62,6 +62,8 @@ pub struct ManagedReg {
     pub mask: Option<usize>,
     /// the saved value of the field or register
     pub value: Option<usize>,
+    /// if true, value is static and should not be updated during suspend, but restored to this value ta resume
+    pub fixed_value: bool,
 }
 
 //#[derive(Debug)]
@@ -88,12 +90,28 @@ impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
             res_epilogue: None,
         }
     }
+    pub fn push_fixed_value(&mut self, mr: RegOrField, value: usize) {
+        let mrt = ManagedReg {
+            item: mr,
+            mask: None,
+            value: Some(value),
+            fixed_value: true,
+        };
+        for entry in self.registers.iter_mut() {
+            if entry.is_none() {
+                *entry = Some(mrt);
+                return;
+            }
+        }
+        panic!("Ran out of space pushing to suspend/resume manager structure. Please increase the allocated size!");
+    }
     // push registers into the manager in the order you want them suspended
     pub fn push(&mut self, mr: RegOrField, mask_override: Option<usize>) {
         let mrt = ManagedReg {
             item: mr,
             mask: mask_override,
             value: None,
+            fixed_value: false,
         };
         for entry in self.registers.iter_mut() {
             if entry.is_none() {
@@ -119,12 +137,14 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         }
         for entry in self.registers.iter_mut().rev() {
             if let Some(reg) = entry {
-                // masking is done on the write side
-                match reg.item {
-                    RegOrField::Field(field) => reg.value = Some(self.csr.rf(field) as usize),
-                    RegOrField::Reg(r) => reg.value = Some(self.csr.r(r) as usize),
+                if !reg.fixed_value {
+                    // masking is done on the write side
+                    match reg.item {
+                        RegOrField::Field(field) => reg.value = Some(self.csr.rf(field) as usize),
+                        RegOrField::Reg(r) => reg.value = Some(self.csr.r(r) as usize),
+                    }
+                    *entry = Some(*reg);
                 }
-                *entry = Some(*reg);
             }
         }
         /*

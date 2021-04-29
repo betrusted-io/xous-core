@@ -27,18 +27,23 @@ mod implementation {
     use log::{error, info};
     use utralib::generated::*;
     use num_traits::ToPrimitive;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     #[allow(dead_code)]
     pub struct Llio {
         reboot_csr: utralib::CSR<u32>,
         crg_csr: utralib::CSR<u32>,
         gpio_csr: utralib::CSR<u32>,
+        gpio_susres: RegManager::<{utra::gpio::GPIO_NUMREGS}>,
         info_csr: utralib::CSR<u32>,
         identifier_csr: utralib::CSR<u32>,
         i2c_csr: utralib::CSR<u32>,
+        i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
         handler_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
+        event_susres: RegManager::<{utra::btevents::BTEVENTS_NUMREGS}>,
         power_csr: utralib::CSR<u32>,
+        power_susres: RegManager::<{utra::power::POWER_NUMREGS}>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer: ticktimer_server::Ticktimer,
         destruct_armed: bool,
@@ -185,12 +190,16 @@ mod implementation {
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
                 crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
                 gpio_csr: CSR::new(gpio_base),
+                gpio_susres: RegManager::new(gpio_base),
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
                 i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
+                i2c_susres: RegManager::new(i2c_csr.as_mut_ptr() as *mut u32),
                 handler_conn: Some(handler_conn), // connection for messages from IRQ handler
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
+                event_susres: RegManager::new(event_csr.as_mut_ptr() as *mut u32),
                 power_csr: CSR::new(power_csr.as_mut_ptr() as *mut u32),
+                power_susres: RegManager::new(power_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer,
                 destruct_armed: false,
@@ -237,7 +246,47 @@ mod implementation {
             // now enable interrupts
             xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
 
+            // setup suspend/resume manager
+            xl.i2c_susres.push(RegOrField::Field(utra::i2c::PRESCALE_PRESCALE), None);
+            xl.i2c_susres.push(RegOrField::Reg(utra::i2c::CONTROL), None);
+            xl.i2c_susres.push_fixed_value(RegOrField::Reg(utra::i2c::EV_PENDING), 0xFFFF_FFFF); // clear pending interrupts
+            xl.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
+
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::DRIVE), None);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::OUTPUT), None);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTPOL), None);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTENA), None);
+            xl.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
+            xl.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
+
+            xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
+            xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
+
+            xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
+            xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
+            xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
+            xl.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
+
             xl
+        }
+        pub fn suspend(&mut self) {
+            self.i2c_susres.suspend();
+            self.gpio_susres.suspend();
+            self.event_susres.suspend();
+            self.power_susres.suspend();
+
+            // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
+            self.i2c_csr.wo(utra::i2c::EV_ENABLE, 0);
+            self.gpio_csr.wo(utra::gpio::EV_ENABLE, 0);
+            self.event_csr.wo(utra::btevents::EV_ENABLE, 0);
+            self.power_csr.wo(utra::power::EV_ENABLE, 0);
+        }
+        pub fn resume(&mut self) {
+            self.power_susres.resume();
+            self.event_susres.resume();
+            self.gpio_susres.resume();
+            self.i2c_susres.resume();
         }
 
         pub fn reboot(&mut self, reboot_soc: bool) {
@@ -433,6 +482,8 @@ mod implementation {
         }
         pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
 
+        pub fn suspend(&self) {}
+        pub fn resume(&self) {}
         pub fn reboot(&self, _reboot_soc: bool) {}
         pub fn set_reboot_vector(&self, _vector: u32) {}
         pub fn gpio_dout(&self, _d: u32) {}
@@ -527,6 +578,10 @@ fn xmain() -> ! {
     // create an i2c state machine handler
     let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut com_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut rtc_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
@@ -549,6 +604,11 @@ fn xmain() -> ! {
             }
         } else {
             match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                    llio.suspend();
+                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                    llio.resume();
+                }),
                 Some(Opcode::RebootRequest) => {
                     reboot_requested = true;
                 },
