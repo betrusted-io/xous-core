@@ -5,4 +5,7 @@ pub(crate) const SERVER_NAME_TRNG: &str     = "_TRNG manager_";
 pub(crate) enum Opcode {
     /// Get one or two 32-bit words of TRNG data
     GetTrng,
+
+    /// Suspend/resume callback
+    SuspendResume,
 }

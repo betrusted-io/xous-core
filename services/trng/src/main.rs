@@ -13,10 +13,12 @@ mod implementation {
     use utralib::generated::*;
     // use crate::api::*;
     use log::info;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     pub struct Trng {
         csr: utralib::CSR<u32>,
         // TODO: allocate a software buffer for whitened TRNGs
+        susres_manager: RegManager::<{utra::trng_server::TRNG_SERVER_NUMREGS}>, // probably can be reduced to save space?
     }
 
     impl Trng {
@@ -31,6 +33,7 @@ mod implementation {
 
             let mut trng = Trng {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
             };
 
             ///// configure power settings and which generator to use
@@ -67,6 +70,8 @@ mod implementation {
                 log::info!("TRNG configured for both avalanche and ring oscillator testing: 0x{:08x}", trng.csr.r(utra::trng_server::CONTROL));
             }
 
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::CONTROL), None);
+
             /*** TRNG tuning parameters: these were configured and tested in a long run against Dieharder
                  There is a rate of TRNG generation vs. quality trade-off. The tuning below is toward quality of
                  TRNG versus rate of TRNG, such that we could use these without any whitening.
@@ -77,6 +82,7 @@ mod implementation {
                 trng.csr.ms(utra::trng_server::AV_CONFIG_POWERDELAY, 50_000)
                 | trng.csr.ms(utra::trng_server::AV_CONFIG_SAMPLES, 32)
             );
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::AV_CONFIG), None);
 
             ///// configure ring oscillator
             trng.csr.wo(utra::trng_server::RO_CONFIG,
@@ -86,6 +92,7 @@ mod implementation {
                 | trng.csr.ms(utra::trng_server::RO_CONFIG_FUZZ, 1)
                 | trng.csr.ms(utra::trng_server::RO_CONFIG_OVERSAMPLING, 3)
             );
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::RO_CONFIG), None);
 
             info!("hardware initialized");
 
@@ -134,6 +141,15 @@ mod implementation {
 
             ret
         }
+
+        pub fn suspend(&mut self) {
+            self.susres_manager.suspend();
+        }
+        pub fn resume(&mut self) {
+            self.susres_manager.resume();
+            // pump the engine to discard the initial 0's in the execution pipeline
+            self.get_trng(2);
+        }
     }
 }
 
@@ -172,6 +188,10 @@ mod implementation {
             ret[1] = self.seed;
 
             ret
+        }
+        pub fn suspend(&self) {
+        }
+        pub fn resume(&self) {
         }
     }
 }
@@ -348,10 +368,6 @@ fn xmain() -> ! {
     let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
     log::trace!("registered with NS -- {:?}", trng_sid);
 
-    #[cfg(target_os = "none")]
-    let trng = Trng::new();
-
-    #[cfg(not(target_os = "none"))]
     let mut trng = Trng::new();
 
     #[cfg(feature = "avalanchetest")]
@@ -367,6 +383,14 @@ fn xmain() -> ! {
     trng.get_trng(2);
     log::trace!("ready to accept requests");
 
+    // register a suspend/resume listener
+    let mut susres = susres::Susres::new(&xns).expect("couldn't create suspend/resume object");
+    let sr_cid = xous::connect(trng_sid).expect("couldn't create suspend callback connection");
+    {
+        use num_traits::ToPrimitive;
+        susres.hook_suspend_callback(api::Opcode::SuspendResume.to_usize().unwrap() as u32, sr_cid).expect("couldn't register suspend/resume listener");
+    }
+
     loop {
         let msg = xous::receive_message(trng_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -374,6 +398,11 @@ fn xmain() -> ! {
                 let val: [u32; 2] = trng.get_trng(count);
                 xous::return_scalar2(msg.sender, val[0] as _, val[1] as _)
                     .expect("couldn't return GetTrng request");
+            }),
+            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                trng.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                trng.resume();
             }),
             None => {
                 log::error!("couldn't convert opcode");
