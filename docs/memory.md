@@ -54,6 +54,7 @@ assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 | 0xff801000 | Context data (registers, etc.)
 | 0xff802000 | Return address from syscalls (never allocated)
 | 0xffc00000 | Kernel arguments, allocation tables
+| 0xffcf0000 | Supervisor UART CSR page
 | 0xffd00000 | Kernel binary image and data section
 | 0xffff0000 | Kernel stack top
 | 0xfff00000 | {unused}
