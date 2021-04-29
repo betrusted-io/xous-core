@@ -93,7 +93,7 @@ mod implementation {
         /// memory region for the "clean suspend" marker
         marker: xous::MemoryRange,
         /// loader stack region -- this data is dirtied on every resume; claim it in this process so no others accidentally use it
-        loader_stack: xous::MemoryRange,
+        //loader_stack: xous::MemoryRange,
         /// backing store for the ticktimer value
         stored_time: Option<u64>,
         /// so we can access the build seed and detect if the FPGA image was changed on us
@@ -132,12 +132,12 @@ mod implementation {
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map clean suspend page");
-            let loader_stack = xous::syscall::map_memory(
+            /*let loader_stack = xous::syscall::map_memory(
                 xous::MemoryAddress::new(0x40FFF000), // this is a special, hard-coded location
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
-            ).expect("couldn't map clean suspend page");
+            ).expect("couldn't map clean suspend page");*/
             let seed_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
                 None,
@@ -158,7 +158,7 @@ mod implementation {
                 os_timer: CSR::new(ostimer_csr.as_mut_ptr() as *mut u32),
                 stored_time: None,
                 marker,
-                loader_stack,
+                //loader_stack,
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
             };
@@ -181,11 +181,12 @@ mod implementation {
                 // note to self: don't use log:: here because we're upstream of logging being initialized
                 assert!(unsafe{(*check_marker)[words]} == 0, "marker had non-zero entry!");
             }
+            /*
             // clear the loader stack, mostly to get rid of unused code warnings
             let stack = loader_stack.as_ptr() as *mut [u32; 1024];
             for words in 0..1024 {
                 unsafe{(*stack)[words] = 0;}
-            }
+            }*/
 
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
@@ -314,10 +315,10 @@ mod implementation {
 
 
             // clear the loader stack, for no particular reason other than to be vengeful.
-            let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
+            /*let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
             for words in 0..1024 {
                 unsafe{(*stack)[words] = 0;}
-            }
+            }*/
 
             println!("Triggering suspend interrupt");
             // trigger an interrupt to process the final suspend bits
@@ -368,10 +369,10 @@ mod implementation {
                 println!("Ticktimer and OS timer now running");
 
                 // clear the loader stack, for no other reason other than to be vengeful
-                let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
+                /*let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
                 for words in 0..1024 {
                     unsafe{(*stack)[words] = 0;}
-                }
+                }*/
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
             };
