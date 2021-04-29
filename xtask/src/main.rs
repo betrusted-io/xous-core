@@ -103,6 +103,7 @@ fn try_main() -> Result<(), DynError> {
         "llio",
         "rkyv-test-client",
         "rkyv-test-server",
+        "com",
         "susres",
     ];
     let task = env::args().nth(1);

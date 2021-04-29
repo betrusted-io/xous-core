@@ -55,8 +55,7 @@ mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::SleepRequest;
     use utralib::generated::*;
-    use utra::ticktimer::*;
-    use susres::*;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
@@ -64,7 +63,8 @@ mod implementation {
         wdt: utralib::CSR<u32>,
         current_response: Option<SleepRequest>,
         connection: xous::CID,
-        susres: RegManager<TICKTIMER_NUMREGS>,
+        ticktimer_sr_manager: RegManager::<{utra::ticktimer::TICKTIMER_NUMREGS}>,
+        wdt_sr_manager: RegManager::<{utra::wdt::WDT_NUMREGS}>,
     }
 
     fn handle_wdt(_irq_no: usize, arg: *mut usize) {
@@ -135,7 +135,8 @@ mod implementation {
             )
             .expect("couldn't map Watchdog timer CSR range");
 
-            let susres = RegManager::new(csr.as_mut_ptr() as *mut u32);
+            let ticktimer_sr_manager = RegManager::new(csr.as_mut_ptr() as *mut u32);
+            let wdt_sr_manager = RegManager::new(wdt.as_mut_ptr() as *mut u32);
 
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -143,13 +144,15 @@ mod implementation {
                 wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
                 current_response: None,
                 connection,
-                susres,
+                ticktimer_sr_manager,
+                wdt_sr_manager,
             };
 
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
-                xtt.susres.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
+                // this is a write-once field that is lost later on, so it must be explicitly managed
+                // xtt.wdt_sr_manager.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
             }
 
             xous::claim_interrupt(
@@ -169,8 +172,12 @@ mod implementation {
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
-                xtt.susres.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+                xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
             }
+
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
 
             xtt
         }
@@ -257,11 +264,28 @@ mod implementation {
                 log::trace!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
             }
         }
+
+        // the ticktimer suspend/resume routines are a bit trickier than normal, so this isn't a great
+        // example of a generic suspend/resume template
         pub fn suspend(&mut self) {
-            self.susres.suspend();
+            log::trace!("suspending");
+            self.ticktimer_sr_manager.suspend();
+            self.wdt_sr_manager.suspend();
+
+            // by writing this after suspend(), resume will get the prior value
+            self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
         }
         pub fn resume(&mut self) {
-            self.susres.resume();
+            // this is a write-once bit that's later erased, so it can't be managed automatically
+            // thus we have to restore in manually on a resume
+            #[cfg(feature = "watchdog")]
+            self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+
+            // manually clear any pending ticktimer events. This is mainly releveant for a "touch-and-go" simulated suspend.
+            self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1);
+
+            self.wdt_sr_manager.resume();
+            self.ticktimer_sr_manager.resume();
         }
     }
 }

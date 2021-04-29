@@ -21,4 +21,5 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = { path = "../../utralib"}
 
 [features]
+debugprint = []
 default = []

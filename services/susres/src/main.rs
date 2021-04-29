@@ -4,22 +4,40 @@
 mod murmur3;
 
 mod api;
-use api::*;
+use api::{Opcode, ScalarHook, SuspendEventCallback, ExecGateOpcode};
 
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack, send_message, Message};
 use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 
+#[cfg(feature = "debugprint")]
+#[macro_use]
+mod debug;
+
+// effectively ignore any println! macros when debugprint is not selected
+#[cfg(not(feature = "debugprint"))]
+macro_rules! println
+{
+	() => ({
+	});
+	($fmt:expr) => ({
+	});
+	($fmt:expr, $($args:tt)+) => ({
+	});
+}
+
+
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
-    use crate::{api::*, murmur3::murmur3_32};
+    use crate::murmur3::murmur3_32;
     use crate::SHOULD_RESUME;
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use core::sync::atomic::Ordering;
+    use num_traits::ToPrimitive;
 
     const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
-    const SYSTEM_TICK_INTERVAL_MS: u32 = 10;
+    const SYSTEM_TICK_INTERVAL_MS: u32 = 100;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
         let mut timer = CSR::new(arg as *mut u32);
@@ -159,7 +177,14 @@ mod implementation {
             sr
         }
 
+        pub fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
+            xous::send_message(cid,
+                xous::Message::new_scalar(crate::TimeoutOpcode::SetCsr.to_usize().unwrap(), self.csr.base as usize, 0, 0, 0)
+            ).map(|_| ())
+        }
+
         pub fn do_suspend(&mut self, forced: bool) {
+            println!("Stopping preemption");
             // stop pre-emption
             self.os_timer.wfo(utra::timer0::EN_EN, 0);
             self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0);
@@ -170,13 +195,18 @@ mod implementation {
             // ensure that the resume bit is not set
             self.csr.wfo(utra::susres::STATE_RESUME, 0);
 
-            // stop thread scheduling, by stopping the ticktimer
+            println!("Stopping ticktimer");
+            // stop deferred thread scheduling, by stopping the ticktimer
             self.csr.wfo(utra::susres::CONTROL_PAUSE, 1);
+            while self.csr.rf(utra::susres::STATUS_PAUSED) == 0 {
+                // busy-wait until we confirm the ticktimer has paused
+            }
             self.stored_time = Some(
                (self.csr.r(utra::susres::TIME0) as u64 |
                (self.csr.r(utra::susres::TIME1) as u64) << 32)
-               + 1 // advance by one tick, to ensure time goes up monotonically at the next resume
+               + 0 // a placeholder in case we need to advance time on save
             );
+            println!("Stored time: {}", self.stored_time.unwrap());
 
             // setup the clean suspend marker, note if things were forced
             const WORDS_PER_PAGE: usize = 1024;
@@ -248,8 +278,10 @@ mod implementation {
                 }
                 let hash = murmur3_32( &hashbuf, 0);
                 unsafe{(*marker)[index + range - 1] = hash;}
+                println!("Clean suspend hash: {:03} <- 0x{:08x}", index + range - 1, hash);
                 index += range;
             }
+
 
             // clear the loader stack, for no particular reason other than to be vengeful.
             let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
@@ -257,16 +289,19 @@ mod implementation {
                 unsafe{(*stack)[words] = 0;}
             }
 
+            println!("Triggering suspend interrupt");
             // trigger an interrupt to process the final suspend bits
             self.csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
 
             // SHOULD_RESUME will be set true by the interrupt context when it re-enters from resume
             while !SHOULD_RESUME.load(Ordering::Relaxed) {
+                println!("Waiting for resume");
                 xous::yield_slice();
             }
         }
         pub fn do_resume(&mut self) -> bool { // returns true if the previous suspend was forced
             // resume the ticktimer where it left off
+            println!("Trying to resume");
             if let Some(time)= self.stored_time.take() {
                 // zero out the clean-suspend marker
                 let marker: *mut [u32; 1024] = self.marker.as_mut_ptr() as *mut[u32; 1024];
@@ -274,14 +309,8 @@ mod implementation {
                     unsafe{(*marker)[words] = 0x0;}
                 }
 
-                // set up pre-emption timer
-                let ms = SYSTEM_TICK_INTERVAL_MS;
-                self.os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
-                // load its values
-                self.os_timer.wfo(utra::timer0::LOAD_LOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
-                self.os_timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
-
                 // restore the ticktimer
+                self.csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before we try to load it
                 self.csr.wo(utra::susres::RESUME_TIME0, time as u32);
                 self.csr.wo(utra::susres::RESUME_TIME1, (time >> 32) as u32);
                 // load the saved value -- can only be done while the timer is paused
@@ -289,15 +318,24 @@ mod implementation {
                     self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
                     self.csr.ms(utra::susres::CONTROL_LOAD, 1)
                 );
+                println!("Ticktimer loaded");
 
+                // set up pre-emption timer
+                let ms = SYSTEM_TICK_INTERVAL_MS;
+                self.os_timer.wfo(utra::timer0::EN_EN, 0b0); // disable the timer
+                // load its values
+                self.os_timer.wfo(utra::timer0::LOAD_LOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+                self.os_timer.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+                // clear any pending interrupts so we have some time to exit
+                self.os_timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
+                // Set EV_ENABLE, this starts pre-emption
+                self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
                 // enable the pre-emption timer
                 self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
-                // Set EV_ENABLE, this starts pre-emption
-                self.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
-
                 // start the tickttimer running
                 self.csr.wo(utra::susres::CONTROL, 0);
+                println!("Ticktimer and OS timer now running");
 
                 // clear the loader stack, for no other reason other than to be vengeful
                 let stack = self.loader_stack.as_ptr() as *mut [u32; 1024];
@@ -419,9 +457,13 @@ pub fn execution_gate() {
         match FromPrimitive::from_usize(msg.body.id()) {
             // the entire purpose of SupendingNow is to block the thread that sent the message, until we're ready to resume.
             Some(ExecGateOpcode::SuspendingNow) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                println!("execution gated!");
                 while !RESUME_EXEC.load(Ordering::Relaxed) {
+                    println!("execution gate active");
                     xous::yield_slice();
                 }
+                println!("execution is ungated!");
+                xous::return_scalar(msg.sender, 0).expect("couldn't return dummy message to unblock execution");
             }),
             Some(ExecGateOpcode::Drop) => {
                 break;
@@ -444,6 +486,14 @@ fn xmain() -> ! {
     log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
+    // these only print if the "debugprint" feature is specified in Cargo.toml
+    // they're necessary because we kill IPC and thread comms as part of suspend
+    // so this is the only way to debug what's going on.
+    println!("App UART debug printing is on!");
+
+    // start up the execution gate
+    xous::create_thread_0(execution_gate).unwrap();
+
     let xns = xous_names::XousNames::new().unwrap();
     let susres_sid = xns.register_name(api::SERVER_NAME_SUSRES).expect("can't register server");
     log::trace!("main loop registered with NS -- {:?}", susres_sid);
@@ -456,6 +506,7 @@ fn xmain() -> ! {
     let (sid0, sid1, sid2, sid3) = timeout_sid.to_u32();
     xous::create_thread_4(timeout_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't create timeout thread");
     let timeout_outgoing_conn = xous::connect(timeout_sid).expect("couldn't connect to our timeout thread");
+    susres_hw.setup_timeout_csr(timeout_outgoing_conn).expect("couldn't set hardware CSR for timeout thread");
 
     let mut suspend_requested = false;
     let mut timeout_pending = false;
@@ -470,6 +521,7 @@ fn xmain() -> ! {
                 do_hook(hookdata, &mut suspend_subscribers);
             },
             Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
+                log::trace!("suspendready with token {}", token);
                 if !suspend_requested {
                     log::error!("received a SuspendReady message when a suspend wasn't pending. Ignoring.");
                     continue;
@@ -482,6 +534,7 @@ fn xmain() -> ! {
                         log::error!("received a duplicate SuspendReady token: {} from {:?}", token, scb);
                     }
                     scb.ready_to_suspend = true;
+                    suspend_subscribers[token] = Some(scb);
 
                     let mut all_ready = true;
                     for maybe_sub in suspend_subscribers.iter() {
@@ -493,6 +546,8 @@ fn xmain() -> ! {
                         };
                     }
                     if all_ready {
+                        log::trace!("all callbacks reporting in, doing suspend");
+                        timeout_pending = false;
                         susres_hw.do_suspend(false);
                         // when do_suspend() returns, it means we've resumed
                         suspend_requested = false;
@@ -500,7 +555,10 @@ fn xmain() -> ! {
                             log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
                         }
                         // this now allows all other threads to commence
+                        log::trace!("low-level resume done, restoring execution");
                         RESUME_EXEC.store(true, Ordering::Relaxed);
+                    } else {
+                        log::trace!("still waiting on callbacks, returning to main loop");
                     }
                 } else {
                     panic!("received an invalid token that does not map to a registered suspend listener");
@@ -527,6 +585,7 @@ fn xmain() -> ! {
             },
             Some(Opcode::SuspendTimeout) => {
                 if timeout_pending {
+                    log::trace!("suspend call has timed out, forcing a suspend");
                     timeout_pending = false;
                     // force a suspend
                     susres_hw.do_suspend(true);
@@ -539,6 +598,7 @@ fn xmain() -> ! {
                     }
                     RESUME_EXEC.store(true, Ordering::Relaxed);
                 } else {
+                    log::trace!("clean suspend timeout received, ignoring");
                     // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
                     // just ignore the message.
                 }

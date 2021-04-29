@@ -120,8 +120,14 @@ impl<const N: usize> SuspendResume for RegManager<N> {
                     RegOrField::Field(field) => reg.value = Some(self.csr.rf(field) as usize),
                     RegOrField::Reg(r) => reg.value = Some(self.csr.r(r) as usize),
                 }
+                *entry = Some(*reg);
             }
         }
+        /*
+        log::trace!("suspend csr: {:?}", self.csr);
+        for entry in self.registers.iter().rev() {
+            log::trace!("suspend: {:?}", entry);
+        }*/
         if let Some(se) = self.sus_epilogue {
             se(self);
         }
@@ -143,6 +149,11 @@ impl<const N: usize> SuspendResume for RegManager<N> {
                 }
             }
         }
+        /*
+        log::trace!("resume csr: {:?}", self.csr);
+        for entry in self.registers.iter() {
+            log::trace!("resume: {:?}", entry);
+        }*/
         if let Some(re) = self.res_epilogue {
             re(self);
         }

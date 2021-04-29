@@ -40,15 +40,18 @@ impl Susres {
         }
     }
     pub fn initiate_suspend(&mut self) -> Result<(), xous::Error> {
+        log::trace!("suspend initiated");
         send_message(self.conn,
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
     pub fn suspend_until_resume(&mut self, token: usize) -> Result<(), xous::Error> {
+        log::trace!("telling the server we're ready to suspend");
         // first tell the susres server that we're ready to suspend
         send_message(self.conn,
             Message::new_scalar(Opcode::SuspendReady.to_usize().unwrap(), token, 0, 0, 0)
         ).map(|_|())?;
+        log::trace!("blocking until suspend");
         // now block until we've resumed
         send_message(self.execution_gate_conn,
             Message::new_blocking_scalar(ExecGateOpcode::SuspendingNow.to_usize().unwrap(), 0, 0, 0, 0)
