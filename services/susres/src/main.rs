@@ -51,6 +51,9 @@ mod implementation {
         timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);
     }
 
+    // this is just for testing, remove for production
+    static REBOOT_CSR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
     // we do all the suspend/resume coordination in an interrupt context
     // the process state is pushed to main memory prior to entering this routine, so it's staged for a resume
     // on a clean suspend then resume, the loader will queue up this interrupt to be the first thing to
@@ -61,12 +64,17 @@ mod implementation {
         sr.csr.wfo(utra::susres::EV_PENDING_SOFT_INT, 1);
 
         // set this to true to do a touch-and-go suspend/resume (no actual power off, but the whole prep cycle in play)
-        let touch_and_go = true;
+        let touch_and_go = false;
         if touch_and_go {
             sr.csr.wfo(utra::susres::STATE_RESUME, 1);
         }
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
+            { // this is just for testing
+                let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
+                reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
+            }
+
             // power the system down - this should result in an almost immediate loss of power
             sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
 
@@ -90,6 +98,8 @@ mod implementation {
         stored_time: Option<u64>,
         /// so we can access the build seed and detect if the FPGA image was changed on us
         seed_csr: utralib::CSR<u32>,
+        /// we also own the reboot facility
+        reboot_csr: utralib::CSR<u32>,
     }
     impl SusResHw {
         pub fn new() -> Self {
@@ -135,6 +145,14 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Seed CSR range");
+            let reboot_csr = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::reboot::HW_REBOOT_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map Reboot CSR range");
+            REBOOT_CSR.store(reboot_csr.as_mut_ptr() as u32, Ordering::Relaxed); // for testing only
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 os_timer: CSR::new(ostimer_csr.as_mut_ptr() as *mut u32),
@@ -142,6 +160,7 @@ mod implementation {
                 marker,
                 loader_stack,
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
+                reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
             };
 
             // start the OS timer running
@@ -175,6 +194,17 @@ mod implementation {
             ).expect("couldn't claim IRQ");
 
             sr
+        }
+
+        pub fn reboot(&mut self, reboot_soc: bool) {
+            if reboot_soc {
+                self.reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
+            } else {
+                self.reboot_csr.wfo(utra::reboot::CPU_RESET_CPU_RESET, 1);
+            }
+        }
+        pub fn set_reboot_vector(&mut self, vector: u32) {
+            self.reboot_csr.wfo(utra::reboot::ADDR_ADDR, vector);
         }
 
         pub fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
@@ -366,6 +396,8 @@ mod implementation {
         pub fn new() -> Self {
             SusResHw {}
         }
+        pub fn reboot(&self, _reboot_soc: bool) {}
+        pub fn set_reboot_vector(&self, _vector: u32) {}
         pub fn do_suspend(&mut self, _forced: bool) {
         }
         pub fn do_resume(&mut self) -> bool {
@@ -518,104 +550,129 @@ fn xmain() -> ! {
 
     let mut suspend_requested = false;
     let mut timeout_pending = false;
+    let mut reboot_requested: bool = false;
 
     let mut suspend_subscribers: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
         let msg = xous::receive_message(susres_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::SuspendEventSubscribe) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                do_hook(hookdata, &mut suspend_subscribers);
-            },
-            Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
-                log::trace!("suspendready with token {}", token);
-                if !suspend_requested {
-                    log::error!("received a SuspendReady message when a suspend wasn't pending. Ignoring.");
-                    continue;
+        if reboot_requested {
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::RebootCpuConfirm) => {
+                    susres_hw.reboot(false);
                 }
-                if token >= suspend_subscribers.len() {
-                    panic!("received a SuspendReady token that's out of range");
+                Some(Opcode::RebootSocConfirm) => {
+                    susres_hw.reboot(true);
                 }
-                if let Some(mut scb) = suspend_subscribers[token] {
-                    if scb.ready_to_suspend {
-                        log::error!("received a duplicate SuspendReady token: {} from {:?}", token, scb);
+                _ => reboot_requested = false,
+            }
+        } else {
+            match FromPrimitive::from_usize(msg.body.id()) {
+                Some(Opcode::RebootRequest) => {
+                    reboot_requested = true;
+                },
+                Some(Opcode::RebootCpuConfirm) => {
+                    log::error!("RebootCpuConfirm, but no prior Request. Ignoring.");
+                },
+                Some(Opcode::RebootSocConfirm) => {
+                    log::error!("RebootSocConfirm, but no prior Request. Ignoring.");
+                },
+                Some(Opcode::RebootVector) =>  msg_scalar_unpack!(msg, vector, _, _, _, {
+                    susres_hw.set_reboot_vector(vector as u32);
+                }),
+                Some(Opcode::SuspendEventSubscribe) => {
+                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                    do_hook(hookdata, &mut suspend_subscribers);
+                },
+                Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
+                    log::trace!("suspendready with token {}", token);
+                    if !suspend_requested {
+                        log::error!("received a SuspendReady message when a suspend wasn't pending. Ignoring.");
+                        continue;
                     }
-                    scb.ready_to_suspend = true;
-                    suspend_subscribers[token] = Some(scb);
+                    if token >= suspend_subscribers.len() {
+                        panic!("received a SuspendReady token that's out of range");
+                    }
+                    if let Some(mut scb) = suspend_subscribers[token] {
+                        if scb.ready_to_suspend {
+                            log::error!("received a duplicate SuspendReady token: {} from {:?}", token, scb);
+                        }
+                        scb.ready_to_suspend = true;
+                        suspend_subscribers[token] = Some(scb);
 
-                    let mut all_ready = true;
-                    for maybe_sub in suspend_subscribers.iter() {
-                        if let Some(sub) = maybe_sub {
-                            if sub.ready_to_suspend == false {
-                                all_ready = false;
-                                break;
+                        let mut all_ready = true;
+                        for maybe_sub in suspend_subscribers.iter() {
+                            if let Some(sub) = maybe_sub {
+                                if sub.ready_to_suspend == false {
+                                    all_ready = false;
+                                    break;
+                                }
+                            };
+                        }
+                        if all_ready {
+                            log::trace!("all callbacks reporting in, doing suspend");
+                            timeout_pending = false;
+                            susres_hw.do_suspend(false);
+                            // when do_suspend() returns, it means we've resumed
+                            suspend_requested = false;
+                            if susres_hw.do_resume() {
+                                log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
                             }
+                            // this now allows all other threads to commence
+                            log::trace!("low-level resume done, restoring execution");
+                            RESUME_EXEC.store(true, Ordering::Relaxed);
+                        } else {
+                            log::trace!("still waiting on callbacks, returning to main loop");
+                        }
+                    } else {
+                        panic!("received an invalid token that does not map to a registered suspend listener");
+                    }
+                }),
+                Some(Opcode::SuspendRequest) => {
+                    suspend_requested = true;
+                    // clear the resume gate
+                    SHOULD_RESUME.store(false, Ordering::Relaxed);
+                    RESUME_EXEC.store(false, Ordering::Relaxed);
+                    // clear the ready to suspend flag
+                    for maybe_sub in suspend_subscribers.iter_mut() {
+                        if let Some(sub) = maybe_sub {
+                            sub.ready_to_suspend = false;
                         };
                     }
-                    if all_ready {
-                        log::trace!("all callbacks reporting in, doing suspend");
+                    // do we want to start the timeout before or after sending the notifications? hmm. 🤔
+                    timeout_pending = true;
+                    send_message(timeout_outgoing_conn,
+                        Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate timeout before suspend!");
+
+                    send_event(&suspend_subscribers);
+                },
+                Some(Opcode::SuspendTimeout) => {
+                    if timeout_pending {
+                        log::trace!("suspend call has timed out, forcing a suspend");
                         timeout_pending = false;
-                        susres_hw.do_suspend(false);
+                        // force a suspend
+                        susres_hw.do_suspend(true);
                         // when do_suspend() returns, it means we've resumed
                         suspend_requested = false;
                         if susres_hw.do_resume() {
-                            log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
+                            log::error!("We forced a suspend, some peripherals may be in an unclean state!");
+                        } else {
+                            log::error!("We forced a suspend, but the bootloader is claiming we did a clean suspend. Internal state may be inconsistent.");
                         }
-                        // this now allows all other threads to commence
-                        log::trace!("low-level resume done, restoring execution");
                         RESUME_EXEC.store(true, Ordering::Relaxed);
                     } else {
-                        log::trace!("still waiting on callbacks, returning to main loop");
+                        log::trace!("clean suspend timeout received, ignoring");
+                        // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
+                        // just ignore the message.
                     }
-                } else {
-                    panic!("received an invalid token that does not map to a registered suspend listener");
                 }
-            }),
-            Some(Opcode::SuspendRequest) => {
-                suspend_requested = true;
-                // clear the resume gate
-                SHOULD_RESUME.store(false, Ordering::Relaxed);
-                RESUME_EXEC.store(false, Ordering::Relaxed);
-                // clear the ready to suspend flag
-                for maybe_sub in suspend_subscribers.iter_mut() {
-                    if let Some(sub) = maybe_sub {
-                        sub.ready_to_suspend = false;
-                    };
+                Some(Opcode::Quit) => {
+                    break
                 }
-                // do we want to start the timeout before or after sending the notifications? hmm. 🤔
-                timeout_pending = true;
-                send_message(timeout_outgoing_conn,
-                    Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
-                ).expect("couldn't initiate timeout before suspend!");
-
-                send_event(&suspend_subscribers);
-            },
-            Some(Opcode::SuspendTimeout) => {
-                if timeout_pending {
-                    log::trace!("suspend call has timed out, forcing a suspend");
-                    timeout_pending = false;
-                    // force a suspend
-                    susres_hw.do_suspend(true);
-                    // when do_suspend() returns, it means we've resumed
-                    suspend_requested = false;
-                    if susres_hw.do_resume() {
-                        log::error!("We forced a suspend, some peripherals may be in an unclean state!");
-                    } else {
-                        log::error!("We forced a suspend, but the bootloader is claiming we did a clean suspend. Internal state may be inconsistent.");
-                    }
-                    RESUME_EXEC.store(true, Ordering::Relaxed);
-                } else {
-                    log::trace!("clean suspend timeout received, ignoring");
-                    // this means we did a clean suspend, we've resumed, and the timeout came back after the resume
-                    // just ignore the message.
+                None => {
+                    log::error!("couldn't convert opcode");
                 }
-            }
-            Some(Opcode::Quit) => {
-                break
-            }
-            None => {
-                log::error!("couldn't convert opcode");
             }
         }
     }

@@ -15,8 +15,8 @@ rand = "0.7.3"
 [features]
 debug-print = []
 earlyprintk = []
-#default = ["debug-print"]
-default = []
+default = ["debug-print"]
+#default = []
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations

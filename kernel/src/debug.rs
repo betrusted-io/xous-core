@@ -14,7 +14,7 @@ use utralib::generated::*;
 ))]
 pub mod debug_print_hardware {
     // the HW device mapping is done in main.rs/init(); the virtual address has to be in the top 4MiB as it is the only page shared among all processes
-    pub const SUPERVISOR_UART_ADDR: *mut usize = 0xffcf_0000 as *mut usize;
+    pub const SUPERVISOR_UART_ADDR: *mut usize = 0xffcf_0000 as *mut usize; // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
 
     #[macro_export]
     macro_rules! print

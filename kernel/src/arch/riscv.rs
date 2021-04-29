@@ -17,12 +17,12 @@ pub fn current_pid() -> PID {
     PID::new(satp::read().asid() as _).unwrap()
 }
 
-pub fn init() {
+pub fn init(resume: bool) {
     unsafe {
         sie::set_ssoft();
         sie::set_sext();
     }
-    rand::init();
+    rand::init(resume);
 }
 
 /// Put the core to sleep until an interrupt hits. Returns `true`

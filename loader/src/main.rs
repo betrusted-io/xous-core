@@ -389,6 +389,7 @@ extern "C" {
         entrypoint: usize,
         stack: usize,
         debug: bool,
+        resume: bool,
     ) -> !;
 }
 
@@ -1076,8 +1077,10 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
 
     let (clean, was_forced_suspend) = check_resume(&mut cfg);
     if !clean {
+        println!("no suspend marker found, doing a cold boot!");
         phase_1(&mut cfg);
         phase_2(&mut cfg);
+        println!("done initializing for cold boot.");
     } else {
         use utralib::generated::*;
         // setup for a resume
@@ -1092,10 +1095,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             resume_csr.wfo(utra::susres::STATE_RESUME, 1);
         }
         resume_csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before resuming
-
-        // set the resume marker for the early kernel init
-        ///////////TODO
-
+        resume_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, 1); // ensure that the soft interrupt is enabled for the kernel to kick
+        println!("clean suspend marker found, doing a resume!");
         // SATP restore is handled by the `start_kernel` assembly pre-amble
     }
 
@@ -1130,6 +1131,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             cfg.processes[0].entrypoint,
             cfg.processes[0].sp,
             cfg.debug,
+            clean,
         );
     }
 }

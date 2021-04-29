@@ -31,7 +31,6 @@ mod implementation {
 
     #[allow(dead_code)]
     pub struct Llio {
-        reboot_csr: utralib::CSR<u32>,
         crg_csr: utralib::CSR<u32>,
         gpio_csr: utralib::CSR<u32>,
         gpio_susres: RegManager::<{utra::gpio::GPIO_NUMREGS}>,
@@ -127,13 +126,6 @@ mod implementation {
         pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
 
         pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
-            let reboot_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::reboot::HW_REBOOT_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Reboot CSR range");
             let crg_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::crg::HW_CRG_BASE),
                 None,
@@ -187,7 +179,6 @@ mod implementation {
             let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xl = Llio {
-                reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
                 crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
                 gpio_csr: CSR::new(gpio_base),
                 gpio_susres: RegManager::new(gpio_base),
@@ -289,16 +280,6 @@ mod implementation {
             self.i2c_susres.resume();
         }
 
-        pub fn reboot(&mut self, reboot_soc: bool) {
-            if reboot_soc {
-                self.reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
-            } else {
-                self.reboot_csr.wfo(utra::reboot::CPU_RESET_CPU_RESET, 1);
-            }
-        }
-        pub fn set_reboot_vector(&mut self, vector: u32) {
-            self.reboot_csr.wfo(utra::reboot::ADDR_ADDR, vector);
-        }
         pub fn gpio_dout(&mut self, d: u32) {
             self.gpio_csr.wfo(utra::gpio::OUTPUT_OUTPUT, d);
         }
@@ -484,8 +465,6 @@ mod implementation {
 
         pub fn suspend(&self) {}
         pub fn resume(&self) {}
-        pub fn reboot(&self, _reboot_soc: bool) {}
-        pub fn set_reboot_vector(&self, _vector: u32) {}
         pub fn gpio_dout(&self, _d: u32) {}
         pub fn gpio_din(&self, ) -> u32 { 0xDEAD_BEEF }
         pub fn gpio_drive(&self, _d: u32) {}
@@ -588,220 +567,195 @@ fn xmain() -> ! {
     let mut gpio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
     log::trace!("starting main loop");
-    let mut reboot_requested: bool = false;
     loop {
         let mut msg = xous::receive_message(llio_sid).unwrap();
         log::trace!("Message: {:?}", msg);
-        if reboot_requested {
-            match FromPrimitive::from_usize(msg.body.id()) {
-                Some(Opcode::RebootCpuConfirm) => {
-                    llio.reboot(false);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                llio.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                llio.resume();
+            }),
+            Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
+                todo!("CrgMode opcode not yet implemented.");
+            }),
+            Some(Opcode::GpioDataOut) => msg_scalar_unpack!(msg, d, _, _, _, {
+                llio.gpio_dout(d as u32);
+            }),
+            Some(Opcode::GpioDataIn) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.gpio_din() as usize).expect("couldn't return gpio data in");
+            }),
+            Some(Opcode::GpioDataDrive) => msg_scalar_unpack!(msg, d, _, _, _, {
+                llio.gpio_drive(d as u32);
+            }),
+            Some(Opcode::GpioIntMask) => msg_scalar_unpack!(msg, d, _, _, _, {
+                llio.gpio_int_mask(d as u32);
+            }),
+            Some(Opcode::GpioIntAsFalling) => msg_scalar_unpack!(msg, d, _, _, _, {
+                llio.gpio_int_as_falling(d as u32);
+            }),
+            Some(Opcode::GpioIntPending) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.gpio_int_pending() as usize).expect("couldn't return gpio pending vector");
+            }),
+            Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
+                llio.gpio_int_ena(d as u32);
+            }),
+            Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
+                llio.set_uart_mux(mux.into());
+            }),
+            Some(Opcode::InfoDna) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (val1, val2) = llio.get_info_dna();
+                xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return DNA");
+            }),
+            Some(Opcode::InfoGit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (val1, val2) = llio.get_info_git();
+                xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Git");
+            }),
+            Some(Opcode::InfoPlatform) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (val1, val2) = llio.get_info_platform();
+                xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Platform");
+            }),
+            Some(Opcode::InfoTarget) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (val1, val2) = llio.get_info_target();
+                xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
+            }),
+            Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.power_audio(false);
+                } else {
+                    llio.power_audio(true);
                 }
-                Some(Opcode::RebootSocConfirm) => {
-                    llio.reboot(true);
+            }),
+            Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.power_self(false);
+                } else {
+                    llio.power_self(true);
                 }
-                _ => reboot_requested = false,
+            }),
+            Some(Opcode::PowerBoostMode) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.power_boost_mode(false);
+                } else {
+                    llio.power_boost_mode(true);
+                }
+            }),
+            Some(Opcode::EcSnoopAllow) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.ec_snoop_allow(false);
+                } else {
+                    llio.ec_snoop_allow(true);
+                }
+            }),
+            Some(Opcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
+                llio.ec_reset();
+            }),
+            Some(Opcode::EcPowerOn) => msg_scalar_unpack!(msg, _, _, _, _, {
+                llio.ec_power_on();
+            }),
+            Some(Opcode::SelfDestruct) => msg_scalar_unpack!(msg, code, _, _, _, {
+                llio.self_destruct(code as u32);
+            }),
+            Some(Opcode::Vibe) => msg_scalar_unpack!(msg, pattern, _, _, _, {
+                llio.vibe(pattern.into());
+            }),
+            Some(Opcode::AdcVbus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_vbus() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcVccInt) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_vccint() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcVccAux) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_vccaux() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcVccBram) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_vccbram() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcUsbN) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_usbn() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcUsbP) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_usbp() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcTemperature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_temperature() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcGpio5) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_gpio5() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::AdcGpio2) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, llio.xadc_gpio2() as _).expect("couldn't return Xadc");
+            }),
+            Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // I2C state machine handler irq received
+                i2c_machine.handler();
+            }),
+            Some(Opcode::I2cTxRx) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
+                let status = i2c_machine.initiate(i2c_txrx);
+                buffer.replace(status).unwrap();
             }
-        } else {
-            match FromPrimitive::from_usize(msg.body.id()) {
-                Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                    llio.suspend();
-                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                    llio.resume();
-                }),
-                Some(Opcode::RebootRequest) => {
-                    reboot_requested = true;
-                },
-                Some(Opcode::RebootCpuConfirm) => {
-                    info!("RebootCpuConfirm, but no prior Request. Ignoring.");
-                },
-                Some(Opcode::RebootSocConfirm) => {
-                    info!("RebootSocConfirm, but no prior Request. Ignoring.");
-                },
-                Some(Opcode::RebootVector) =>  msg_scalar_unpack!(msg, vector, _, _, _, {
-                    llio.set_reboot_vector(vector as u32);
-                }),
-                Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
-                    todo!("CrgMode opcode not yet implemented.");
-                }),
-                Some(Opcode::GpioDataOut) => msg_scalar_unpack!(msg, d, _, _, _, {
-                    llio.gpio_dout(d as u32);
-                }),
-                Some(Opcode::GpioDataIn) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.gpio_din() as usize).expect("couldn't return gpio data in");
-                }),
-                Some(Opcode::GpioDataDrive) => msg_scalar_unpack!(msg, d, _, _, _, {
-                    llio.gpio_drive(d as u32);
-                }),
-                Some(Opcode::GpioIntMask) => msg_scalar_unpack!(msg, d, _, _, _, {
-                    llio.gpio_int_mask(d as u32);
-                }),
-                Some(Opcode::GpioIntAsFalling) => msg_scalar_unpack!(msg, d, _, _, _, {
-                    llio.gpio_int_as_falling(d as u32);
-                }),
-                Some(Opcode::GpioIntPending) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.gpio_int_pending() as usize).expect("couldn't return gpio pending vector");
-                }),
-                Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
-                    llio.gpio_int_ena(d as u32);
-                }),
-                Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
-                    llio.set_uart_mux(mux.into());
-                }),
-                Some(Opcode::InfoDna) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let (val1, val2) = llio.get_info_dna();
-                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return DNA");
-                }),
-                Some(Opcode::InfoGit) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let (val1, val2) = llio.get_info_git();
-                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Git");
-                }),
-                Some(Opcode::InfoPlatform) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let (val1, val2) = llio.get_info_platform();
-                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Platform");
-                }),
-                Some(Opcode::InfoTarget) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let (val1, val2) = llio.get_info_target();
-                    xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
-                }),
-                Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
-                    if power_on == 0 {
-                        llio.power_audio(false);
-                    } else {
-                        llio.power_audio(true);
-                    }
-                }),
-                Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
-                    if power_on == 0 {
-                        llio.power_self(false);
-                    } else {
-                        llio.power_self(true);
-                    }
-                }),
-                Some(Opcode::PowerBoostMode) => msg_scalar_unpack!(msg, power_on, _, _, _, {
-                    if power_on == 0 {
-                        llio.power_boost_mode(false);
-                    } else {
-                        llio.power_boost_mode(true);
-                    }
-                }),
-                Some(Opcode::EcSnoopAllow) => msg_scalar_unpack!(msg, power_on, _, _, _, {
-                    if power_on == 0 {
-                        llio.ec_snoop_allow(false);
-                    } else {
-                        llio.ec_snoop_allow(true);
-                    }
-                }),
-                Some(Opcode::EcReset) => msg_scalar_unpack!(msg, _, _, _, _, {
-                    llio.ec_reset();
-                }),
-                Some(Opcode::EcPowerOn) => msg_scalar_unpack!(msg, _, _, _, _, {
-                    llio.ec_power_on();
-                }),
-                Some(Opcode::SelfDestruct) => msg_scalar_unpack!(msg, code, _, _, _, {
-                    llio.self_destruct(code as u32);
-                }),
-                Some(Opcode::Vibe) => msg_scalar_unpack!(msg, pattern, _, _, _, {
-                    llio.vibe(pattern.into());
-                }),
-                Some(Opcode::AdcVbus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_vbus() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcVccInt) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_vccint() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcVccAux) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_vccaux() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcVccBram) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_vccbram() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcUsbN) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_usbn() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcUsbP) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_usbp() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcTemperature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_temperature() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcGpio5) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_gpio5() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::AdcGpio2) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    xous::return_scalar(msg.sender, llio.xadc_gpio2() as _).expect("couldn't return Xadc");
-                }),
-                Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                    // I2C state machine handler irq received
-                    i2c_machine.handler();
-                }),
-                Some(Opcode::I2cTxRx) => {
-                    let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                    let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
-                    let status = i2c_machine.initiate(i2c_txrx);
-                    buffer.replace(status).unwrap();
+            Some(Opcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let busy = if i2c_machine.is_busy() {1} else {0};
+                xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
+            }),
+            Some(Opcode::EventUsbAttachSubscribe) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut usb_cb_conns);
+            }
+            Some(Opcode::EventComSubscribe) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut com_cb_conns);
+            }
+            Some(Opcode::EventRtcSubscribe) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut rtc_cb_conns);
+            }
+            Some(Opcode::GpioIntSubscribe) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut gpio_cb_conns);
+            }
+            Some(Opcode::EventComEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                if ena == 0 {
+                    llio.com_int_ena(false);
+                } else {
+                    llio.com_int_ena(true);
                 }
-                Some(Opcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                    let busy = if i2c_machine.is_busy() {1} else {0};
-                    xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
-                }),
-                Some(Opcode::EventUsbAttachSubscribe) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                    do_hook(hookdata, &mut usb_cb_conns);
+            }),
+            Some(Opcode::EventRtcEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                if ena == 0 {
+                    llio.rtc_int_ena(false);
+                } else {
+                    llio.rtc_int_ena(true);
                 }
-                Some(Opcode::EventComSubscribe) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                    do_hook(hookdata, &mut com_cb_conns);
+            }),
+            Some(Opcode::EventUsbAttachEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
+                if ena == 0 {
+                    llio.usb_int_ena(false);
+                } else {
+                    llio.usb_int_ena(true);
                 }
-                Some(Opcode::EventRtcSubscribe) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                    do_hook(hookdata, &mut rtc_cb_conns);
-                }
-                Some(Opcode::GpioIntSubscribe) => {
-                    let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                    let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
-                    do_hook(hookdata, &mut gpio_cb_conns);
-                }
-                Some(Opcode::EventComEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
-                    if ena == 0 {
-                        llio.com_int_ena(false);
-                    } else {
-                        llio.com_int_ena(true);
-                    }
-                }),
-                Some(Opcode::EventRtcEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
-                    if ena == 0 {
-                        llio.rtc_int_ena(false);
-                    } else {
-                        llio.rtc_int_ena(true);
-                    }
-                }),
-                Some(Opcode::EventUsbAttachEnable) => msg_scalar_unpack!(msg, ena, _, _, _, {
-                    if ena == 0 {
-                        llio.usb_int_ena(false);
-                    } else {
-                        llio.usb_int_ena(true);
-                    }
-                }),
-                Some(Opcode::EventComHappened) => {
-                    send_event(&com_cb_conns, 0);
-                },
-                Some(Opcode::EventRtcHappened) => {
-                    send_event(&rtc_cb_conns, 0);
-                },
-                Some(Opcode::EventUsbHappened) => {
-                    send_event(&usb_cb_conns, 0);
-                },
-                Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
-                    send_event(&gpio_cb_conns, channel as usize);
-                }),
-                None => {
-                    error!("couldn't convert opcode");
-                    break;
-                }
+            }),
+            Some(Opcode::EventComHappened) => {
+                send_event(&com_cb_conns, 0);
+            },
+            Some(Opcode::EventRtcHappened) => {
+                send_event(&rtc_cb_conns, 0);
+            },
+            Some(Opcode::EventUsbHappened) => {
+                send_event(&usb_cb_conns, 0);
+            },
+            Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
+                send_event(&gpio_cb_conns, channel as usize);
+            }),
+            None => {
+                error!("couldn't convert opcode");
+                break;
             }
         }
     }

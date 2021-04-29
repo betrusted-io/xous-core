@@ -19,6 +19,14 @@ pub(crate) enum Opcode {
     /// from the timeout thread
     SuspendTimeout,
 
+    /// not tested - reboot
+    RebootRequest,
+    RebootSocConfirm, // all peripherals + CPU
+    RebootCpuConfirm, // just the CPU, peripherals (in particular the USB debug bridge) keep state
+
+    /// not tested - reboot address
+    RebootVector, //(u32),
+
     /// exit the server
     Quit,
 }
@@ -206,106 +214,3 @@ impl<const N: usize> SuspendResume for ManagedMem<N> {
         }
     }
 }
-
-
-
-
-/*
-// "suspend/resume u32"
-struct SrU32 {
-    /// offset of the register
-    offset: crate::Register,
-    /// the saved value of the register
-    value: u32,
-    /// the order in which this register should be written. If none, it's written at any convenient time.
-    resume_order: Option<u8>,
-    /// if this register should be in the suspend/resume set
-    do_sr: bool,
-}
-
-/* sketching some structs for suspend/resume */
-struct TicktimerSusres {
-    csr: utralib::CSR<u32>, // new(csr_base) will allocate this register, from the virtual CSR base given to us by the owning server
-    pub control: Option<u32>,
-    pub time1: Option<u32>,
-    pub time0: Option<u32>,
-    pub resume_time1: Option<u32>,
-    pub resume_time0: Option<u32>,
-    pub status: Option<u32>,
-    pub msleep_target1: Option<u32>,
-    pub msleep_target0: Option<u32>,
-    pub ev_status: Option<u32>,
-    pub ev_pending: Option<u32>,
-    pub ev_enable: Option<u32>,
-    pub ticktimer_irq: Option<bool>, // whether to enable or not after resume
-    pub wait_suspend: Option<fn(timeout: u32) -> bool>, // function to call to check if a block can suspend
-}
-pub trait SuspendResume {
-    pub fn suspend(&mut self) {
-        /*
-        go through each item of the structure, and if the item is Some(item), access the corresponding
-        register and save it into the register
-         */
-    }
-    pub fn resume(&mut self) {
-        /*
-        go through each item of the stucture, and if the item is Some(item), unwrap the value and
-        poke it into the register
-        */
-    }
-}
-
-enum TickttimerReg {
-    Control = 0,
-    Time1 = 1,
-    Time0 = 2,
-    MSleepTarget1 = 3,
-    //...
-}
-//enum TickttimerInterrupt {
-//    Alarm = 0,
-//}
-
-struct ManagedReg {
-    offset: TickttimerReg,
-    mask: usize, // mask of data to store
-    value: u32,
-}
-//struct ManagedInterrupt {
-//    irq: usize,
-//}
-struct ManagedMem {
-    offset: usize, // the starting offset of the volatile memory block
-    mem: [u32; MEMLEN], // backup copy of the memory
-}
-// this can operate on the above three structure
-pub trait SusResOps {
-    fn save();
-    fn restore();
-}
-
-/*
-Interrupts need no suspend/resume setup:
-- the hooks and callback locations are all stored in non-volatile SRAM
-- the SIM register, which contains the mask of interrupts that are enabled, will be restored
-  by the loader on boot
-
-Between these two facts, all of the interrupt mechanism are transparently handled by the kernel
- */
-
-
-struct SusResManager {
-    csr: utralib::CSR<u32>,
-    pub registers: [Option<ManagedReg>; 12], // max number is set by the utra2svd generator
-    //pub interrupts: [Option<usize>; 1], // if in this list, this interrupt should be enabled
-
-    // i think maybe these go in the library, not in the auto-generated manager structure
-    pub suspend_cb: fn(),
-    pub resume_cb: fn(),
-}
-pub trait SusResBlockOps {
-    fn append(reg: ManagedReg); // adds a register to the managed suspend list
-    fn suspend(); // iterates through the list of registers and performs the suspend operation
-    fn resume(); // iterates through the list of registers and performs the resume operation
-}
-*/

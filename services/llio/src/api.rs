@@ -139,14 +139,6 @@ pub(crate) const SERVER_NAME_LLIO: &str      = "_Low Level I/O manager_";
 //////////////////////////////////// OPCODES
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
-    /// not tested - reboot
-    RebootRequest,
-    RebootSocConfirm, // all peripherals + CPU
-    RebootCpuConfirm, // just the CPU, peripherals (in particular the USB debug bridge) keep state
-
-    /// not tested - reboot address
-    RebootVector, //(u32),
-
     /// not tested - set CRG parameters
     CrgMode, //(ClockMode),
 

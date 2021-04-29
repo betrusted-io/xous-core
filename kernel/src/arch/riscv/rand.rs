@@ -7,15 +7,15 @@ use xous_kernel::{MemoryFlags, MemoryType, PID};
 
 pub const TRNG_KERNEL: Trng = Trng {
     // the HW device mapping is done in xous-rs/src/lib.rs/init()
-    // the manually chosen virtuall address has to be in the top 4MiB as it is the only page shared among all processes
-    base: 0xffce_0000 as *mut usize,
+    // the manually chosen virtual address has to be in the top 4MiB as it is the only page shared among all processes
+    base: 0xffce_0000 as *mut usize, // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
 };
 
 pub struct Trng {
     pub base: *mut usize,
 }
 
-pub fn init() {
+pub fn init(resume: bool) {
     // Map the TRNG so that we can allocate names
     // hardware guarantees that:
     //   - TRNG will automatically power on
@@ -23,18 +23,20 @@ pub fn init() {
     //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed without delay
     //   - The kernel will start a TRNG server
     //   - All further security decisions and policies are 100% delegated to this new server.
-    MemoryManager::with_mut(|memory_manager| {
-        memory_manager
-            .map_range(
-                utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u8,
-                ((TRNG_KERNEL.base as u32) & !4095) as *mut u8,
-                4096,
-                PID::new(1).unwrap(),
-                MemoryFlags::R | MemoryFlags::W,
-                MemoryType::Default,
-            )
-            .expect("unable to map TRNG")
-    });
+    if !resume {
+        MemoryManager::with_mut(|memory_manager| {
+            memory_manager
+                .map_range(
+                    utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u8,
+                    ((TRNG_KERNEL.base as u32) & !4095) as *mut u8,
+                    4096,
+                    PID::new(1).unwrap(),
+                    MemoryFlags::R | MemoryFlags::W,
+                    MemoryType::Default,
+                )
+                .expect("unable to map TRNG")
+        });
+    }
 
     let trng_kernel_csr = CSR::new(TRNG_KERNEL.base as *mut u32);
     while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}

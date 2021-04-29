@@ -27,7 +27,7 @@ pub fn current_pid() -> PID {
     unimplemented!();
 }
 
-pub fn init() {}
+pub fn init(resume: bool) {}
 
 pub mod syscall {
     use crate::arch::Context;

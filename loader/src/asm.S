@@ -50,5 +50,8 @@ start_kernel:
     // Reposition the stack at the offset passed by $a5
     move        sp, a5
 
+    // copy the clean suspend marker to the fourth argument slot (a3)
+    move        a3, a7
+
     // Issue the return, which will jump to $mepc in Supervisor mode
     mret
