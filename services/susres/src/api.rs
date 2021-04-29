@@ -46,12 +46,14 @@ pub(crate) enum ExecGateOpcode {
 /////////////////////////// suspend-resume hardware management primitives
 /////////////////////////////////////////////////////////////////////////
 #[cfg(target_os = "none")]
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum RegOrField {
     Field(Field),
     Reg(Register),
 }
 #[cfg(target_os = "none")]
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub struct ManagedReg {
     /// register, or a field of a register
@@ -63,6 +65,7 @@ pub struct ManagedReg {
 }
 
 //#[derive(Debug)]
+#[allow(dead_code)]
 #[cfg(target_os = "none")]
 pub struct RegManager<const N: usize> {
     pub csr: CSR<u32>,
@@ -72,6 +75,7 @@ pub struct RegManager<const N: usize> {
     pub res_prologue: Option<fn(&mut Self)>,
     pub res_epilogue: Option<fn(&mut Self)>,
 }
+#[allow(dead_code)]
 #[cfg(target_os = "none")]
 impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
     pub fn new(reg_base: *mut u32) -> RegManager::<N> {

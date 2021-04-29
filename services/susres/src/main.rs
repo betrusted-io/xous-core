@@ -358,6 +358,8 @@ mod implementation {
 
 #[cfg(not(target_os = "none"))]
 mod implementation {
+    use num_traits::ToPrimitive;
+
     pub struct SusResHw {
     }
     impl SusResHw {
@@ -366,7 +368,13 @@ mod implementation {
         }
         pub fn do_suspend(&mut self, _forced: bool) {
         }
-        pub fn do_resume(&mut self, _forced: bool) {
+        pub fn do_resume(&mut self) -> bool {
+            false
+        }
+        pub fn setup_timeout_csr(&mut self, cid: xous::CID) -> Result<(), xous::Error> {
+            xous::send_message(cid,
+                xous::Message::new_scalar(crate::TimeoutOpcode::SetCsr.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_| ())
         }
     }
 }

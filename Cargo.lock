@@ -1476,6 +1476,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "susres",
  "ticktimer-server",
  "utralib",
  "xous",
