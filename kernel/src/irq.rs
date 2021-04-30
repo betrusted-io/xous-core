@@ -22,7 +22,7 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
                     return SystemServices::with_mut(|ss| {
                         // Disable all other IRQs and redirect into userspace
                         arch::irq::disable_all_irqs();
-                        // println!("Making a callback to PID{}: {:08x} ({:08x}, {:08x})", pid, f as usize, irq_no as usize, arg as usize);
+                        // println!("Making a callback to PID{}: {:x?} ({:08x}, {:x?})", pid, f, irq_no as usize, arg);
                         ss.make_callback_to(
                             pid,
                             f.get() as *mut usize,

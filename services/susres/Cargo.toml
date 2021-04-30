@@ -22,4 +22,4 @@ utralib = { path = "../../utralib"}
 
 [features]
 debugprint = []
-default = []
+default = ["debugprint"]

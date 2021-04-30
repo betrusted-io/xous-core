@@ -1100,6 +1100,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         resume_csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before resuming
         resume_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, 1); // ensure that the soft interrupt is enabled for the kernel to kick
         println!("clean suspend marker found, doing a resume!");
+
+        // trigger the interrupt; it's not immediately handled, but rather checked later on by the kernel on clean resume
+        resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
         // SATP restore is handled by the `start_kernel` assembly pre-amble
     }
 
@@ -1160,11 +1163,21 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             for i in 0..7 {
                 println!("0x{:08x}", (*backup_args)[i]);
             }
+            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (10 << 22);
+            //let satp = (*backup_args)[3];
+            println!("Adjusting SATP was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
+
+            if true {
+                use utralib::generated::*;
+                let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+                gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERENL(default))
+            }
+
             start_kernel(
                 (*backup_args)[0] as usize,
                 (*backup_args)[1] as usize,
                 (*backup_args)[2] as usize,
-                (*backup_args)[3] as usize,
+                satp as usize,
                 (*backup_args)[4] as usize,
                 (*backup_args)[5] as usize,
                 if (*backup_args)[6] == 0 {false} else {true},

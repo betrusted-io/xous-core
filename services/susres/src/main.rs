@@ -59,6 +59,7 @@ mod implementation {
     // on a clean suspend then resume, the loader will queue up this interrupt to be the first thing to
     // run on Xous resume, with a bit in the RESUME register set.
     fn susres_handler(_irq_no: usize, arg: *mut usize) {
+        println!("susres handler");
         let sr = unsafe{ &mut *(arg as *mut SusResHw) };
         // clear the pending interrupt
         sr.csr.wfo(utra::susres::EV_PENDING_SOFT_INT, 1);
@@ -70,7 +71,8 @@ mod implementation {
         }
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
-            { // this is just for testing
+            println!("going into suspend");
+            if false { // this is just for testing
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
@@ -80,6 +82,7 @@ mod implementation {
 
             loop {} // block forever here
         } else {
+            println!("going into resume");
             // this unblocks the threads waiting on the resume
             SHOULD_RESUME.store(true, Ordering::Relaxed);
         }
@@ -498,7 +501,7 @@ pub fn execution_gate() {
         match FromPrimitive::from_usize(msg.body.id()) {
             // the entire purpose of SupendingNow is to block the thread that sent the message, until we're ready to resume.
             Some(ExecGateOpcode::SuspendingNow) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                println!("execution gated!");
+                println!("checking exec gate:");
                 while !RESUME_EXEC.load(Ordering::Relaxed) {
                     println!("execution gate active");
                     xous::yield_slice();

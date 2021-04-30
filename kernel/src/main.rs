@@ -131,6 +131,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     arch::rand::get_u32();
 
     if resume {
+        println!("Resume: enabling IRQs and kicking into the resume interrupt context");
         // this will reload the SIM from its backing store in RAM
         crate::arch::irq::enable_all_irqs();
         // we should already have our page mapped from a prior boot
@@ -208,6 +209,7 @@ pub extern "C" fn kmain() {
             Some(pid) => {
                 // #[cfg(feature = "debug-print")]
                 // klog!("switching to pid {}", pid);
+                println!("switching to pid {}", pid);
                 xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0))
                     .expect("couldn't switch to pid");
             }

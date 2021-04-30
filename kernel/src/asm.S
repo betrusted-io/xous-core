@@ -28,6 +28,28 @@ _start:
     la t0, _start_trap
     csrw stvec, t0
 
+    /////// resume prep code
+    // if resume flag is false (0), skip this section
+    beq         a3, zero, coldboot
+
+    // Restore a default stack pointer
+    li          sp, 0xfffefffc
+
+    // setup sie ssoft, sext: bits 1 and 9 0b10_0000_0010
+    li          t0, 0x202
+    csrw        sie, t0
+
+    // restore the SIM with the previously socked away value
+    jal         ra, _enable_all_irqs
+
+    // set scause to simulate an interrupt's occurence
+    li          t0, 0x80000000
+    csrw        scause, t0
+
+    // Note that registers $a0-$a7 still contain the arguments
+    j           _start_trap_rust
+
+coldboot:
     // Jump to a program to initialize global variables.
     // Note that at this point, the .data section should
     // have already been set up by the loader.

@@ -76,7 +76,7 @@ fn rkyv_test_client() -> ! {
         com.req_batt_stats().unwrap();
 
         // let the loop run a bit, then try a suspend
-        if idx == 2 {
+        if idx == 0 {
             // TODO: add a self-wakeup RTC alarm once we're beyond the touch-and-go phase
             susres.initiate_suspend().unwrap();
         }

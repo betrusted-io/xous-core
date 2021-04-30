@@ -223,8 +223,7 @@ mod implementation {
 
         pub fn schedule_response(&mut self, request: SleepRequest) {
             let irq_target = request.msec;
-            #[cfg(feature = "debug-print")]
-            log::info!(
+            log::trace!(
                 "setting a response at {} ms (current time: {} ms)",
                 irq_target,
                 self.elapsed_ms()
@@ -287,6 +286,16 @@ mod implementation {
 
             self.wdt_sr_manager.resume();
             self.ticktimer_sr_manager.resume();
+
+            #[cfg(feature = "watchdog")]
+            { // do a watchdog reset right away
+                self.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
+            }
+
+            log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
+            log::trace!("ticktimer target: {}", self.csr.r(utra::ticktimer::MSLEEP_TARGET0));
         }
     }
 }
@@ -511,6 +520,7 @@ fn xmain() -> ! {
         //ticktimer.check_wdt();
 
         let msg = xous::receive_message(ticktimer_server).unwrap();
+        log::trace!("msg: {:?}", msg);
         match num_traits::FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::ElapsedMs) => {
                 let time = ticktimer.elapsed_ms() as i64;
