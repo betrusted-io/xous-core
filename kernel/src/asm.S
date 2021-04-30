@@ -39,7 +39,7 @@ _start:
        allows a Xous interrupt context to run, which allows the Xous return-from-interrupt
        handler to set up the remainder of the resume tasks.
     */
-    // Restore a default stack pointer
+    // Restore a default stack pointer - used by interrupt handlers and considered temporary/smashable
     li          sp, 0xfffefffc
 
     // setup sie [ssoft, sext]. This corresponds to bits 1 and 9, or 0b10_0000_0010

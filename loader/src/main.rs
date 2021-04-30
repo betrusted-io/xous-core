@@ -1079,7 +1079,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     read_initial_config(&mut cfg);
 
     // check to see if we are recovering from a clean suspend or not
-    let (clean, was_forced_suspend) = check_resume(&mut cfg);
+    let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
 
     if !clean {
         // cold boot path
@@ -1188,7 +1188,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
                     println!("0x{:08x}", (*backup_args)[i]);
                 }
             }
-            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (10 << 22);
+            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
             //let satp = (*backup_args)[3];
             println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
 
@@ -1212,7 +1212,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     }
 }
 
-fn check_resume(cfg: &mut BootConfig) -> (bool, bool) {
+fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     use utralib::generated::*;
     const WORDS_PER_SECTOR: usize = 128;
     const NUM_SECTORS: usize = 8;
@@ -1229,14 +1229,17 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool) {
     let mut clean = true;
     let mut hashbuf: [u32; WORDS_PER_SECTOR - 1] = [0; WORDS_PER_SECTOR - 1];
     let mut index: usize = 0;
+    let mut pid: u32 = 0;
     for sector in 0..NUM_SECTORS {
         for i in 0..hashbuf.len() {
             hashbuf[i] = unsafe{(*marker)[index * WORDS_PER_SECTOR + i]};
         }
         // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before computing the hash
+        // it also contains the PID of the suspend/resume process manager, which we need to inject into the SATP
         if sector == 0 {
             hashbuf[1] = seed0;
             hashbuf[2] = seed1;
+            pid = hashbuf[3];
         }
         let hash = crate::murmur3::murmur3_32(&hashbuf, 0);
         if hash != unsafe{(*marker)[(index+1) * WORDS_PER_SECTOR - 1]} {
@@ -1252,7 +1255,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool) {
         unsafe{(*marker)[i] = 0;}
     }
 
-    (clean, was_forced_suspend)
+    (clean, was_forced_suspend, pid)
 }
 
 fn phase_1(cfg: &mut BootConfig) {
@@ -1382,6 +1385,6 @@ pub fn phase_2(cfg: &mut BootConfig) {
         cfg.runtime_page_tracker.len()
     );
     // mark pages used by suspend/resume according to their needs
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // loader stack -- do not touch as it contains kerner args
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // clean suspend page
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // allow clean suspend page to be mapped in Xous
 }

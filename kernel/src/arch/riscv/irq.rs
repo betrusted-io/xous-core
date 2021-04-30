@@ -123,7 +123,7 @@ pub extern "C" fn trap_handler(
 
     use crate::arch::exception::RiscvException;
     let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
-    println!("ex: {:?}", ex);
+    // println!("ex: {:?}", ex);
     if sc.is_exception() {
         // If the CPU tries to store, look for a "reserved page" and provide
         // it with one if necessary.

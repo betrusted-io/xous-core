@@ -493,7 +493,7 @@ fn xmain() -> ! {
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
