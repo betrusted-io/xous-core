@@ -68,7 +68,7 @@ impl XousNames {
 
         match buf.to_original().unwrap() {
             api::Return::CID(cid) => Ok(cid),
-            api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
+            // api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
             _ => Err(xous::Error::ServerNotFound),
         }
     }
