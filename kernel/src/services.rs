@@ -532,7 +532,6 @@ impl SystemServices {
             // Activate the current context
             arch_process.set_thread(arch::process::IRQ_TID).unwrap();
 
-            // println!("Invoking...");
             // Construct the new frame
             arch::syscall::invoke(
                 arch_process.current_thread_mut(),

@@ -203,10 +203,10 @@ pub extern "C" fn trap_handler(
                         .take()
                         .expect("got an instruction page fault with no previous PID")
                 };
-                println!(
-                    "ISR: Resuming previous pair of ({}, {})",
-                    previous_pid, previous_context
-                );
+                // println!(
+                //     "ISR: Resuming previous pair of ({}, {})",
+                //     previous_pid, previous_context
+                // );
                 // Switch to the previous process' address space.
                 SystemServices::with_mut(|ss| {
                     ss.finish_callback_and_resume(previous_pid, previous_context)
@@ -231,7 +231,7 @@ pub extern "C" fn trap_handler(
         loop {}
     } else {
         let irqs_pending = sip::read();
-        println!("irqs: {:x}", irqs_pending);
+        // println!("irqs: {:x}", irqs_pending);
 
         // Safe to access globals since interrupts are disabled
         // when this function runs.
