@@ -88,6 +88,7 @@ fn suspend_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(SuspendEventCallback::Event) => msg_scalar_unpack!(msg, cid, id, token, _, {
                 // directly pass the scalar message onto the CID with the ID memorized in the original hook
+                log::info!("PID {} has s/r token {}", xous::current_pid().unwrap().get(), token);
                 send_message(cid as u32,
                     Message::new_scalar(id, token, 0, 0, 0)
                 ).unwrap();

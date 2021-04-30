@@ -156,7 +156,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
         (6, 4) => ScanCode{key: Some('↑'), shift: Some('↑'), hold: None, alt: Some('↑')},
         (8, 2) => ScanCode{key: Some('↓'), shift: Some('↓'), hold: None, alt: Some('↓')},
         // this one is OK
-        (5, 2) => ScanCode{key: Some('∴'), shift: Some('∴'), hold: None, alt: Some('∴')},
+        (3, 6) => ScanCode{key: Some('∴'), shift: Some('∴'), hold: None, alt: Some('∴')},
 
         _ => ScanCode {key: None, shift: None, hold: None, alt: None}
     }

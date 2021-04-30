@@ -72,7 +72,7 @@ mod implementation {
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             println!("going into suspend");
-            if true { // this is just for testing
+            if true { // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
