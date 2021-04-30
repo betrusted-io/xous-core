@@ -3,7 +3,7 @@
 
 use core::fmt;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum RiscvException {
     /// When things are all 0
     NoException,

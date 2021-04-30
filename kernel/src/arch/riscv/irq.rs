@@ -27,7 +27,8 @@ pub fn disable_all_irqs() {
 }
 
 /// Enable external interrupts
-pub fn enable_all_irqs() {
+#[export_name = "_enable_all_irqs"]
+pub extern "C" fn enable_all_irqs() {
     sim::write(unsafe{SIM_BACKING});
 }
 
@@ -122,6 +123,7 @@ pub extern "C" fn trap_handler(
 
     use crate::arch::exception::RiscvException;
     let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
+    // println!("ex: {:?}", ex);
     if sc.is_exception() {
         // If the CPU tries to store, look for a "reserved page" and provide
         // it with one if necessary.
@@ -229,6 +231,8 @@ pub extern "C" fn trap_handler(
         loop {}
     } else {
         let irqs_pending = sip::read();
+        // println!("irqs: {:x}", irqs_pending);
+
         // Safe to access globals since interrupts are disabled
         // when this function runs.
         unsafe {

@@ -77,7 +77,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
                 .expect("unable to map serial port")
         });
         debug::Uart{}.init();
-        println!("KMAIN: Supervisor mode started...");
+        println!("KMAIN (clean boot): Supervisor mode started...");
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
         xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
             .expect("Couldn't claim debug interrupt");
@@ -91,10 +91,9 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
         }
     }
 
-    // pump the random number generator to test it
-    for _ in 0..100 {
-        arch::rand::get_u32();
-    }
+    // rand::init() already clears the initial pipe, but pump the TRNG a little more out of no other reason than sheer paranoia
+    arch::rand::get_u32();
+    arch::rand::get_u32();
 }
 
 /// Loop through the SystemServices list to determine the next PID to be run.
@@ -157,8 +156,8 @@ pub extern "C" fn kmain() {
 
         match pid {
             Some(pid) => {
-                // #[cfg(feature = "debug-print")]
-                // klog!("switching to pid {}", pid);
+                #[cfg(feature = "debug-print")]
+                println!("switching to pid {}", pid);
                 xous_kernel::rsyscall(xous_kernel::SysCall::SwitchTo(pid, 0))
                     .expect("couldn't switch to pid");
             }

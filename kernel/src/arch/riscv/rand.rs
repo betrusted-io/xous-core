@@ -7,8 +7,8 @@ use xous_kernel::{MemoryFlags, MemoryType, PID};
 
 pub const TRNG_KERNEL: Trng = Trng {
     // the HW device mapping is done in xous-rs/src/lib.rs/init()
-    // the manually chosen virtuall address has to be in the top 4MiB as it is the only page shared among all processes
-    base: 0xffce_0000 as *mut usize,
+    // the manually chosen virtual address has to be in the top 4MiB as it is the only page shared among all processes
+    base: 0xffce_0000 as *mut usize, // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
 };
 
 pub struct Trng {

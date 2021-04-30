@@ -11,6 +11,7 @@ log-server = { path = "../log-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
 
+xous-ipc = {path="../../xous-ipc"}
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
@@ -20,4 +21,5 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = { path = "../../utralib"}
 
 [features]
+debugprint = []
 default = []

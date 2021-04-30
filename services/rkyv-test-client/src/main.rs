@@ -49,9 +49,10 @@ fn rkyv_test_client() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
 
-    /*let mut com = com::Com::new(&xns).unwrap();
+    let mut susres = susres::Susres::new_without_hook(&xns).unwrap();
+    let mut com = com::Com::new(&xns).unwrap();
     com.hook_batt_stats(handle_battstats).unwrap();
-
+    /*
     let mut kbd = keyboard::Keyboard::new(&xns).unwrap();
     kbd.hook_keyboard_events(handle_keyevents).unwrap();*/
     loop {
@@ -72,7 +73,13 @@ fn rkyv_test_client() -> ! {
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
 
-        //com.req_batt_stats().unwrap();
+        com.req_batt_stats().unwrap();
+
+        // let the loop run a bit, then try a suspend
+        if idx == 0 {
+            // TODO: add a self-wakeup RTC alarm once we're beyond the touch-and-go phase
+            susres.initiate_suspend().unwrap();
+        }
 
         idx += 1;
     }

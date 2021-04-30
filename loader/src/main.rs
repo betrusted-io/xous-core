@@ -5,6 +5,8 @@
 mod args;
 use args::{KernelArgument, KernelArguments};
 
+mod murmur3;
+
 use core::num::NonZeroUsize;
 use core::{mem, ptr, slice};
 
@@ -33,6 +35,8 @@ const FLG_U: usize = 0x10;
 const FLG_A: usize = 0x40;
 const FLG_D: usize = 0x80;
 const STACK_PAGE_COUNT: usize = 5;
+
+const VDBG: bool = false; // verbose debug
 
 mod debug;
 
@@ -261,7 +265,7 @@ impl MiniElf {
         // Example: Page starts at 0xf0c0 and is 128 bytes long
         // 1. Copy 128 bytes to page 1
         for section in self.sections {
-            println!("    Section @ {:08x}", section.virt as usize);
+            if VDBG {println!("    Section @ {:08x}", section.virt as usize);}
             let flag_defaults = FLG_U
                 | FLG_R
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
@@ -277,7 +281,7 @@ impl MiniElf {
             // If this is not a new page, ensure the uninitialized values from between
             // this section and the previous one are all zeroed out.
             if this_page != current_page_addr {
-                println!("1       {:08x} -> {:08x}", top as usize, this_page);
+                if VDBG {println!("1       {:08x} -> {:08x}", top as usize, this_page);}
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
@@ -291,31 +295,31 @@ impl MiniElf {
                 }
                 bytes_to_copy -= first_chunk_size;
             } else {
-                println!(
+                if VDBG {println!(
                     "This page is {:08x}, and last page was {:08x}",
                     this_page, current_page_addr
-                );
+                );}
                 // This is a continuation of the previous section, and as a result
                 // the memory will have been copied already. Avoid copying this data
                 // to a new page.
                 let first_chunk_size = PAGE_SIZE - (section.virt as usize & (PAGE_SIZE - 1));
-                println!("First chunk size: {}", first_chunk_size);
+                if VDBG {println!("First chunk size: {}", first_chunk_size);}
                 if bytes_to_copy < first_chunk_size {
                     bytes_to_copy = 0;
-                    println!("Clamping to 0 bytes");
+                    if VDBG {println!("Clamping to 0 bytes");}
                 } else {
                     bytes_to_copy -= first_chunk_size;
-                    println!(
+                    if VDBG {println!(
                         "Clamping to {} bytes by cutting off {} bytes",
                         bytes_to_copy, first_chunk_size
-                    );
+                    );}
                 }
                 this_page += PAGE_SIZE;
             }
 
             // Part 2: Copy any full pages.
             while bytes_to_copy > PAGE_SIZE {
-                println!("2       {:08x} -> {:08x}", top as usize, this_page);
+                if VDBG {println!("2       {:08x} -> {:08x}", top as usize, this_page);}
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
@@ -327,7 +331,7 @@ impl MiniElf {
             // Part 3: Copy the final residual partial page
             if bytes_to_copy > 0 {
                 let this_page = (section.virt as usize + section.len()) & !(PAGE_SIZE - 1);
-                println!("3       {:08x} -> {:08x}", top as usize, this_page);
+                if VDBG {println!("3       {:08x} -> {:08x}", top as usize, this_page);}
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
                 allocated_bytes += PAGE_SIZE;
@@ -387,8 +391,10 @@ extern "C" {
         entrypoint: usize,
         stack: usize,
         debug: bool,
+        resume: bool,
     ) -> !;
 }
+
 
 impl ProgramDescription {
     /// Map this ProgramDescription into RAM.
@@ -478,11 +484,11 @@ impl ProgramDescription {
 
         // let load_size_rounded = (self.text_size as usize + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         for offset in (0..self.text_size as usize).step_by(PAGE_SIZE) {
-            println!(
+            if VDBG {println!(
                 "   TEXT: Mapping {:08x} -> {:08x}",
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset
-            );
+            );}
             allocator.map_page(
                 satp,
                 load_offset + offset + rounded_data_bss,
@@ -495,11 +501,11 @@ impl ProgramDescription {
         // Map the process data section into RAM.
         for offset in (0..(self.data_size + self.bss_size) as usize).step_by(PAGE_SIZE as usize) {
             // let page_addr = allocator.alloc();
-            println!(
+            if VDBG {println!(
                 "   DATA: Mapping {:08x} -> {:08x}",
                 load_offset + offset,
                 self.data_offset as usize + offset
-            );
+            );}
             allocator.map_page(
                 satp,
                 load_offset + offset,
@@ -528,7 +534,7 @@ unsafe fn bzero<T>(mut sbss: *mut T, ebss: *mut T)
 where
     T: Copy,
 {
-    println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);
+    if VDBG {println!("ZERO: {:08x} - {:08x}", sbss as usize, ebss as usize);}
     while sbss < ebss {
         // NOTE(volatile) to prevent this from being transformed into `memclr`
         ptr::write_volatile(sbss, mem::zeroed());
@@ -541,14 +547,14 @@ unsafe fn memcpy<T>(dest: *mut T, src: *const T, count: usize)
 where
     T: Copy,
 {
-    println!(
+    if VDBG {println!(
         "COPY: {:08x} - {:08x} {} {:08x} - {:08x}",
         src as usize,
         src as usize + count,
         count,
         dest as usize,
         dest as usize + count
-    );
+    );}
     let mut offset = 0;
     while offset < (count / mem::size_of::<T>()) {
         dest.add(offset)
@@ -644,19 +650,19 @@ fn copy_processes(cfg: &mut BootConfig) {
                 let this_page = section.virt as usize & !(PAGE_SIZE - 1);
                 let mut bytes_to_copy = section.len();
 
-                println!(
+                if VDBG {println!(
                     "Section is {} bytes long, loaded to {:08x}",
                     bytes_to_copy, section.virt
-                );
+                );}
                 // If this is not a new page, ensure the uninitialized values from between
                 // this section and the previous one are all zeroed out.
                 if this_page != page_addr {
-                    println!("New page @ {:08x}", this_page);
+                    if VDBG {println!("New page @ {:08x}", this_page);}
                     if previous_addr != 0 {
-                        println!(
+                        if VDBG {println!(
                             "Zeroing-out remainder of previous page: {:08x} (mapped to physical address {:08x})",
                             previous_addr, top as usize,
-                        );
+                        );}
                         unsafe {
                             bzero(
                                 top.add(previous_addr as usize & (PAGE_SIZE - 1)),
@@ -672,7 +678,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     // Zero out the page, if necessary.
                     unsafe { bzero(top, top.add(section.virt as usize & (PAGE_SIZE - 1))) };
                 } else {
-                    println!("Reusing existing page @ {:08x}", this_page);
+                    if VDBG {println!("Reusing existing page @ {:08x}", this_page);}
                 }
 
                 // Part 1: Copy the first chunk over.
@@ -681,7 +687,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     first_chunk_size = section.len();
                 }
                 let first_chunk_offset = section.virt as usize & (PAGE_SIZE - 1);
-                println!(
+                if VDBG {println!(
                     "First chunk is {} bytes, copying from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
                     first_chunk_size,
                     src_addr as usize,
@@ -690,7 +696,7 @@ fn copy_processes(cfg: &mut BootConfig) {
                     unsafe { top.add(first_chunk_size + first_chunk_offset)
                         as usize },
                     this_page + first_chunk_offset,
-                );
+                );}
                 // Perform the copy, if NOCOPY is not set
                 if !section.no_copy() {
                     unsafe {
@@ -728,11 +734,11 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 // Part 3: Copy the final residual partial page
                 if bytes_to_copy > 0 {
-                    println!(
+                    if VDBG {println!(
                         "Copying final section -- {} bytes @ {:08x}",
                         bytes_to_copy,
                         section.virt + (section.len() as u32) - (bytes_to_copy as u32)
-                    );
+                    );}
                     cfg.extra_pages += 1;
                     top = cfg.get_top() as *mut u8;
                     if !section.no_copy() {
@@ -747,7 +753,7 @@ fn copy_processes(cfg: &mut BootConfig) {
 
                 previous_addr = section.virt as usize + section.len();
                 page_addr = previous_addr & !(PAGE_SIZE - 1);
-                println!("Looping to the next section");
+                if VDBG {println!("Looping to the next section");}
             }
 
             println!("Done with sections, zeroing out remaining data");
@@ -1072,8 +1078,44 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     };
     read_initial_config(&mut cfg);
 
-    phase_1(&mut cfg);
-    phase_2(&mut cfg);
+    // check to see if we are recovering from a clean suspend or not
+    let (clean, was_forced_suspend, susres_pid) = check_resume(&mut cfg);
+
+    if !clean {
+        // cold boot path
+        println!("no suspend marker found, doing a cold boot!");
+        phase_1(&mut cfg);
+        phase_2(&mut cfg);
+        println!("done initializing for cold boot.");
+    } else {
+        // resume path
+        use utralib::generated::*;
+        // TRNG virtual memory mapping already set up, but the hardware needs
+        // to have its pipeline flushed, as the first result is always 0.
+        let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
+        for _ in 0..4 { // only one is strictly necessary but more is no problem
+            while trng_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
+            trng_csr.rf(utra::trng_kernel::DATA_DATA);
+        }
+
+        // setup the `susres` register for a resume
+        let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
+        // set the resume marker for the SUSRES server, noting the forced suspend status
+        if was_forced_suspend {
+            resume_csr.wo(utra::susres::STATE,
+                resume_csr.ms(utra::susres::STATE_RESUME, 1) |
+                resume_csr.ms(utra::susres::STATE_WAS_FORCED, 1)
+            );
+        } else {
+            resume_csr.wfo(utra::susres::STATE_RESUME, 1);
+        }
+        resume_csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before resuming
+        resume_csr.wfo(utra::susres::EV_ENABLE_SOFT_INT, 1); // ensure that the soft interrupt is enabled for the kernel to kick
+        println!("clean suspend marker found, doing a resume!");
+
+        // trigger the interrupt; it's not immediately handled, but rather checked later on by the kernel on clean resume
+        resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
+    }
 
     println!("Font maps located as follows:");
     println!("  Hanzi @ {:08x}", fonts::hanzi::DATA_HANZI.as_ptr() as u32);
@@ -1085,29 +1127,135 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     println!("  Small @ {:08x}", fonts::small::DATA_SMALL.as_ptr() as u32);
     println!("  Bold @ {:08x}", fonts::bold::DATA_BOLD.as_ptr() as u32);
 
-    // The MMU should be set up now, and memory pages assigned to their
-    // respective processes.
-    let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
-    let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
-    let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
-    let rpt_offset =
-        cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
-    println!(
-        "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
-        cfg.processes[0].entrypoint, cfg.processes[0].satp, cfg.processes[0].sp,
-        arg_offset, ip_offset, rpt_offset,
-    );
-    unsafe {
-        start_kernel(
-            arg_offset,
-            ip_offset,
-            rpt_offset,
-            cfg.processes[0].satp,
-            cfg.processes[0].entrypoint,
-            cfg.processes[0].sp,
-            cfg.debug,
+    if !clean {
+        // The MMU should be set up now, and memory pages assigned to their
+        // respective processes.
+        let krn_struct_start = cfg.sram_start as usize + cfg.sram_size - cfg.init_size;
+        let arg_offset = cfg.args.base as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        let ip_offset = cfg.processes.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        let rpt_offset =
+            cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+        println!(
+            "Jumping to kernel @ {:08x} with map @ {:08x} and stack @ {:08x} (kargs: {:08x}, ip: {:08x}, rpt: {:08x})",
+            cfg.processes[0].entrypoint, cfg.processes[0].satp, cfg.processes[0].sp,
+            arg_offset, ip_offset, rpt_offset,
         );
+
+        // save a copy of the computed kernel registers at the bottom of the page reserved
+        // for the bootloader stack. Note there is no stack-smash protection for these arguments,
+        // so we're definitely vulnerable to e.g. buffer overrun attacks in the early bootloader.
+        //
+        // Probably the right long-term solution to this is to turn all the bootloader "loading"
+        // actions into "verify" actions during a clean resume (right now we just don't run them),
+        // so that attempts to mess with the args during a resume can't lead to overwriting
+        // critical parameters like these kernel arguments.
+        unsafe {
+            let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
+            (*backup_args)[0] = arg_offset as u32;
+            (*backup_args)[1] = ip_offset as u32;
+            (*backup_args)[2] = rpt_offset as u32;
+            (*backup_args)[3] = cfg.processes[0].satp as u32;
+            (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
+            (*backup_args)[5] = cfg.processes[0].sp as u32;
+            (*backup_args)[6] = if cfg.debug {1} else {0};
+            #[cfg(feature="debug-print")]
+            {
+                println!("Backup kernel args:");
+                for i in 0..7 {
+                    println!("0x{:08x}", (*backup_args)[i]);
+                }
+            }
+        }
+        unsafe {
+            start_kernel(
+                arg_offset,
+                ip_offset,
+                rpt_offset,
+                cfg.processes[0].satp,
+                cfg.processes[0].entrypoint,
+                cfg.processes[0].sp,
+                cfg.debug,
+                clean,
+            );
+        }
+    } else {
+        unsafe {
+            let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
+            #[cfg(feature="debug-print")]
+            {
+                println!("Using backed up kernel args:");
+                for i in 0..7 {
+                    println!("0x{:08x}", (*backup_args)[i]);
+                }
+            }
+            let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (((susres_pid as usize) & 0x1FF) << 22);
+            //let satp = (*backup_args)[3];
+            println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
+
+            if true {
+                use utralib::generated::*;
+                let mut gpio_csr = CSR::new(utra::gpio::HW_GPIO_BASE as *mut u32);
+                gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1); // patch us over to a different UART for debug (1=LOG 2=APP, 0=KERENL(default))
+            }
+
+            start_kernel(
+                (*backup_args)[0] as usize,
+                (*backup_args)[1] as usize,
+                (*backup_args)[2] as usize,
+                satp as usize,
+                (*backup_args)[4] as usize,
+                (*backup_args)[5] as usize,
+                if (*backup_args)[6] == 0 {false} else {true},
+                clean,
+            );
+        }
     }
+}
+
+fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
+    use utralib::generated::*;
+    const WORDS_PER_SECTOR: usize = 128;
+    const NUM_SECTORS: usize = 8;
+    const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
+
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 2;
+    let marker: *mut[u32; WORDS_PER_PAGE] = suspend_marker as *mut[u32; WORDS_PER_PAGE];
+
+    let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
+    let seed0 = boot_seed.r(utra::seed::SEED0);
+    let seed1 = boot_seed.r(utra::seed::SEED1);
+    let was_forced_suspend: bool = if unsafe{(*marker)[0]} != 0 { true } else { false };
+
+    let mut clean = true;
+    let mut hashbuf: [u32; WORDS_PER_SECTOR - 1] = [0; WORDS_PER_SECTOR - 1];
+    let mut index: usize = 0;
+    let mut pid: u32 = 0;
+    for sector in 0..NUM_SECTORS {
+        for i in 0..hashbuf.len() {
+            hashbuf[i] = unsafe{(*marker)[index * WORDS_PER_SECTOR + i]};
+        }
+        // sector 0 contains the boot seeds, which we replace with our own as read out from our FPGA before computing the hash
+        // it also contains the PID of the suspend/resume process manager, which we need to inject into the SATP
+        if sector == 0 {
+            hashbuf[1] = seed0;
+            hashbuf[2] = seed1;
+            pid = hashbuf[3];
+        }
+        let hash = crate::murmur3::murmur3_32(&hashbuf, 0);
+        if hash != unsafe{(*marker)[(index+1) * WORDS_PER_SECTOR - 1]} {
+            println!("* computed 0x{:08x} - stored 0x{:08x}", hash, unsafe{(*marker)[(index+1) * (WORDS_PER_SECTOR) - 1]});
+            clean = false;
+        } else {
+            println!("  computed 0x{:08x} - match", hash);
+        }
+        index += 1;
+    }
+    // zero out the clean suspend marker, so if something goes wrong during resume we don't try to resume again
+    for i in 0..WORDS_PER_PAGE {
+        unsafe{(*marker)[i] = 0;}
+    }
+
+    (clean, was_forced_suspend, pid)
 }
 
 fn phase_1(cfg: &mut BootConfig) {
@@ -1220,21 +1368,23 @@ pub fn phase_2(cfg: &mut BootConfig) {
         unsafe { (l1_pt_addr as *mut usize).add(1023).write(krn_pg1023_ptr) };
     }
 
-    println!("PID1 pagetables:");
-    debug::print_pagetable(cfg.processes[0].satp);
-    println!();
-    println!();
-    for (_pid, process) in cfg.processes[1..].iter().enumerate() {
-        println!("PID{} pagetables:", _pid + 2);
-        debug::print_pagetable(process.satp);
+    if VDBG {
+        println!("PID1 pagetables:");
+        debug::print_pagetable(cfg.processes[0].satp);
         println!();
         println!();
+        for (_pid, process) in cfg.processes[1..].iter().enumerate() {
+            println!("PID{} pagetables:", _pid + 2);
+            debug::print_pagetable(process.satp);
+            println!();
+            println!();
+        }
     }
     println!(
         "Runtime Page Tracker: {} bytes",
         cfg.runtime_page_tracker.len()
     );
-    // mark pages used by suspend/resume as unused for later allocation by the susres server
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 0; // loader stack
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // clean suspend page
+    // mark pages used by suspend/resume according to their needs
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // allow clean suspend page to be mapped in Xous
 }

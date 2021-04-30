@@ -3,8 +3,6 @@
 
 mod api;
 
-mod os_timer;
-
 use heapless::binary_heap::{BinaryHeap, Min};
 use heapless::consts::*;
 
@@ -57,8 +55,7 @@ mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::SleepRequest;
     use utralib::generated::*;
-    use utra::ticktimer::*;
-    use susres::*;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
@@ -66,7 +63,8 @@ mod implementation {
         wdt: utralib::CSR<u32>,
         current_response: Option<SleepRequest>,
         connection: xous::CID,
-        susres: RegManager<TICKTIMER_NUMREGS>,
+        ticktimer_sr_manager: RegManager::<{utra::ticktimer::TICKTIMER_NUMREGS}>,
+        wdt_sr_manager: RegManager::<{utra::wdt::WDT_NUMREGS}>,
     }
 
     fn handle_wdt(_irq_no: usize, arg: *mut usize) {
@@ -137,7 +135,8 @@ mod implementation {
             )
             .expect("couldn't map Watchdog timer CSR range");
 
-            let susres = RegManager::new(csr.as_mut_ptr() as *mut u32);
+            let ticktimer_sr_manager = RegManager::new(csr.as_mut_ptr() as *mut u32);
+            let wdt_sr_manager = RegManager::new(wdt.as_mut_ptr() as *mut u32);
 
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -145,13 +144,15 @@ mod implementation {
                 wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
                 current_response: None,
                 connection,
-                susres,
+                ticktimer_sr_manager,
+                wdt_sr_manager,
             };
 
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
-                xtt.susres.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
+                // this is a write-once field that is lost later on, so it must be explicitly managed
+                // xtt.wdt_sr_manager.push(RegOrField::Field(utra::wdt::WATCHDOG_ENABLE), None);
             }
 
             xous::claim_interrupt(
@@ -171,8 +172,13 @@ mod implementation {
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
-                xtt.susres.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+                xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
             }
+
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+            xtt.ticktimer_sr_manager.push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
+            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
 
             xtt
         }
@@ -217,8 +223,7 @@ mod implementation {
 
         pub fn schedule_response(&mut self, request: SleepRequest) {
             let irq_target = request.msec;
-            #[cfg(feature = "debug-print")]
-            log::info!(
+            log::trace!(
                 "setting a response at {} ms (current time: {} ms)",
                 irq_target,
                 self.elapsed_ms()
@@ -258,6 +263,39 @@ mod implementation {
             if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
                 log::trace!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
             }
+        }
+
+        // the ticktimer suspend/resume routines are a bit trickier than normal, so this isn't a great
+        // example of a generic suspend/resume template
+        pub fn suspend(&mut self) {
+            log::trace!("suspending");
+            self.ticktimer_sr_manager.suspend();
+            self.wdt_sr_manager.suspend();
+
+            // by writing this after suspend(), resume will get the prior value
+            self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 0);
+        }
+        pub fn resume(&mut self) {
+            // this is a write-once bit that's later erased, so it can't be managed automatically
+            // thus we have to restore in manually on a resume
+            #[cfg(feature = "watchdog")]
+            self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+
+            // manually clear any pending ticktimer events. This is mainly releveant for a "touch-and-go" simulated suspend.
+            self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1);
+
+            self.wdt_sr_manager.resume();
+            self.ticktimer_sr_manager.resume();
+
+            #[cfg(feature = "watchdog")]
+            { // do a watchdog reset right away
+                self.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
+            }
+
+            log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
+            log::trace!("ticktimer target: {}", self.csr.r(utra::ticktimer::MSLEEP_TARGET0));
         }
     }
 }
@@ -394,6 +432,14 @@ mod implementation {
         pub fn reset_wdt(&self) {
             // dummy function, does nothing
         }
+        pub fn register_suspend_listener(&self, _opcode: u32, _cid: xous::CID) -> Result<(), xous::Error> {
+            Ok(())
+        }
+        pub fn suspend(&self) {
+        }
+        pub fn resume(&self) {
+        }
+
     }
 }
 
@@ -444,13 +490,10 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    // Start the OS timer which is responsible for setting up preemption.
-    os_timer::init();
-
     let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let ticktimer_server = xous::create_server_with_address(b"ticktimer-server")
@@ -465,6 +508,11 @@ fn xmain() -> ! {
     let mut ticktimer = XousTickTimer::new(ticktimer_client);
     ticktimer.reset(); // make sure the time starts from zero
 
+    // register a suspend/resume listener
+    let xns = xous_names::XousNames::new().unwrap();
+    let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
@@ -472,6 +520,7 @@ fn xmain() -> ! {
         //ticktimer.check_wdt();
 
         let msg = xous::receive_message(ticktimer_server).unwrap();
+        log::trace!("msg: {:?}", msg);
         match num_traits::FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::ElapsedMs) => {
                 let time = ticktimer.elapsed_ms() as i64;
@@ -494,7 +543,12 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::RecalculateSleep) => {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-            }
+            },
+            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                ticktimer.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                ticktimer.resume();
+            }),
             None => {
                 error!("couldn't convert opcode");
                 break

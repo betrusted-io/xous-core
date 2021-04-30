@@ -108,6 +108,9 @@ pub(crate) enum Opcode {
 
     /// stop passive SSID scanning
     ScanOff,
+
+    /// suspend/resume callback
+    SuspendResume,
 }
 
 /// These enums indicate what kind of callback type we're sending.
