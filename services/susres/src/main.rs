@@ -127,12 +127,14 @@ mod implementation {
             )
             .expect("couldn't map SusRes CSR range");
 
+            // note that mapping a page zeroes it out. Plus, this should have been zero'd by the bootloader.
             let marker = xous::syscall::map_memory(
                 xous::MemoryAddress::new(0x40FFE000), // this is a special, hard-coded location
                 None,
                 4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map clean suspend page");
+
             let seed_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::seed::HW_SEED_BASE),
                 None,
@@ -168,13 +170,6 @@ mod implementation {
 
             // Set EV_ENABLE, this starts pre-emption
             sr.os_timer.wfo(utra::timer0::EV_ENABLE_ZERO, 0b1);
-
-            // check that the marker has been zero'd by map_memory. Once this passes we can probably get rid of this code.
-            let check_marker =  marker.as_ptr() as *const [u32; 1024];
-            for words in 0..1024 {
-                // note to self: don't use log:: here because we're upstream of logging being initialized
-                assert!(unsafe{(*check_marker)[words]} == 0, "marker had non-zero entry!");
-            }
 
             xous::claim_interrupt(
                 utra::susres::SUSRES_IRQ,
