@@ -30,26 +30,38 @@ _start:
 
     /////// resume prep code
     // if resume flag is false (0), skip this section
-    beq         a3, zero, coldboot
+    beq         a7, zero, coldboot
 
+    /*
+       This is the resume code. The overall strategy is to have a suspend/resume cycle
+       occur within an interrupt context. Thus, at this point of the suspend/resume
+       cycle (e.g. the resume half), our strategy is to restore a minimal environment which
+       allows a Xous interrupt context to run, which allows the Xous return-from-interrupt
+       handler to set up the remainder of the resume tasks.
+    */
     // Restore a default stack pointer
     li          sp, 0xfffefffc
 
-    // setup sie ssoft, sext: bits 1 and 9 0b10_0000_0010
+    // setup sie [ssoft, sext]. This corresponds to bits 1 and 9, or 0b10_0000_0010
     li          t0, 0x202
     csrw        sie, t0
 
-    // restore the SIM with the previously socked away value
+    // restore the SIM with the value previously socked away by the interrupt handler routine during the suspend half
     jal         ra, _enable_all_irqs
 
-    // set scause to simulate an interrupt's occurence
+    // set scause to simulate an interrupt's occurence -- this makes the resume "feel like" an interrupt
+    // vectored into the same routine that caused the suspend, but without having gone through the typical
+    // interrupt handler mechanisms
     li          t0, 0x80000000
     csrw        scause, t0
 
-    // Note that registers $a0-$a7 still contain the arguments
+    // this is the same path the suspend interrupt took, but we set it up manually
+    // and the loader had flipped the "resume" bit, so this should bring us into the resume branch.
     j           _start_trap_rust
 
 coldboot:
+    // Note that registers $a0-$a7 still contain the kernel arguments
+
     // Jump to a program to initialize global variables.
     // Note that at this point, the .data section should
     // have already been set up by the loader.

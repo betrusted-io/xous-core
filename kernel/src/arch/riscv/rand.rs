@@ -15,7 +15,7 @@ pub struct Trng {
     pub base: *mut usize,
 }
 
-pub fn init(resume: bool) {
+pub fn init() {
     // Map the TRNG so that we can allocate names
     // hardware guarantees that:
     //   - TRNG will automatically power on
@@ -23,20 +23,18 @@ pub fn init(resume: bool) {
     //   - Kernel FIFO will fill with TRNGs such that at least the next 512 calls to get_u32() will succeed without delay
     //   - The kernel will start a TRNG server
     //   - All further security decisions and policies are 100% delegated to this new server.
-    if !resume {
-        MemoryManager::with_mut(|memory_manager| {
-            memory_manager
-                .map_range(
-                    utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u8,
-                    ((TRNG_KERNEL.base as u32) & !4095) as *mut u8,
-                    4096,
-                    PID::new(1).unwrap(),
-                    MemoryFlags::R | MemoryFlags::W,
-                    MemoryType::Default,
-                )
-                .expect("unable to map TRNG")
-        });
-    }
+    MemoryManager::with_mut(|memory_manager| {
+        memory_manager
+            .map_range(
+                utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u8,
+                ((TRNG_KERNEL.base as u32) & !4095) as *mut u8,
+                4096,
+                PID::new(1).unwrap(),
+                MemoryFlags::R | MemoryFlags::W,
+                MemoryType::Default,
+            )
+            .expect("unable to map TRNG")
+    });
 
     let trng_kernel_csr = CSR::new(TRNG_KERNEL.base as *mut u32);
     while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}

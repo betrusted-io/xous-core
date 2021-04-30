@@ -1078,15 +1078,27 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     };
     read_initial_config(&mut cfg);
 
+    // check to see if we are recovering from a clean suspend or not
     let (clean, was_forced_suspend) = check_resume(&mut cfg);
+
     if !clean {
+        // cold boot path
         println!("no suspend marker found, doing a cold boot!");
         phase_1(&mut cfg);
         phase_2(&mut cfg);
         println!("done initializing for cold boot.");
     } else {
+        // resume path
         use utralib::generated::*;
-        // setup for a resume
+        // TRNG virtual memory mapping already set up, but the hardware needs
+        // to have its pipeline flushed, as the first result is always 0.
+        let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
+        for _ in 0..4 { // only one is strictly necessary but more is no problem
+            while trng_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
+            trng_csr.rf(utra::trng_kernel::DATA_DATA);
+        }
+
+        // setup the `susres` register for a resume
         let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
         // set the resume marker for the SUSRES server, noting the forced suspend status
         if was_forced_suspend {
@@ -1103,7 +1115,6 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
 
         // trigger the interrupt; it's not immediately handled, but rather checked later on by the kernel on clean resume
         resume_csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
-        // SATP restore is handled by the `start_kernel` assembly pre-amble
     }
 
     println!("Font maps located as follows:");
@@ -1130,6 +1141,14 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             arg_offset, ip_offset, rpt_offset,
         );
 
+        // save a copy of the computed kernel registers at the bottom of the page reserved
+        // for the bootloader stack. Note there is no stack-smash protection for these arguments,
+        // so we're definitely vulnerable to e.g. buffer overrun attacks in the early bootloader.
+        //
+        // Probably the right long-term solution to this is to turn all the bootloader "loading"
+        // actions into "verify" actions during a clean resume (right now we just don't run them),
+        // so that attempts to mess with the args during a resume can't lead to overwriting
+        // critical parameters like these kernel arguments.
         unsafe {
             let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
             (*backup_args)[0] = arg_offset as u32;
@@ -1139,9 +1158,12 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             (*backup_args)[4] = cfg.processes[0].entrypoint as u32;
             (*backup_args)[5] = cfg.processes[0].sp as u32;
             (*backup_args)[6] = if cfg.debug {1} else {0};
-            println!("Backup kernel args:");
-            for i in 0..7 {
-                println!("0x{:08x}", (*backup_args)[i]);
+            #[cfg(feature="debug-print")]
+            {
+                println!("Backup kernel args:");
+                for i in 0..7 {
+                    println!("0x{:08x}", (*backup_args)[i]);
+                }
             }
         }
         unsafe {
@@ -1159,13 +1181,16 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     } else {
         unsafe {
             let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
-            println!("Using backed up kernel args:");
-            for i in 0..7 {
-                println!("0x{:08x}", (*backup_args)[i]);
+            #[cfg(feature="debug-print")]
+            {
+                println!("Using backed up kernel args:");
+                for i in 0..7 {
+                    println!("0x{:08x}", (*backup_args)[i]);
+                }
             }
             let satp = ((*backup_args)[3] as usize) & 0x803F_FFFF | (10 << 22);
             //let satp = (*backup_args)[3];
-            println!("Adjusting SATP was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
+            println!("Adjusting SATP to the sures process. Was: 0x{:08x} now: 0x{:08x}", (*backup_args)[3], satp);
 
             if true {
                 use utralib::generated::*;
