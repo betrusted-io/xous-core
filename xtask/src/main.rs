@@ -52,17 +52,6 @@ fn try_main() -> Result<(), DynError> {
         "rtc",
         "susres",
     ];
-    let fcc_pkgs = [
-        "fcc-agent",
-        "graphics-server",
-        "ticktimer-server",
-        "log-server",
-        "com",
-        "xous-names",
-        "keyboard",
-        "trng",
-        "susres",
-    ];
     let benchmark_pkgs = [
         "benchmark",
         "benchmark-target",
@@ -117,7 +106,6 @@ fn try_main() -> Result<(), DynError> {
         Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, None)?,
-        Some("fcc-agent") => build_hw_image(false, env::args().nth(2), &fcc_pkgs, None)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, None)?,
         Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, None)?,
         Some("trng-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
@@ -143,7 +131,6 @@ hw-image [soc.svd]      builds an image for real hardware
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 benchmark [soc.svd]     builds a benchmarking image for real hardware
-fcc-agent [soc.svd]     builds a version suitable for FCC testing
 minimal [soc.svd]       builds a minimal image for API testing
 cbtest                  builds an image for callback testing
 trng-test [soc.svd]     builds an image for TRNG testing (both avalanche and ring oscillator on)
