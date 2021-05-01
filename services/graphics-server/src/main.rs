@@ -10,6 +10,7 @@ mod op;
 
 mod logo;
 mod poweron;
+mod sleep_note;
 
 use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point, TextView, Line, Circle};
 use api::{Opcode, ClipObject, ClipObjectType};
@@ -72,6 +73,7 @@ fn xmain() -> ! {
 
     map_fonts();
 
+    let mut use_sleep_note = true;
     if false {
         // leave this test case around
         // for some reason, the top right quadrant draws an extra pixel inside the fill area
@@ -101,9 +103,16 @@ fn xmain() -> ! {
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                display.suspend();
+                display.suspend(use_sleep_note);
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                display.resume();
+                display.resume(use_sleep_note);
+            }),
+            Some(Opcode::SetSleepNote) => xous::msg_scalar_unpack!(msg, set_use, _, _, _, {
+                if set_use == 0 {
+                    use_sleep_note = false;
+                } else {
+                    use_sleep_note = true;
+                }
             }),
             Some(Opcode::DrawClipObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

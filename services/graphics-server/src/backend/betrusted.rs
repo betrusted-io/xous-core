@@ -73,17 +73,56 @@ impl XousDisplay {
         display
     }
 
-    pub fn suspend(&mut self) {
+    pub fn suspend(&mut self, draw_note: bool) {
         while self.busy() {
             // just wait until any pending FB operations are done
         }
         self.srfb.suspend();
         self.susres.suspend();
 
+        if draw_note {
+            let note = crate::sleep_note::LOGO_MAP;
+            let note_lines = note.len() / FB_WIDTH_WORDS;
+            let start_line = (FB_LINES - note_lines) / 2;
+            let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+            for words in 0..note.len() {
+                unsafe {
+                    (*hwfb)[words + start_line * FB_WIDTH_WORDS] = note[words];
+                }
+            }
+            for lines in start_line..start_line + note_lines {
+                // set the dirty bits
+                unsafe {
+                    (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                }
+            }
+            self.update_dirty();
+            while self.busy() {
+                // busy wait, blocking suspend until this has happened
+            }
+        }
+
     }
-    pub fn resume(&mut self) {
+    pub fn resume(&mut self, drew_note: bool) {
         self.susres.resume();
         self.srfb.resume();
+
+        if drew_note {
+            let note = crate::sleep_note::LOGO_MAP;
+            let note_lines = note.len() / FB_WIDTH_WORDS;
+            let start_line = (FB_LINES - note_lines) / 2;
+            let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
+            for lines in start_line..start_line + note_lines {
+                // set the dirty bits to force a redraw of the restored data
+                unsafe {
+                    (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                }
+            }
+            self.update_dirty();
+            while self.busy() {
+                // busy wait, blocking resume until this has happened
+            }
+        }
     }
 
     pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }

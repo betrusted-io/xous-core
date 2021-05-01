@@ -261,7 +261,7 @@ mod implementation {
         pub fn check_wdt(&mut self) {
             let state = self.wdt.r(utra::wdt::STATE);
             if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
-                log::trace!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
+                log::info!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
             }
         }
 
@@ -279,7 +279,11 @@ mod implementation {
             // this is a write-once bit that's later erased, so it can't be managed automatically
             // thus we have to restore in manually on a resume
             #[cfg(feature = "watchdog")]
-            self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+            {
+                self.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+                self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
+            }
 
             // manually clear any pending ticktimer events. This is mainly releveant for a "touch-and-go" simulated suspend.
             self.csr.wfo(utra::ticktimer::EV_PENDING_ALARM, 1);
@@ -288,11 +292,7 @@ mod implementation {
             self.ticktimer_sr_manager.resume();
 
             #[cfg(feature = "watchdog")]
-            { // do a watchdog reset right away
-                self.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
-                self.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
-                self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
-            }
+            self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
 
             log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
             log::trace!("ticktimer time/target: {}/{}", self.csr.r(utra::ticktimer::TIME0), self.csr.r(utra::ticktimer::MSLEEP_TARGET0));

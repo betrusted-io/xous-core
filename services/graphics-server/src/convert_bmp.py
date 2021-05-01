@@ -25,11 +25,14 @@ def convert(ifile, ofile):
 
         offset = image[0xa] # skip header
         length = len(image)
+        rows = (length - 64) // 44
+        if ((length - 64) % 44) != 0:
+            print("warning: file length is not an integer multiple of rows. output will be malformed. length: {}, rows: {}".format(length, rows))
 
         with open(ofile, "w") as output:
-            output.write("pub const LOGO_MAP: [u32; 11 * 536] = [\n")
+            output.write("pub const LOGO_MAP: [u32; 11 * {}] = [\n".format(rows))
 
-            line = 536
+            line = rows
             while line > 0:
                 horiz = 0
                 while horiz < 11:
