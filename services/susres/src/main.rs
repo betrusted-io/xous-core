@@ -319,14 +319,8 @@ mod implementation {
                 }
 
                 // restore the ticktimer
-                self.csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before we try to load it
                 self.csr.wo(utra::susres::RESUME_TIME0, time as u32);
                 self.csr.wo(utra::susres::RESUME_TIME1, (time >> 32) as u32);
-                // load the saved value -- can only be done while the timer is paused
-                self.csr.wo(utra::susres::CONTROL,
-                    self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
-                    self.csr.ms(utra::susres::CONTROL_LOAD, 1)
-                );
                 println!("Ticktimer loaded with {}", time);
 
                 // set up pre-emption timer
@@ -344,11 +338,10 @@ mod implementation {
 
                 // start the tickttimer running
                 self.csr.wo(utra::susres::CONTROL,
-                    self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
                     self.csr.ms(utra::susres::CONTROL_LOAD, 1)
                 );
-                log::info!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
-                log::info!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
+                log::trace!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
+                log::trace!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
                 self.csr.wo(utra::susres::CONTROL, 0);
                 println!("Ticktimer and OS timer now running");
 

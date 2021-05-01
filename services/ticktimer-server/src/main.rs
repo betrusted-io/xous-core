@@ -295,7 +295,7 @@ mod implementation {
             }
 
             log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
-            log::info!("ticktimer time/target: {}/{}", self.csr.r(utra::ticktimer::TIME0), self.csr.r(utra::ticktimer::MSLEEP_TARGET0));
+            log::trace!("ticktimer time/target: {}/{}", self.csr.r(utra::ticktimer::TIME0), self.csr.r(utra::ticktimer::MSLEEP_TARGET0));
         }
     }
 }
