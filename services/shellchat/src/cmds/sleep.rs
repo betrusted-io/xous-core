@@ -4,12 +4,14 @@ use xous_ipc::String;
 #[derive(Debug)]
 pub struct Sleep {
     rtc: rtc::Rtc,
+    susres: susres::Susres,
 }
 impl Sleep {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let rtc = rtc::Rtc::new(&xns).unwrap();
         Sleep {
             rtc,
+            susres: susres::Susres::new_without_hook(&xns).unwrap(),
         }
     }
 }
@@ -45,7 +47,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce]";
+        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -58,6 +60,11 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "sus" => {
+                    self.susres.initiate_suspend().unwrap();
+                    // the message below is sent after we wake up
+                    write!(ret, "Resumed from sleep!").unwrap();
+                }
                 "now" => {
                     if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
                         // if power is plugged in, deny powerdown request

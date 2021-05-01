@@ -89,6 +89,10 @@ fn xmain() -> ! {
         op::rounded_rectangle(display.native_buffer(), rr, None);
     }
 
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     let screen_clip = Rectangle::new(Point::new(0,0), display.screen_size());
 
     display.redraw();
@@ -96,6 +100,11 @@ fn xmain() -> ! {
         let mut msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                display.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                display.resume();
+            }),
             Some(Opcode::DrawClipObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<ClipObject, _>().unwrap();

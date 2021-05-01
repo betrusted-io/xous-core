@@ -1,6 +1,7 @@
 use utralib::generated::*;
 use xous::MemoryRange;
 use crate::api::Point;
+use susres::{RegManager, RegOrField, SuspendResume, ManagedMem};
 
 const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
@@ -11,7 +12,9 @@ const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 pub struct XousDisplay {
     fb: MemoryRange,
     hwfb: MemoryRange,
+    srfb: ManagedMem::<{utralib::generated::HW_MEMLCD_MEM_LEN}>,
     csr: utralib::CSR<u32>,
+    susres: RegManager::<{utra::memlcd::MEMLCD_NUMREGS}>,
 }
 
 impl XousDisplay {
@@ -52,9 +55,12 @@ impl XousDisplay {
             fb: fb,
             hwfb: hwfb,
             csr: CSR::new(control.as_mut_ptr() as *mut u32),
+            susres: RegManager::new(control.as_mut_ptr() as *mut u32),
+            srfb: ManagedMem::new(hwfb),
          };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
+        display.susres.push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
         display.sync_clear();
 
         /*
@@ -65,6 +71,19 @@ impl XousDisplay {
         */
 
         display
+    }
+
+    pub fn suspend(&mut self) {
+        while self.busy() {
+            // just wait until any pending FB operations are done
+        }
+        self.srfb.suspend();
+        self.susres.suspend();
+
+    }
+    pub fn resume(&mut self) {
+        self.susres.resume();
+        self.srfb.resume();
     }
 
     pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }

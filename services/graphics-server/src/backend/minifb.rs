@@ -65,6 +65,8 @@ impl XousDisplay {
             emulated_buffer: [0u32; FB_SIZE],
         }
     }
+    pub fn suspend(&self) {}
+    pub fn resume(&self) {}
 
     pub fn screen_size(&self) -> Point {
         Point::new(WIDTH as i16, HEIGHT as i16)

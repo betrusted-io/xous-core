@@ -13,6 +13,8 @@ keyboard = {path = "../keyboard"}
 log = "0.4"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
+susres = {path = "../susres"}
+
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 num-derive = {version = "0.3", default-features = false}

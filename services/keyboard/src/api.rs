@@ -182,6 +182,9 @@ pub(crate) enum Opcode {
 
     /// used to turn keyboard vibrate on and off
     Vibe,
+
+    /// Suspend/resume callback
+    SuspendResume,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

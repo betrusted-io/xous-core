@@ -13,6 +13,7 @@ xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
+susres = {path = "../susres"}
 
 heapless = "0.5.6"
 

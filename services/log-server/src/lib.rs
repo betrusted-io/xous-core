@@ -67,6 +67,11 @@ impl XousLoggerBacking<'_> {
         self.buffer.rewrite(lr).unwrap();
         self.buffer.lend(self.conn, 0).unwrap(); // there is only one type of buffer we should be sending!
     }
+    fn resume(&self) {
+        xous::send_message(self.conn,
+            xous::Message::new_scalar(2000, 0, 0, 0, 0) // logger is one of the few servers that uses special, non-encoded message IDs.
+        ).expect("couldn't send resume message to the logger implementation");
+    }
 }
 
 impl log::Log for XousLogger {
@@ -120,4 +125,8 @@ pub fn init_wait() -> Result<(), log::SetLoggerError> {
     log::set_logger(&XOUS_LOGGER)?;
     log::set_max_level(log::LevelFilter::Info);
     Ok(())
+}
+
+pub fn resume() {
+    unsafe { XOUS_LOGGER_BACKING.as_mut().unwrap().resume() };
 }

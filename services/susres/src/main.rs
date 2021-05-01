@@ -72,7 +72,7 @@ mod implementation {
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             println!("going into suspend");
-            if true { // this is just for testing, doing a quick full-soc boot instead of a power down
+            if false { // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
@@ -588,6 +588,7 @@ fn xmain() -> ! {
                             susres_hw.do_suspend(false);
                             // when do_suspend() returns, it means we've resumed
                             suspend_requested = false;
+                            log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                             if susres_hw.do_resume() {
                                 log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
                             }
@@ -628,6 +629,7 @@ fn xmain() -> ! {
                         susres_hw.do_suspend(true);
                         // when do_suspend() returns, it means we've resumed
                         suspend_requested = false;
+                        log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
                             log::error!("We forced a suspend, some peripherals may be in an unclean state!");
                         } else {

@@ -7,6 +7,7 @@ use xous::{send_message, CID, Message, msg_scalar_unpack};
 use xous_ipc::Buffer;
 use num_traits::{ToPrimitive, FromPrimitive};
 
+#[derive(Debug)]
 pub struct Susres {
     conn: CID,
     suspend_cb_sid: Option<xous::SID>,

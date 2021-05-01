@@ -156,7 +156,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
         (6, 4) => ScanCode{key: Some('↑'), shift: Some('↑'), hold: None, alt: Some('↑')},
         (8, 2) => ScanCode{key: Some('↓'), shift: Some('↓'), hold: None, alt: Some('↓')},
         // this one is OK
-        (3, 6) => ScanCode{key: Some('∴'), shift: Some('∴'), hold: None, alt: Some('∴')},
+        (5, 2) => ScanCode{key: Some('∴'), shift: Some('∴'), hold: None, alt: Some('∴')},
 
         _ => ScanCode {key: None, shift: None, hold: None, alt: None}
     }
@@ -170,6 +170,7 @@ mod implementation {
     use ticktimer_server::Ticktimer;
     use xous::CID;
     use num_traits::ToPrimitive;
+    use susres::{RegManager, RegOrField, SuspendResume};
 
     use heapless::Vec;
     use heapless::consts::*;
@@ -213,6 +214,7 @@ mod implementation {
         chord_active: u32,
         /// indicate if the chord has been captured. Once captured, further presses are ignored, until all keys are let up.
         chord_captured: bool,
+        susres: RegManager::<{utra::keyboard::KEYBOARD_NUMREGS}>,
     }
 
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
@@ -266,6 +268,7 @@ mod implementation {
                 chord: [[false; KBD_COLS]; KBD_ROWS],
                 chord_active: 0,
                 chord_captured: false,
+                susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
             };
 
             xous::claim_interrupt(
@@ -281,7 +284,18 @@ mod implementation {
             );
             log::trace!("hardware initialized");
 
+            kbd.susres.push_fixed_value(RegOrField::Reg(utra::keyboard::EV_PENDING), 0xFFFF_FFFF);
+            kbd.susres.push(RegOrField::Reg(utra::keyboard::EV_ENABLE), None);
+
             kbd
+        }
+
+        pub fn suspend(&mut self) {
+            self.susres.suspend();
+            self.csr.wo(utra::keyboard::EV_ENABLE, 0);
+        }
+        pub fn resume(&mut self) {
+            self.susres.resume();
         }
 
         pub fn set_map(&mut self, map: KeyMap) {
@@ -756,6 +770,10 @@ mod implementation {
                 chord_interval: 50,
             }
         }
+        pub fn suspend(&self) {
+        }
+        pub fn resume(&self) {
+        }
 
         pub fn set_map(&mut self, map: KeyMap) {
             self.map = map;
@@ -814,6 +832,10 @@ fn xmain() -> ! {
     // Create a new kbd object
     let mut kbd = Keyboard::new(kbd_sid);
 
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     let mut normal_conns: [Option<CID>; 16] = [None; 16];
     let mut raw_conns: [Option<CID>; 16] = [None; 16];
 
@@ -825,6 +847,11 @@ fn xmain() -> ! {
         let msg = xous::receive_message(kbd_sid).unwrap(); // this blocks until we get a message
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                kbd.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                kbd.resume();
+            }),
             Some(Opcode::Vibe) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
                 if ena != 0 { vibe = true }
                 else { vibe = false }
