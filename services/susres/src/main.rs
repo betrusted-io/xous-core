@@ -327,7 +327,7 @@ mod implementation {
                     self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
                     self.csr.ms(utra::susres::CONTROL_LOAD, 1)
                 );
-                println!("Ticktimer loaded");
+                println!("Ticktimer loaded with {}", time);
 
                 // set up pre-emption timer
                 let ms = SYSTEM_TICK_INTERVAL_MS;
@@ -343,6 +343,12 @@ mod implementation {
                 self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
                 // start the tickttimer running
+                self.csr.wo(utra::susres::CONTROL,
+                    self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
+                    self.csr.ms(utra::susres::CONTROL_LOAD, 1)
+                );
+                log::info!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
+                log::info!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
                 self.csr.wo(utra::susres::CONTROL, 0);
                 println!("Ticktimer and OS timer now running");
 

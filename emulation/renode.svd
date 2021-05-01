@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-04-30 23:37:05]]></description>
+    <description><![CDATA[Litex SoC 2021-05-01 18:46:16]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1070,10 +1070,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``79550678``, so this value is 2035615352, which should be enough to check out
+``933d6807``, so this value is 2470275079, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x79550678</resetValue>
+                    <resetValue>0x933d6807</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1090,7 +1090,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x03</resetValue>
+                    <resetValue>0x04</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2155,26 +2155,18 @@ register to disable individual events.]]></description>
                     <size>32</size>
                     <fields>
                         <field>
-                            <name>reset</name>
+                            <name>pause</name>
                             <msb>0</msb>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Write a `1` to this bit to reset the count to 0. This bit has priority over all
-other requests.]]></description>
-                        </field>
-                        <field>
-                            <name>pause</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
                             <description><![CDATA[Write a `1` to this field to request a pause to counting, 0 for free-run. Count
 pauses on the next tick quanta.]]></description>
                         </field>
                         <field>
                             <name>load</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
                             <description><![CDATA[If paused, write a `1` to this bit to load a resume value to the timer. If not
 paused, this bit is ignored.]]></description>
                         </field>
@@ -2183,7 +2175,7 @@ paused, this bit is ignored.]]></description>
                 <register>
                     <name>RESUME_TIME1</name>
                     <description><![CDATA[Bits 32-63 of `SUSRES_RESUME_TIME`. Elapsed time to load. Loaded upon writing
-`1` to the load bit in the control regsiter. This will immediately affect the
+`1` to the load bit in the control register. This will immediately affect the
 msleep extension.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
@@ -3109,7 +3101,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x1cbd6891</resetValue>
+                    <resetValue>0xd1ce410</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3124,7 +3116,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x3d2e31ed</resetValue>
+                    <resetValue>0x23175a86</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
