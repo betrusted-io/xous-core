@@ -57,7 +57,10 @@ of wear leveling, however.
 + 20CF_FFFF |                                        |
 +-----------+----------------------------------------+
 + 20D0_0000 |   PDDB 'filesystem'                    |
-+ 27FF_FFFF |                                        |
++ 27F7_FFFF |                                        |
++-----------+----------------------------------------+
++ 27F8_0000 |   512k reserved space for EC image     |
++ 27FF_FFFF |   Split into 300k wf200 + 200k EC fw   |
 +-----------+----------------------------------------+
 
 ```
@@ -77,5 +80,26 @@ The csr.csv block is further structured as follows:
 +-----------+----------------------------------------+
 + 2027_FFC0 |   sha512 of 2027_8000:2027_FFBF        |
 + 2027_FFFF |   64 bytes, network order              |
++-----------+----------------------------------------+
+```
+
+## Testing Structures
+
+Prior to the creation of the PDDB, some hard-coded audio data is loaded for development purposes.
+
+This documents their location in FLASH. The samples are shorter than the allocated regions, but the WAV headers encode their actual lenth.
+
+```
++-----------+----------------------------------------+
++ 2600_0000 |   8khz short sample (WAV/512kiB)       |
++ 2607_FFFF |   16-bit stereo PCM ~16s long          |
++-----------+----------------------------------------+
++ 2608_0000 |   44.1khz short sample (WAV/2,800kiB)  |
++ 2633_BFFF |   16-bit stereo PCM ~16s long          |
++-----------+----------------------------------------+
++ 2633_C000 |   8khz short sample (WAV/28,944kiB)    |
++ 2607_FFFF |   16-bit stereo PCM ~330s long         |
++-----------+----------------------------------------+
++ 27F8_0000 |   Start of EC region (do not use)      |
 +-----------+----------------------------------------+
 ```
