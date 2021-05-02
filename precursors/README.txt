@@ -6,4 +6,8 @@ https://github.com/betrusted-io/xous-core/blob/master/docs/flash.md
 for the locations of the samples, and the betrusted-scripts repo
 for any helper scripts to do this.
 
-Please also see CREDITS.txt for credits on the samples.
+The track samples included here are from "Midwinter", by
+Jackalope (https://soundcloud.com/tokyojackalope)
+
+Used with permission to redistribute as part of this repository.
+
