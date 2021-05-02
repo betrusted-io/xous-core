@@ -22,6 +22,8 @@ mod implementation {
     use xous_ipc::Buffer;
     use num_traits::ToPrimitive;
 
+    const BLOCKING_I2C_TIMEOUT_MS: u64 = 50;
+
     const ABRTCMC_I2C_ADR: u8 = 0x68;
     const ABRTCMC_CONTROL1: u8 = 0x00;
     bitflags! {
@@ -245,6 +247,7 @@ mod implementation {
         llio: Llio,
         rtc_alarm_enabled: bool,
         wakeup_alarm_enabled: bool,
+        ticktimer: ticktimer_server::Ticktimer,
     }
 
     impl Rtc {
@@ -256,6 +259,7 @@ mod implementation {
                 llio,
                 rtc_alarm_enabled: false,
                 wakeup_alarm_enabled: false,
+                ticktimer: ticktimer_server::Ticktimer::new().expect("can't connect to ticktimer"),
             }
         }
 
@@ -342,28 +346,40 @@ mod implementation {
             transaction.txbuf = Some(txbuf);
             transaction.txlen = 2;
             transaction.status = I2cStatus::RequestIncoming;
+            transaction.timeout_ms = 50;
 
-            while self.llio.poll_i2c_busy().unwrap() {
-                xous::yield_slice();
-            }
             let mut sent = false;
-            while !sent {
-                match self.llio.send_i2c_request(transaction) {
-                    Ok(status) => {
-                        match status {
-                            I2cStatus::ResponseInProgress => sent = true,
-                            I2cStatus::ResponseBusy => sent = false,
-                            _ => {log::error!("try_send_i2c unhandled response"); return false;},
-                        }
-                    }
-                    _ => {log::error!("try_send_i2c unhandled error"); return false;}
+            let max_retries = 2;
+            let mut retries = 0;
+            while (retries < max_retries) && !sent {
+                while self.llio.poll_i2c_busy().unwrap() {
+                    xous::yield_slice();
                 }
-                xous::yield_slice();
+                let start = self.ticktimer.elapsed_ms();
+                while !sent {
+                    match self.llio.send_i2c_request(transaction) {
+                        Ok(status) => {
+                            match status {
+                                I2cStatus::ResponseInProgress => sent = true,
+                                I2cStatus::ResponseBusy => sent = false,
+                                _ => {log::error!("try_send_i2c unhandled response"); return false;},
+                            }
+                        }
+                        _ => {log::error!("try_send_i2c unhandled error"); return false;}
+                    }
+                    if (self.ticktimer.elapsed_ms() - start > BLOCKING_I2C_TIMEOUT_MS) && !sent {
+                        log::error!("I2C blocking write timed out, try {}/{}", retries+1, max_retries);
+                        break;
+                    }
+                    xous::yield_slice();
+                }
+                while self.llio.poll_i2c_busy().unwrap() {
+                    xous::yield_slice();
+                }
+                retries += 1;
             }
-            while self.llio.poll_i2c_busy().unwrap() {
-                xous::yield_slice();
-            }
-            true
+
+            sent
         }
 
         /// wakeup self after designated number of seconds
