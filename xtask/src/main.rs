@@ -51,6 +51,7 @@ fn try_main() -> Result<(), DynError> {
         "llio",
         "rtc",
         "susres",
+        "codec",
     ];
     let benchmark_pkgs = [
         "benchmark",

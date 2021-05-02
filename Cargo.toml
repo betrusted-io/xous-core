@@ -23,6 +23,7 @@ default-members = [
   "services/cb-test-c1",
   "services/cb-test-c2",
   "services/susres",
+  "services/codec",
 ]
 members = [
   "xous-ipc",
@@ -57,6 +58,7 @@ members = [
   "services/cb-test-c1",
   "services/cb-test-c2",
   "services/susres",
+  "services/codec",
 ]
 resolver = "2"
 
