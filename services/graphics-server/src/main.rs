@@ -10,6 +10,7 @@ mod op;
 
 mod logo;
 mod poweron;
+mod sleep_note;
 
 use api::{DrawStyle, PixelColor, Rectangle, TextBounds, RoundedRectangle, Point, TextView, Line, Circle};
 use api::{Opcode, ClipObject, ClipObjectType};
@@ -72,6 +73,7 @@ fn xmain() -> ! {
 
     map_fonts();
 
+    let mut use_sleep_note = true;
     if false {
         // leave this test case around
         // for some reason, the top right quadrant draws an extra pixel inside the fill area
@@ -92,10 +94,27 @@ fn xmain() -> ! {
     let screen_clip = Rectangle::new(Point::new(0,0), display.screen_size());
 
     display.redraw();
+
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                display.suspend(use_sleep_note);
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                display.resume(use_sleep_note);
+            }),
+            Some(Opcode::SetSleepNote) => xous::msg_scalar_unpack!(msg, set_use, _, _, _, {
+                if set_use == 0 {
+                    use_sleep_note = false;
+                } else {
+                    use_sleep_note = true;
+                }
+            }),
             Some(Opcode::DrawClipObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<ClipObject, _>().unwrap();

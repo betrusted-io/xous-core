@@ -72,7 +72,7 @@ mod implementation {
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             println!("going into suspend");
-            if true { // this is just for testing
+            if false { // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
@@ -319,15 +319,9 @@ mod implementation {
                 }
 
                 // restore the ticktimer
-                self.csr.wfo(utra::susres::CONTROL_PAUSE, 1); // ensure that the ticktimer is paused before we try to load it
                 self.csr.wo(utra::susres::RESUME_TIME0, time as u32);
                 self.csr.wo(utra::susres::RESUME_TIME1, (time >> 32) as u32);
-                // load the saved value -- can only be done while the timer is paused
-                self.csr.wo(utra::susres::CONTROL,
-                    self.csr.ms(utra::susres::CONTROL_PAUSE, 1) |
-                    self.csr.ms(utra::susres::CONTROL_LOAD, 1)
-                );
-                println!("Ticktimer loaded");
+                println!("Ticktimer loaded with {}", time);
 
                 // set up pre-emption timer
                 let ms = SYSTEM_TICK_INTERVAL_MS;
@@ -343,6 +337,11 @@ mod implementation {
                 self.os_timer.wfo(utra::timer0::EN_EN, 0b1);
 
                 // start the tickttimer running
+                self.csr.wo(utra::susres::CONTROL,
+                    self.csr.ms(utra::susres::CONTROL_LOAD, 1)
+                );
+                log::trace!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
+                log::trace!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
                 self.csr.wo(utra::susres::CONTROL, 0);
                 println!("Ticktimer and OS timer now running");
 
@@ -497,7 +496,7 @@ fn xmain() -> ! {
     let mut susres_hw = implementation::SusResHw::new();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     // these only print if the "debugprint" feature is specified in Cargo.toml
@@ -589,6 +588,7 @@ fn xmain() -> ! {
                             susres_hw.do_suspend(false);
                             // when do_suspend() returns, it means we've resumed
                             suspend_requested = false;
+                            log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                             if susres_hw.do_resume() {
                                 log::error!("We did a clean shut-down, but bootloader is saying previous suspend was forced. Some peripherals may be in an unclean state!");
                             }
@@ -629,6 +629,7 @@ fn xmain() -> ! {
                         susres_hw.do_suspend(true);
                         // when do_suspend() returns, it means we've resumed
                         suspend_requested = false;
+                        log_server::resume(); // log server is a special case, in order to avoid circular dependencies
                         if susres_hw.do_resume() {
                             log::error!("We forced a suspend, some peripherals may be in an unclean state!");
                         } else {

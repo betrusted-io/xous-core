@@ -74,16 +74,12 @@ pub struct ManagedReg {
     pub fixed_value: bool,
 }
 
-//#[derive(Debug)]
+#[derive(Debug)]
 #[allow(dead_code)]
 #[cfg(target_os = "none")]
 pub struct RegManager<const N: usize> {
     pub csr: CSR<u32>,
     pub registers: [Option<ManagedReg>; N],
-    pub sus_prologue: Option<fn(&mut Self)>,
-    pub sus_epilogue: Option<fn(&mut Self)>,
-    pub res_prologue: Option<fn(&mut Self)>,
-    pub res_epilogue: Option<fn(&mut Self)>,
 }
 #[allow(dead_code)]
 #[cfg(target_os = "none")]
@@ -92,10 +88,6 @@ impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
         RegManager::<N> {
             csr: CSR::new(reg_base),
             registers: [None; N],
-            sus_prologue: None,
-            sus_epilogue: None,
-            res_prologue: None,
-            res_epilogue: None,
         }
     }
     pub fn push_fixed_value(&mut self, mr: RegOrField, value: usize) {
@@ -140,9 +132,6 @@ pub trait SuspendResume {
 #[cfg(target_os = "none")]
 impl<const N: usize> SuspendResume for RegManager<N> {
     fn suspend(&mut self) {
-        if let Some(sp) = self.sus_prologue {
-            sp(self);
-        }
         for entry in self.registers.iter_mut().rev() {
             if let Some(reg) = entry {
                 if !reg.fixed_value {
@@ -160,14 +149,8 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         for entry in self.registers.iter().rev() {
             log::trace!("suspend: {:?}", entry);
         }*/
-        if let Some(se) = self.sus_epilogue {
-            se(self);
-        }
     }
     fn resume(&mut self) {
-        if let Some(rp) = self.res_prologue {
-            rp(self);
-        }
         for entry in self.registers.iter() { // this is in reverse order to the suspend
             if let Some(reg) = entry {
                 if let Some(mut value) = reg.value {
@@ -186,30 +169,38 @@ impl<const N: usize> SuspendResume for RegManager<N> {
         for entry in self.registers.iter() {
             log::trace!("resume: {:?}", entry);
         }*/
-        if let Some(re) = self.res_epilogue {
-            re(self);
-        }
     }
 }
 
 // because the volatile memory regions can be potentially large (128kiB), but fewer (maybe 5-6 total in the system),
 // we allocate these as stand-alone structures and manage them explicitly.
+#[derive(Debug)]
 #[cfg(target_os = "none")]
 pub struct ManagedMem<const N: usize> {
     pub mem: xous::MemoryRange,
     pub backing: [u32; N],
 }
+#[allow(dead_code)]
+#[cfg(target_os = "none")]
+impl<const N: usize> ManagedMem<N> {
+    pub fn new(src: xous::MemoryRange) -> Self {
+        ManagedMem {
+            mem: src,
+            backing: [0; N],
+        }
+    }
+}
 #[cfg(target_os = "none")]
 impl<const N: usize> SuspendResume for ManagedMem<N> {
     fn suspend(&mut self) {
         let src = self.mem.as_ptr() as *const u32;
-        for words in 0..self.mem.len() {
+        for words in 0..(self.mem.len() / core::mem::size_of::<u32>()) {
             self.backing[words] = unsafe{src.add(words).read_volatile()};
         }
     }
     fn resume(&mut self) {
         let dst = self.mem.as_ptr() as *mut u32;
-        for words in 0..self.mem.len() {
+        for words in 0..(self.mem.len() / core::mem::size_of::<u32>()) {
             unsafe{dst.add(words).write_volatile(self.backing[words])};
         }
     }

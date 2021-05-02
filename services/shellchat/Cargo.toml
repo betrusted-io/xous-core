@@ -21,6 +21,7 @@ xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 keyboard = {path = "../keyboard"}
+susres = {path = "../susres"}
 
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}

@@ -73,10 +73,12 @@ fn rkyv_test_client() -> ! {
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
 
-        com.req_batt_stats().unwrap();
+        if (idx %2) == 0 {
+            com.req_batt_stats().unwrap();
+        }
 
         // let the loop run a bit, then try a suspend
-        if idx == 0 {
+        if idx == 3 {
             // TODO: add a self-wakeup RTC alarm once we're beyond the touch-and-go phase
             susres.initiate_suspend().unwrap();
         }

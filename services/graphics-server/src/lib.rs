@@ -133,6 +133,13 @@ impl Gfx {
         let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
+
+    pub fn draw_sleep_note(&self, flag: bool) -> Result<(), xous::Error> {
+        let arg = if flag {1} else {0};
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetSleepNote.to_usize().unwrap(), arg, 0, 0, 0,
+        )).map(|_|())
+    }
 }
 
 impl Drop for Gfx {

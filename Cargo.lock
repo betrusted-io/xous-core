@@ -432,22 +432,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fcc-agent"
-version = "0.1.0"
-dependencies = [
- "com",
- "heapless",
- "log",
- "log-server",
- "ticktimer-server",
- "typenum",
- "utralib",
- "xous",
- "xous-ipc",
- "xous-names",
-]
-
-[[package]]
 name = "filetime"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,6 +540,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "susres",
  "utralib",
  "xous",
  "xous-ipc",
@@ -705,6 +690,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "susres",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1300,6 +1286,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "rtc",
+ "susres",
  "ticktimer-server",
  "utralib",
  "xous",

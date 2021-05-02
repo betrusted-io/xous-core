@@ -79,7 +79,13 @@ pub(crate) enum Opcode {
     DrawClipObject, //(ClipObject),
 
     /// draws the sleep screen; assumes requests are vetted by GAM/xous-names
-    DrawSleepScreen
+    DrawSleepScreen,
+
+    /// sets whether a sleep note should be rendered or not on suspend
+    SetSleepNote,
+
+    /// SuspendResume callback
+    SuspendResume,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]

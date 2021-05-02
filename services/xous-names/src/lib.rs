@@ -81,6 +81,7 @@ impl XousNames {
                 Err(xous::Error::AccessDenied) => return Err(xous::Error::AccessDenied),
                 _ => (),
             }
+            log::info!("connection to {} could not be established, retrying", name);
             xous::yield_slice();
         }
     }
