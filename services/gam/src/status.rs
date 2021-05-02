@@ -117,7 +117,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let mut rtc = rtc::Rtc::new(&xns).unwrap();
 
     // TODO: debug why this is unreliable
-    //rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
+    rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
 
     rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<rtc::DateTime> = None;
