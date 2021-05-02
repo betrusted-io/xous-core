@@ -496,7 +496,7 @@ fn xmain() -> ! {
     let mut susres_hw = implementation::SusResHw::new();
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     // these only print if the "debugprint" feature is specified in Cargo.toml
