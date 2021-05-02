@@ -14,6 +14,7 @@ pub struct Susres {
     execution_gate_conn: CID,
 }
 impl Susres {
+    #[cfg(target_os = "none")]
     pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
@@ -35,6 +36,20 @@ impl Susres {
             execution_gate_conn,
         })
     }
+    // suspend/resume is not implemented in hosted mode, and will break if you try to do it.
+    // the main reason this was doen is actually it seems hosted mode can't handle the level
+    // of concurrency introduced by suspend/resume, as its underlying IPC mechanisms are quite
+    // different and have a lot of overhead; it seems like the system goes into a form of deadlock
+    // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
+    #[cfg(not(target_os = "none"))]
+    pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+        Ok(Susres {
+            conn: 0,
+            suspend_cb_sid: None,
+            execution_gate_conn: 0,
+        })
+    }
+
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;
         Ok(Susres {

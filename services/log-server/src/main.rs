@@ -230,6 +230,7 @@ fn handle_scalar(
         }
         1200 => writeln!(output, "Terminating process").unwrap(),
         2000 => {
+            #[cfg(target_os = "none")]
             crate::debug::DEFAULT.enable_rx();
             writeln!(output, "Resuming logger").unwrap();
         },

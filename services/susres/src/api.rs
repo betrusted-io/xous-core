@@ -174,12 +174,14 @@ impl<const N: usize> SuspendResume for RegManager<N> {
 
 // because the volatile memory regions can be potentially large (128kiB), but fewer (maybe 5-6 total in the system),
 // we allocate these as stand-alone structures and manage them explicitly.
+#[derive(Debug)]
 #[cfg(target_os = "none")]
 pub struct ManagedMem<const N: usize> {
     pub mem: xous::MemoryRange,
     pub backing: [u32; N],
 }
 #[allow(dead_code)]
+#[cfg(target_os = "none")]
 impl<const N: usize> ManagedMem<N> {
     pub fn new(src: xous::MemoryRange) -> Self {
         ManagedMem {
