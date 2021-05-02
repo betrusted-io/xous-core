@@ -95,10 +95,10 @@ This documents their location in FLASH. The samples are shorter than the allocat
 + 2607_FFFF |   16-bit stereo PCM ~16s long          |
 +-----------+----------------------------------------+
 + 2608_0000 |   44.1khz short sample (WAV/2,800kiB)  |
-+ 2633_BFFF |   16-bit stereo PCM ~16s long          |
++ 2633_FFFF |   16-bit stereo PCM ~16s long          |
 +-----------+----------------------------------------+
-+ 2633_C000 |   8khz short sample (WAV/28,944kiB)    |
-+ 2607_FFFF |   16-bit stereo PCM ~330s long         |
++ 2634_0000 |   8khz short sample (WAV/28,944kiB)    |
++ 2707_FFFF |   16-bit stereo PCM ~330s long         |
 +-----------+----------------------------------------+
 + 27F8_0000 |   Start of EC region (do not use)      |
 +-----------+----------------------------------------+
