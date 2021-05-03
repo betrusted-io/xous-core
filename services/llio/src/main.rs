@@ -4,7 +4,6 @@
 mod api;
 use api::*;
 mod i2c;
-use i2c::*;
 
 use log::{error, info};
 
@@ -135,8 +134,6 @@ mod implementation {
     }
 
     impl Llio {
-        pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
-
         pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
             let crg_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::crg::HW_CRG_BASE),
@@ -488,8 +485,6 @@ mod implementation {
             Llio {
             }
         }
-        pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
-
         pub fn suspend(&self) {}
         pub fn resume(&self) {}
         pub fn gpio_dout(&self, _d: u32) {}
@@ -551,7 +546,9 @@ mod implementation {
         pub fn usb_int_ena(self, _ena: bool) {
         }
 
-        pub fn i2c_handler(&mut self) {
+        pub fn i2c_report_write_done(&mut self) {
+        }
+        pub fn i2c_report_read_done(&mut self) {
         }
         pub fn i2c_initiate(&mut self, i2c_txrx: I2cTransaction) -> I2cStatus {
             I2cStatus::ResponseInProgress
