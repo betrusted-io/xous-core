@@ -305,7 +305,7 @@ impl Llio {
     pub fn audio_on(&self, ena: bool) -> Result<(), xous::Error> {
         let arg = if ena { 1 } else { 0 };
         send_message(self.conn,
-            Message::new_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
     pub fn soc_gitrev(&self) -> Result<(u8, u8, u8, u8, u32), xous::Error> {

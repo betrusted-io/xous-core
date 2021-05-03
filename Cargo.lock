@@ -307,6 +307,7 @@ dependencies = [
  "utralib",
  "volatile",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1290,6 +1291,7 @@ checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
+ "codec",
  "com",
  "content-plugin-api",
  "gam",

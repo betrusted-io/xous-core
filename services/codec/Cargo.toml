@@ -12,9 +12,12 @@ log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
+xous-ipc = {path="../../xous-ipc"}
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 susres = {path = "../susres"}
+llio = {path = "../llio"}
+volatile = "0.4"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

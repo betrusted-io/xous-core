@@ -67,6 +67,7 @@ mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
 mod ssid;     use ssid::*;
 mod ver;      use ver::*;
+mod audio;    use audio::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -83,6 +84,7 @@ pub struct CmdEnv {
     rtc_cmd: RtcCmd,
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
+    audio_cmd: Audio,
 
     fcc_cmd: Fcc,
 }
@@ -105,6 +107,7 @@ impl CmdEnv {
             rtc_cmd: RtcCmd::new(&xns),
             vibe_cmd: Vibe::new(&xns),
             ssid_cmd: Ssid::new(),
+            audio_cmd: Audio::new(&xns),
 
             fcc_cmd: Fcc::new(),
         }
@@ -126,6 +129,7 @@ impl CmdEnv {
             &mut self.vibe_cmd,
             &mut self.ssid_cmd,
             &mut ver_cmd,
+            &mut self.audio_cmd,
 
             &mut self.fcc_cmd,
         ];

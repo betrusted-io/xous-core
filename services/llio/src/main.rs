@@ -648,12 +648,13 @@ fn xmain() -> ! {
                 let (val1, val2) = llio.get_info_target();
                 xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
             }),
-            Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+            Some(Opcode::PowerAudio) => msg_blocking_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
                     llio.power_audio(false);
                 } else {
                     llio.power_audio(true);
                 }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm audio power was set");
             }),
             Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
