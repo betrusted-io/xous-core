@@ -99,11 +99,21 @@ mod implementation {
     // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
     fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
+
         if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::IrqI2cTxrxDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+            match xl.i2c_machine.handler_i() {
+                I2cHandlerReport::WriteDone => {
+                    xous::try_send_message(conn,
+                        xous::Message::new_scalar(Opcode::IrqI2cTxrxWriteDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+                },
+                I2cHandlerReport::ReadDone => {
+                    xous::try_send_message(conn,
+                        xous::Message::new_scalar(Opcode::IrqI2cTxrxReadDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+                },
+                _ => {}, // don't send any message if we're in progress
+            }
         } else {
-            log::error!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
+            panic!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
         }
         xl.i2c_csr
             .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
@@ -284,8 +294,11 @@ mod implementation {
             self.i2c_susres.resume();
         }
 
-        pub fn i2c_handler(&mut self) {
-            self.i2c_machine.handler();
+        pub fn i2c_report_write_done(&mut self) {
+            self.i2c_machine.report_write_done();
+        }
+        pub fn i2c_report_read_done(&mut self) {
+            self.i2c_machine.report_read_done();
         }
         pub fn i2c_initiate(&mut self, i2c_txrx: llio::I2cTransaction) -> llio::I2cStatus {
             self.i2c_machine.initiate(i2c_txrx)
@@ -705,9 +718,13 @@ fn xmain() -> ! {
             Some(Opcode::AdcGpio2) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 xous::return_scalar(msg.sender, llio.xadc_gpio2() as _).expect("couldn't return Xadc");
             }),
-            Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                // I2C state machine handler irq received
-                llio.i2c_handler();
+            Some(Opcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // I2C state machine handler irq result
+                llio.i2c_report_write_done();
+            }),
+            Some(Opcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // I2C state machine handler irq result
+                llio.i2c_report_read_done();
             }),
             Some(Opcode::I2cTxRx) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };

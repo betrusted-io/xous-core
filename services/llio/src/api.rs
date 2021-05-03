@@ -189,7 +189,8 @@ pub(crate) enum Opcode {
     /// not tested - I2C functions
     I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
     /// from i2c interrupt handler (internal API only)
-    IrqI2cTxrxDone,
+    IrqI2cTxrxWriteDone,
+    IrqI2cTxrxReadDone,
     /// checks if the I2C engine is currently busy, for polling implementations
     I2cIsBusy,
 

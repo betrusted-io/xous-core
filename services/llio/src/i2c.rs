@@ -13,8 +13,14 @@ enum I2cState {
     Read,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum I2cHandlerReport {
+    WriteDone,
+    ReadDone,
+    InProgress,
+}
 #[cfg(target_os = "none")]
-pub struct I2cStateMachine {
+pub(crate) struct I2cStateMachine {
     transaction: I2cTransaction,
     state: I2cState,
     index: u32,  // index of the current buffer in the state machine
@@ -22,6 +28,7 @@ pub struct I2cStateMachine {
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
     i2c_csr: utralib::CSR<u32>,
     listener: Option<xous::SID>,
+    error: bool, // set if the interrupt handler encountered some kind of error
 }
 
 #[cfg(target_os = "none")]
@@ -43,6 +50,7 @@ impl I2cStateMachine {
             i2c_csr: CSR::new(i2c_base),
             index: 0,
             listener: None,
+            error: false,
         }
     }
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
@@ -66,6 +74,7 @@ impl I2cStateMachine {
                 self.index = 0;
                 // now we're ready to move on and try a new transaction. We hope! Maybe the block should be reset?? TBD. Need to understand the nature of the timeouts better, if and when they do happen.
             }
+            self.error = false;
             self.timestamp = now;
             self.transaction = transaction.clone();
             match transaction.listener {
@@ -130,7 +139,7 @@ impl I2cStateMachine {
             send_i2c_response(listener, timeout).expect("LLIO|I2c: couldn't send timeout error to liseners");
         };
     }
-    fn report_write_done(&mut self) {
+    pub fn report_write_done(&mut self) {
         log::trace!("write_done");
         // report the end of a write-only transaction to all the listeners
         let mut ack = I2cTransaction::new();
@@ -139,13 +148,16 @@ impl I2cStateMachine {
             send_i2c_response(listener, ack).expect("LLIO|I2C: couldn't send write ACK to listeners");
         };
     }
-    fn report_read_done(&mut self) {
+    pub fn report_read_done(&mut self) {
         log::trace!("read_done");
         // report the result of a read transaction to all the listeners
         self.transaction.status = I2cStatus::ResponseReadOk;
-        if let Some(listener) = self.listener {
+        if let Some(listener) = self.listener.take() {
+            log::trace!("Sending read done to {:?} of {:?}", listener, self.transaction);
             send_i2c_response(listener, self.transaction).expect("LLIO|I2C: couldn't send read response to listeners");
-        };
+        } else {
+            log::error!("No listener for my read done resopnse!");
+        }
     }
     pub fn is_busy(&self) -> bool {
         if self.state == I2cState::Idle {
@@ -164,6 +176,7 @@ impl I2cStateMachine {
             self.i2c_csr.r(utra::i2c::PRESCALE),
         );
     }
+    #[cfg(feature = "non_irq_handler")]
     pub fn handler(&mut self) {
         self.trace();
         // check if the transaction had actually timed out
@@ -269,8 +282,8 @@ impl I2cStateMachine {
     }
 
     // interrupt context-friendly handler
-    pub fn handler_i(&mut self) {
-        self.trace();
+    pub fn handler_i(&mut self) -> I2cHandlerReport {
+        /* // can't check timeouts in an interrupt handler
         // check if the transaction had actually timed out
         let now = self.ticktimer.elapsed_ms();
         if now - self.timestamp > self.transaction.timeout_ms as u64 {
@@ -283,25 +296,15 @@ impl I2cStateMachine {
             self.timestamp = now;
             return;
         }
-        self.timestamp = now;
+        self.timestamp = now;*/
+
+        let mut report = I2cHandlerReport::InProgress;
 
         match self.state {
             I2cState::Write => {
-                log::trace!("I2C handler: WRITE");
                 if let Some(txbuf) = self.transaction.txbuf {
-                    // check ack bit--this actually doesn't seem to work, so excise the code
-                    if false {
-                        if self.i2c_csr.rf(utra::i2c::STATUS_RXACK) != 1 {
-                            /*
-                            self.state = I2cState::Idle;
-                            self.transaction = I2cTransaction::new();
-                            self.report_nack();*/
-                            log::trace!("got NACK, ignoring");
-                        }
-                    }
                     // send next byte if there is one
                     if self.index < self.transaction.txlen {
-                        log::trace!("write->write");
                         self.i2c_csr.wfo(utra::i2c::TXR_TXR, txbuf[self.index as usize] as u32);
                         if self.index == (self.transaction.txlen - 1) && self.transaction.rxbuf.is_none() {
                             // send a stop bit if this is the very last in the series
@@ -316,7 +319,6 @@ impl I2cStateMachine {
                     } else {
                         if let Some(_rxbuf) = self.transaction.rxbuf {
                             // initiate bus address with read bit set
-                            log::trace!("write->read");
                             self.state = I2cState::Read;
                             self.i2c_csr.wfo(utra::i2c::TXR_TXR, (self.transaction.bus_addr << 1 | 1) as u32);
                             self.index = 0;
@@ -325,23 +327,19 @@ impl I2cStateMachine {
                                 self.i2c_csr.ms(utra::i2c::COMMAND_STA, 1)
                             );
                         } else {
-                            self.report_write_done();
+                            report = I2cHandlerReport::WriteDone;
                             self.state = I2cState::Idle;
                         }
                     }
-                    self.trace();
                 } else {
                     // we should never get here, because txbuf was checked as Some() by the setup routine
-                    log::error!("LLIO|I2C: illegal write state");
                 }
             },
             I2cState::Read => {
-                log::trace!("I2C handler: READ");
                 if let Some(mut rxbuf) = self.transaction.rxbuf {
                     if self.index > 0 {
                         // we are re-entering from a previous call, store the read value from the previous call
                         rxbuf[self.index as usize - 1] = self.i2c_csr.rf(utra::i2c::RXR_RXR) as u8;
-                        log::trace!("READ got 0x{:02x}", rxbuf[self.index as usize - 1]);
                         self.transaction.rxbuf = Some(rxbuf);
                     }
                     if self.index < self.transaction.rxlen {
@@ -356,20 +354,19 @@ impl I2cStateMachine {
                         }
                         self.index += 1;
                     } else {
-                        log::trace!("I2C handler: read done {:?}", self.transaction);
-                        self.report_read_done();
+                        report = I2cHandlerReport::ReadDone;
                         self.state = I2cState::Idle;
-                        self.listener = None;
                     }
                 } else {
                     // we should never get here, because rxbuf was checked as Some() by the setup routine
-                    log::error!("LLIO|I2C: illegal read state");
                 }
-                self.trace();
             },
             I2cState::Idle => {
-                log::error!("LLIO|I2C: received interrupt event when no transaciton pending!");
+                // this shouldn't happen, all we can do is flag an error
+                self.error = true;
             }
         }
+
+        report
     }
 }

@@ -61,7 +61,10 @@ impl Llio {
         // discovered, just unhygenic.
         let mut local_transaction = transaction;
         match self.i2c_sid {
-            None => local_transaction.listener = None,
+            None => {
+                local_transaction.listener = None;
+                log::warn!("Initiating I2C request with no listener. Are you sure?");
+            },
             Some(sid) => local_transaction.listener = Some(sid.to_u32()),
         }
         let mut buf = Buffer::into_buf(local_transaction).or(Err(xous::Error::InternalError))?;
