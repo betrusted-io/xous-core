@@ -39,6 +39,38 @@ impl Codec {
             Message::new_scalar(Opcode::Setup8kStereo.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+
+    pub fn free_frames(&mut self) -> Result<(play, rec), xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::FreeFrames.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(play_free, rec_avail) = response {
+            Ok(
+                (play_free, rec_avail)
+            )
+        } else {
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn swap_frames(&mut self, frames: &mut FrameRing::<FIFO_DEPTH, 4>) -> Result<(), xous::Error> {
+        let mut buf = Buffer::into_buf(*frames).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::SwapFrames.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+        frames = buf.to_original::<FrameRing::<FIFO_DEPTH, 4>, _>().unwrap();
+        Ok(())
+    }
+
+    pub fn resume(&mut self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::ResumeStream.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn pause(&mut self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PauseStream.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
 }
 
 impl Drop for Codec {

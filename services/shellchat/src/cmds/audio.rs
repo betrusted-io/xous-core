@@ -2,7 +2,7 @@ use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 
 use core::convert::TryFrom;
-
+use codec::*;
 
 #[derive(Debug)]
 pub struct Audio {
@@ -11,6 +11,7 @@ pub struct Audio {
     header: Header,
     raw_data: *const u32,
     raw_len_bytes: u32,
+    play_ptr_bytes: usize,
 }
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -26,13 +27,18 @@ impl Audio {
         for i in 0..16 {
             unsafe{ raw_header[i] = (*samples)[i] };
         }
+
         codec.setup_8k_stream();
+        let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+        codec.hook_frame_callback(0xDEAD_BEEF, callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
+
         Audio {
             codec,
             sample,
             header: Header::from(raw_header),
             raw_data: (sample.as_ptr() + 44) as *const u32,
             raw_len_bytes: unsafe{*((sample.as_ptr() + 40) as *const u32)},
+            play_ptr_bytes: 0,
         }
     }
 }
@@ -51,12 +57,29 @@ impl<'a> ShellCmdApi<'a> for Audio {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "play" => {
-                    write!(ret, "TODO").unwrap();
-                    // need to set up the callback handler
+                    write!(ret, "Playing sample...").unwrap();
                     // load the initial sample data
-                    // start the playing
+                    let (play_free, _) = self.codec.free_frames().unwrap();
 
-                    // for now, we'll just discard the recorded data...
+                    let frames: FrameRing::<codec::FIFO_DEPTH, 4> = FrameRing::new();
+                    let frame_to_push = if frames.writeable_count() < play_free {
+                        frames.writeable_count();
+                    } else {
+                        play_free;
+                    };
+                    for i in 0..frame_to_push {
+                        let frame = [u32; codec::FIFO_DEPTH];
+                        for i in 0..codec::FIFO_DEPTH {
+                            frame[i] = unsafe{*(raw_data + i)};
+                        }
+                        self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
+                        frames.nq_frame(frame).unwrap();
+                    }
+                    self.codec.swap_frames(frames).unwrap();
+                    // start the playing
+                    self.codec.resume().unwrap();
+
+                    // we'll get a callback that demands the next data...
                 }
                 "info" => {
                     write!(ret, "Loaded sample is {}kHz, {} channels, {} format, {} bytes", self.header.sampling_rate, self.header.channel_count, self.header.audio_format, self.raw_len_bytes).unwrap();
@@ -68,6 +91,37 @@ impl<'a> ShellCmdApi<'a> for Audio {
         }
 
         Ok(Some(ret))
+    }
+
+    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        use core::fmt::Write;
+
+        xous::msg_scalar_unpack!(msg, free_play, avail_rec, _, _, {
+            if self.play_ptr_bytes + codec::FIFO_DEPTH *4 < self.raw_len_bytes {
+                let frames: FrameRing::<codec::FIFO_DEPTH, 4> = FrameRing::new();
+                let frame_to_push = if frames.writeable_count() < play_free {
+                    frames.writeable_count();
+                } else {
+                    play_free;
+                };
+                for i in 0..frame_to_push {
+                    let frame = [u32; codec::FIFO_DEPTH];
+                    for i in 0..codec::FIFO_DEPTH {
+                        frame[i] = unsafe{*(raw_data + i)};
+                    }
+                    self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
+                    frames.nq_frame(frame).unwrap();
+                }
+                self.codec.swap_frames(frames).unwrap();
+
+                Ok(None)
+            } else {
+                self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                let mut ret = String::<1024>::new();
+                write!(ret, "{}", "Playback finished").unwrap();
+                Ok(ret)
+            }
+        });
     }
 }
 
