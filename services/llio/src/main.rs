@@ -28,6 +28,7 @@ mod implementation {
     use utralib::generated::*;
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
+    use crate::i2c::*;
 
     #[allow(dead_code)]
     pub struct Llio {
@@ -46,6 +47,7 @@ mod implementation {
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer: ticktimer_server::Ticktimer,
         destruct_armed: bool,
+        i2c_machine: I2cStateMachine,
     }
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
@@ -177,6 +179,7 @@ mod implementation {
             .expect("couldn't map Xadc CSR range"); // note that Xadc is "in" the TRNG because TRNG can override Xadc in hardware
 
             let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+            let i2c_ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
             let mut xl = Llio {
                 crg_csr: CSR::new(crg_csr.as_mut_ptr() as *mut u32),
@@ -194,6 +197,7 @@ mod implementation {
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer,
                 destruct_armed: false,
+                i2c_machine: I2cStateMachine::new(i2c_ticktimer, i2c_csr.as_mut_ptr() as *mut u32),
             };
 
             xous::claim_interrupt(
@@ -278,6 +282,16 @@ mod implementation {
             self.event_susres.resume();
             self.gpio_susres.resume();
             self.i2c_susres.resume();
+        }
+
+        pub fn i2c_handler(&mut self) {
+            self.i2c_machine.handler();
+        }
+        pub fn i2c_initiate(&mut self, i2c_txrx: llio::I2cTransaction) -> llio::I2cStatus {
+            self.i2c_machine.initiate(i2c_txrx)
+        }
+        pub fn i2c_is_busy(&mut self) -> bool {
+            self.i2c_machine.is_busy()
         }
 
         pub fn gpio_dout(&mut self, d: u32) {
@@ -523,6 +537,16 @@ mod implementation {
         }
         pub fn usb_int_ena(self, _ena: bool) {
         }
+
+        pub fn i2c_handler(&mut self) {
+        }
+        pub fn i2c_initiate(&mut self, i2c_txrx: I2cTransaction) -> I2cStatus {
+            I2cStatus::ResponseInProgress
+        }
+        pub fn i2c_is_busy(&mut self) -> bool {
+            false
+        }
+
     }
 }
 
@@ -551,11 +575,6 @@ fn xmain() -> ! {
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
-
-    // ticktimer is a well-known server
-    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-    // create an i2c state machine handler
-    let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
@@ -688,16 +707,16 @@ fn xmain() -> ! {
             }),
             Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
                 // I2C state machine handler irq received
-                i2c_machine.handler();
+                llio.i2c_handler();
             }),
             Some(Opcode::I2cTxRx) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
-                let status = i2c_machine.initiate(i2c_txrx);
+                let status = llio.i2c_initiate(i2c_txrx);
                 buffer.replace(status).unwrap();
             }
             Some(Opcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                let busy = if i2c_machine.is_busy() {1} else {0};
+                let busy = if llio.i2c_is_busy() {1} else {0};
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
             }),
             Some(Opcode::EventUsbAttachSubscribe) => {
