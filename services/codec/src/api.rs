@@ -55,14 +55,14 @@ pub(crate) struct ScalarHook {
 
 //////////////////////////////////////////////////////////////////////////////////////
 
-pub(crate) const ZERO_PCM: u16 = 0x0; // assumes 2's compliment. 0x8000 otherwise.
+pub const ZERO_PCM: u16 = 0x0; // assumes 2's compliment. 0x8000 otherwise.
 pub const FIFO_DEPTH: usize = 256;
-pub const FRAME_DEPTH: usize = 16;
 /*
 The format of samples appears to be
   u32: |31 right 16|15 left 0|
 */
 
+// pub const FRAME_DEPTH: usize = 16;
 /*
 Implementation note: rkyv's derives are having trouble with specifying the
 depth of the frame as a const generic, eg.
@@ -131,7 +131,7 @@ impl FrameRing {
         if self.is_empty() {
             None
         } else {
-            let playbuf: [u32; FIFO_DEPTH];
+            let mut playbuf: [u32; FIFO_DEPTH] = [0; FIFO_DEPTH];
             for (&src, dst) in self.buffer[self.rd_frame].iter().zip(playbuf.iter_mut()) {
                 *dst = src;
             }

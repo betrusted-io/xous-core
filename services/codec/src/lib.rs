@@ -4,8 +4,9 @@ pub mod api;
 use xous::{CID, send_message, Message};
 use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
-use api::*;
+pub use api::*;
 
+#[derive(Debug)]
 pub struct Codec {
     conn: CID,
     frame_sid: Option<xous::SID>,

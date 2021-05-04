@@ -1,8 +1,9 @@
 use crate::{ShellCmdApi,CommonEnv};
 use xous_ipc::String;
 
-use core::convert::TryFrom;
+//use core::convert::TryFrom;
 use codec::*;
+use xous::MessageEnvelope;
 
 #[derive(Debug)]
 pub struct Audio {
@@ -12,33 +13,41 @@ pub struct Audio {
     raw_data: *const u32,
     raw_len_bytes: u32,
     play_ptr_bytes: usize,
+    framecount: u32,
 }
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let sample = xous::syscall::map_memory(
-            0x2600_0000, // it's here, because we know it's here!
+            Some(core::num::NonZeroUsize::new(0x2600_0000).unwrap()), // it's here, because we know it's here!
             None,
             0x8_0000,
             xous::MemoryFlags::R,
         ).expect("couldn't map in the audio sample");
-        let codec = codec::Codec::new(xns).unwrap();
+        let mut codec = codec::Codec::new(xns).unwrap();
         let mut raw_header: [u8; 16] = [0; 16];
-        let samples: *const [u8; 16] = (sample.as_ptr() + 12) as *const [u8; 16];
+        let samples: *const [u8; 16] = unsafe{sample.as_ptr().add(20)} as *const [u8; 16];
+        log::trace!("header:");
         for i in 0..16 {
             unsafe{ raw_header[i] = (*samples)[i] };
+            log::trace!("0x{:x}", raw_header[i]);
         }
 
-        codec.setup_8k_stream();
+        log::trace!("setting up audio stream");
+        codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
+        log::trace!("getting a callback ID");
         let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+        log::trace!("hooking frame callback");
         codec.hook_frame_callback(0xDEAD_BEEF, callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
+        log::trace!("returning from setup");
 
         Audio {
             codec,
             sample,
             header: Header::from(raw_header),
-            raw_data: (sample.as_ptr() + 44) as *const u32,
-            raw_len_bytes: unsafe{*((sample.as_ptr() + 40) as *const u32)},
+            raw_data: unsafe{sample.as_ptr().add(44)} as *const u32,
+            raw_len_bytes: unsafe{*(sample.as_ptr().add(40) as *const u32)},
             play_ptr_bytes: 0,
+            framecount: 0,
         }
     }
 }
@@ -46,7 +55,7 @@ impl Audio {
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
-    fn process(&mut self, _args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
@@ -61,22 +70,26 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     // load the initial sample data
                     let (play_free, _) = self.codec.free_frames().unwrap();
 
-                    let frames: FrameRing::<codec::FIFO_DEPTH, 4> = FrameRing::new();
-                    let frame_to_push = if frames.writeable_count() < play_free {
-                        frames.writeable_count();
+                    let mut frames: FrameRing = FrameRing::new();
+                    let frames_to_push = if frames.writeable_count() < play_free {
+                        frames.writeable_count()
                     } else {
-                        play_free;
+                        play_free
                     };
-                    for i in 0..frame_to_push {
-                        let frame = [u32; codec::FIFO_DEPTH];
-                        for i in 0..codec::FIFO_DEPTH {
-                            frame[i] = unsafe{*(raw_data + i)};
+                    log::trace!("loading up {} frames", frames_to_push);
+                    self.framecount += frames_to_push as u32;
+                    for i in 0..frames_to_push {
+                        let mut frame: [u32; codec::FIFO_DEPTH] = [codec::ZERO_PCM as u32 | (codec::ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
+                        for sample in frame.iter_mut() {
+                            *sample = unsafe{*self.raw_data.add(i)};
                         }
                         self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
                         frames.nq_frame(frame).unwrap();
                     }
-                    self.codec.swap_frames(frames).unwrap();
+                    log::trace!("pushing frames");
+                    self.codec.swap_frames(&mut frames).unwrap();
                     // start the playing
+                    log::trace!("starting playback");
                     self.codec.resume().unwrap();
 
                     // we'll get a callback that demands the next data...
@@ -93,49 +106,41 @@ impl<'a> ShellCmdApi<'a> for Audio {
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
-        xous::msg_scalar_unpack!(msg, free_play, avail_rec, _, _, {
-            if self.play_ptr_bytes + codec::FIFO_DEPTH *4 < self.raw_len_bytes {
-                let frames: FrameRing::<codec::FIFO_DEPTH, 4> = FrameRing::new();
-                let frame_to_push = if frames.writeable_count() < play_free {
-                    frames.writeable_count();
+        let mut ret = String::<1024>::new();
+        xous::msg_scalar_unpack!(msg, free_play, _avail_rec, _, _, {
+            if self.play_ptr_bytes + codec::FIFO_DEPTH *4 < self.raw_len_bytes as usize {
+                let mut frames: FrameRing = FrameRing::new();
+                let frames_to_push = if frames.writeable_count() < free_play {
+                    frames.writeable_count()
                 } else {
-                    play_free;
+                    free_play
                 };
-                for i in 0..frame_to_push {
-                    let frame = [u32; codec::FIFO_DEPTH];
+                self.framecount += frames_to_push as u32;
+                log::trace!("frame {}", self.framecount);
+                for _ in 0..frames_to_push {
+                    let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                     for i in 0..codec::FIFO_DEPTH {
-                        frame[i] = unsafe{*(raw_data + i)};
+                        frame[i] = unsafe{*self.raw_data.add(i)};
                     }
                     self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
                     frames.nq_frame(frame).unwrap();
                 }
-                self.codec.swap_frames(frames).unwrap();
+                self.codec.swap_frames(&mut frames).unwrap();
 
-                Ok(None)
+                return Ok(None)
             } else {
+                log::trace!("stopping playback");
                 self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
-                let mut ret = String::<1024>::new();
                 write!(ret, "{}", "Playback finished").unwrap();
-                Ok(ret)
             }
         });
+        Ok(Some(ret))
     }
 }
 
-
-/// Value signifying PCM data.
-pub const WAV_FORMAT_PCM: u16 = 0x01;
-/// Value signifying IEEE float data.
-pub const WAV_FORMAT_IEEE_FLOAT: u16 = 0x03;
-
-/// Structure for the `"fmt "` chunk of wave files, specifying key information
-/// about the enclosed data.
-///
-/// This struct supports only PCM and IEEE float data, which is to say there is
-/// no extra members for compressed format data.
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Header {
     pub audio_format: u16,
@@ -144,47 +149,6 @@ pub struct Header {
     pub bytes_per_second: u32,
     pub bytes_per_sample: u16,
     pub bits_per_sample: u16,
-}
-
-impl Header {
-    /// Creates a new Header object.
-    ///
-    /// ## Note
-    ///
-    /// While the [`crate::read`] and [`crate::write`] functions only support
-    /// uncompressed PCM/IEEE for the audio format, the option is given here to
-    /// select any audio format for custom implementations of wave features.
-    ///
-    /// ## Parameters
-    ///
-    /// * `audio_format` - Audio format. Only [`WAV_FORMAT_PCM`] (0x01) and
-    ///                    [`WAV_FORMAT_IEEE_FLOAT`] (0x03) are supported.
-    /// * `channel_count` - Channel count, the number of channels each sample
-    ///                     has. Generally 1 (mono) or 2 (stereo).
-    /// * `sampling_rate` - Sampling rate (e.g. 44.1kHz, 48kHz, 96kHz, etc.).
-    /// * `bits_per_sample` - Number of bits in each (sub-channel) sample.
-    ///                       Generally 8, 16, 24, or 32.
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// let h = wav::Header::new(wav::header::WAV_FORMAT_PCM, 2, 48_000, 16);
-    /// ```
-    pub fn new(
-        audio_format: u16,
-        channel_count: u16,
-        sampling_rate: u32,
-        bits_per_sample: u16,
-    ) -> Header {
-        Header {
-            audio_format,
-            channel_count,
-            sampling_rate,
-            bits_per_sample,
-            bytes_per_second: (((bits_per_sample >> 3) * channel_count) as u32) * sampling_rate,
-            bytes_per_sample: ((bits_per_sample >> 3) * channel_count) as u16,
-        }
-    }
 }
 
 impl From<[u8; 16]> for Header {

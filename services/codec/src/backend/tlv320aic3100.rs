@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
 use utralib::generated::*;
 use xous::MemoryRange;
-use susres::{RegManager, RegOrField, SuspendResume, ManagedMem};
+use susres::{RegManager, RegOrField, SuspendResume};
 use core::sync::atomic::{AtomicU8, AtomicBool, Ordering};
 use llio::{I2cStatus, I2cTransaction};
-use volatile::*;
 use crate::api::*;
+use num_traits::*;
 
 pub const TLV320AIC3100_I2C_ADR: u8 = 0b0011_000;
 const I2C_TIMEOUT: u32 = 50;
@@ -18,12 +20,12 @@ static I2C_READLEN: AtomicU8 = AtomicU8::new(0);
 pub struct Codec {
     csr: utralib::CSR<u32>,
     fifo: MemoryRange,
-    susres_manager: RegManager::<{utra::audio::AUDIO_NUMREGS}>,
+    susres_manager: RegManager<{utra::audio::AUDIO_NUMREGS}>,
     llio: llio::Llio,
     ticktimer: ticktimer_server::Ticktimer,
-    play_buffer: FrameRing::<FIFO_DEPTH, FRAME_DEPTH>,
+    play_buffer: FrameRing,
     play_frames_dropped: u32,
-    rec_buffer: FrameRing::<FIFO_DEPTH, FRAME_DEPTH>,
+    rec_buffer: FrameRing,
     rec_frames_dropped: u32,
     powered_on: bool,
     initialized: bool,
@@ -36,7 +38,7 @@ fn i2c_callback(trans: I2cTransaction) {
         I2C_PENDING.store(false, Ordering::Relaxed);
 
         if let Some(rxbuf) = trans.rxbuf {
-            let mut len = trans.rxlen;
+            let mut len = trans.rxlen as usize;
             if len > I2C_READ.len() {
                 log::error!("Received more bytes via I2C than we can return inside our handler");
                 len = I2C_READ.len();
@@ -44,36 +46,36 @@ fn i2c_callback(trans: I2cTransaction) {
             for i in 0..len {
                 I2C_READ[i].store(rxbuf[i], Ordering::Relaxed);
             }
-            I2C_READLEN.store(len, Ordering::Relaxed);
+            I2C_READLEN.store(len as u8, Ordering::Relaxed);
         } else {
             log::error!("i2c_callback: no rx data to unpack!")
         }
-    } else if trans.status = I2cStatus::ResponseWriteOk {
+    } else if trans.status == I2cStatus::ResponseWriteOk {
         I2C_PENDING.store(false, Ordering::Relaxed);
     }
 }
 
 fn audio_handler(_irq_no: usize, arg: *mut usize) {
     let codec = unsafe { &mut *(arg as *mut Codec) };
+    let volatile_audio = codec.fifo.as_mut_ptr() as *mut u32;
 
     // load the play buffer
     if let Some(frame) = codec.play_buffer.dq_frame() {
-        let volatile_audio = codec.fifo.as_mut_ptr() as *mut Volatile<u32>;
         assert!(codec.csr.rf(utra::audio::TX_STAT_FREE) == 1, "interrupt was called, but not enough space to receive!");
-        for stereo_sample in frame.iter() {
-            unsafe { (*volatile_audio).write(stereo_sample) };
+        for &stereo_sample in frame.iter() {
+            unsafe { *volatile_audio = stereo_sample };
         }
     }
     // copy the record buffer
     assert!(codec.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1, "interrupt was called, but not enough data to read!");
-    let rec_buf = [u32; FIFO_DEPTH];
+    let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
-        unsafe{ *stereo_sample = (*volatile_audio).read(); }
+        unsafe{ *stereo_sample = *volatile_audio; }
     }
 
     match codec.rec_buffer.nq_frame(rec_buf) {
         Ok(()) => {},
-        Err(buff) => codec.rec_frames_dropped += 1,
+        Err(_buff) => codec.rec_frames_dropped += 1,
     }
 
     // let the audio handler know we used up another frame!
@@ -84,7 +86,7 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
 }
 
 impl Codec {
-    pub fn new(conn: xous::CID) -> Codec {
+    pub fn new(conn: xous::CID, xns: &xous_names::XousNames) -> Codec {
         let csr = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::audio::HW_AUDIO_BASE),
             None,
@@ -100,7 +102,7 @@ impl Codec {
         )
         .expect("couldn't map Audio CSR range");
 
-        let mut llio = Llio::new(xns).expect("can't connect to LLIO");
+        let mut llio = llio::Llio::new(xns).expect("can't connect to LLIO");
         llio.hook_i2c_callback(i2c_callback).expect("can't hook I2C callback");
 
         let mut codec = Codec {
@@ -122,7 +124,7 @@ impl Codec {
         xous::claim_interrupt(
             utra::audio::AUDIO_IRQ,
             audio_handler,
-            (&mut codec) as *mut codec as *mut usize,
+            (&mut codec) as *mut Codec as *mut usize,
         )
         .expect("couldn't claim audio irq");
         codec.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1);
@@ -138,12 +140,12 @@ impl Codec {
     pub fn suspend(&mut self) {
         self.susres_manager.suspend();
         if self.powered_on {
-            self.llio.audio_on(false); // force the codec into an off state for resume
+            self.llio.audio_on(false).unwrap(); // force the codec into an off state for resume
         }
     }
     pub fn resume(&mut self) {
         if self.powered_on {
-            self.llio.audio_on(true); // this is a blocking scalar
+            self.llio.audio_on(true).unwrap(); // this is a blocking scalar
             self.ticktimer.sleep_ms(2).unwrap(); // give the codec a moment to power up before writing to it
             // spec is 1ms, but set 2 because of OS timing jitter
             if self.initialized {
@@ -154,16 +156,20 @@ impl Codec {
     }
 
     pub fn init(&mut self) {
+        log::trace!("audio_clocks");
         self.audio_clocks();
+        log::trace!("audio_ports");
         self.audio_ports();
+        log::trace!("audio_mixer");
         self.audio_mixer();
+        log::trace!("audio initialized!");
         self.initialized = true;
     }
 
-    pub fn nq_play_frame(&mut self, frame: [u32; FIFO_DEPTH]) -> Result<(), [u32; DEPTH]> {
+    pub fn nq_play_frame(&mut self, frame: [u32; FIFO_DEPTH]) -> Result<(), [u32; FIFO_DEPTH]> {
         self.play_buffer.nq_frame(frame)
     }
-    pub fn dq_rec_frame(&mut self) -> Some([u32; FIFO_DEPTH]) {
+    pub fn dq_rec_frame(&mut self) -> Option<[u32; FIFO_DEPTH]> {
         self.rec_buffer.dq_frame()
     }
     pub fn free_play_frames(&self) -> usize {
@@ -191,24 +197,26 @@ impl Codec {
         self.live
     }
 
-    fn w(&mut self, adr: u8, data: &[u8]) {
+    fn w(&mut self, adr: u8, data: &[u8]) -> bool {
         let mut transaction = I2cTransaction::new();
         let mut txbuf: [u8; 258] = [0; 258];
-        for (&src, dest) in data.iter().zip(&mut txbuf.iter_mut()) {
-            *dest = src;
+        txbuf[0] = adr;
+        for i in 0..data.len() {
+            txbuf[i+1] = data[i];
         }
         transaction.bus_addr = TLV320AIC3100_I2C_ADR;
         transaction.txbuf = Some(txbuf);
-        transaction.txlen = data.len();
+        transaction.txlen = data.len() as u32;
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = I2C_TIMEOUT;
 
+        log::trace!("writing to 0x{:x}, {:x?}", adr, data);
         let mut sent = false;
         while self.llio.poll_i2c_busy().unwrap() {
             xous::yield_slice();
         }
         let mut retries = 0;
-        while !sent && reties < 4 {
+        while !sent && retries < 4 {
             match self.llio.send_i2c_request(transaction) {
                 Ok(status) => {
                     match status {
@@ -228,8 +236,10 @@ impl Codec {
         while I2C_PENDING.load(Ordering::Relaxed) {
             xous::yield_slice();
         }
+        log::trace!("write done");
+        true
     }
-    fn r(&mut self, adr: u8, data: &mut[u8]) {
+    fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
         let mut transaction = I2cTransaction::new();
         let mut txbuf: [u8; 258] = [0; 258];
         txbuf[0] = adr;
@@ -239,16 +249,16 @@ impl Codec {
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = I2C_TIMEOUT;
 
-        let mut rxbuf: [u8; 258] = [0; 258];
+        let rxbuf: [u8; 258] = [0; 258];
         transaction.rxbuf = Some(rxbuf);
-        transaction.rxlen = data.len();
+        transaction.rxlen = data.len() as u32;
 
         let mut sent = false;
         while self.llio.poll_i2c_busy().unwrap() {
             xous::yield_slice();
         }
         let mut retries = 0;
-        while !sent && reties < 4 {
+        while !sent && retries < 4 {
             match self.llio.send_i2c_request(transaction) {
                 Ok(status) => {
                     match status {
@@ -269,9 +279,10 @@ impl Codec {
             xous::yield_slice();
         }
 
-        for i in 0..I2C_READLEN.load(Ordering::Relaxed) {
+        for i in 0..I2C_READLEN.load(Ordering::Relaxed) as usize {
             data[i] = I2C_READ[i].load(Ordering::Relaxed);
         }
+        true
     }
 
     pub fn get_headset_code(&mut self) -> u8 {
@@ -319,7 +330,7 @@ impl Codec {
     fn audio_clocks(&mut self) {
         self.w(0, &[0]);  // select page 0
         self.w(1, &[1]);  // software reset
-        delay_ms(&self.p, 2); // reset happens in 1 ms; +1 ms due to timing jitter uncertainty
+        self.ticktimer.sleep_ms(2).unwrap(); // reset happens in 1 ms; +1 ms due to timing jitter uncertainty
 
         self.w(0, &[0]);  // select page 0
 
@@ -478,9 +489,9 @@ impl Codec {
 
         let fifo_depth = self.csr.rf(utra::audio::RX_STAT_FIFO_DEPTH);
 
-        let volatile_audio = self.fifo.as_mut_ptr() as *mut Volatile<u32>;
+        let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
         for _ in 0..(fifo_depth / 2) {
-            unsafe { (*volatile_audio).write(0); }  // prefill TX fifo with zero's
+            unsafe { (volatile_audio).write(0); }  // prefill TX fifo with zero's
         }
         // enable interrupts on the TX_READY
         self.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1); // clear any pending interrupt
@@ -502,19 +513,18 @@ impl Codec {
         self.live = false;
     }
 
-    const TESTLEN: usize = FIFO_DEPTH;
     /// this is a testing-only function which does a double-buffered audio loopback
-    pub fn audio_loopback_poll(&mut self, buf_a: &mut [u32; TESTLEN], buf_b: &mut [u32; TESTLEN], toggle: bool) -> bool {
-        let volatile_audio = self.fifo.as_mut_ptr() as *mut Volatile<u32>;
+    pub fn audio_loopback_poll(&mut self, buf_a: &mut [u32; FIFO_DEPTH], buf_b: &mut [u32; FIFO_DEPTH], toggle: bool) -> bool {
+        let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
 
         if (self.csr.rf(utra::audio::TX_STAT_FREE) == 1) && (self.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1) {
-            for i in 0..TESTLEN {
+            for i in 0..FIFO_DEPTH {
                 if toggle {
-                    unsafe{ buf_a[i] = (*volatile_audio).read(); }
-                    unsafe { (*volatile_audio).write(buf_b[i]); }
+                    unsafe{ buf_a[i] = *volatile_audio; }
+                    unsafe { *volatile_audio = buf_b[i]; }
                 } else {
-                    unsafe{ buf_b[i] = (*volatile_audio).read(); }
-                    unsafe { (*volatile_audio).write(buf_a[i]); }
+                    unsafe{ buf_b[i] = *volatile_audio; }
+                    unsafe { *volatile_audio = buf_a[i]; }
                 }
             }
             // wait for the done flags to clear; with an interrupt-driven system, this isn't necessary

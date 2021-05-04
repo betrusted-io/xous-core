@@ -5,11 +5,13 @@ mod api;
 mod backend;
 use backend::Codec;
 
-use num_traits::FromPrimitive;
+use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
-use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{CID, msg_scalar_unpack};
 
 use log::info;
+
+use api::*;
 
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
@@ -21,15 +23,15 @@ struct ScalarCallback {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
     let codec_sid = xns.register_name(api::SERVER_NAME_CODEC).expect("can't register server");
     log::trace!("registered with NS -- {:?}", codec_sid);
 
-    let codec_conn = xous::connect(codec_id).expect("couldn't make connection for the codec implementation");
-    let mut codec = Codec::new(codec_conn);
+    let codec_conn = xous::connect(codec_sid).expect("couldn't make connection for the codec implementation");
+    let mut codec = Codec::new(codec_conn, &xns);
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     log::trace!("ready to accept requests");
@@ -40,7 +42,8 @@ fn xmain() -> ! {
 
     let mut audio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
-        let msg = xous::receive_message(codec_sid).unwrap();
+        let mut msg = xous::receive_message(codec_sid).unwrap();
+        log::trace!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 codec.suspend();
@@ -51,8 +54,11 @@ fn xmain() -> ! {
                 codec.power(false);
             }),
             Some(api::Opcode::Setup8kStereo) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                log::trace!("turning on codec power");
                 codec.power(true);
-                ticktimer.sleep_ms(2);
+                log::trace!("waiting for power up");
+                ticktimer.sleep_ms(2).unwrap();
+                log::trace!("initializing codec");
                 codec.init();
             }),
             Some(api::Opcode::ResumeStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
@@ -84,12 +90,12 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::SwapFrames) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let mut framering = buffer.to_original::<codec::api::FrameRing::<FIFO_DEPTH, 4>, _>().unwrap();
+                let mut framering = buffer.to_original::<codec::api::FrameRing, _>().unwrap();
 
                 loop {
                     if let Some(frame) = framering.dq_frame() {
                         if codec.free_play_frames() > 0 {
-                            codec.nq_play_frame(frame); // throw away the result because we know this must succeed
+                            codec.nq_play_frame(frame).unwrap(); // throw away the result because we know this must succeed
                         } else {
                             // TODO: need to define a behavior when we have a play overrun. Do we:
                             // - wait until we can play the frame?
@@ -103,7 +109,7 @@ fn xmain() -> ! {
                 loop {
                     if let Some(frame) = codec.dq_rec_frame() {
                         if !framering.is_full() {
-                            framering.nq_frame(frame); // always succeeds because we checked if we're full first
+                            framering.nq_frame(frame).unwrap(); // always succeeds because we checked if we're full first
                         } else {
                             break;
                         }
@@ -117,10 +123,12 @@ fn xmain() -> ! {
             Some(api::Opcode::AudioStreamSubscribe) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
+                log::trace!("hooking {:?}", hookdata);
                 do_hook(hookdata, &mut audio_cb_conns);
+                log::trace!("hook done, {:?}", audio_cb_conns);
             }
             Some(api::Opcode::AnotherFrame) => {
-                send_event(&audio_cb_cons, codec.free_play_frames(), codec.available_rec_frames());
+                send_event(&audio_cb_conns, codec.free_play_frames(), codec.available_rec_frames());
             }
             None => {
                 log::error!("couldn't convert opcode");
