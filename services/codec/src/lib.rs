@@ -1,8 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use xous::{CID, send_message};
-use num_traits::ToPrimitive;
+use xous::{CID, send_message, Message};
+use num_traits::{ToPrimitive, FromPrimitive};
+use xous_ipc::Buffer;
+use api::*;
 
 pub struct Codec {
     conn: CID,
@@ -40,7 +42,7 @@ impl Codec {
         ).map(|_| ())
     }
 
-    pub fn free_frames(&mut self) -> Result<(play, rec), xous::Error> {
+    pub fn free_frames(&mut self) -> Result<(usize, usize), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::FreeFrames.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar2(play_free, rec_avail) = response {
@@ -53,11 +55,11 @@ impl Codec {
         }
     }
 
-    pub fn swap_frames(&mut self, frames: &mut FrameRing::<FIFO_DEPTH, 4>) -> Result<(), xous::Error> {
+    pub fn swap_frames(&mut self, frames: &mut FrameRing) -> Result<(), xous::Error> {
         let mut buf = Buffer::into_buf(*frames).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::SwapFrames.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
-        frames = buf.to_original::<FrameRing::<FIFO_DEPTH, 4>, _>().unwrap();
+        *frames = buf.to_original::<FrameRing, _>().unwrap();
         Ok(())
     }
 
