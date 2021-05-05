@@ -15,6 +15,7 @@ static mut I2C_CB: Option<fn(I2cTransaction)> = None;
 #[derive(Debug)]
 pub struct Llio {
     conn: CID,
+    i2c_conn: CID,
     com_sid: Option<xous::SID>,
     i2c_sid: Option<xous::SID>,
     rtc_sid: Option<xous::SID>,
@@ -24,6 +25,7 @@ pub struct Llio {
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to LLIO");
+        let i2c_conn = xns.request_connection_blocking(api::SERVER_NAME_I2C).expect("Can't connect to I2C");
         Ok(Llio {
           conn,
           com_sid: None,
@@ -31,6 +33,7 @@ impl Llio {
           rtc_sid: None,
           usb_sid: None,
           gpio_sid: None,
+          i2c_conn,
         })
     }
     pub fn vibe(&self, pattern: VibePattern) -> Result<(), xous::Error> {
@@ -38,6 +41,10 @@ impl Llio {
             Message::new_scalar(Opcode::Vibe.to_usize().unwrap(), pattern.into(), 0, 0, 0)
         ).map(|_|())
     }
+
+
+
+    ///////////////////////// I2C ///////////////
     // used to hook a callback for I2c responses
     pub fn hook_i2c_callback(&mut self, cb: fn(I2cTransaction)) -> Result<(), xous::Error> {
         if unsafe{I2C_CB}.is_some() {
@@ -68,14 +75,14 @@ impl Llio {
             Some(sid) => local_transaction.listener = Some(sid.to_u32()),
         }
         let mut buf = Buffer::into_buf(local_transaction).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.i2c_conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         let status = buf.to_original::<I2cStatus, _>().unwrap();
         Ok(status)
     }
     pub fn poll_i2c_busy(&self) -> Result<bool, xous::Error> {
-        let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::I2cIsBusy.to_usize().unwrap(), 0, 0, 0, 0))?;
+        let response = send_message(self.i2c_conn,
+            Message::new_blocking_scalar(I2cOpcode::I2cIsBusy.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar1(val) = response {
             if val != 0 {
                 Ok(true)
@@ -87,6 +94,18 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
+
+    /*
+    pub fn i2c_sync_request(&self, transaction: &mut I2cTransaction) -> Result<I2cStatus, xous::Error> {
+
+    }
+
+    pub fn i2c_async_request(&self, transaction: I2cTransaction, cb: fn(I2cTransaction)) -> Result<I2cStatus, xous::Error> {
+
+    }*/
+    ///////////////////////// I2C ///////////////
+
+
 
     pub fn allow_power_off(&self, allow: bool) -> Result<(), xous::Error> {
         let arg = if allow { 0 } else { 1 };

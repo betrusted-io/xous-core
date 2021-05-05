@@ -60,8 +60,10 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(2).unwrap();
                 log::trace!("initializing codec");
                 codec.init();
+                codec.trace_rx();
             }),
             Some(api::Opcode::ResumeStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                codec.trace_rx();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_start();
                 } else {
@@ -69,6 +71,7 @@ fn xmain() -> ! {
                 }
             }),
             Some(api::Opcode::PauseStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                codec.trace_rx();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_stop();
                 } else {
@@ -127,9 +130,10 @@ fn xmain() -> ! {
                 do_hook(hookdata, &mut audio_cb_conns);
                 log::trace!("hook done, {:?}", audio_cb_conns);
             }
-            Some(api::Opcode::AnotherFrame) => {
+            Some(api::Opcode::AnotherFrame) => xous::msg_scalar_unpack!(msg, rdcount, wrcount, _, _, {
+                log::trace!("A rd {} wr {}", rdcount, wrcount);
                 send_event(&audio_cb_conns, codec.free_play_frames(), codec.available_rec_frames());
-            }
+            }),
             None => {
                 log::error!("couldn't convert opcode");
                 break

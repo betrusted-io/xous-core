@@ -136,6 +136,7 @@ impl Into<usize> for ClockMode {
 }
 
 pub(crate) const SERVER_NAME_LLIO: &str      = "_Low Level I/O manager_";
+pub(crate) const SERVER_NAME_I2C: &str       = "_Threaded I2C manager_";
 //////////////////////////////////// OPCODES
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
@@ -153,17 +154,16 @@ pub(crate) enum Opcode {
     GpioIntSubscribe, //(String<64>), // TODO
     GpioIntHappened,
 
-    /// not tested - set UART mux
+    /// set UART mux
     UartMux, //(UartType),
 
-    /// not tested - information about the SoC build and revision
     //TODO InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
     InfoTarget,
 
-    /// not tested -- power
+    /// partially tested -- power
     PowerAudio, //(bool),
     PowerSelf, //(bool), // setting this to false allows the EC to turn off our power
     PowerBoostMode, //(bool),
@@ -172,7 +172,7 @@ pub(crate) enum Opcode {
     EcPowerOn,
     SelfDestruct, //(u32), // requires a series of writes to enable
 
-    /// not tested -- vibe
+    /// vibe motor
     Vibe, //(VibePattern),
 
     /// not tested -- xadc
@@ -186,15 +186,7 @@ pub(crate) enum Opcode {
     AdcGpio5,
     AdcGpio2,
 
-    /// not tested - I2C functions
-    I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
-    /// from i2c interrupt handler (internal API only)
-    IrqI2cTxrxWriteDone,
-    IrqI2cTxrxReadDone,
-    /// checks if the I2C engine is currently busy, for polling implementations
-    I2cIsBusy,
-
-    /// not tested -- events
+    /// partially tested -- events
     EventComSubscribe, //(String<64>),
     EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
@@ -209,7 +201,23 @@ pub(crate) enum Opcode {
 
     /// SuspendResume callback
     SuspendResume,
+
+    /// Exit the server
+    Quit,
 }
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum I2cOpcode {
+    I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
+    /// from i2c interrupt handler (internal API only)
+    IrqI2cTxrxWriteDone,
+    IrqI2cTxrxReadDone,
+    /// checks if the I2C engine is currently busy, for polling implementations
+    I2cIsBusy,
+    /// SuspendResume callback
+    SuspendResume,
+    Quit,
+}
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {
     Event,

@@ -1,10 +1,9 @@
 use llio::api::*;
 
-#[cfg(target_os = "none")]
 use utralib::*;
 
-#[cfg(target_os = "none")]
 use num_traits::ToPrimitive;
+use susres::{RegManager, RegOrField, SuspendResume};
 
 #[derive(Eq, PartialEq)]
 enum I2cState {
@@ -13,25 +12,49 @@ enum I2cState {
     Read,
 }
 
+// ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
+fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
+    let i2c = unsafe { &mut *(arg as *mut I2cStateMachine) };
+
+    if let Some(conn) = i2c.handler_conn {
+        match i2c.handler_i() {
+            I2cHandlerReport::WriteDone => {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxWriteDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+            },
+            I2cHandlerReport::ReadDone => {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(I2cOpcode::IrqI2cTxrxReadDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
+            },
+            _ => {}, // don't send any message if we're in progress
+        }
+    } else {
+        panic!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
+    }
+    i2c.i2c_csr
+        .wo(utra::i2c::EV_PENDING, i2c.i2c_csr.r(utra::i2c::EV_PENDING));
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum I2cHandlerReport {
     WriteDone,
     ReadDone,
     InProgress,
 }
-#[cfg(target_os = "none")]
 pub(crate) struct I2cStateMachine {
+    i2c_csr: utralib::CSR<u32>,
+    i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
+    handler_conn: Option<xous::CID>,
+
     transaction: I2cTransaction,
     state: I2cState,
     index: u32,  // index of the current buffer in the state machine
     timestamp: u64, // timestamp of the last transaction
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
-    i2c_csr: utralib::CSR<u32>,
     listener: Option<xous::SID>,
     error: bool, // set if the interrupt handler encountered some kind of error
 }
 
-#[cfg(target_os = "none")]
 fn send_i2c_response(listener: xous::SID, trans: I2cTransaction) -> Result<(), xous::Error> {
     let cid = xous::connect(listener).unwrap();
     let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
@@ -39,20 +62,69 @@ fn send_i2c_response(listener: xous::SID, trans: I2cTransaction) -> Result<(), x
     unsafe{xous::disconnect(cid)}
 }
 
-#[cfg(target_os = "none")]
 impl I2cStateMachine {
-    pub fn new(ticktimer: ticktimer_server::Ticktimer, i2c_base: *mut u32) -> Self {
-        I2cStateMachine {
+    pub fn new(handler_conn: xous::CID) -> Self {
+        let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        let i2c_csr = xous::syscall::map_memory(
+            xous::MemoryAddress::new(utra::i2c::HW_I2C_BASE),
+            None,
+            4096,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        )
+        .expect("couldn't map I2C CSR range");
+
+        let mut i2c = I2cStateMachine {
+            i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
+            i2c_susres: RegManager::new(i2c_csr.as_mut_ptr() as *mut u32),
+            handler_conn: Some(handler_conn),
+
             transaction: I2cTransaction::new(),
             state: I2cState::Idle,
             timestamp: ticktimer.elapsed_ms(),
             ticktimer,
-            i2c_csr: CSR::new(i2c_base),
             index: 0,
             listener: None,
             error: false,
-        }
+        };
+
+        // disable interrupt, just in case it's enabled from e.g. a warm boot
+        i2c.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
+        xous::claim_interrupt(
+            utra::i2c::I2C_IRQ,
+            handle_i2c_irq,
+            (&mut i2c) as *mut I2cStateMachine as *mut usize,
+        )
+        .expect("couldn't claim I2C irq");
+
+        // initialize i2c clocks
+        // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
+        let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
+        i2c.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
+        // enable the block
+        i2c.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
+        // clear any interrupts pending, just in case something went pear-shaped during initialization
+        i2c.i2c_csr.wo(utra::i2c::EV_PENDING, i2c.i2c_csr.r(utra::i2c::EV_PENDING));
+        // now enable interrupts
+        i2c.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
+
+        // setup suspend/resume manager
+        i2c.i2c_susres.push(RegOrField::Field(utra::i2c::PRESCALE_PRESCALE), None);
+        i2c.i2c_susres.push(RegOrField::Reg(utra::i2c::CONTROL), None);
+        i2c.i2c_susres.push_fixed_value(RegOrField::Reg(utra::i2c::EV_PENDING), 0xFFFF_FFFF); // clear pending interrupts
+        i2c.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
+
+        i2c
     }
+    pub fn suspend(&mut self) {
+        self.i2c_susres.suspend();
+
+        // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
+        self.i2c_csr.wo(utra::i2c::EV_ENABLE, 0);
+    }
+    pub fn resume(&mut self) {
+        self.i2c_susres.resume();
+    }
+
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
         log::trace!("I2C initated with {:x?}", transaction);
         // sanity-check the bounds limits

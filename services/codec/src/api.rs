@@ -83,6 +83,8 @@ pub struct FrameRing {
     rd_frame: usize,
     // the current writeable frame number
     wr_frame: usize,
+    // a pointer for more efficient recording during interrupt contexts
+    rec_ptr: usize,
 }
 impl FrameRing {
     pub fn new() -> FrameRing {
@@ -90,6 +92,7 @@ impl FrameRing {
             buffer: [[(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); FIFO_DEPTH]; FRAMES],
             rd_frame: 0,
             wr_frame: 0,
+            rec_ptr: 0,
         }
     }
     /*
@@ -116,6 +119,25 @@ impl FrameRing {
     pub fn writeable_count(&self) -> usize {
         (FRAMES-1) - self.readable_count()
     }
+    // this is less time efficient, but more space efficient, as we don't allocate intermediate buffers, clear them, etc.
+    pub fn rec_sample(&mut self, sample: u32) -> bool {
+        if self.rec_ptr < FIFO_DEPTH {
+            self.buffer[self.wr_frame][self.rec_ptr] = sample;
+            self.rec_ptr += 1;
+            true
+        } else {
+            false
+        }
+    }
+    pub fn rec_advance(&mut self) -> bool {
+        if self.is_full() {
+            false
+        } else {
+            self.rec_ptr = 0;
+            self.wr_frame = (self.wr_frame + 1) % FRAMES;
+            true
+        }
+    }
     pub fn nq_frame(&mut self, frame: [u32; FIFO_DEPTH]) -> Result<(), [u32; FIFO_DEPTH]> {
         if self.is_full() {
             return Err(frame);
@@ -125,6 +147,7 @@ impl FrameRing {
             }
         }
         self.wr_frame = (self.wr_frame + 1) % FRAMES;
+        self.rec_ptr = 0;
         Ok(())
     }
     pub fn dq_frame(&mut self) -> Option<[u32; FIFO_DEPTH]> {

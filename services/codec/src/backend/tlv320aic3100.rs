@@ -67,7 +67,17 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
         }
     }
     // copy the record buffer
-    assert!(codec.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1, "interrupt was called, but not enough data to read!");
+    //assert!(codec.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1, "interrupt was called, but not enough data to read!");
+    let rx_rdcount = codec.csr.rf(utra::audio::RX_STAT_RDCOUNT) as usize;
+    let rx_wrcount = codec.csr.rf(utra::audio::RX_STAT_WRCOUNT) as usize;
+    if codec.rec_buffer.is_full() {
+        codec.rec_frames_dropped += 1;
+    } else {
+        for _ in 0..codec::FIFO_DEPTH {
+            codec.rec_buffer.rec_sample(unsafe{*volatile_audio});
+        }
+        codec.rec_buffer.rec_advance();
+    }
     let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
         unsafe{ *stereo_sample = *volatile_audio; }
@@ -80,7 +90,7 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
 
     // let the audio handler know we used up another frame!
     xous::try_send_message(codec.conn,
-        xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+        xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0)).unwrap();
 
     codec.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1);
 }
@@ -135,6 +145,9 @@ impl Codec {
         codec.susres_manager.push(RegOrField::Reg(utra::audio::EV_ENABLE), None);
 
         codec
+    }
+    pub fn trace_rx(&self) {
+        log::trace!("T rd {} wr {}", self.csr.rf(utra::audio::RX_STAT_RDCOUNT), self.csr.rf(utra::audio::RX_STAT_WRCOUNT));
     }
 
     pub fn suspend(&mut self) {
@@ -487,11 +500,9 @@ impl Codec {
         self.csr.wfo(utra::audio::RX_CTL_RESET, 1);
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);
 
-        let fifo_depth = self.csr.rf(utra::audio::RX_STAT_FIFO_DEPTH);
-
         let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
-        for _ in 0..(fifo_depth / 2) {
-            unsafe { (volatile_audio).write(0); }  // prefill TX fifo with zero's
+        for _ in 0..FIFO_DEPTH*2 {
+            unsafe { (volatile_audio).write(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); }  // prefill TX fifo with zero's
         }
         // enable interrupts on the TX_READY
         self.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1); // clear any pending interrupt
