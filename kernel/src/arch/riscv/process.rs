@@ -12,7 +12,7 @@ use xous_kernel::{ProcessInit, ThreadInit, PID, TID};
 
 // use crate::args::KernelArguments;
 pub const DEFAULT_STACK_SIZE: usize = 131072;
-pub const MAX_PROCESS_COUNT: usize = 32;
+pub const MAX_PROCESS_COUNT: usize = 64;
 // pub use crate::arch::mem::DEFAULT_STACK_TOP;
 
 /// This is the address a program will jump to in order to return from an ISR.
