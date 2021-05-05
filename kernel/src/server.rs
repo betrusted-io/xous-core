@@ -441,7 +441,7 @@ impl Server {
                     let client_tid = client_tid as _;
                     // Return the memory to the calling process
                     ss.return_memory(
-                        server_addr as *mut u8,
+                        server_addr as *mut usize,
                         client_pid,
                         client_tid,
                         client_addr as _,

@@ -87,7 +87,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
                 let new_virt = ss.send_memory(
-                    msg.buf.as_mut_ptr(),
+                    msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),
@@ -101,7 +101,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             }
             Message::MutableBorrow(msg) => {
                 let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr(),
+                    msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),
@@ -116,7 +116,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             }
             Message::Borrow(msg) => {
                 let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr(),
+                    msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),

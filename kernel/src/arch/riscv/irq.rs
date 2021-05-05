@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::arch::current_pid;
-use crate::arch::mem::{MemoryMapping, MMUFlags};
+use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process as ArchProcess;
 use crate::arch::process::{Thread, RETURN_FROM_ISR};
-use crate::mem::{MemoryManager, PAGE_SIZE};
 use crate::services::SystemServices;
 use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous_kernel::{SysCall, PID, TID};
@@ -14,22 +13,18 @@ extern "Rust" {
     fn _xous_syscall_return_result(result: &xous_kernel::Result, context: &Thread) -> !;
 }
 
-extern "C" {
-    fn flush_mmu();
-}
-
 // use RAM-based backing so this variable is automatically saved on suspend
 static mut SIM_BACKING: usize = 0;
 /// Disable external interrupts
 pub fn disable_all_irqs() {
-    unsafe{SIM_BACKING = sim::read()};
+    unsafe { SIM_BACKING = sim::read() };
     sim::write(0x0);
 }
 
 /// Enable external interrupts
 #[export_name = "_enable_all_irqs"]
 pub extern "C" fn enable_all_irqs() {
-    sim::write(unsafe{SIM_BACKING});
+    sim::write(unsafe { SIM_BACKING });
 }
 
 pub fn enable_irq(irq_no: usize) {
@@ -134,64 +129,24 @@ pub extern "C" fn trap_handler(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
                     pid, ex, pc, addr
                 );
-                let virt = addr & !0xfff;
-                let entry = crate::arch::mem::pagetable_entry(virt).unwrap_or_else(|x| {
-                    // MemoryManagerHandle::get().print_ownership();
-                    MemoryMapping::current().print_map();
-                    #[cfg(not(any(feature = "debug-print", feature = "print-panics")))]
-                    print!(
-                        "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                        pid, ex, pc, addr
-                    );
-                    panic!(
-                        "error {:?} at {:08x}: memory not mapped or reserved for addr {:08x}",
-                        x, pc, addr
-                    );
-                });
-                let flags = *entry & 0x1ff;
+                crate::arch::mem::ensure_page_exists_inner(addr)
+                    .map(|_new_page| {
+                        #[cfg(all(feature = "debug-print", feature = "print-panics"))]
+                        println!("Handing page {:08x} to process", _new_page);
+                        ArchProcess::with_current_mut(|process| {
+                            crate::arch::syscall::resume(
+                                current_pid().get() == 1,
+                                process.current_thread(),
+                            )
+                        });
+                    })
+                    .expect("Couldn't allocate page");
 
-                // If the flags are nonzero, but the "Valid" bit is not 1 and
-                // the page isn't shared, then this is a reserved page. Allocate
-                // a real page to back it and resume execution.
-                if flags & MMUFlags::VALID.bits() == 0 && flags != 0 && flags & MMUFlags::S.bits() == 0 {
-                    let new_page = MemoryManager::with_mut(|mm| {
-                        mm.alloc_page(pid).expect("Couldn't allocate new page")
-                    });
-                    let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
-                    let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
-                    unsafe {
-                        // Map the page to our process
-                        *entry = (ppn1 << 20)
-                            | (ppn0 << 10)
-                            | (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7)/* A */);
-                        flush_mmu();
-
-                        // Zero-out the page
-                        (virt as *mut usize)
-                            .write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
-
-                        // Move the page into userspace
-                        *entry = (ppn1 << 20)
-                            | (ppn0 << 10)
-                            | (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7)/* A */);
-                        flush_mmu();
-                    };
-
-                    #[cfg(all(feature = "debug-print", feature = "print-panics"))]
-                    println!("Handing page {:08x} to process", new_page);
-                    ArchProcess::with_current_mut(|process| {
-                        crate::arch::syscall::resume(
-                            current_pid().get() == 1,
-                            process.current_thread(),
-                        )
-                    });
-
-                    #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
-                    print!(
-                        "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                        pid, ex, pc, addr
-                    );
-                }
+                #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
+                print!(
+                    "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
+                    pid, ex, pc, addr
+                );
                 println!("Page was not allocated");
             }
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
