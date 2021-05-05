@@ -16,7 +16,7 @@ use xous_kernel::{
     pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
 };
 
-const MAX_SERVER_COUNT: usize = 32;
+const MAX_SERVER_COUNT: usize = 128;
 
 pub use crate::arch::process::{INITIAL_TID, MAX_PROCESS_COUNT};
 
@@ -232,7 +232,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
-    servers: filled_array![None; 32],
+    servers: filled_array![None; 128],
 };
 
 impl core::fmt::Debug for Process {
