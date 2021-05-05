@@ -24,6 +24,7 @@ fn sync_i2c_cb(transaction: I2cTransaction) {
             }
         }
     }
+    unsafe{I2C_CB = None;} // break-before-make, ensures that the I2C_RX_HANDOFF data can't be overwritten by another callback
     I2C_IN_PROGRESS_MUTEX.store(false, Ordering::Relaxed);
 }
 
@@ -203,13 +204,12 @@ impl Llio {
         unsafe{I2C_CB = None};
     }
     pub fn i2c_write_sync(&mut self, dev: u8, adr: u8, data: &[u8]) -> Result<I2cStatus, xous::Error> {
+        if data.len() > I2C_MAX_LEN - 1 {
+            return Err(xous::Error::OutOfMemory)
+        }
         if I2C_IN_PROGRESS_MUTEX.load(Ordering::Relaxed) {
             log::error!("entering a synchronous routine, but somehow something was already in progress!");
             return Err(xous::Error::InternalError);
-        }
-
-        if data.len() > I2C_MAX_LEN - 1 {
-            return Err(xous::Error::OutOfMemory)
         }
         let mut transaction = I2cTransaction::new();
         self.check_cb_init();
@@ -222,6 +222,7 @@ impl Llio {
             }
             I2C_CB = Some(sync_i2c_cb);
         }
+        I2C_IN_PROGRESS_MUTEX.store(true, Ordering::Relaxed);
         match self.i2c_sid {
             Some(sid) => transaction.listener = Some(sid.to_u32()),
             None => log::error!("We requested a local listener, but somehow it's not there!"),
@@ -237,7 +238,6 @@ impl Llio {
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = self.i2c_timeout_ms;
 
-        I2C_IN_PROGRESS_MUTEX.store(true, Ordering::Relaxed);
         let mut buf = Buffer::into_buf(transaction).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.i2c_conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let result = buf.to_original::<I2cStatus, _>().unwrap();
@@ -250,12 +250,12 @@ impl Llio {
         Ok(I2cStatus::ResponseWriteOk)
     }
     pub fn i2c_read_sync(&mut self, dev: u8, adr: u8, data: &mut[u8]) -> Result<I2cStatus, xous::Error> {
+        if data.len() > I2C_MAX_LEN - 1 {
+            return Err(xous::Error::OutOfMemory)
+        }
         if I2C_IN_PROGRESS_MUTEX.load(Ordering::Relaxed) {
             log::error!("entering a synchronous routine, but somehow something was already in progress!");
             return Err(xous::Error::InternalError);
-        }
-        if data.len() > I2C_MAX_LEN - 1 {
-            return Err(xous::Error::OutOfMemory)
         }
         let mut transaction = I2cTransaction::new();
         self.check_cb_init();
@@ -268,6 +268,7 @@ impl Llio {
             }
             I2C_CB = Some(sync_i2c_cb);
         }
+        I2C_IN_PROGRESS_MUTEX.store(true, Ordering::Relaxed);
         match self.i2c_sid {
             Some(sid) => transaction.listener = Some(sid.to_u32()),
             None => log::error!("We requested a local listener, but somehow it's not there!"),
@@ -283,7 +284,6 @@ impl Llio {
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = self.i2c_timeout_ms;
 
-        I2C_IN_PROGRESS_MUTEX.store(true, Ordering::Relaxed);
         let mut buf = Buffer::into_buf(transaction).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.i2c_conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let result = buf.to_original::<I2cStatus, _>().unwrap();

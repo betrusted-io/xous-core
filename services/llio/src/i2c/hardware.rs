@@ -209,7 +209,7 @@ impl I2cStateMachine {
             let cid = xous::connect(listener).unwrap();
             let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
             buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
-            unsafe{xous::disconnect(cid)};
+            unsafe{xous::disconnect(cid).unwrap()};
         };
         if let Some(work) = self.workqueue.dequeue() {
             if self.checked_initiate(work) != I2cStatus::ResponseInProgress {

@@ -253,8 +253,7 @@ mod implementation {
     impl Rtc {
         pub fn new(xns: &xous_names::XousNames) -> Rtc {
             log::trace!("hardware initialized");
-            let mut llio = Llio::new(xns).expect("can't connect to LLIO");
-            llio.hook_i2c_callback(i2c_callback).expect("can't hook I2C callback");
+            let llio = Llio::new(xns).expect("can't connect to LLIO");
             Rtc {
                 llio,
                 rtc_alarm_enabled: false,
@@ -266,8 +265,7 @@ mod implementation {
         /// we only support 24 hour mode
         pub fn rtc_set(&mut self, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8, day: Weekday)
            -> Result<bool, xous::Error> {
-            let mut transaction = I2cTransaction::new();
-            let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
+            let mut txbuf: [u8; 8] = [0; 8];
 
             if secs > 59 { return Ok(false); }
             if mins > 59 { return Ok(false); }
@@ -288,44 +286,30 @@ mod implementation {
             };
 
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-            txbuf[0] = ABRTCMC_CONTROL3;
-            txbuf[1] = (Control3::BATT_STD_BL_EN).bits();
-            txbuf[2] = to_bcd(secs);
-            txbuf[3] = to_bcd(mins);
-            txbuf[4] = to_bcd(hours);
-            txbuf[5] = to_bcd(days);
-            txbuf[6] = to_bcd(d.bits);
-            txbuf[7] = to_bcd(months);
-            txbuf[8] = to_bcd(years);
+            txbuf[0] = (Control3::BATT_STD_BL_EN).bits();
+            txbuf[1] = to_bcd(secs);
+            txbuf[2] = to_bcd(mins);
+            txbuf[3] = to_bcd(hours);
+            txbuf[4] = to_bcd(days);
+            txbuf[5] = to_bcd(d.bits);
+            txbuf[6] = to_bcd(months);
+            txbuf[7] = to_bcd(years);
 
-            transaction.bus_addr = ABRTCMC_I2C_ADR;
-            transaction.txbuf = Some(txbuf);
-            transaction.txlen = 9;
-            transaction.status = I2cStatus::RequestIncoming;
-            match self.llio.send_i2c_request(transaction) {
+            match self.llio.i2c_write_sync(ABRTCMC_I2C_ADR, ABRTCMC_CONTROL3, &txbuf) {
                 Ok(status) => {
                     match status {
-                        I2cStatus::ResponseInProgress => Ok(true),
+                        I2cStatus::ResponseWriteOk => Ok(true),
                         I2cStatus::ResponseBusy => Err(xous::Error::ServerQueueFull),
-                        _ => Err(xous::Error::InternalError),
+                        _ => {log::error!("try_send_i2c unhandled response: {:?}", status); Err(xous::Error::InternalError)},
                     }
                 }
-                _ => Err(xous::Error::InternalError)
+                _ => {log::error!("try_send_i2c unhandled error"); Err(xous::Error::InternalError)}
             }
         }
 
         pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
-            let mut transaction = I2cTransaction::new();
-            let mut txbuf = [0; llio::I2C_MAX_LEN];
-            let rxbuf = [0; llio::I2C_MAX_LEN];
-            txbuf[0] = ABRTCMC_SECONDS;
-            transaction.bus_addr = ABRTCMC_I2C_ADR;
-            transaction.txlen = 1;
-            transaction.rxlen = 7;
-            transaction.txbuf = Some(txbuf);
-            transaction.rxbuf = Some(rxbuf);
-            transaction.status = I2cStatus::RequestIncoming;
-            match self.llio.send_i2c_request(transaction) {
+            let mut rxbuf = [0; 7];
+            match self.llio.i2c_read_async(ABRTCMC_I2C_ADR, ABRTCMC_SECONDS, &mut rxbuf, i2c_callback) {
                 Ok(status) => {
                     match status {
                         I2cStatus::ResponseInProgress => Ok(()),
@@ -336,50 +320,25 @@ mod implementation {
                 _ => Err(xous::Error::InternalError)
             }
         }
+        pub fn rtc_get_ack(&mut self) {
+            self.llio.i2c_async_done();
+        }
 
-        fn blocking_i2c_write2(&self, tx: [u8; 2]) -> bool {
-            let mut transaction = I2cTransaction::new();
-            let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
-            txbuf[0] = tx[0];
-            txbuf[1] = tx[1];
-            transaction.bus_addr = ABRTCMC_I2C_ADR;
-            transaction.txbuf = Some(txbuf);
-            transaction.txlen = 2;
-            transaction.status = I2cStatus::RequestIncoming;
-            transaction.timeout_ms = 50;
-
-            let mut sent = false;
-            let max_retries = 2;
-            let mut retries = 0;
-            while (retries < max_retries) && !sent {
-                while self.llio.poll_i2c_busy().unwrap() {
-                    xous::yield_slice();
-                }
-                let start = self.ticktimer.elapsed_ms();
-                while !sent {
-                    match self.llio.send_i2c_request(transaction) {
-                        Ok(status) => {
-                            match status {
-                                I2cStatus::ResponseInProgress => sent = true,
-                                I2cStatus::ResponseBusy => sent = false,
-                                _ => {log::error!("try_send_i2c unhandled response"); return false;},
-                            }
-                        }
-                        _ => {log::error!("try_send_i2c unhandled error"); return false;}
+        // the awkward array syntax is a legacy of a port from a previous implementation
+        // would be fine to clean up method signature as e.g.
+        // blocking_i2c_write2(adr: u8, data: u8) -> bool
+        // but need to make sure we don't bork any of the constants later on in this code :P
+        fn blocking_i2c_write2(&mut self, adr: u8, data: u8) -> bool {
+            match self.llio.i2c_write_sync(ABRTCMC_I2C_ADR, adr, &[data]) {
+                Ok(status) => {
+                    match status {
+                        I2cStatus::ResponseWriteOk => true,
+                        I2cStatus::ResponseBusy => false,
+                        _ => {log::error!("try_send_i2c unhandled response: {:?}", status); return false;},
                     }
-                    if (self.ticktimer.elapsed_ms() - start > BLOCKING_I2C_TIMEOUT_MS) && !sent {
-                        log::error!("I2C blocking write timed out, try {}/{}", retries+1, max_retries);
-                        break;
-                    }
-                    xous::yield_slice();
                 }
-                while self.llio.poll_i2c_busy().unwrap() {
-                    xous::yield_slice();
-                }
-                retries += 1;
+                _ => {log::error!("try_send_i2c unhandled error"); return false;}
             }
-
-            sent
         }
 
         /// wakeup self after designated number of seconds
@@ -388,15 +347,15 @@ mod implementation {
 
             log::trace!("wakeup: switchover");
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits());
 
             log::trace!("wakeup: timerb_clk");
             // set clock units to 1 second, output pulse length to ~218ms
-            self.blocking_i2c_write2([ABRTCMC_TIMERB_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]);
+            self.blocking_i2c_write2(ABRTCMC_TIMERB_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits());
 
             log::trace!("wakeup: timerb");
             // program elapsed time
-            self.blocking_i2c_write2([ABRTCMC_TIMERB, seconds]);
+            self.blocking_i2c_write2(ABRTCMC_TIMERB, seconds);
 
             log::trace!("wakeup: b_int");
             // enable timerb countdown interrupt, also clears any prior interrupt flag
@@ -404,7 +363,7 @@ mod implementation {
             if self.rtc_alarm_enabled {
                 control2 |= Control2::COUNTDOWN_A_INT.bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL2, control2);
 
             log::trace!("wakeup: config");
             // turn on the timer proper -- the system will wakeup in 5..4..3....
@@ -412,28 +371,28 @@ mod implementation {
             if self.rtc_alarm_enabled {
                 config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+            self.blocking_i2c_write2(ABRTCMC_CONFIG, config);
         }
 
         pub fn clear_wakeup_alarm(&mut self) {
             self.wakeup_alarm_enabled = false;
 
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits());
 
             let mut config = Config::CLKOUT_DISABLE.bits();
             if self.rtc_alarm_enabled {
                 config |= (Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
             }
             // turn off RTC wakeup timer, in case previously set
-            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+            self.blocking_i2c_write2(ABRTCMC_CONFIG, config);
 
             // clear my interrupts and flags
             let mut control2 = 0;
             if self.rtc_alarm_enabled {
                 control2 |= Control2::COUNTDOWN_A_INT.bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL2, control2);
         }
 
 
@@ -441,27 +400,27 @@ mod implementation {
         pub fn rtc_alarm(&mut self, seconds: u8) {
             self.rtc_alarm_enabled = true;
             // make sure battery switchover is enabled, otherwise we won't keep time when power goes off
-            self.blocking_i2c_write2([ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits()]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL3, (Control3::BATT_STD_BL_EN).bits());
 
             // set clock units to 1 second, output pulse length to ~218ms
-            self.blocking_i2c_write2([ABRTCMC_TIMERA_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits()]);
+            self.blocking_i2c_write2(ABRTCMC_TIMERA_CLK, (TimerClk::CLK_1_S | TimerClk::PULSE_218_MS).bits());
 
             // program elapsed time
-            self.blocking_i2c_write2([ABRTCMC_TIMERA, seconds]);
+            self.blocking_i2c_write2(ABRTCMC_TIMERA, seconds);
 
             // enable timerb countdown interrupt, also clears any prior interrupt flag
             let mut control2 = (Control2::COUNTDOWN_A_INT).bits();
             if self.wakeup_alarm_enabled {
                 control2 |= Control2::COUNTDOWN_B_INT.bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL2, control2);
 
             // turn on the timer proper -- interrupt in 5..4..3....
             let mut config = (Config::CLKOUT_DISABLE | Config::TIMER_A_COUNTDWN | Config::TIMERA_SECONDS_INT_PULSED).bits();
             if self.wakeup_alarm_enabled {
                 config |= (Config::TIMER_B_ENABLE).bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+            self.blocking_i2c_write2(ABRTCMC_CONFIG, config);
         }
 
         pub fn clear_rtc_alarm(&mut self) {
@@ -471,14 +430,14 @@ mod implementation {
             if self.wakeup_alarm_enabled {
                 config |= (Config::TIMER_B_ENABLE | Config::TIMERB_INT_PULSED).bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONFIG, config]);
+            self.blocking_i2c_write2(ABRTCMC_CONFIG, config);
 
             // clear my interrupts and flags
             let mut control2 = 0;
             if self.wakeup_alarm_enabled {
                 control2 |= Control2::COUNTDOWN_B_INT.bits();
             }
-            self.blocking_i2c_write2([ABRTCMC_CONTROL2, control2]);
+            self.blocking_i2c_write2(ABRTCMC_CONTROL2, control2);
         }
     }
 }
@@ -632,6 +591,7 @@ fn xmain() -> ! {
                 unsafe{xous::disconnect(cid).unwrap()};
             }),
             Some(Opcode::ResponseDateTime) => {
+                rtc.rtc_get_ack(); // let the async callback interface know we returned
                 let incoming_buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = incoming_buffer.to_original::<DateTime, _>().unwrap();
                 log::trace!("ResponseDateTime received: {:?}", dt);
