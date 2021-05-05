@@ -64,55 +64,6 @@ impl Llio {
 
     ///////////////////////// I2C ///////////////
     // used to hook a callback for I2c responses
-    pub fn hook_i2c_callback(&mut self, cb: fn(I2cTransaction)) -> Result<(), xous::Error> {
-        if unsafe{I2C_CB}.is_some() {
-            return Err(xous::Error::MemoryInUse) // can't hook it twice
-        }
-        unsafe{I2C_CB = Some(cb)};
-        if self.i2c_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.i2c_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(i2c_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            // note: we don't register a callback, because we hand our SID directly to the i2c request for a 1:1 message return
-        }
-        Ok(())
-    }
-    // used by other servers to request an I2C transaction
-    pub fn send_i2c_request(&self, transaction: I2cTransaction) -> Result<I2cStatus, xous::Error> {
-        // copy the transaction, and annotate with our private callback listener server address
-        // the server is used only for this connection, and shared only to the LLIO server
-        // it's sanitized on the callback response. It's not the end of the world if this server address is
-        // discovered, just unhygenic.
-        let mut local_transaction = transaction;
-        match self.i2c_sid {
-            None => {
-                local_transaction.listener = None;
-                log::warn!("Initiating I2C request with no listener. Are you sure?");
-            },
-            Some(sid) => local_transaction.listener = Some(sid.to_u32()),
-        }
-        let mut buf = Buffer::into_buf(local_transaction).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.i2c_conn, I2cOpcode::I2cTxRx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-
-        let status = buf.to_original::<I2cStatus, _>().unwrap();
-        Ok(status)
-    }
-    pub fn poll_i2c_busy(&self) -> Result<bool, xous::Error> {
-        let response = send_message(self.i2c_conn,
-            Message::new_blocking_scalar(I2cOpcode::I2cIsBusy.to_usize().unwrap(), 0, 0, 0, 0))?;
-        if let xous::Result::Scalar1(val) = response {
-            if val != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            log::error!("LLIO: unexpected return value: {:#?}", response);
-            Err(xous::Error::InternalError)
-        }
-    }
-
     fn check_cb_init(&mut self) {
         if self.i2c_sid.is_none() {
             let sid = xous::create_server().unwrap();
@@ -300,7 +251,7 @@ impl Llio {
         }
         Ok(I2cStatus::ResponseReadOk)
     }
-    ///////////////////////// I2C ///////////////
+    ///////////////////////// I2C done ///////////////
 
 
 

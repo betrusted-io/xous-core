@@ -64,10 +64,13 @@ pub enum I2cStatus {
     ResponseWriteOk,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum I2cCallback {
+pub(crate) enum I2cCallback {
     Result,
     Drop,
 }
+// maybe once things stabilize, it's probably a good idea to make this structure private to the crate,
+// and create a "public" version for return values via callbacks. But for now, it's pretty
+// convenient to reach into the state of the I2C machine to debug problems in the callbacks.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
@@ -87,7 +90,7 @@ impl I2cTransaction {
     }
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum I2cOpcode {
+pub(crate) enum I2cOpcode {
     /// initiate an I2C transaction
     I2cTxRx,
     /// from i2c interrupt handler (internal API only)

@@ -500,7 +500,7 @@ fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }),
             Some(I2cOpcode::I2cTxRx) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
+                let i2c_txrx = buffer.to_original::<api::I2cTransaction, _>().unwrap();
                 let status = i2c.initiate(i2c_txrx);
                 buffer.replace(status).unwrap();
             },
