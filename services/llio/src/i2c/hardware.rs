@@ -4,6 +4,7 @@ use utralib::*;
 
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
+use heapless::spsc::Queue;
 
 #[derive(Eq, PartialEq)]
 enum I2cState {
@@ -53,13 +54,8 @@ pub(crate) struct I2cStateMachine {
     ticktimer: ticktimer_server::Ticktimer, // a connection to the ticktimer so we can measure timeouts
     listener: Option<xous::SID>,
     error: bool, // set if the interrupt handler encountered some kind of error
-}
 
-fn send_i2c_response(listener: xous::SID, trans: I2cTransaction) -> Result<(), xous::Error> {
-    let cid = xous::connect(listener).unwrap();
-    let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
-    buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
-    unsafe{xous::disconnect(cid)}
+    workqueue: Queue<I2cTransaction, 8>,
 }
 
 impl I2cStateMachine {
@@ -85,6 +81,8 @@ impl I2cStateMachine {
             index: 0,
             listener: None,
             error: false,
+
+            workqueue: Queue::new(),
         };
 
         // disable interrupt, just in case it's enabled from e.g. a warm boot
@@ -126,6 +124,17 @@ impl I2cStateMachine {
     }
 
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
+        if !self.workqueue.is_empty() {
+            match self.workqueue.enqueue(transaction) {
+                Ok(_) => return I2cStatus::ResponseInProgress,
+                _ => return I2cStatus::ResponseBusy,
+            }
+        } else {
+            self.checked_initiate(transaction)
+        }
+    }
+
+    fn checked_initiate(&mut self, transaction: I2cTransaction) -> I2cStatus {
         log::trace!("I2C initated with {:x?}", transaction);
         // sanity-check the bounds limits
         if transaction.txlen > 258 || transaction.rxlen > 258 {
@@ -194,43 +203,50 @@ impl I2cStateMachine {
             }
         }
     }
+
+    fn i2c_followup(&mut self, trans: I2cTransaction) -> Result<(), xous::Error> {
+        if let Some(listener) = self.listener.take() {
+            let cid = xous::connect(listener).unwrap();
+            let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
+            buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
+            unsafe{xous::disconnect(cid)};
+        };
+        if let Some(work) = self.workqueue.dequeue() {
+            if self.checked_initiate(work) != I2cStatus::ResponseInProgress {
+                log::error!("Unable to initiate I2C transaction even though machine should be idle: {:?}.", work);
+                log::error!("Probably, the I2C engine is going off the rails from here...");
+            }
+        };
+        Ok(())
+    }
+
     #[allow(dead_code)] // keep this around in case we figure out the NACK issue
     fn report_nack(&mut self) {
         log::trace!("NACK");
         // report the NACK situation to the listener
         let mut nack = I2cTransaction::new();
         nack.status = I2cStatus::ResponseNack;
-        if let Some(listener) = self.listener {
-            send_i2c_response(listener, nack).expect("LLIO|I2C: couldn't send NACK to listeners");
-        };
+        self.i2c_followup(nack).expect("couldn't send NACK to listeners");
     }
     fn report_timeout(&mut self) {
         log::error!("I2C timeout on transaction {:?}", self.transaction);
         let mut timeout = I2cTransaction::new();
         timeout.status = I2cStatus::ResponseTimeout;
-        if let Some(listener) = self.listener {
-            send_i2c_response(listener, timeout).expect("LLIO|I2c: couldn't send timeout error to liseners");
-        };
+        self.i2c_followup(timeout).expect("couldn't send timeout error to liseners");
     }
     pub fn report_write_done(&mut self) {
         log::trace!("write_done");
         // report the end of a write-only transaction to all the listeners
         let mut ack = I2cTransaction::new();
         ack.status = I2cStatus::ResponseWriteOk;
-        if let Some(listener) = self.listener {
-            send_i2c_response(listener, ack).expect("LLIO|I2C: couldn't send write ACK to listeners");
-        };
+        self.i2c_followup(ack).expect("couldn't send write ACK to listeners");
     }
     pub fn report_read_done(&mut self) {
         log::trace!("read_done");
         // report the result of a read transaction to all the listeners
         self.transaction.status = I2cStatus::ResponseReadOk;
-        if let Some(listener) = self.listener.take() {
-            log::trace!("Sending read done to {:?} of {:?}", listener, self.transaction);
-            send_i2c_response(listener, self.transaction).expect("LLIO|I2C: couldn't send read response to listeners");
-        } else {
-            log::error!("No listener for my read done resopnse!");
-        }
+        log::trace!("Sending read done {:?}", self.transaction);
+        self.i2c_followup(self.transaction).expect("couldn't send read response to listeners");
     }
     pub fn is_busy(&self) -> bool {
         if self.state == I2cState::Idle {

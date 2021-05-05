@@ -31,7 +31,6 @@ impl Audio {
             unsafe{ raw_header[i] = (*samples)[i] };
             log::trace!("0x{:x}", raw_header[i]);
         }
-
         /*
         log::trace!("setting up audio stream");
         codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
@@ -40,8 +39,7 @@ impl Audio {
         log::trace!("hooking frame callback");
         codec.hook_frame_callback(0xDEAD_BEEF, callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
         log::trace!("returning from setup");
-        */
-
+    */
         Audio {
             codec,
             sample,

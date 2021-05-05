@@ -503,7 +503,7 @@ fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
                 let status = i2c.initiate(i2c_txrx);
                 buffer.replace(status).unwrap();
-            }
+            },
             Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let busy = if i2c.is_busy() {1} else {0};
                 xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");

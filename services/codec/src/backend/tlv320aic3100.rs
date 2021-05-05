@@ -212,14 +212,14 @@ impl Codec {
 
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
         let mut transaction = I2cTransaction::new();
-        let mut txbuf: [u8; 258] = [0; 258];
+        let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
         txbuf[0] = adr;
         for i in 0..data.len() {
             txbuf[i+1] = data[i];
         }
         transaction.bus_addr = TLV320AIC3100_I2C_ADR;
         transaction.txbuf = Some(txbuf);
-        transaction.txlen = data.len() as u32;
+        transaction.txlen = (data.len() + 1) as u32;
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = I2C_TIMEOUT;
 
@@ -254,7 +254,7 @@ impl Codec {
     }
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
         let mut transaction = I2cTransaction::new();
-        let mut txbuf: [u8; 258] = [0; 258];
+        let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
         txbuf[0] = adr;
         transaction.bus_addr = TLV320AIC3100_I2C_ADR;
         transaction.txbuf = Some(txbuf);
@@ -262,7 +262,7 @@ impl Codec {
         transaction.status = I2cStatus::RequestIncoming;
         transaction.timeout_ms = I2C_TIMEOUT;
 
-        let rxbuf: [u8; 258] = [0; 258];
+        let rxbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
         transaction.rxbuf = Some(rxbuf);
         transaction.rxlen = data.len() as u32;
 

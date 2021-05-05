@@ -40,6 +40,8 @@ impl Into<u32> for UartType {
 }
 
 /////////////////////// I2C
+// TODO: change this to pub(crate) once we've gotten rid of legacy API
+pub const I2C_MAX_LEN: usize = 33;
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
@@ -71,9 +73,9 @@ pub enum I2cCallback {
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    pub txbuf: Option<[u8; 258]>, // long enough for a 256-byte operation + 2 bytes of "register address"
+    pub txbuf: Option<[u8; I2C_MAX_LEN]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
-    pub rxbuf: Option<[u8; 258]>,
+    pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
     pub rxlen: u32,
     pub listener: Option<(u32, u32, u32, u32)>, // where Rx split transactions should be routed to
     pub timeout_ms: u32,
@@ -84,6 +86,19 @@ impl I2cTransaction {
     pub fn new() -> Self {
         I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
     }
+}
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum I2cOpcode {
+    /// initiate an I2C transaction
+    I2cTxRx,
+    /// from i2c interrupt handler (internal API only)
+    IrqI2cTxrxWriteDone,
+    IrqI2cTxrxReadDone,
+    /// checks if the I2C engine is currently busy, for polling implementations
+    I2cIsBusy,
+    /// SuspendResume callback
+    SuspendResume,
+    Quit,
 }
 
 ////////////////////////////////// VIBE
@@ -203,18 +218,6 @@ pub(crate) enum Opcode {
     SuspendResume,
 
     /// Exit the server
-    Quit,
-}
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum I2cOpcode {
-    I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
-    /// from i2c interrupt handler (internal API only)
-    IrqI2cTxrxWriteDone,
-    IrqI2cTxrxReadDone,
-    /// checks if the I2C engine is currently busy, for polling implementations
-    I2cIsBusy,
-    /// SuspendResume callback
-    SuspendResume,
     Quit,
 }
 

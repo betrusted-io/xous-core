@@ -267,7 +267,7 @@ mod implementation {
         pub fn rtc_set(&mut self, secs: u8, mins: u8, hours: u8, days: u8, months: u8, years: u8, day: Weekday)
            -> Result<bool, xous::Error> {
             let mut transaction = I2cTransaction::new();
-            let mut txbuf: [u8; 258] = [0; 258];
+            let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
 
             if secs > 59 { return Ok(false); }
             if mins > 59 { return Ok(false); }
@@ -316,8 +316,8 @@ mod implementation {
 
         pub fn rtc_get(&mut self) -> Result<(), xous::Error> {
             let mut transaction = I2cTransaction::new();
-            let mut txbuf = [0; 258];
-            let rxbuf = [0; 258];
+            let mut txbuf = [0; llio::I2C_MAX_LEN];
+            let rxbuf = [0; llio::I2C_MAX_LEN];
             txbuf[0] = ABRTCMC_SECONDS;
             transaction.bus_addr = ABRTCMC_I2C_ADR;
             transaction.txlen = 1;
@@ -339,7 +339,7 @@ mod implementation {
 
         fn blocking_i2c_write2(&self, tx: [u8; 2]) -> bool {
             let mut transaction = I2cTransaction::new();
-            let mut txbuf: [u8; 258] = [0; 258];
+            let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
             txbuf[0] = tx[0];
             txbuf[1] = tx[1];
             transaction.bus_addr = ABRTCMC_I2C_ADR;
