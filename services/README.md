@@ -36,6 +36,15 @@ Conceptually, a complete Xous OS implementation would have HALs that claim the p
 
 We're trying to track progress on implementing the various servers using [github projects](https://github.com/betrusted-io/xous-core/projects/1).
 
+## Server Limit
+
+Xous is currently limited to 128 servers. Each potential server reserves 40 bytes of space in the kernel. Xous 0.8 carries about 30 servers, so 128 servers should be reasonably future-proof. Adjusting the limit requires making a change in two places (note the permalink is to an older version of Xous):
+
+1. https://github.com/betrusted-io/xous-core/blob/68aff967e85847cce98e6ec65384f59c803f18a8/kernel/src/services.rs#L19
+1. https://github.com/betrusted-io/xous-core/blob/68aff967e85847cce98e6ec65384f59c803f18a8/kernel/src/services.rs#L235
+
+Process count is adjusted by altering https://github.com/betrusted-io/xous-core/blob/master/kernel/src/arch/riscv/process.rs#L15. Xous 0.8 carries about 10 processes, and the current limit is 63. Each additional process reserves about 16 or so additional bytes for tracking information.
+
 ## Well-Known Servers
 Here is the list of well-known services:
 - `ticktimer-server` -- allows processes to know elapsed time since start, and request sleeps. Also manages WDT.
