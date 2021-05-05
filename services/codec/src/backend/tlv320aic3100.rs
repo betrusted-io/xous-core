@@ -3,19 +3,12 @@
 use utralib::generated::*;
 use xous::MemoryRange;
 use susres::{RegManager, RegOrField, SuspendResume};
-use core::sync::atomic::{AtomicU8, AtomicBool, Ordering};
-use llio::{I2cStatus, I2cTransaction};
+use llio::I2cStatus;
 use crate::api::*;
 use num_traits::*;
 
 pub const TLV320AIC3100_I2C_ADR: u8 = 0b0011_000;
 const I2C_TIMEOUT: u32 = 50;
-
-static I2C_PENDING: AtomicBool = AtomicBool::new(false);
-static I2C_READ: [AtomicU8; 8] = [AtomicU8::new(0), AtomicU8::new(0), AtomicU8::new(0), AtomicU8::new(0),
-                                  AtomicU8::new(0), AtomicU8::new(0), AtomicU8::new(0), AtomicU8::new(0), ];
-static I2C_READLEN: AtomicU8 = AtomicU8::new(0);
-
 
 pub struct Codec {
     csr: utralib::CSR<u32>,
@@ -31,28 +24,6 @@ pub struct Codec {
     initialized: bool,
     live: bool,
     conn: xous::CID,
-}
-
-fn i2c_callback(trans: I2cTransaction) {
-    if trans.status == I2cStatus::ResponseReadOk {
-        I2C_PENDING.store(false, Ordering::Relaxed);
-
-        if let Some(rxbuf) = trans.rxbuf {
-            let mut len = trans.rxlen as usize;
-            if len > I2C_READ.len() {
-                log::error!("Received more bytes via I2C than we can return inside our handler");
-                len = I2C_READ.len();
-            }
-            for i in 0..len {
-                I2C_READ[i].store(rxbuf[i], Ordering::Relaxed);
-            }
-            I2C_READLEN.store(len as u8, Ordering::Relaxed);
-        } else {
-            log::error!("i2c_callback: no rx data to unpack!")
-        }
-    } else if trans.status == I2cStatus::ResponseWriteOk {
-        I2C_PENDING.store(false, Ordering::Relaxed);
-    }
 }
 
 fn audio_handler(_irq_no: usize, arg: *mut usize) {
@@ -112,8 +83,7 @@ impl Codec {
         )
         .expect("couldn't map Audio CSR range");
 
-        let mut llio = llio::Llio::new(xns).expect("can't connect to LLIO");
-        llio.hook_i2c_callback(i2c_callback).expect("can't hook I2C callback");
+        let llio = llio::Llio::new(xns).expect("can't connect to LLIO");
 
         let mut codec = Codec {
             csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -211,91 +181,30 @@ impl Codec {
     }
 
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
-        let mut transaction = I2cTransaction::new();
-        let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
-        txbuf[0] = adr;
-        for i in 0..data.len() {
-            txbuf[i+1] = data[i];
-        }
-        transaction.bus_addr = TLV320AIC3100_I2C_ADR;
-        transaction.txbuf = Some(txbuf);
-        transaction.txlen = (data.len() + 1) as u32;
-        transaction.status = I2cStatus::RequestIncoming;
-        transaction.timeout_ms = I2C_TIMEOUT;
-
         log::trace!("writing to 0x{:x}, {:x?}", adr, data);
-        let mut sent = false;
-        while self.llio.poll_i2c_busy().unwrap() {
-            xous::yield_slice();
-        }
-        let mut retries = 0;
-        while !sent && retries < 4 {
-            match self.llio.send_i2c_request(transaction) {
-                Ok(status) => {
-                    match status {
-                        I2cStatus::ResponseInProgress => {
-                            sent = true;
-                            I2C_PENDING.store(true, Ordering::Relaxed);
-                        },
-                        I2cStatus::ResponseBusy => sent = false,
-                        _ => {log::error!("try_send_i2c unhandled response"); return false;},
-                    }
+        match self.llio.i2c_write_sync(TLV320AIC3100_I2C_ADR, adr, data) {
+            Ok(status) => {
+                log::trace!("write returned with status {:?}", status);
+                match status {
+                    I2cStatus::ResponseWriteOk => true,
+                    I2cStatus::ResponseBusy => false,
+                    _ => {log::error!("try_send_i2c unhandled response: {:?}", status); false},
                 }
-                _ => {log::error!("try_send_i2c unhandled error"); return false;}
             }
-            retries += 1;
+            _ => {log::error!("try_send_i2c unhandled error"); false}
         }
-        // block until completed
-        while I2C_PENDING.load(Ordering::Relaxed) {
-            xous::yield_slice();
-        }
-        log::trace!("write done");
-        true
     }
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
-        let mut transaction = I2cTransaction::new();
-        let mut txbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
-        txbuf[0] = adr;
-        transaction.bus_addr = TLV320AIC3100_I2C_ADR;
-        transaction.txbuf = Some(txbuf);
-        transaction.txlen = 1;
-        transaction.status = I2cStatus::RequestIncoming;
-        transaction.timeout_ms = I2C_TIMEOUT;
-
-        let rxbuf: [u8; llio::I2C_MAX_LEN] = [0; llio::I2C_MAX_LEN];
-        transaction.rxbuf = Some(rxbuf);
-        transaction.rxlen = data.len() as u32;
-
-        let mut sent = false;
-        while self.llio.poll_i2c_busy().unwrap() {
-            xous::yield_slice();
-        }
-        let mut retries = 0;
-        while !sent && retries < 4 {
-            match self.llio.send_i2c_request(transaction) {
-                Ok(status) => {
-                    match status {
-                        I2cStatus::ResponseInProgress => {
-                            sent = true;
-                            I2C_PENDING.store(true, Ordering::Relaxed);
-                        },
-                        I2cStatus::ResponseBusy => sent = false,
-                        _ => {log::error!("try_send_i2c unhandled response"); return false;},
-                    }
+        match self.llio.i2c_read_sync(TLV320AIC3100_I2C_ADR, adr, data) {
+            Ok(status) => {
+                match status {
+                    I2cStatus::ResponseReadOk => true,
+                    I2cStatus::ResponseBusy => false,
+                    _ => {log::error!("try_send_i2c unhandled response: {:?}", status); false},
                 }
-                _ => {log::error!("try_send_i2c unhandled error"); return false;}
             }
-            retries += 1;
+            _ => {log::error!("try_send_i2c unhandled error"); false}
         }
-        // block until completed
-        while I2C_PENDING.load(Ordering::Relaxed) {
-            xous::yield_slice();
-        }
-
-        for i in 0..I2C_READLEN.load(Ordering::Relaxed) as usize {
-            data[i] = I2C_READ[i].load(Ordering::Relaxed);
-        }
-        true
     }
 
     pub fn get_headset_code(&mut self) -> u8 {

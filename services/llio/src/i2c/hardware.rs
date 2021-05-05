@@ -124,13 +124,16 @@ impl I2cStateMachine {
     }
 
     pub fn initiate(&mut self, transaction: I2cTransaction ) -> I2cStatus {
-        if !self.workqueue.is_empty() {
+        // state idle means the transaction is done
+        // listener None means any callback notifications are also done
+        // workqueue empty means, we have a clear path to do our thing
+        if self.workqueue.is_empty() && self.state == I2cState::Idle && self.listener == None {
+            self.checked_initiate(transaction)
+        } else {
             match self.workqueue.enqueue(transaction) {
                 Ok(_) => return I2cStatus::ResponseInProgress,
                 _ => return I2cStatus::ResponseBusy,
             }
-        } else {
-            self.checked_initiate(transaction)
         }
     }
 
@@ -159,10 +162,12 @@ impl I2cStateMachine {
             self.error = false;
             self.timestamp = now;
             self.transaction = transaction.clone();
+            assert!(self.listener == None, "initiating when previous transaction is still in progress!");
             match transaction.listener {
                 None => self.listener = None,
                 Some((s0, s1, s2, s3)) => self.listener = Some(xous::SID::from_u32(s0, s1, s2, s3)),
             }
+            log::trace!("initiate with listener {:?}", self.listener);
 
             if self.transaction.status == I2cStatus::RequestIncoming {
                 self.transaction.status = I2cStatus::ResponseInProgress;
@@ -206,10 +211,13 @@ impl I2cStateMachine {
 
     fn i2c_followup(&mut self, trans: I2cTransaction) -> Result<(), xous::Error> {
         if let Some(listener) = self.listener.take() {
+            log::trace!("followup to listener {:?}: {:?}", listener, trans);
             let cid = xous::connect(listener).unwrap();
             let buf = xous_ipc::Buffer::into_buf(trans).or(Err(xous::Error::InternalError))?;
             buf.lend(cid, I2cCallback::Result.to_u32().unwrap()).map(|_|())?;
             unsafe{xous::disconnect(cid).unwrap()};
+        } else {
+            log::trace!("completed with transaction, but no listener! {:?}", trans);
         };
         if let Some(work) = self.workqueue.dequeue() {
             if self.checked_initiate(work) != I2cStatus::ResponseInProgress {

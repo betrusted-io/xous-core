@@ -6,4 +6,4 @@ pub use crate::backend::hosted::*;
 #[cfg(target_os = "none")]
 mod hardware;
 #[cfg(target_os = "none")]
-pub use crate::i2c::hardware::*;
+pub(crate) use crate::i2c::hardware::*;

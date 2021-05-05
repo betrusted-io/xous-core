@@ -40,8 +40,7 @@ impl Into<u32> for UartType {
 }
 
 /////////////////////// I2C
-// TODO: change this to pub(crate) once we've gotten rid of legacy API
-pub const I2C_MAX_LEN: usize = 33;
+pub (crate) const I2C_MAX_LEN: usize = 33;
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
