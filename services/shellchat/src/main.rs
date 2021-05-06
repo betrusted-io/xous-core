@@ -94,7 +94,7 @@ impl Repl{
     }
 
     /// update the loop, in response to various inputs
-    fn update(&mut self) -> Result<(), xous::Error> {
+    fn update(&mut self, was_callback: bool) -> Result<(), xous::Error> {
         let debug1 = false;
         // if we had an input string, do something
         if let Some(local) = self.input {
@@ -110,8 +110,11 @@ impl Repl{
         // side effect our commands
 
         // redraw UI once upon accepting all input
-        self.redraw().expect("can't redraw");
+        if !was_callback { // don't need to redraw on a callback, save some cycles
+            self.redraw().expect("can't redraw");
+        }
 
+        let mut dirty = true;
         // take the input and pass it on to the various command parsers, and attach result
         if let Some(mut local) = self.input {
             log::trace!("processing line: {}", local);
@@ -123,6 +126,8 @@ impl Repl{
                     is_input: false
                 };
                 self.circular_push(output_history);
+            } else {
+                dirty = false;
             }
         } else if let Some(msg) = &self.msg {
             log::trace!("processing callback msg: {:?}", msg);
@@ -134,6 +139,8 @@ impl Repl{
                     is_input: false
                 };
                 self.circular_push(output_history);
+            } else {
+                dirty = false;
             }
         }
 
@@ -141,7 +148,9 @@ impl Repl{
         self.input = None;
         self.msg = None;
         // redraw UI now that we've responded
-        self.redraw().expect("can't redraw");
+        if dirty {
+            self.redraw().expect("can't redraw");
+        }
 
         if debug1 {
             for h in self.history.iter() {
@@ -263,6 +272,7 @@ fn xmain() -> ! {
 
     let mut repl = Repl::new(&xns, SERVER_NAME_SHELLCHAT);
     let mut update_repl = false;
+    let mut was_callback = false;
 
     if false {
         xous::create_thread_0(test_thread).unwrap();
@@ -279,6 +289,7 @@ fn xmain() -> ! {
                 log::trace!("shell got input line: {}", s.as_str());
                 repl.input(s.as_str()).expect("REPL couldn't accept input string");
                 update_repl = true; // set a flag, instead of calling here, so message can drop and calling server is released
+                was_callback = false;
             }
             Some(ShellOpcode::Redraw) => {
                 log::trace!("got Redraw");
@@ -292,10 +303,11 @@ fn xmain() -> ! {
                 log::trace!("got unknown message, treating as callback");
                 repl.msg(msg);
                 update_repl = true;
+                was_callback = true;
             }
         }
         if update_repl {
-            repl.update().expect("REPL had problems updating");
+            repl.update(was_callback).expect("REPL had problems updating");
             update_repl = false;
         }
         log::trace!("reached bottom of main loop");

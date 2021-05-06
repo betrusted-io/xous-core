@@ -95,6 +95,12 @@ impl FrameRing {
             rec_ptr: 0,
         }
     }
+    pub fn clear(&mut self) {
+        self.buffer = [[(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); FIFO_DEPTH]; FRAMES];
+        self.rd_frame = 0;
+        self.wr_frame = 0;
+        self.rec_ptr = 0;
+    }
     /*
       empty: rd_frame == wr_frame
       full: wr_frame == (rd_frame - 1) || (rd_frame == 0) && (wr_frame == F-1)

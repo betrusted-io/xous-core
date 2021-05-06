@@ -18,13 +18,17 @@ pub struct Codec {
     ticktimer: ticktimer_server::Ticktimer,
     play_buffer: FrameRing,
     play_frames_dropped: u32,
+    tx_stat_errors: u32,
     rec_buffer: FrameRing,
     rec_frames_dropped: u32,
+    rx_stat_errors: u32,
     powered_on: bool,
     initialized: bool,
     live: bool,
     conn: xous::CID,
 }
+
+static SILENCE: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
 
 fn audio_handler(_irq_no: usize, arg: *mut usize) {
     let codec = unsafe { &mut *(arg as *mut Codec) };
@@ -32,38 +36,57 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
 
     // load the play buffer
     if let Some(frame) = codec.play_buffer.dq_frame() {
-        assert!(codec.csr.rf(utra::audio::TX_STAT_FREE) == 1, "interrupt was called, but not enough space to receive!");
+        //assert!(codec.csr.rf(utra::audio::TX_STAT_FREE) == 1, "interrupt was called, but not enough space to receive!");
+        if codec.csr.rf(utra::audio::TX_STAT_FREE) != 1 {
+            codec.tx_stat_errors += 1;
+        }
         for &stereo_sample in frame.iter() {
-            unsafe { *volatile_audio = stereo_sample };
+            unsafe { volatile_audio.write_volatile((stereo_sample & 0xFFFF_0000) | ((stereo_sample & 0xFFFF) >> 1)) };
+//            unsafe { volatile_audio.write_volatile(stereo_sample) };
+        }
+    } else {
+        codec.play_frames_dropped += 1;
+        for &stereo_sample in SILENCE.iter() {
+            unsafe { volatile_audio.write_volatile(stereo_sample) };
         }
     }
     // copy the record buffer
     //assert!(codec.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1, "interrupt was called, but not enough data to read!");
+    if codec.csr.rf(utra::audio::RX_STAT_DATAREADY) != 1 {
+        codec.rx_stat_errors += 1;
+    }
     let rx_rdcount = codec.csr.rf(utra::audio::RX_STAT_RDCOUNT) as usize;
     let rx_wrcount = codec.csr.rf(utra::audio::RX_STAT_WRCOUNT) as usize;
     if codec.rec_buffer.is_full() {
         codec.rec_frames_dropped += 1;
+        let mut _dummy = 0;
+        for _ in 0..codec::FIFO_DEPTH {
+            _dummy += unsafe{volatile_audio.read_volatile()}; // drain the record fifo to prevent interrupt from continuously firing
+        }
     } else {
         for _ in 0..codec::FIFO_DEPTH {
-            codec.rec_buffer.rec_sample(unsafe{*volatile_audio});
+            codec.rec_buffer.rec_sample(unsafe{volatile_audio.read_volatile()});
         }
         codec.rec_buffer.rec_advance();
     }
+
+    /*
     let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
-        unsafe{ *stereo_sample = *volatile_audio; }
+        unsafe{ *stereo_sample = volatile_audio.read_volatile(); }
     }
-
     match codec.rec_buffer.nq_frame(rec_buf) {
         Ok(()) => {},
         Err(_buff) => codec.rec_frames_dropped += 1,
+    }*/
+
+    // if the buffer is low, let the audio handler know we used up another frame!
+    if codec.play_buffer.readable_count() < 6 {
+        xous::try_send_message(codec.conn,
+            xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0)).unwrap();
     }
 
-    // let the audio handler know we used up another frame!
-    xous::try_send_message(codec.conn,
-        xous::Message::new_scalar(Opcode::AnotherFrame.to_usize().unwrap(), rx_rdcount, rx_wrcount, 0, 0)).unwrap();
-
-    codec.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1);
+    codec.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
 }
 
 impl Codec {
@@ -99,6 +122,8 @@ impl Codec {
             initialized: false,
             live: false,
             conn,
+            tx_stat_errors: 0,
+            rx_stat_errors: 0,
         };
 
         xous::claim_interrupt(
@@ -107,7 +132,7 @@ impl Codec {
             (&mut codec) as *mut Codec as *mut usize,
         )
         .expect("couldn't claim audio irq");
-        codec.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1);
+        codec.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
 
         codec.susres_manager.push(RegOrField::Reg(utra::audio::RX_CTL), None);
         codec.susres_manager.push(RegOrField::Reg(utra::audio::TX_CTL), None);
@@ -115,6 +140,13 @@ impl Codec {
         codec.susres_manager.push(RegOrField::Reg(utra::audio::EV_ENABLE), None);
 
         codec
+    }
+    pub fn trace(&mut self) {
+        if self.tx_stat_errors > 0 || self.rx_stat_errors > 0 {
+            log::trace!("drop p:{} r:{} | staterr tx:{} rx:{}", self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
+            self.tx_stat_errors = 0;
+            self.rx_stat_errors = 0;
+        }
     }
     pub fn trace_rx(&self) {
         log::trace!("T rd {} wr {}", self.csr.rf(utra::audio::RX_STAT_RDCOUNT), self.csr.rf(utra::audio::RX_STAT_WRCOUNT));
@@ -333,9 +365,9 @@ impl Codec {
         // DAC volume - neither DACs muted, independent volume controls
         self.w(64, &[0b0000_0_0_00]);
         // DAC left volume control
-        self.w(65, &[0b1]); // +0.5dB
+        self.w(65, &[0b1111_0110]); // -5dB
         // DAC right volume control
-        self.w(66, &[0b1]); // +0.5dB
+        self.w(66, &[0b1111_0110]); // -5dB
 
         ///////// VOLUME, PGA CONTROLS -- PAGE 1
         self.w(0, &[1]); // select page 1
@@ -346,8 +378,8 @@ impl Codec {
 
         // internal volume control
         self.w(36, &[
-            0b1_001_0010, // HPL channel control on, -9dB
-            0b1_001_0010, // HPR channel control on, -9dB
+            0b1_001_1110, // HPL channel control on, -15dB
+            0b1_001_1110, // HPR channel control on, -15dB
             0b1_000_1100, // SPK control on, -6dB
             ]);
 
@@ -355,7 +387,7 @@ impl Codec {
         self.w(40, &[
             0b0_0000_111, // HPL driver PGA = 0dB, not muted, all gains applied
             0b0_0000_111, // HPR driver PGA = 0dB, not muted, all gains applied
-            0b000_00_1_0_1, // SPK gain = 6 dB, driver not muted, all gains applied
+            0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
             ]);
 
             // HP driver control -- 16us short circuit debounce, best DAC performance, HPL/HPR as headphone drivers
@@ -413,9 +445,9 @@ impl Codec {
         for _ in 0..FIFO_DEPTH*2 {
             unsafe { (volatile_audio).write(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); }  // prefill TX fifo with zero's
         }
-        // enable interrupts on the TX_READY
-        self.csr.wfo(utra::audio::EV_PENDING_TX_READY, 1); // clear any pending interrupt
-        self.csr.wfo(utra::audio::EV_ENABLE_TX_READY, 1);
+        // enable interrupts on the RX_READY
+        self.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1); // clear any pending interrupt
+        self.csr.wfo(utra::audio::EV_ENABLE_RX_READY, 1);
 
         // this sets everything running
         self.csr.wfo(utra::audio::RX_CTL_ENABLE, 1);
@@ -424,13 +456,17 @@ impl Codec {
     }
 
     pub fn audio_i2s_stop(&mut self) {
-        self.csr.wfo(utra::audio::EV_ENABLE_TX_READY, 0);
+        self.csr.wfo(utra::audio::EV_ENABLE_RX_READY, 0);
+        self.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1);
+
         self.csr.wfo(utra::audio::RX_CTL_ENABLE, 0);
         self.csr.wfo(utra::audio::TX_CTL_ENABLE, 0);
 
         self.csr.wfo(utra::audio::RX_CTL_RESET, 1);
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);
         self.live = false;
+        self.play_buffer.clear();
+        self.rec_buffer.clear();
     }
 
     /// this is a testing-only function which does a double-buffered audio loopback

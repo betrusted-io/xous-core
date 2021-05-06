@@ -23,7 +23,7 @@ struct ScalarCallback {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -43,7 +43,7 @@ fn xmain() -> ! {
     let mut audio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
         let mut msg = xous::receive_message(codec_sid).unwrap();
-        log::trace!("got message {:?}", msg);
+        //log::trace!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 codec.suspend();
@@ -64,6 +64,7 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::ResumeStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 codec.trace_rx();
+                codec.trace();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_start();
                 } else {
@@ -72,6 +73,7 @@ fn xmain() -> ! {
             }),
             Some(api::Opcode::PauseStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 codec.trace_rx();
+                codec.trace();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_stop();
                 } else {
@@ -130,8 +132,9 @@ fn xmain() -> ! {
                 do_hook(hookdata, &mut audio_cb_conns);
                 log::trace!("hook done, {:?}", audio_cb_conns);
             }
-            Some(api::Opcode::AnotherFrame) => xous::msg_scalar_unpack!(msg, rdcount, wrcount, _, _, {
-                log::trace!("A rd {} wr {}", rdcount, wrcount);
+            Some(api::Opcode::AnotherFrame) => xous::msg_scalar_unpack!(msg, _rdcount, _wrcount, _, _, {
+                codec.trace();
+                //log::trace!("A rd {} wr {}", rdcount, wrcount);
                 send_event(&audio_cb_conns, codec.free_play_frames(), codec.available_rec_frames());
             }),
             None => {
