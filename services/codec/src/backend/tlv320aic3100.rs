@@ -181,10 +181,10 @@ impl Codec {
     }
 
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {
-        log::trace!("writing to 0x{:x}, {:x?}", adr, data);
-        match self.llio.i2c_write_sync(TLV320AIC3100_I2C_ADR, adr, data) {
+        //log::trace!("writing to 0x{:x}, {:x?}", adr, data);
+        match self.llio.i2c_write(TLV320AIC3100_I2C_ADR, adr, data, None) {
             Ok(status) => {
-                log::trace!("write returned with status {:?}", status);
+                //log::trace!("write returned with status {:?}", status);
                 match status {
                     I2cStatus::ResponseWriteOk => true,
                     I2cStatus::ResponseBusy => false,
@@ -195,7 +195,7 @@ impl Codec {
         }
     }
     fn r(&mut self, adr: u8, data: &mut[u8]) -> bool {
-        match self.llio.i2c_read_sync(TLV320AIC3100_I2C_ADR, adr, data) {
+        match self.llio.i2c_read(TLV320AIC3100_I2C_ADR, adr, data, None) {
             Ok(status) => {
                 match status {
                     I2cStatus::ResponseReadOk => true,
