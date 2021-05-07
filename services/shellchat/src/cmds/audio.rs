@@ -16,6 +16,10 @@ pub struct Audio {
     framecount: u32,
     callback_id: Option<u32>,
     callback_conn: u32,
+    recbuf: xous::MemoryRange,
+    rec_data: *mut u32,
+    rec_ptr_words: u32,
+    play_or_rec_n: bool, // true if play sample, false if play recorded data
 }
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -31,6 +35,12 @@ impl Audio {
         for i in 0..16 {
             unsafe{ raw_header[i] = (*samples)[i] };
         }
+        let recbuf = xous::syscall::map_memory(
+            None,
+            None,
+            0x8_0000,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        ).expect("couldn't allocate record buffer");
 
         log::trace!("setting up codec hardware parameters");
         codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
@@ -45,7 +55,10 @@ impl Audio {
             framecount: 0,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
-
+            recbuf,
+            rec_data: recbuf.as_mut_ptr() as *mut u32,
+            rec_ptr_words: 0,
+            play_or_rec_n: true,
         };
         audio
     }
@@ -82,12 +95,20 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     } else {
                         play_free
                     };
-                    log::debug!("loading up {} frames", frames_to_push);
-                    self.framecount += frames_to_push as u32;
+                    log::info!("loading up {} frames", frames_to_push);
+                    self.play_ptr_bytes = 0;
+                    self.rec_ptr_words = 0;
+                    self.framecount = frames_to_push as u32;
                     for i in 0..frames_to_push {
                         let mut frame: [u32; codec::FIFO_DEPTH] = [codec::ZERO_PCM as u32 | (codec::ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-                        for sample in frame.iter_mut() {
-                            *sample = unsafe{self.raw_data.add(i).read_volatile()};
+                        if self.play_or_rec_n {
+                            for sample in frame.iter_mut() {
+                                *sample = unsafe{self.raw_data.add(i).read_volatile()};
+                            }
+                        } else {
+                            for sample in frame.iter_mut() {
+                                *sample = unsafe{self.rec_data.add(i).read_volatile()};
+                            }
                         }
                         self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
                         frames.nq_frame(frame).unwrap();
@@ -95,10 +116,18 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     log::debug!("pushing frames");
                     self.codec.swap_frames(&mut frames).unwrap();
                     // start the playing
-                    log::debug!("starting playback");
+                    log::info!("starting playback");
                     self.codec.resume().unwrap();
 
                     // we'll get a callback that demands the next data...
+                }
+                "fromrec" => {
+                    self.play_or_rec_n = false;
+                    write!(ret, "playing back from record buffer").unwrap();
+                }
+                "fromsample" => {
+                    self.play_or_rec_n = true;
+                    write!(ret, "playing back from sample on FLASH").unwrap();
                 }
                 "dump" => {
                     let mut temp = String::<9>::new();
@@ -145,13 +174,33 @@ impl<'a> ShellCmdApi<'a> for Audio {
                 log::debug!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
                     let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-                    for i in 0..codec::FIFO_DEPTH {
-                        frame[i] = unsafe{*self.raw_data.add(i + self.play_ptr_bytes/4)};
+                    if self.play_or_rec_n {
+                        for i in 0..codec::FIFO_DEPTH {
+                            frame[i] = unsafe{*self.raw_data.add(i + self.play_ptr_bytes/4)};
+                        }
+                    } else {
+                        for i in 0..codec::FIFO_DEPTH {
+                            frame[i] = unsafe{*self.rec_data.add(i + self.play_ptr_bytes/4)};
+                        }
                     }
                     self.play_ptr_bytes += codec::FIFO_DEPTH * 4;
                     frames.nq_frame(frame).unwrap();
+
                 }
                 self.codec.swap_frames(&mut frames).unwrap();
+
+                loop {
+                    if let Some(frame) = frames.dq_frame() {
+                        if self.rec_ptr_words < (0x8_0000 - codec::FIFO_DEPTH) as u32 {
+                            for i in 0..codec::FIFO_DEPTH {
+                                unsafe{*self.rec_data.add(i + self.rec_ptr_words as usize) = frame[i]};
+                            }
+                            self.rec_ptr_words += codec::FIFO_DEPTH as u32;
+                        }
+                    } else {
+                        break;
+                    };
+                }
 
                 return Ok(None)
             } else {
@@ -161,6 +210,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     write!(ret, "Playback of {} frames finished", self.framecount).unwrap();
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;
+                    self.rec_ptr_words = 0;
                 } else {
                     // we will get extra callbacks as the pipe clears
                     return Ok(None)

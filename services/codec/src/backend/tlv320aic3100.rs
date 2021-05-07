@@ -36,13 +36,17 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
 
     // load the play buffer
     if let Some(frame) = codec.play_buffer.dq_frame() {
-        //assert!(codec.csr.rf(utra::audio::TX_STAT_FREE) == 1, "interrupt was called, but not enough space to receive!");
         if codec.csr.rf(utra::audio::TX_STAT_FREE) != 1 {
             codec.tx_stat_errors += 1;
         }
         for &stereo_sample in frame.iter() {
-            unsafe { volatile_audio.write_volatile((stereo_sample & 0xFFFF_0000) | ((stereo_sample & 0xFFFF) >> 1)) };
-//            unsafe { volatile_audio.write_volatile(stereo_sample) };
+            if true {
+                //// TODO
+                // there is some bug which is causing the right channel to be frame shifted left by one, but not the left....could be a hardware bug.
+                unsafe { volatile_audio.write_volatile((stereo_sample & 0xFFFF_0000) | ((stereo_sample & 0xFFFF) >> 1)) };
+            } else {
+                unsafe { volatile_audio.write_volatile(stereo_sample) };
+            }
         }
     } else {
         codec.play_frames_dropped += 1;
@@ -51,26 +55,11 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
         }
     }
     // copy the record buffer
-    //assert!(codec.csr.rf(utra::audio::RX_STAT_DATAREADY) == 1, "interrupt was called, but not enough data to read!");
     if codec.csr.rf(utra::audio::RX_STAT_DATAREADY) != 1 {
         codec.rx_stat_errors += 1;
     }
     let rx_rdcount = codec.csr.rf(utra::audio::RX_STAT_RDCOUNT) as usize;
     let rx_wrcount = codec.csr.rf(utra::audio::RX_STAT_WRCOUNT) as usize;
-
-    /* // this version saves on a useless initialization step
-    if codec.rec_buffer.is_full() {
-        codec.rec_frames_dropped += 1;
-        let mut _dummy = 0;
-        for _ in 0..codec::FIFO_DEPTH {
-            _dummy += unsafe{volatile_audio.read_volatile()}; // drain the record fifo to prevent interrupt from continuously firing
-        }
-    } else {
-        for _ in 0..codec::FIFO_DEPTH {
-            codec.rec_buffer.rec_sample(unsafe{volatile_audio.read_volatile()});
-        }
-        codec.rec_buffer.rec_advance();
-    }*/
 
     let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
@@ -388,8 +377,8 @@ impl Codec {
 
         // driver PGA control
         self.w(40, &[
-            0b0_0000_111, // HPL driver PGA = 0dB, not muted, all gains applied
-            0b0_0000_111, // HPR driver PGA = 0dB, not muted, all gains applied
+            0b0_0011_111, // HPL driver PGA = 3dB, not muted, all gains applied
+            0b0_0011_111, // HPR driver PGA = 3dB, not muted, all gains applied
             0b000_01_1_0_1, // SPK gain = 12 dB, driver not muted, all gains applied
             ]);
 

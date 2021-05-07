@@ -97,7 +97,7 @@ fn xmain() -> ! {
                         let mut printed = false;
                         while codec.free_play_frames() == 0 {
                             if !printed {
-                                log::info!("swap overrun");
+                                log::debug!("swap overrun");
                                 printed = true;
                             }
                             xous::yield_slice();
