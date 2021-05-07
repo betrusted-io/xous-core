@@ -57,6 +57,8 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
     }
     let rx_rdcount = codec.csr.rf(utra::audio::RX_STAT_RDCOUNT) as usize;
     let rx_wrcount = codec.csr.rf(utra::audio::RX_STAT_WRCOUNT) as usize;
+
+    /* // this version saves on a useless initialization step
     if codec.rec_buffer.is_full() {
         codec.rec_frames_dropped += 1;
         let mut _dummy = 0;
@@ -68,17 +70,18 @@ fn audio_handler(_irq_no: usize, arg: *mut usize) {
             codec.rec_buffer.rec_sample(unsafe{volatile_audio.read_volatile()});
         }
         codec.rec_buffer.rec_advance();
-    }
+    }*/
 
-    /*
     let mut rec_buf: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
     for stereo_sample in rec_buf.iter_mut() {
         unsafe{ *stereo_sample = volatile_audio.read_volatile(); }
     }
     match codec.rec_buffer.nq_frame(rec_buf) {
         Ok(()) => {},
-        Err(_buff) => codec.rec_frames_dropped += 1,
-    }*/
+        Err(_buff) => {
+            codec.rec_frames_dropped += 1
+        },
+    }
 
     // if the buffer is low, let the audio handler know we used up another frame!
     if codec.play_buffer.readable_count() < 6 {
@@ -141,14 +144,14 @@ impl Codec {
 
         codec
     }
-    pub fn trace(&mut self) {
+    fn trace(&mut self) {
         if self.tx_stat_errors > 0 || self.rx_stat_errors > 0 {
             log::trace!("drop p:{} r:{} | staterr tx:{} rx:{}", self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
             self.tx_stat_errors = 0;
             self.rx_stat_errors = 0;
         }
     }
-    pub fn trace_rx(&self) {
+    fn trace_rx(&self) {
         log::trace!("T rd {} wr {}", self.csr.rf(utra::audio::RX_STAT_RDCOUNT), self.csr.rf(utra::audio::RX_STAT_WRCOUNT));
     }
 
@@ -461,6 +464,13 @@ impl Codec {
 
         self.csr.wfo(utra::audio::RX_CTL_ENABLE, 0);
         self.csr.wfo(utra::audio::TX_CTL_ENABLE, 0);
+
+        log::info!("playback stopped. frames dropped: p{} r{} / errors: tx{} rx{}",
+            self.play_frames_dropped, self.rec_frames_dropped, self.tx_stat_errors, self.rx_stat_errors);
+        self.play_frames_dropped = 0;
+        self.rec_frames_dropped = 0;
+        self.tx_stat_errors = 0;
+        self.rx_stat_errors = 0;
 
         self.csr.wfo(utra::audio::RX_CTL_RESET, 1);
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);

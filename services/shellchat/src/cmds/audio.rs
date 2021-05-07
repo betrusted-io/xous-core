@@ -161,7 +161,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     free_play
                 };
                 self.framecount += frames_to_push as u32;
-                log::debug!("frame {}", self.framecount);
+                log::debug!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
                     let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                     for i in 0..codec::FIFO_DEPTH {
@@ -177,9 +177,9 @@ impl<'a> ShellCmdApi<'a> for Audio {
                 log::debug!("stopping playback");
                 if self.framecount != 0 {
                     self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
+                    write!(ret, "Playback of {} frames finished", self.framecount).unwrap();
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;
-                    write!(ret, "{}", "Playback finished").unwrap();
                 } else {
                     // we will get extra callbacks as the pipe clears
                     return Ok(None)

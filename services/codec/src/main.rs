@@ -60,11 +60,8 @@ fn xmain() -> ! {
                 ticktimer.sleep_ms(2).unwrap();
                 log::trace!("initializing codec");
                 codec.init();
-                codec.trace_rx();
             }),
             Some(api::Opcode::ResumeStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
-                codec.trace_rx();
-                codec.trace();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_start();
                 } else {
@@ -72,8 +69,6 @@ fn xmain() -> ! {
                 }
             }),
             Some(api::Opcode::PauseStream) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
-                codec.trace_rx();
-                codec.trace();
                 if codec.is_on() && codec.is_init() {
                     codec.audio_i2s_stop();
                 } else {
@@ -99,6 +94,18 @@ fn xmain() -> ! {
 
                 loop {
                     if let Some(frame) = framering.dq_frame() {
+                        let mut printed = false;
+                        while codec.free_play_frames() == 0 {
+                            if !printed {
+                                log::info!("swap overrun");
+                                printed = true;
+                            }
+                            xous::yield_slice();
+                            if !codec.is_live() {
+                                // handle the case that play stopped while we're trying to run the swap
+                                break;
+                            }
+                        }
                         if codec.free_play_frames() > 0 {
                             codec.nq_play_frame(frame).unwrap(); // throw away the result because we know this must succeed
                         } else {
@@ -133,7 +140,6 @@ fn xmain() -> ! {
                 log::trace!("hook done, {:?}", audio_cb_conns);
             }
             Some(api::Opcode::AnotherFrame) => xous::msg_scalar_unpack!(msg, _rdcount, _wrcount, _, _, {
-                codec.trace();
                 //log::trace!("A rd {} wr {}", rdcount, wrcount);
                 send_event(&audio_cb_conns, codec.free_play_frames(), codec.available_rec_frames());
             }),
