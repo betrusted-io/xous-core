@@ -329,6 +329,7 @@ dependencies = [
  "rkyv 0.4.3",
  "susres",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
  "xous-ipc",

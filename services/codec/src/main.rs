@@ -39,6 +39,13 @@ fn xmain() -> ! {
     // register a suspend/resume listener
     let sr_cid = xous::connect(codec_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    /*
+    let trng = trng::Trng::new(&xns).unwrap();
+    let mut noise: [u32; codec::FIFO_DEPTH] = [0; codec::FIFO_DEPTH];
+    for i in 0..noise.len() {
+        noise[i] = trng.get_u32().unwrap();
+    }
+    */
 
     let mut audio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
@@ -118,6 +125,7 @@ fn xmain() -> ! {
                     }
                 }
 
+                framering.reset_ptrs();
                 loop {
                     if let Some(frame) = codec.dq_rec_frame() {
                         if !framering.is_full() {

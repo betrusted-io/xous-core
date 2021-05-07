@@ -101,6 +101,11 @@ impl FrameRing {
         self.wr_frame = 0;
         self.rec_ptr = 0;
     }
+    pub fn reset_ptrs(&mut self) {
+        self.rd_frame = 0;
+        self.wr_frame = 0;
+        self.rec_ptr = 0;
+    }
     /*
       empty: rd_frame == wr_frame
       full: wr_frame == (rd_frame - 1) || (rd_frame == 0) && (wr_frame == F-1)

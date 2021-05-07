@@ -418,9 +418,9 @@ impl Codec {
 
         self.w(86, &[
             0b1_011_0000, // AGC enabled, target level = -12dB
-            0b00_10001_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30), 17 => -64dB
+            0b00_10101_0, // hysteresis 1dB, noise threshold = -((value-1)*2 + 30): 21 => -70dB
             100, // max gain = code/2 dB
-            0b_00101_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
+            0b_00010_000, // attack time = 0b_acode_mul = (acode*32*mul)/Fs
             0b_01101_000, // decay time  = 0b_dcode_mul = (dcode*32*mul)/Fs
             0x01, // noise debounce time = code*4 / fs
             0x01, // signal debounce time = code*4 / fs
@@ -430,13 +430,15 @@ impl Codec {
 
     /// set up the betrusted-side signals
     pub fn audio_i2s_start(&mut self) {
+        /*
         self.csr.wfo(utra::audio::RX_CTL_RESET, 1);
         self.csr.wfo(utra::audio::TX_CTL_RESET, 1);
-
+        */
         let volatile_audio = self.fifo.as_mut_ptr() as *mut u32;
         for _ in 0..FIFO_DEPTH*2 {
             unsafe { (volatile_audio).write(ZERO_PCM as u32 | (ZERO_PCM as u32) << 16); }  // prefill TX fifo with zero's
         }
+
         // enable interrupts on the RX_READY
         self.csr.wfo(utra::audio::EV_PENDING_RX_READY, 1); // clear any pending interrupt
         self.csr.wfo(utra::audio::EV_ENABLE_RX_READY, 1);
