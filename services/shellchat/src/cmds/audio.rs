@@ -14,6 +14,8 @@ pub struct Audio {
     raw_len_bytes: u32,
     play_ptr_bytes: usize,
     framecount: u32,
+    callback_id: Option<u32>,
+    callback_conn: u32,
 }
 impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -30,15 +32,10 @@ impl Audio {
             unsafe{ raw_header[i] = (*samples)[i] };
         }
 
-        log::trace!("setting up audio stream");
+        log::trace!("setting up codec hardware parameters");
         codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
-        log::trace!("getting a callback ID");
-        let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
-        log::trace!("hooking frame callback");
-        codec.hook_frame_callback(0xDEAD_BEEF, callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
-        log::trace!("returning from setup");
 
-        let mut audio = Audio {
+        let audio = Audio {
             codec,
             sample,
             header: Header::from(raw_header),
@@ -46,33 +43,10 @@ impl Audio {
             raw_len_bytes: unsafe{*(sample.as_ptr().add(40) as *const u32)},
             play_ptr_bytes: 0,
             framecount: 0,
-        };
-        /*
-        // load the initial sample data
-        let (play_free, _) = audio.codec.free_frames().unwrap();
+            callback_id: None,
+            callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
 
-        let mut frames: FrameRing = FrameRing::new();
-        let frames_to_push = if frames.writeable_count() < play_free {
-            frames.writeable_count()
-        } else {
-            play_free
         };
-        log::debug!("loading up {} frames", frames_to_push);
-        audio.framecount += frames_to_push as u32;
-        for i in 0..frames_to_push {
-            let mut frame: [u32; codec::FIFO_DEPTH] = [codec::ZERO_PCM as u32 | (codec::ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
-            for sample in frame.iter_mut() {
-                *sample = unsafe{audio.raw_data.add(i).read_volatile()};
-            }
-            audio.play_ptr_bytes += codec::FIFO_DEPTH * 4;
-            frames.nq_frame(frame).unwrap();
-        }
-        log::debug!("pushing frames");
-        audio.codec.swap_frames(&mut frames).unwrap();
-        // start the playing
-        log::debug!("starting playback");
-        audio.codec.resume().unwrap();
-        */
         audio
     }
 }
@@ -80,7 +54,7 @@ impl Audio {
 impl<'a> ShellCmdApi<'a> for Audio {
     cmd_api!(audio);
 
-    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
@@ -91,6 +65,13 @@ impl<'a> ShellCmdApi<'a> for Audio {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "play" => {
+                    if self.callback_id.is_none() {
+                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        log::trace!("hooking frame callback with ID {}", cb_id);
+                        self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
+                        self.callback_id = Some(cb_id);
+                    }
+
                     write!(ret, "Playing sample...").unwrap();
                     // load the initial sample data
                     let (play_free, _) = self.codec.free_frames().unwrap();

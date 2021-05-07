@@ -4,6 +4,7 @@ pub mod api;
 use xous::{CID, send_message};
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct Trng {
     conn: CID,
 }

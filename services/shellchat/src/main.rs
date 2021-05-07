@@ -11,7 +11,6 @@ use xous::MessageEnvelope;
 use xous_ipc::{String, Buffer};
 
 use heapless::spsc::Queue;
-use heapless::consts::U16;
 
 mod cmds;
 use cmds::*;
@@ -33,7 +32,7 @@ struct Repl {
     msg: Option<MessageEnvelope>,
 
     // record our input history
-    history: Queue<History, U16>,
+    history: Queue::<History, 16>,
     content: Gid,
     gam: gam::Gam,
 
@@ -227,7 +226,7 @@ use num_traits::{ToPrimitive, FromPrimitive};
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum ShellOpcode {
     /// a line of text has arrived
-    Line,
+    Line = 0, // make sure we occupy opcodes with discriminants < 1000, as the rest are used for callbacks
     /// redraw our UI
     Redraw,
     /// exit the application
@@ -259,7 +258,7 @@ pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
