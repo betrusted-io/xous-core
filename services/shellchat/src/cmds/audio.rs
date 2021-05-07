@@ -25,9 +25,9 @@ impl Audio {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         let sample = xous::syscall::map_memory(
             // 0x2634_0000 is the long sample. 0x2600_0000 is the short sample.
-            Some(core::num::NonZeroUsize::new(0x2600_0000).unwrap()), // it's here, because we know it's here!
+            Some(core::num::NonZeroUsize::new(0x2634_0000).unwrap()), // it's here, because we know it's here!
             None,
-            0x8_0000, // 0x8_0000 is length of short sample, 0x1C4_0000 is the long sample
+            0x1c4_0000, // 0x8_0000 is length of short sample, 0x1C4_0000 is the long sample
             xous::MemoryFlags::R,
         ).expect("couldn't map in the audio sample");
         let mut codec = codec::Codec::new(xns).unwrap();
@@ -114,21 +114,6 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     self.play_or_rec_n = true;
                     write!(ret, "playing back from sample on FLASH").unwrap();
                 }
-                "dump" => {
-                    let mut temp = String::<9>::new();
-                    for i in 0..8 {
-                        write!(temp, "{:08x} ", unsafe{self.raw_data.add(i).read_volatile()}).unwrap();
-                        ret.append(temp.to_str()).unwrap();
-                        temp.clear();
-                    }
-                    ret.append("\n").unwrap();
-                    ret.append("\n").unwrap();
-                    for i in 0..8 {
-                        write!(temp, "{:08x} ", unsafe{self.raw_data.add(i + 0x2000).read_volatile()}).unwrap();
-                        ret.append(temp.to_str()).unwrap();
-                        temp.clear();
-                    }
-                }
                 "info" => {
                     write!(ret, "Loaded sample is {}kHz, {} channels, {} format, {} bytes", self.header.sampling_rate, self.header.channel_count, self.header.audio_format, self.raw_len_bytes).unwrap();
                 }
@@ -176,7 +161,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
 
                 loop {
                     if let Some(frame) = frames.dq_frame() {
-                        if self.rec_ptr_words < (0x8_0000 - codec::FIFO_DEPTH) as u32 {
+                        if self.rec_ptr_words < (0x8_0000/4 - codec::FIFO_DEPTH) as u32 {
                             for i in 0..codec::FIFO_DEPTH {
                                 unsafe{*self.rec_data.add(i + self.rec_ptr_words as usize) = frame[i]};
                             }
