@@ -16,7 +16,7 @@ use xous_kernel::{
     pid_from_usize, Error, MemoryAddress, Message, ProcessInit, ThreadInit, CID, PID, SID, TID,
 };
 
-const MAX_SERVER_COUNT: usize = 32;
+const MAX_SERVER_COUNT: usize = 128;
 
 pub use crate::arch::process::{INITIAL_TID, MAX_PROCESS_COUNT};
 
@@ -217,7 +217,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
-    servers: filled_array![None; 32],
+    servers: filled_array![None; 128],
 }));
 
 #[cfg(baremetal)]
@@ -232,7 +232,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
-    servers: filled_array![None; 32],
+    servers: filled_array![None; 128],
 };
 
 impl core::fmt::Debug for Process {
@@ -1028,11 +1028,11 @@ impl SystemServices {
     #[cfg(baremetal)]
     pub fn send_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         dest_pid: PID,
-        dest_virt: *mut u8,
+        dest_virt: *mut usize,
         len: usize,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         if len == 0 {
             return Err(xous_kernel::Error::BadAddress);
         }
@@ -1048,8 +1048,19 @@ impl SystemServices {
 
         let current_pid = self.current_pid();
 
+        // Iterators and `ptr.wrapping_add()` operate on `usize` types,
+        // which effectively lowers the `len`.
+        let usize_len = len / core::mem::size_of::<usize>();
+        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
+
         // If the dest and src PID is the same, do nothing.
         if current_pid == dest_pid {
+            crate::mem::MemoryManager::with_mut(|mm| {
+                for offset in (0..usize_len).step_by(usize_page) {
+                    mm.ensure_page_exists(src_virt.wrapping_add(offset) as usize)?;
+                }
+                Ok(())
+            })?;
             return Ok(src_virt);
         }
 
@@ -1059,11 +1070,11 @@ impl SystemServices {
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
             let dest_virt = mm
-                .find_virtual_address(dest_virt, len, xous_kernel::MemoryType::Messages)
+                .find_virtual_address(dest_virt as *mut u8, len, xous_kernel::MemoryType::Messages)
                 .or_else(|e| {
                     src_mapping.activate().expect("couldn't undo mapping");
                     Err(e)
-                })?;
+                })? as *mut usize;
             src_mapping
                 .activate()
                 .expect("Couldn't switch back to source mapping");
@@ -1071,31 +1082,33 @@ impl SystemServices {
             let mut error = None;
 
             // Move each subsequent page.
-            for offset in (0..(len / core::mem::size_of::<usize>()))
-                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
-            {
+            for offset in (0..usize_len).step_by(usize_page) {
+                assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                assert!(((dest_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                mm.ensure_page_exists(src_virt.wrapping_add(offset) as usize)?;
                 mm.move_page(
                     current_pid,
                     &src_mapping,
-                    src_virt.wrapping_add(offset),
+                    src_virt.wrapping_add(offset) as *mut u8,
                     dest_pid,
                     &dest_mapping,
-                    dest_virt.wrapping_add(offset),
+                    dest_virt.wrapping_add(offset) as *mut u8,
                 )
                 .unwrap_or_else(|e| error = Some(e));
             }
             error.map_or_else(|| Ok(dest_virt), |e| panic!("unable to send: {:?}", e))
         })
+        .map(|val| val as *mut usize)
     }
 
     #[cfg(not(baremetal))]
     pub fn send_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         _dest_pid: PID,
-        _dest_virt: *mut u8,
+        _dest_virt: *mut usize,
         _len: usize,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         Ok(src_virt)
     }
 
@@ -1127,12 +1140,12 @@ impl SystemServices {
     #[cfg(baremetal)]
     pub fn lend_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         dest_pid: PID,
-        dest_virt: *mut u8,
+        dest_virt: *mut usize,
         len: usize,
         mutable: bool,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         if len == 0 {
             return Err(xous_kernel::Error::BadAddress);
         }
@@ -1145,10 +1158,22 @@ impl SystemServices {
         if dest_virt as usize & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAlignment);
         }
+        // Iterators and `ptr.wrapping_add()` operate on `usize` types,
+        // which effectively lowers the `len`.
+        let usize_len = len / core::mem::size_of::<usize>();
+        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
 
         let current_pid = self.current_pid();
-        // If it's within the same process, ignore the operation.
+        // If it's within the same process, ignore the move operation and
+        // just ensure the pages actually exist.
         if current_pid == dest_pid {
+            MemoryManager::with_mut(|mm| {
+                for offset in (0..usize_len).step_by(usize_page) {
+                    assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                    mm.ensure_page_exists(src_virt.wrapping_add(offset) as usize)?;
+                }
+                Ok(())
+            })?;
             return Ok(src_virt);
         }
         let src_mapping = self.get_process(current_pid)?.mapping;
@@ -1158,26 +1183,27 @@ impl SystemServices {
             // Locate an address to fit the new memory.
             dest_mapping.activate()?;
             let dest_virt = mm
-                .find_virtual_address(dest_virt, len, xous_kernel::MemoryType::Messages)
+                .find_virtual_address(dest_virt as *mut u8, len, xous_kernel::MemoryType::Messages)
                 .or_else(|e| {
                     src_mapping.activate().unwrap();
                     // klog!("Couldn't find a virtual address");
                     Err(e)
-                })?;
+                })? as *mut usize;
             src_mapping.activate().unwrap();
 
             let mut error = None;
 
             // Lend each subsequent page.
-            for offset in (0..(len / core::mem::size_of::<usize>()))
-                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
-            {
+            for offset in (0..usize_len).step_by(usize_page) {
+                assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                assert!(((dest_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                mm.ensure_page_exists(src_virt.wrapping_add(offset) as usize)?;
                 mm.lend_page(
                     &src_mapping,
-                    src_virt.wrapping_add(offset),
+                    src_virt.wrapping_add(offset) as *mut u8,
                     dest_pid,
                     &dest_mapping,
-                    dest_virt.wrapping_add(offset),
+                    dest_virt.wrapping_add(offset) as *mut u8,
                     mutable,
                 )
                 .unwrap_or_else(|e| {
@@ -1200,17 +1226,18 @@ impl SystemServices {
                 },
             )
         })
+        .map(|val| val as *mut usize)
     }
 
     #[cfg(not(baremetal))]
     pub fn lend_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         _dest_pid: PID,
-        _dest_virt: *mut u8,
+        _dest_virt: *mut usize,
         _len: usize,
         _mutable: bool,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         Ok(src_virt)
     }
 
@@ -1228,12 +1255,12 @@ impl SystemServices {
     #[cfg(baremetal)]
     pub fn return_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         dest_pid: PID,
         _dest_tid: TID,
-        dest_virt: *mut u8,
+        dest_virt: *mut usize,
         len: usize,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         // klog!(
         //     "Returning from {}:{} to {}:{}",
         //     self.current_pid(),
@@ -1258,6 +1285,11 @@ impl SystemServices {
             Err(xous_kernel::Error::BadAddress)?;
         }
 
+        // Iterators and `ptr.wrapping_add()` operate on `usize` types,
+        // which effectively lowers the `len`.
+        let usize_len = len / core::mem::size_of::<usize>();
+        let usize_page = crate::mem::PAGE_SIZE / core::mem::size_of::<usize>();
+
         let current_pid = self.current_pid();
         // If it's within the same process, ignore the operation.
         if current_pid == dest_pid {
@@ -1270,15 +1302,17 @@ impl SystemServices {
             let mut error = None;
 
             // Lend each subsequent page.
-            for offset in (0..(len / core::mem::size_of::<usize>()))
-                .step_by(crate::mem::PAGE_SIZE / core::mem::size_of::<usize>())
+            for offset in (0..usize_len)
+                .step_by(usize_page)
             {
+                assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
+                assert!(((dest_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
                 mm.unlend_page(
                     &src_mapping,
-                    src_virt.wrapping_add(offset),
+                    src_virt.wrapping_add(offset) as *mut u8,
                     dest_pid,
                     &dest_mapping,
-                    dest_virt.wrapping_add(offset),
+                    dest_virt.wrapping_add(offset) as *mut u8,
                 )
                 .unwrap_or_else(|e| {
                     // panic!(
@@ -1292,19 +1326,19 @@ impl SystemServices {
                 });
             }
             error.map_or_else(|| Ok(dest_virt), |e| Err(e))
-        })
+        }).map(|val| val as *mut usize)
     }
 
     #[cfg(not(baremetal))]
     pub fn return_memory(
         &mut self,
-        src_virt: *mut u8,
+        src_virt: *mut usize,
         dest_pid: PID,
         dest_tid: TID,
-        _dest_virt: *mut u8,
+        _dest_virt: *mut usize,
         len: usize,
         // buf: MemoryRange,
-    ) -> Result<*mut u8, xous_kernel::Error> {
+    ) -> Result<*mut usize, xous_kernel::Error> {
         let buf = MemoryRange::new(src_virt as usize, len)?;
         let buf = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len()) };
         let current_pid = self.current_pid();
@@ -1317,7 +1351,7 @@ impl SystemServices {
         let target_process = self.get_process(current_pid)?;
         target_process.activate()?;
 
-        Ok(src_virt)
+        Ok(src_virt as *mut usize)
     }
 
     /// Create a new thread in the current process.  Execution begins at

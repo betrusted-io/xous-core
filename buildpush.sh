@@ -106,7 +106,7 @@ then
   cargo $USE_NIGHTLY xtask $IMAGE $SOC_SVD
 # only copy if changed, othrewise it seems to trigger extra build effort...
   rsync -a --no-times --checksum $SOC_SVD svd2utra/examples/soc.svd
-  rsync -a --no-times --checksum $SOC_SVD emulation/renode.svd
+  rsync -a --no-times --checksum $SOC_SVD emulation/soc/renode.svd
 else
   cargo $USE_NIGHTLY xtask $IMAGE $OVERRIDE_SVD
 fi

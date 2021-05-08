@@ -5,7 +5,7 @@ use ime_plugin_api::*;
 
 use log::{error, info};
 use heapless::spsc::Queue;
-use heapless::consts::U4;
+use heapless::consts::*;
 
 use xous_ipc::{String, Buffer};
 use num_traits::FromPrimitive;

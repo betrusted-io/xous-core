@@ -49,7 +49,7 @@ pub(crate) struct AuthenticateRequest {
 #[derive(Debug, Copy, Clone)]
 pub struct XousServerName {
     value: [u8; 64],
-    length: u32,
+    length: usize,
 }
 
 impl Default for XousServerName {
@@ -84,12 +84,13 @@ impl XousServerName {
         }
         // Set the string length to the length of the passed-in String,
         // or the maximum possible length. Which ever is smaller.
-        s.length = s.value.len().min(src.as_bytes().len()) as u32;
+        s.length = s.value.len().min(src.as_bytes().len());
 
         // If the string is not valid, set its length to 0.
         if s.as_str().is_err() {
             s.length = 0;
         }
+        assert!(s.length < s.value.len(), "incorrect length derivation!");
 
         s
     }
@@ -127,7 +128,8 @@ impl core::fmt::Write for XousServerName {
         if b.len() > self.value.len() {
             Err(core::fmt::Error)?;
         }
-        self.length = b.len() as u32;
+        self.length = b.len();
+        assert!(self.length < self.value.len(), "incorrect length derivation!");
 
         // Copy the string into this variable
         for (dest, src) in self.value.iter_mut().zip(s.bytes()) {
@@ -148,6 +150,7 @@ impl hash32::Hash for XousServerName {
     where
         H: Hasher,
     {
+        assert!(self.length < self.value.len(), "incorret length on hash!");
         Hash::hash(&self.value[..self.length as usize], state);
         Hash::hash(&self.length, state)
     }
@@ -155,6 +158,8 @@ impl hash32::Hash for XousServerName {
 
 impl PartialEq for XousServerName {
     fn eq(&self, other: &Self) -> bool {
+        assert!(self.length < self.value.len(), "incorret length on Eq!");
+        assert!(other.length < other.value.len(), "incorrect length on Eq (other)!");
         self.value[..self.length as usize] == other.value[..other.length as usize]
             && self.length == other.length
     }

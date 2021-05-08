@@ -133,7 +133,7 @@ impl<'a> Buffer<'a> {
     where
         S: rkyv::Serialize<rkyv::ser::serializers::BufferSerializer<Buffer<'a>>>,
     {
-        let buf = Self::new(4096);
+        let buf = Self::new(core::mem::size_of::<S>());
         let mut ser = rkyv::ser::serializers::BufferSerializer::new(buf);
         let pos = ser.serialize_value(&src).or(Err(()))?;
         let mut buf = ser.into_inner();

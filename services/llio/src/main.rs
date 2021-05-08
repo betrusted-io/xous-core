@@ -4,7 +4,6 @@
 mod api;
 use api::*;
 mod i2c;
-use i2c::*;
 
 use log::{error, info};
 
@@ -36,8 +35,6 @@ mod implementation {
         gpio_susres: RegManager::<{utra::gpio::GPIO_NUMREGS}>,
         info_csr: utralib::CSR<u32>,
         identifier_csr: utralib::CSR<u32>,
-        i2c_csr: utralib::CSR<u32>,
-        i2c_susres: RegManager::<{utra::i2c::I2C_NUMREGS}>,
         handler_conn: Option<xous::CID>,
         event_csr: utralib::CSR<u32>,
         event_susres: RegManager::<{utra::btevents::BTEVENTS_NUMREGS}>,
@@ -94,18 +91,6 @@ mod implementation {
         xl.power_csr
             .wo(utra::power::EV_PENDING, xl.power_csr.r(utra::power::EV_PENDING));
     }
-    // ASSUME: we are only ever handling txrx done interrupts. If implementing ARB interrupts, this needs to be refactored to read the source and dispatch accordingly.
-    fn handle_i2c_irq(_irq_no: usize, arg: *mut usize) {
-        let xl = unsafe { &mut *(arg as *mut Llio) };
-        if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::IrqI2cTxrxDone.to_usize().unwrap(), 0, 0, 0, 0)).map(|_| ()).unwrap();
-        } else {
-            log::error!("|handle_i2c_irq: TXRX done interrupt, but no connection for notification!");
-        }
-        xl.i2c_csr
-            .wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
-    }
 
     pub fn log_init() -> *mut u32 {
         let gpio_base = xous::syscall::map_memory(
@@ -123,8 +108,6 @@ mod implementation {
     }
 
     impl Llio {
-        pub fn get_i2c_base(&self) -> *mut u32 { self.i2c_csr.base }
-
         pub fn new(handler_conn: xous::CID, gpio_base: *mut u32) -> Llio {
             let crg_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::crg::HW_CRG_BASE),
@@ -147,13 +130,6 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Identifier CSR range");
-            let i2c_csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::i2c::HW_I2C_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map I2C CSR range");
             let event_csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::btevents::HW_BTEVENTS_BASE),
                 None,
@@ -184,8 +160,6 @@ mod implementation {
                 gpio_susres: RegManager::new(gpio_base),
                 info_csr: CSR::new(info_csr.as_mut_ptr() as *mut u32),
                 identifier_csr: CSR::new(identifier_csr.as_mut_ptr() as *mut u32),
-                i2c_csr: CSR::new(i2c_csr.as_mut_ptr() as *mut u32),
-                i2c_susres: RegManager::new(i2c_csr.as_mut_ptr() as *mut u32),
                 handler_conn: Some(handler_conn), // connection for messages from IRQ handler
                 event_csr: CSR::new(event_csr.as_mut_ptr() as *mut u32),
                 event_susres: RegManager::new(event_csr.as_mut_ptr() as *mut u32),
@@ -217,32 +191,6 @@ mod implementation {
             )
             .expect("couldn't claim Power irq");
 
-            // disable interrupt, just in case it's enabled from e.g. a warm boot
-            xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 0);
-            xous::claim_interrupt(
-                utra::i2c::I2C_IRQ,
-                handle_i2c_irq,
-                (&mut xl) as *mut Llio as *mut usize,
-            )
-            .expect("couldn't claim I2C irq");
-
-            // initialize i2c clocks
-            // set the prescale assuming 100MHz cpu operation: 100MHz / ( 5 * 100kHz ) - 1 = 199
-            let clkcode = (utralib::LITEX_CONFIG_CLOCK_FREQUENCY as u32) / (5 * 100_000) - 1;
-            xl.i2c_csr.wfo(utra::i2c::PRESCALE_PRESCALE, clkcode & 0xFFFF);
-            // enable the block
-            xl.i2c_csr.rmwf(utra::i2c::CONTROL_EN, 1);
-            // clear any interrupts pending, just in case something went pear-shaped during initialization
-            xl.i2c_csr.wo(utra::i2c::EV_PENDING, xl.i2c_csr.r(utra::i2c::EV_PENDING));
-            // now enable interrupts
-            xl.i2c_csr.wfo(utra::i2c::EV_ENABLE_TXRX_DONE, 1);
-
-            // setup suspend/resume manager
-            xl.i2c_susres.push(RegOrField::Field(utra::i2c::PRESCALE_PRESCALE), None);
-            xl.i2c_susres.push(RegOrField::Reg(utra::i2c::CONTROL), None);
-            xl.i2c_susres.push_fixed_value(RegOrField::Reg(utra::i2c::EV_PENDING), 0xFFFF_FFFF); // clear pending interrupts
-            xl.i2c_susres.push(RegOrField::Reg(utra::i2c::EV_ENABLE), None);
-
             xl.gpio_susres.push(RegOrField::Reg(utra::gpio::DRIVE), None);
             xl.gpio_susres.push(RegOrField::Reg(utra::gpio::OUTPUT), None);
             xl.gpio_susres.push(RegOrField::Reg(utra::gpio::INTPOL), None);
@@ -262,13 +210,11 @@ mod implementation {
             xl
         }
         pub fn suspend(&mut self) {
-            self.i2c_susres.suspend();
             self.gpio_susres.suspend();
             self.event_susres.suspend();
             self.power_susres.suspend();
 
             // this happens after suspend, so these disables are "lost" upon resume and replaced with the normal running values
-            self.i2c_csr.wo(utra::i2c::EV_ENABLE, 0);
             self.gpio_csr.wo(utra::gpio::EV_ENABLE, 0);
             self.event_csr.wo(utra::btevents::EV_ENABLE, 0);
             self.power_csr.wo(utra::power::EV_ENABLE, 0);
@@ -277,7 +223,6 @@ mod implementation {
             self.power_susres.resume();
             self.event_susres.resume();
             self.gpio_susres.resume();
-            self.i2c_susres.resume();
         }
 
         pub fn gpio_dout(&mut self, d: u32) {
@@ -461,8 +406,6 @@ mod implementation {
             Llio {
             }
         }
-        pub fn get_i2c_base(&self) -> *mut u32 { 0 as *mut u32 }
-
         pub fn suspend(&self) {}
         pub fn resume(&self) {}
         pub fn gpio_dout(&self, _d: u32) {}
@@ -526,6 +469,59 @@ mod implementation {
     }
 }
 
+fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let i2c_sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    let xns = xous_names::XousNames::new().unwrap();
+
+    let handler_conn = xous::connect(i2c_sid).expect("couldn't make handler connection for i2c");
+    let mut i2c = i2c::I2cStateMachine::new(handler_conn);
+
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+
+    log::trace!("starting main loop");
+    loop {
+        let mut msg = xous::receive_message(i2c_sid).unwrap();
+        log::trace!("Message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                i2c.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                i2c.resume();
+            }),
+            Some(I2cOpcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // I2C state machine handler irq result
+                i2c.report_write_done();
+            }),
+            Some(I2cOpcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                // I2C state machine handler irq result
+                i2c.report_read_done();
+            }),
+            Some(I2cOpcode::I2cTxRx) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let i2c_txrx = buffer.to_original::<api::I2cTransaction, _>().unwrap();
+                let status = i2c.initiate(i2c_txrx);
+                buffer.replace(status).unwrap();
+            },
+            Some(I2cOpcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let busy = if i2c.is_busy() {1} else {0};
+                xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
+            }),
+            Some(I2cOpcode::Quit) => {
+                log::info!("Received quit opcode, exiting!");
+                break;
+            }
+            None => {
+                log::error!("Received unknown opcode: {:?}", msg);
+            }
+        }
+    }
+    xns.unregister_server(i2c_sid).unwrap();
+    xous::destroy_server(i2c_sid).unwrap();
+}
+
+
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
     server_to_cb_cid: CID,
@@ -548,14 +544,15 @@ fn xmain() -> ! {
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
+    // create the I2C handler thread
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C).expect("can't register I2C thread");
+    log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
+    let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
+    xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");
+
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
-
-    // ticktimer is a well-known server
-    let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
-    // create an i2c state machine handler
-    let mut i2c_machine = I2cStateMachine::new(ticktimer, llio.get_i2c_base());
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
@@ -568,7 +565,7 @@ fn xmain() -> ! {
 
     log::trace!("starting main loop");
     loop {
-        let mut msg = xous::receive_message(llio_sid).unwrap();
+        let msg = xous::receive_message(llio_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
@@ -619,12 +616,13 @@ fn xmain() -> ! {
                 let (val1, val2) = llio.get_info_target();
                 xous::return_scalar2(msg.sender, val1, val2).expect("couldn't return Target");
             }),
-            Some(Opcode::PowerAudio) => msg_scalar_unpack!(msg, power_on, _, _, _, {
+            Some(Opcode::PowerAudio) => msg_blocking_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
                     llio.power_audio(false);
                 } else {
                     llio.power_audio(true);
                 }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm audio power was set");
             }),
             Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
@@ -686,20 +684,6 @@ fn xmain() -> ! {
             Some(Opcode::AdcGpio2) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 xous::return_scalar(msg.sender, llio.xadc_gpio2() as _).expect("couldn't return Xadc");
             }),
-            Some(Opcode::IrqI2cTxrxDone) => msg_scalar_unpack!(msg, _, _, _, _, {
-                // I2C state machine handler irq received
-                i2c_machine.handler();
-            }),
-            Some(Opcode::I2cTxRx) => {
-                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
-                let i2c_txrx = buffer.to_original::<llio::api::I2cTransaction, _>().unwrap();
-                let status = i2c_machine.initiate(i2c_txrx);
-                buffer.replace(status).unwrap();
-            }
-            Some(Opcode::I2cIsBusy) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                let busy = if i2c_machine.is_busy() {1} else {0};
-                xous::return_scalar(msg.sender, busy as _).expect("couldn't return I2cIsBusy");
-            }),
             Some(Opcode::EventUsbAttachSubscribe) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
@@ -753,9 +737,16 @@ fn xmain() -> ! {
             Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
                 send_event(&gpio_cb_conns, channel as usize);
             }),
-            None => {
-                error!("couldn't convert opcode");
+            Some(Opcode::Quit) => {
+                log::info!("Received quit opcode, exiting.");
+                let dropconn = xous::connect(i2c_sid).unwrap();
+                xous::send_message(dropconn,
+                    xous::Message::new_scalar(I2cOpcode::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+                unsafe{xous::disconnect(dropconn).unwrap();}
                 break;
+            }
+            None => {
+                error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }

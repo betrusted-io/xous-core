@@ -333,6 +333,7 @@ pub fn map_page_inner(
     assert!(vpn1 < 1024);
     assert!(vpn0 < 1024);
     assert!(vpo < 4096);
+    assert!((virt & 0xfff) == 0);
 
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
@@ -548,7 +549,7 @@ pub fn return_page_inner(
 
     // If the page is not valid in this program, we can't return it.
     if *src_entry & MMUFlags::VALID.bits() == 0 {
-        return Err(xous_kernel::Error::ShareViolation);
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // Mark the page as `Free`, which unmaps it.
@@ -610,6 +611,54 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
         return Err(xous_kernel::Error::BadAddress);
     }
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
+}
+
+pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
+    let virt = address & !0xfff;
+    let entry = crate::arch::mem::pagetable_entry(virt).or(Err(xous_kernel::Error::BadAddress))?;
+    // let entry = crate::arch::mem::pagetable_entry(virt).or_else(|e| {
+    //     // klog!("Error in mem: {:?}", e);
+    //     panic!("Page doesn't exist: {:08x}", address);
+    //     Err(xous_kernel::Error::BadAddress)
+    // })?;
+
+    let flags = *entry & 0x1ff;
+
+    if flags & MMUFlags::VALID.bits() != 0 {
+        return Ok(address);
+    }
+
+    // If the flags are nonzero, but the "Valid" bit is not 1 and
+    // the page isn't shared, then this is a reserved page. Allocate
+    // a real page to back it and resume execution.
+    if flags == 0 || flags & MMUFlags::S.bits() != 0 {
+        Err(xous_kernel::Error::BadAddress)?;
+    }
+
+    let new_page = MemoryManager::with_mut(|mm| {
+        mm.alloc_page(crate::arch::process::current_pid())
+            .expect("Couldn't allocate new page")
+    });
+    let ppn1 = (new_page >> 22) & ((1 << 12) - 1);
+    let ppn0 = (new_page >> 12) & ((1 << 10) - 1);
+    unsafe {
+        // Map the page to our process
+        *entry = (ppn1 << 20)
+            | (ppn0 << 10)
+            | (flags | (1 << 0) /* valid */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+        flush_mmu();
+
+        // Zero-out the page
+        (virt as *mut usize).write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
+
+        // Move the page into userspace
+        *entry = (ppn1 << 20)
+            | (ppn0 << 10)
+            | (flags | (1 << 0) /* valid */ | (1 << 4) /* USER */ | (1 << 6) /* D */ | (1 << 7)/* A */);
+        flush_mmu();
+    };
+
+    Ok(new_page)
 }
 
 /// Determine whether a virtual address has been mapped

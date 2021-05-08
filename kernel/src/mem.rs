@@ -562,6 +562,10 @@ impl MemoryManager {
         )
     }
 
+    pub fn ensure_page_exists(&mut self, address: usize) -> Result<(), xous_kernel::Error> {
+        crate::arch::mem::ensure_page_exists_inner(address).and(Ok(()))
+    }
+
     /// Claim the given memory for the given process, or release the memory
     /// back to the free pool.
     #[cfg(not(baremetal))]

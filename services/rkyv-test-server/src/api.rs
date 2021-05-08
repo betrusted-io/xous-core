@@ -43,7 +43,7 @@ pub(crate) enum MathOperation {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct LogString {
     pub(crate) prefix: String<32>,
-    pub(crate) message: String<512>,
+    pub(crate) message: String<5200>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

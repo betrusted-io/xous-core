@@ -1,6 +1,8 @@
 use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
+
+use heapless::FnvIndexMap;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
@@ -42,6 +44,22 @@ pub struct CommonEnv {
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
+    cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
+    trng: trng::Trng,
+}
+impl CommonEnv {
+    pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
+        let mut key: u32;
+        loop {
+            key = self.trng.get_u32().unwrap();
+            // reserve the bottom 1000 IDs for the main loop enums.
+            if !self.cb_registrations.contains_key(&key) && (key > 1000) {
+                break;
+            }
+        }
+        self.cb_registrations.insert(key, verb).unwrap();
+        key
+    }
 }
 
 /*
@@ -67,6 +85,7 @@ mod rtc_cmd;  use rtc_cmd::*;
 mod vibe;     use vibe::*;
 mod ssid;     use ssid::*;
 mod ver;      use ver::*;
+mod audio;    use audio::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -83,19 +102,24 @@ pub struct CmdEnv {
     rtc_cmd: RtcCmd,
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
+    audio_cmd: Audio,
 
     fcc_cmd: Fcc,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        let mut common = CommonEnv {
+            llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
+            com: com::Com::new(&xns).expect("could't connect to COM"),
+            ticktimer: ticktimer,
+            gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
+            cb_registrations: FnvIndexMap::new(),
+            trng: trng::Trng::new(&xns).unwrap(),
+        };
+        let fcc = Fcc::new(&mut common);
         CmdEnv {
-            common_env: CommonEnv {
-                llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
-                com: com::Com::new(&xns).expect("could't connect to COM"),
-                ticktimer: ticktimer,
-                gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
-            },
+            common_env: common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             //test_cmd: Test::new(),
@@ -105,8 +129,9 @@ impl CmdEnv {
             rtc_cmd: RtcCmd::new(&xns),
             vibe_cmd: Vibe::new(&xns),
             ssid_cmd: Ssid::new(),
+            audio_cmd: Audio::new(&xns),
 
-            fcc_cmd: Fcc::new(),
+            fcc_cmd: fcc,
         }
     }
 
@@ -126,6 +151,7 @@ impl CmdEnv {
             &mut self.vibe_cmd,
             &mut self.ssid_cmd,
             &mut ver_cmd,
+            &mut self.audio_cmd,
 
             &mut self.fcc_cmd,
         ];
@@ -169,14 +195,25 @@ impl CmdEnv {
             }
         } else if let Some(callback) = maybe_callback {
             let mut cmd_ret: Result<Option<String::<1024>>, xous::Error> = Ok(None);
-            if self.lastverb.len() > 0 {
-                let verb = self.lastverb.to_str();
-                for cmd in commands.iter_mut() {
-                    if cmd.matches(verb) {
-                        cmd_ret = cmd.callback(callback, &mut self.common_env);
-                        break;
-                    };
+            // first check and see if we have a callback registration; if not, just map to the last verb
+            let verb = match self.common_env.cb_registrations.get(&(callback.body.id() as u32)) {
+                Some(verb) => {
+                    verb.to_str()
+                },
+                None => {
+                    self.lastverb.to_str()
                 }
+            };
+            // now dispatch
+            let mut verbfound = false;
+            for cmd in commands.iter_mut() {
+                if cmd.matches(verb) {
+                    cmd_ret = cmd.callback(callback, &mut self.common_env);
+                    verbfound = true;
+                    break;
+                };
+            }
+            if verbfound {
                 cmd_ret
             } else {
                 Ok(None)

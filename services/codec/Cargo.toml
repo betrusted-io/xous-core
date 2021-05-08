@@ -1,0 +1,27 @@
+[package]
+name = "codec"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Audio CODEC server"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+susres = {path = "../susres"}
+llio = {path = "../llio"}
+trng = {path = "../trng"}
+
+xous-ipc = {path="../../xous-ipc"}
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+default = []

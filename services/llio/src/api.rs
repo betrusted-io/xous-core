@@ -40,6 +40,7 @@ impl Into<u32> for UartType {
 }
 
 /////////////////////// I2C
+pub (crate) const I2C_MAX_LEN: usize = 33;
 // a small book-keeping struct used to report back to I2C requestors as to the status of a transaction
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Eq, PartialEq)]
 pub enum I2cStatus {
@@ -63,17 +64,20 @@ pub enum I2cStatus {
     ResponseWriteOk,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum I2cCallback {
+pub(crate) enum I2cCallback {
     Result,
     Drop,
 }
+// maybe once things stabilize, it's probably a good idea to make this structure private to the crate,
+// and create a "public" version for return values via callbacks. But for now, it's pretty
+// convenient to reach into the state of the I2C machine to debug problems in the callbacks.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    pub txbuf: Option<[u8; 258]>, // long enough for a 256-byte operation + 2 bytes of "register address"
+    pub txbuf: Option<[u8; I2C_MAX_LEN]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
-    pub rxbuf: Option<[u8; 258]>,
+    pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
     pub rxlen: u32,
     pub listener: Option<(u32, u32, u32, u32)>, // where Rx split transactions should be routed to
     pub timeout_ms: u32,
@@ -84,6 +88,19 @@ impl I2cTransaction {
     pub fn new() -> Self {
         I2cTransaction{ bus_addr: 0, txbuf: None, txlen: 0, rxbuf: None, rxlen: 0, timeout_ms: 500, status: I2cStatus::Uninitialized, listener: None, callback_id: 0 }
     }
+}
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub(crate) enum I2cOpcode {
+    /// initiate an I2C transaction
+    I2cTxRx,
+    /// from i2c interrupt handler (internal API only)
+    IrqI2cTxrxWriteDone,
+    IrqI2cTxrxReadDone,
+    /// checks if the I2C engine is currently busy, for polling implementations
+    I2cIsBusy,
+    /// SuspendResume callback
+    SuspendResume,
+    Quit,
 }
 
 ////////////////////////////////// VIBE
@@ -136,6 +153,7 @@ impl Into<usize> for ClockMode {
 }
 
 pub(crate) const SERVER_NAME_LLIO: &str      = "_Low Level I/O manager_";
+pub(crate) const SERVER_NAME_I2C: &str       = "_Threaded I2C manager_";
 //////////////////////////////////// OPCODES
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
@@ -153,17 +171,16 @@ pub(crate) enum Opcode {
     GpioIntSubscribe, //(String<64>), // TODO
     GpioIntHappened,
 
-    /// not tested - set UART mux
+    /// set UART mux
     UartMux, //(UartType),
 
-    /// not tested - information about the SoC build and revision
     //TODO InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
     InfoTarget,
 
-    /// not tested -- power
+    /// partially tested -- power
     PowerAudio, //(bool),
     PowerSelf, //(bool), // setting this to false allows the EC to turn off our power
     PowerBoostMode, //(bool),
@@ -172,7 +189,7 @@ pub(crate) enum Opcode {
     EcPowerOn,
     SelfDestruct, //(u32), // requires a series of writes to enable
 
-    /// not tested -- vibe
+    /// vibe motor
     Vibe, //(VibePattern),
 
     /// not tested -- xadc
@@ -186,14 +203,7 @@ pub(crate) enum Opcode {
     AdcGpio5,
     AdcGpio2,
 
-    /// not tested - I2C functions
-    I2cTxRx, //(I2cTransaction), // type (tx or rx) encoded in struct
-    /// from i2c interrupt handler (internal API only)
-    IrqI2cTxrxDone,
-    /// checks if the I2C engine is currently busy, for polling implementations
-    I2cIsBusy,
-
-    /// not tested -- events
+    /// partially tested -- events
     EventComSubscribe, //(String<64>),
     EventRtcSubscribe, //(String<64>),
     EventUsbAttachSubscribe, //(String<64>),
@@ -208,7 +218,11 @@ pub(crate) enum Opcode {
 
     /// SuspendResume callback
     SuspendResume,
+
+    /// Exit the server
+    Quit,
 }
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {
     Event,

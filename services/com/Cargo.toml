@@ -7,7 +7,7 @@ version = "0.1.0"
 
 [dependencies]
 com_rs-ref = {path = "../../imports/com_rs-ref"}
-heapless = "0.5"
+heapless = "0.7"
 log = "0.4"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}

@@ -1162,7 +1162,7 @@ pub fn create_server_with_sid(sid: SID) -> core::result::Result<SID, Error> {
 ///
 /// # Errors
 ///
-/// * **OutOfMemory**: No more servers may be created
+/// * **ServerNotFound**: No more servers may be created
 pub fn create_server() -> core::result::Result<SID, Error> {
     let result = rsyscall(SysCall::CreateServer)?;
     if let Result::NewServerID(sid, _cid) = result {

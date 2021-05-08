@@ -4,7 +4,6 @@
 mod api;
 
 use heapless::binary_heap::{BinaryHeap, Min};
-use heapless::consts::*;
 
 use log::{error, info};
 
@@ -447,7 +446,7 @@ use implementation::*;
 
 fn recalculate_sleep(
     ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BinaryHeap<SleepRequest, U32, Min>,
+    sleep_heap: &mut BinaryHeap<SleepRequest, Min, 64>,
     new: Option<SleepRequest>,
 ) {
     // If there's a sleep request ongoing now, grab it.
@@ -490,7 +489,7 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let mut sleep_heap: BinaryHeap<SleepRequest, U32, Min> = BinaryHeap::new();
+    let mut sleep_heap: BinaryHeap<SleepRequest, Min, 64> = BinaryHeap::new();
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);

@@ -51,6 +51,7 @@ fn try_main() -> Result<(), DynError> {
         "llio",
         "rtc",
         "susres",
+        "codec",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -72,6 +73,7 @@ fn try_main() -> Result<(), DynError> {
         "rkyv-test-client",
         "rkyv-test-server",
         "susres",
+        "com",
     ];
     let cbtest_pkgs = [
         "ticktimer-server",

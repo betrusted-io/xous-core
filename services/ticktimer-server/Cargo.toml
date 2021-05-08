@@ -6,7 +6,7 @@ name = "ticktimer-server"
 version = "0.1.0"
 
 [dependencies]
-heapless = "0.5"
+heapless = "0.7"
 log = "0.4"
 log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}

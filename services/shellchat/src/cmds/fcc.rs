@@ -15,7 +15,7 @@ use xous::{Message, ScalarMessage, MessageEnvelope};
 use core::sync::atomic::{AtomicBool, Ordering};
 static CB_RUN: AtomicBool = AtomicBool::new(false);
 static CB_GO: AtomicBool = AtomicBool::new(false);
-pub fn callback_thread() {
+pub fn callback_thread(callback_id: usize) {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
     let xns = xous_names::XousNames::new().unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
@@ -26,9 +26,9 @@ pub fn callback_thread() {
             ticktimer.sleep_ms(20_000).unwrap();
             // after we wait, check and see if we still need the callback...
             if CB_GO.load(Ordering::Relaxed) {
-                // just send a bogus message
+                // send a message that will get routed to our callback handler, locatable with the `callback_id`
                 xous::send_message(callback_conn, Message::Scalar(ScalarMessage{
-                    id: 0xdeadbeef, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+                    id: callback_id, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
                 })).unwrap();
             }
         } else {
@@ -46,8 +46,9 @@ pub struct Fcc {
     tx_start_time: u64,
 }
 impl Fcc {
-    pub fn new() -> Fcc {
-        xous::create_thread_0(callback_thread).expect("couldn't create callback generator thread");
+    pub fn new(env: &mut CommonEnv) -> Fcc {
+        let callback_id = env.register_handler(String::<256>::from_str("fcc"));
+        xous::create_thread_1(callback_thread, callback_id as usize).expect("couldn't create callback generator thread");
         Fcc {
             channel: None, //Some(2), // default to simplify testing, replace with None
             rate: None, //Some(Rate::B1Mbps),  // default to simplify testing, replace with None

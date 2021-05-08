@@ -15,7 +15,7 @@ xous-names = {path = "../xous-names"}
 llio = {path = "../llio"}
 susres = {path = "../susres"}
 
-heapless = "0.5.6"
+heapless = "0.7"
 
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}

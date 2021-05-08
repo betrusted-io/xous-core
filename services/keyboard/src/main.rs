@@ -5,7 +5,6 @@ mod api;
 use api::*;
 
 use heapless::Vec;
-use heapless::consts::*;
 
 use log::info;
 
@@ -173,7 +172,6 @@ mod implementation {
     use susres::{RegManager, RegOrField, SuspendResume};
 
     use heapless::Vec;
-    use heapless::consts::*;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
@@ -401,7 +399,7 @@ mod implementation {
             krs
         }
 
-        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol, U16>>, keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol, 16>>, keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
             /*
             Chording algorithm:
 
@@ -420,7 +418,7 @@ mod implementation {
                 }
             }
             log::trace!("self.chord: {:?}", self.chord);
-            let mut keystates: Vec<char, U4> = Vec::new();
+            let mut keystates: Vec<char, 4> = Vec::new();
 
             let now = self.ticktimer.elapsed_ms();
             if was_idle && self.chord_active != 0 {
@@ -537,7 +535,7 @@ mod implementation {
             keystates
         }
 
-        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol, U16>>, keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol, 16>>, keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
             /*
               "conventional" keyboard algorithm. The goals of this are to differentiate
               the cases of "shift", "alt", and "hold".
@@ -548,7 +546,7 @@ mod implementation {
               then for all others, we note the down time, and compare it to the current time
               to determine if a "hold" modifier applies
              */
-            let mut ks: Vec<char, U4> = Vec::new();
+            let mut ks: Vec<char, 4> = Vec::new();
 
             // first check for shift and alt keys
             if let Some(kds) = &keydowns {
@@ -584,9 +582,9 @@ mod implementation {
                     }
                 }
             }
-            let keyups_noshift: Option<Vec<RowCol, U16>> =
+            let keyups_noshift: Option<Vec<RowCol, 16>> =
                 if let Some(kus) = &keyups {
-                    let mut ku_ns: Vec<RowCol, U16> = Vec::new();
+                    let mut ku_ns: Vec<RowCol, 16> = Vec::new();
                     for &rc in kus.iter() {
                         match self.map {
                             KeyMap::Azerty => {
@@ -747,7 +745,6 @@ mod implementation {
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use heapless::Vec;
-    use heapless::consts::*;
     use crate::api::*;
     //use crate::{map_dvorak, map_qwerty};
 
@@ -784,11 +781,11 @@ mod implementation {
             KeyRawStates::new()
         }
 
-        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, 16>>, _keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
             Vec::new()
         }
 
-        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, U16>>, _keydowns: Option<Vec<RowCol, U16>>) -> Vec<char, U4> {
+        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, 16>>, _keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
             Vec::new()
         }
 
@@ -935,8 +932,8 @@ fn xmain() -> ! {
                 // and push(), len() etc. which doesn't really make sense to re-implement. But, maybe someone much
                 // more clever than I could do extend RowColVec to have these feature and get rid of this ugly copy
                 // step and make the rest of this routine operate natively on RowColVec types....
-                let mut keyups_core: Vec<RowCol, U16> = Vec::new();
-                let mut keydowns_core: Vec<RowCol, U16> = Vec::new();
+                let mut keyups_core: Vec<RowCol, 16> = Vec::new();
+                let mut keydowns_core: Vec<RowCol, 16> = Vec::new();
                 for i in 0..rawstates.keyups.len() {
                     if let Some(rc) = rawstates.keyups.get(i) {
                         keyups_core.push(rc).unwrap();
@@ -960,7 +957,7 @@ fn xmain() -> ! {
 
                 // interpret scancodes
                 // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
-                let kc: Vec<char, U4> = match kbd.get_map() {
+                let kc: Vec<char, 4> = match kbd.get_map() {
                     KeyMap::Braille => {
                         kbd.track_chord(keyups, keydowns)
                     },

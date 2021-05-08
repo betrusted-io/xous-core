@@ -72,9 +72,6 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
-        // try powering on the audio block to help to discharge the 3.3VA line
-        env.llio.audio_on(true).unwrap();
-
         // in all cases, we want the boost to be off to ensure a clean shutdown
         env.com.set_boost(false).unwrap();
         env.llio.boost_on(false).unwrap();

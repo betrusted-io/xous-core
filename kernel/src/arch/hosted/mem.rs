@@ -100,6 +100,10 @@ pub fn return_page_inner(
     unimplemented!()
 }
 
+pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
+    unimplemented!()
+}
+
 pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, Error> {
     Ok(virt)
 }

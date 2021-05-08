@@ -50,7 +50,7 @@ impl Rtc {
         if let Some(sid) = self.callback_sid {
             sid_tuple = sid.to_u32();
         } else {
-            let sid = xous::create_server().unwrap();
+            let sid = xous::create_server().expect("Couldn't create RTC callback server");
             self.callback_sid = Some(sid);
             sid_tuple = sid.to_u32();
             xous::create_thread_4(rtc_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
