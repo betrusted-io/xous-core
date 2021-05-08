@@ -1,7 +1,6 @@
 use core::cmp::Ordering;
 use heapless::binary_heap::{BinaryHeap, Max};
 use heapless::FnvIndexMap;
-use heapless::consts::*;
 use graphics_server::*;
 use log::{error, info};
 
@@ -146,7 +145,7 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
-pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<(), xous::Error> {
+pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
     for (_, c) in canvases.iter() {
@@ -179,19 +178,19 @@ pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, U32> {
+pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, 32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, 32> {
     let debug = false;
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.
     if debug { info!("CANVAS: recompute canvas"); }
-    let mut sorted_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
+    let mut sorted_clipregions: BinaryHeap<Canvas, Max, 32> = BinaryHeap::new();
     for (&k, &c) in canvases.iter() {
         if debug { info!("   CANVAS: sorting gid {:?}, canvas {:?}", k, c);}
         sorted_clipregions.push(c).unwrap(); // always succeeds because incoming type is the same size
     }
 
     // now, descend through trust levels and compute intersections, putting the updated drawable states into higher_clipregions
-    let mut higher_clipregions: BinaryHeap<Canvas, U32, Max> = BinaryHeap::new();
+    let mut higher_clipregions: BinaryHeap<Canvas, Max, 32> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
     if debug{info!("CANVAS: received screen argument of {:?}", screen);}
@@ -227,7 +226,7 @@ pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, U32>, screen: Recta
     }
 
     // create a new index map out of the recomputed higher_clipregions
-    let mut map: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
+    let mut map: FnvIndexMap<Gid, Canvas, 32> = FnvIndexMap::new();
     if debug { info!("CANVAS: reconstituting index map");}
     for &c in higher_clipregions.iter() {
         if debug { info!("   CANVAS: inserting gid {:?}, canvas {:?}", c.gid(), c);}

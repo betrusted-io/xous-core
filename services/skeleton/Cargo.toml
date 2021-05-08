@@ -7,7 +7,6 @@ description = "Audio CODEC server"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
-heapless = "0.5.6"
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }

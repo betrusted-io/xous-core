@@ -41,7 +41,6 @@ mod implementation {
     use susres::{RegManager, RegOrField, SuspendResume};
 
     use heapless::Vec;
-    use heapless::consts::U64;
 
     const STD_TIMEOUT: u32 = 100;
 
@@ -49,7 +48,7 @@ mod implementation {
         csr: utralib::CSR<u32>,
         susres: RegManager::<{utra::com::COM_NUMREGS}>,
         ticktimer: ticktimer_server::Ticktimer,
-        pub workqueue: Vec<WorkRequest, U64>,
+        pub workqueue: Vec<WorkRequest, 64>,
         busy: bool,
         stby_current: Option<i16>,
     }
@@ -209,7 +208,7 @@ mod implementation {
     use heapless::consts::*;
 
     pub struct XousCom {
-        pub workqueue: Vec<WorkRequest, U64>,
+        pub workqueue: Vec<WorkRequest, 64>,
         busy: bool,
     }
 

@@ -23,7 +23,7 @@ keyboard = {path = "../keyboard"}
 susres = {path = "../susres"}
 codec = {path = "../codec"}
 
-heapless = "0.7.0"
+heapless = "0.7"
 trng = {path = "../trng"}
 
 num-derive = {version = "0.3", default-features = false}

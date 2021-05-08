@@ -18,7 +18,6 @@ use content_plugin_api::{ContentCanvasConnection, ContentCanvasApi};
 use log::info;
 
 use heapless::FnvIndexMap;
-use heapless::consts::*;
 
 use num_traits::FromPrimitive;
 use xous_ipc::Buffer;
@@ -40,7 +39,7 @@ struct ChatLayout {
     gfx: graphics_server::Gfx,
 }
 impl ChatLayout {
-    pub fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<ChatLayout, xous::Error> {
+    pub fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<ChatLayout, xous::Error> {
         let gfx = graphics_server::Gfx::new(&xns).unwrap();
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
@@ -85,7 +84,7 @@ impl ChatLayout {
             gfx,
         })
     }
-    pub fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<(), xous::Error> {
+    pub fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let content_canvas = canvases.get(&self.content).expect("couldn't find content canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
@@ -108,7 +107,7 @@ impl ChatLayout {
         self.gfx.draw_rectangle(rect).expect("can't clear canvas");
         Ok(())
     }
-    pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<Point, xous::Error> {
+    pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
         let status_canvas = canvases.get(&self.status).expect("couldn't find status canvas");
@@ -149,7 +148,7 @@ struct ModalCanvases {
     pub alert: Gid,
 }
 impl ModalCanvases {
-    fn init(trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, U32>) -> Result<ModalCanvases, xous::Error> {
+    fn init(trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<ModalCanvases, xous::Error> {
         let password_canvas = Canvas::new(
             Rectangle::new_coords(-1, -1, -1, -1),
             255, &trng, None
@@ -196,7 +195,7 @@ fn xmain() -> ! {
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
 
     // a map of canvases accessable by Gid
-    let mut canvases: FnvIndexMap<Gid, Canvas, U32> = FnvIndexMap::new();
+    let mut canvases: FnvIndexMap<Gid, Canvas, 32> = FnvIndexMap::new();
     // let modallayout = ModalCanvases::init(trng, &mut canvases).expect("can't add modal layouts");
     let mut chatlayout = ChatLayout::init(&xns, &trng, &mut canvases).expect("couldn't create chat layout");
     chatlayout.clear(&mut canvases).expect("couldn't clear initial chatlayout");
