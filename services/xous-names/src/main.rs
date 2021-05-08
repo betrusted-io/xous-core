@@ -6,8 +6,6 @@ extern crate hash32_derive;
 mod api;
 use api::*;
 
-use heapless::FnvIndexMap;
-
 use num_traits::FromPrimitive;
 use xous_ipc::{String, Buffer};
 
@@ -56,12 +54,69 @@ mod implementation {
     }
 }
 
+/*
+SlowMap is a stand-in implementation for a HashMap from the Heapless crate that has proven to be unsafe,
+and leaking data between entries. It's called "SlowMap" because it's slow: accesses are O(N). That
+being said, it's 100% safe, and xous-names accesses are once-in-a-blue-moon type of things, so
+I'll take safety over speed in this case.
+
+Eventually, we shall endeavor to remove Heapless entirely, once we have a `libstd` in place
+and we can use heap-allocated Rust primitives...
+*/
+struct SlowMap {
+    pub map: [Option<(XousServerName, xous::SID)>; 128],
+}
+impl SlowMap {
+    pub fn new() -> Self {
+        SlowMap {
+            map: [None; 128],
+        }
+    }
+    pub fn insert(&mut self, name: XousServerName, sid: xous::SID) -> Result<(), xous::Error> {
+        let mut ok = false;
+        for entry in self.map.iter_mut() {
+            if entry.is_none() {
+                *entry = Some((name, sid));
+                ok = true;
+                break;
+            }
+        }
+        if !ok {
+            Err(xous::Error::OutOfMemory)
+        } else {
+            Ok(())
+        }
+    }
+    pub fn contains_key(&self, name: &XousServerName) -> bool {
+        for maybe_entry in self.map.iter() {
+            if let Some(entry) = maybe_entry {
+                let (key, _value) = entry;
+                if name == key {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    pub fn get(&self, name: &XousServerName) -> Option<&xous::SID> {
+        for maybe_entry in self.map.iter() {
+            if let Some(entry) = maybe_entry {
+                let (key, value) = entry;
+                if name == key {
+                    return Some(value)
+                }
+            }
+        }
+        None
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     use implementation::*;
-    let debug1 = true;
+    let debug1 = false;
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let name_server = xous::create_server_with_address(b"xous-name-server")
@@ -70,7 +125,8 @@ fn xmain() -> ! {
     let d11ctimeout = D11cTimeout::new();
 
     // this limits the number of available servers to be requested to 128...!
-    let mut name_table = FnvIndexMap::<XousServerName, xous::SID, 128>::new();
+    //let mut name_table = FnvIndexMap::<XousServerName, xous::SID, 128>::new();
+    let mut name_table = SlowMap::new();
 
     info!("started");
     loop {
@@ -127,8 +183,10 @@ fn xmain() -> ! {
                                 "Can't find request '{}' in table, dumping table:",
                                 name
                             );
-                            for (key, val) in name_table.iter() {
-                                info!("name: '{}', sid: '{:?}'", key, val);
+                            for kv_tuple in name_table.map.iter() {
+                                if let Some((key, val)) = kv_tuple {
+                                    info!("name: '{}', sid: '{:?}'", key, val);
+                                }
                             }
                             response = api::Return::Failure
                         }
@@ -138,8 +196,10 @@ fn xmain() -> ! {
                         "Can't find request '{}' in table, dumping table:",
                         name
                     );
-                    for (key, val) in name_table.iter() {
-                        info!("name: '{}', sid: '{:?}'", key, val);
+                    for kv_tuple in name_table.map.iter() {
+                        if let Some((key, val)) = kv_tuple {
+                            info!("name: '{}', sid: '{:?}'", key, val);
+                        }
                     }
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                     let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();

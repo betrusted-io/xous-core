@@ -1846,7 +1846,6 @@ version = "0.1.0"
 dependencies = [
  "hash32",
  "hash32-derive",
- "heapless",
  "log",
  "log-server",
  "num-derive",
