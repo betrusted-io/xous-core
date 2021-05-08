@@ -117,6 +117,21 @@ impl<'a> ShellCmdApi<'a> for Audio {
                 "info" => {
                     write!(ret, "Loaded sample is {}kHz, {} channels, {} format, {} bytes", self.header.sampling_rate, self.header.channel_count, self.header.audio_format, self.raw_len_bytes).unwrap();
                 }
+                "dump" => {
+                    let mut temp = String::<9>::new();
+                    for i in 0..8 {
+                        write!(temp, "{:08x} ", unsafe{self.raw_data.add(i).read_volatile()}).unwrap();
+                        ret.append(temp.to_str()).unwrap();
+                        temp.clear();
+                    }
+                    ret.append("\n").unwrap();
+                    ret.append("\n").unwrap();
+                    for i in 0..8 {
+                        write!(temp, "{:08x} ", unsafe{self.raw_data.add(i + 0x2000).read_volatile()}).unwrap();
+                        ret.append(temp.to_str()).unwrap();
+                        temp.clear();
+                    }
+                }
                 _ =>  write!(ret, "{}", helpstring).unwrap(),
             }
         } else {
