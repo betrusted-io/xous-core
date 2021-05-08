@@ -275,7 +275,7 @@ impl I2cStateMachine {
     }
 
     // interrupt context-friendly handler
-    pub fn handler_i(&mut self) -> I2cHandlerReport {
+    pub(crate) fn handler_i(&mut self) -> I2cHandlerReport {
         let mut report = I2cHandlerReport::InProgress;
 
         match self.state {

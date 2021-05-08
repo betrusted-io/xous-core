@@ -205,7 +205,6 @@ mod implementation {
     use log::error;
 
     use heapless::Vec;
-    use heapless::consts::*;
 
     pub struct XousCom {
         pub workqueue: Vec<WorkRequest, 64>,

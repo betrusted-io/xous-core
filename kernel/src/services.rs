@@ -217,7 +217,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
-    servers: filled_array![None; 32],
+    servers: filled_array![None; 128],
 }));
 
 #[cfg(baremetal)]

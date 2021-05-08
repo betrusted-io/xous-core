@@ -1,7 +1,7 @@
 #[cfg(not(target_os = "none"))]
 mod hosted;
 #[cfg(not(target_os = "none"))]
-pub use crate::backend::hosted::*;
+pub use crate::i2c::hosted::*;
 
 #[cfg(target_os = "none")]
 mod hardware;

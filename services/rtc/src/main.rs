@@ -512,6 +512,8 @@ mod implementation {
         pub fn clear_wakeup_alarm(&mut self) { }
         pub fn rtc_alarm(&mut self, _seconds: u8) { }
         pub fn clear_rtc_alarm(&mut self) { }
+        pub fn rtc_get_ack(&mut self) {
+        }
     }
 }
 
