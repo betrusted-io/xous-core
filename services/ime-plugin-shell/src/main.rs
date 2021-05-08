@@ -5,6 +5,7 @@ use ime_plugin_api::*;
 
 use log::{error, info};
 use heapless::spsc::Queue;
+use heapless::consts::*;
 
 use xous_ipc::{String, Buffer};
 use num_traits::FromPrimitive;
@@ -19,7 +20,7 @@ fn xmain() -> ! {
     let ime_sh_sid = xns.register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
-    let mut history: Queue<String<64>, 4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
+    let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
     let history_max = 4;
 
     if false { // loads defaults into the predictor array to test things

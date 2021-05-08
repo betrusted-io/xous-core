@@ -109,15 +109,17 @@ pub struct CmdEnv {
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
         let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
+        let mut common = CommonEnv {
+            llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
+            com: com::Com::new(&xns).expect("could't connect to COM"),
+            ticktimer: ticktimer,
+            gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
+            cb_registrations: FnvIndexMap::new(),
+            trng: trng::Trng::new(&xns).unwrap(),
+        };
+        let fcc = Fcc::new(&mut common);
         CmdEnv {
-            common_env: CommonEnv {
-                llio: llio::Llio::new(&xns).expect("couldn't connect to LLIO"),
-                com: com::Com::new(&xns).expect("could't connect to COM"),
-                ticktimer: ticktimer,
-                gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
-                cb_registrations: FnvIndexMap::new(),
-                trng: trng::Trng::new(&xns).unwrap(),
-            },
+            common_env: common,
             lastverb: String::<256>::new(),
             ///// 3. initialize your storage, by calling new()
             //test_cmd: Test::new(),
@@ -129,7 +131,7 @@ impl CmdEnv {
             ssid_cmd: Ssid::new(),
             audio_cmd: Audio::new(&xns),
 
-            fcc_cmd: Fcc::new(),
+            fcc_cmd: fcc,
         }
     }
 
