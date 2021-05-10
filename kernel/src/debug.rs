@@ -140,11 +140,11 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 let current_pid = system_services.current_pid();
                 for process in &system_services.processes {
                     if !process.free() {
-                        println!("PID {}:", process.pid);
+                        println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
                         process.activate().unwrap();
                         crate::arch::mem::MemoryMapping::current().print_map();
+                        println!();
                     }
-                    println!();
                 }
                 system_services
                     .get_process(current_pid)
@@ -159,7 +159,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 let current_pid = system_services.current_pid();
                 for process in &system_services.processes {
                     if !process.free() {
-                        println!("PID {}:", process.pid);
+                        println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
                         process.activate().unwrap();
                         crate::arch::process::Process::with_current_mut(|arch_process| {
                             arch_process.print_all_threads()
@@ -194,6 +194,14 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 });
             });
             println!("{} k total", total_bytes / 1024);
+        }
+        'h' => {
+            println!("Xous Kernel Debug");
+            println!("key | command");
+            println!("--- + -----------------------");
+            println!(" r  | report RAM usage of all processes");
+            println!(" p  | print all processes and threads");
+            println!(" m  | print MMU page tables of all processes");
         }
         _ => {}
     }
