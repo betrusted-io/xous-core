@@ -353,8 +353,25 @@ impl Process {
         Ok(())
     }
 
-    pub fn print_thread(&self) {
-        let _thread = self.current_thread();
+    pub fn print_all_threads(&self) {
+        let process = unsafe { &mut *PROCESS };
+        &mut process.threads[process.hardware_thread - 1];
+        for (tid_idx, &thread) in process.threads.iter().enumerate() {
+            let tid = tid_idx + 1;
+            if thread.registers[1] != 0 {
+                Self::print_thread(tid, &thread);
+            }
+        }
+    }
+
+    pub fn print_current_thread(&self) {
+        let thread = self.current_thread();
+        let tid = self.current_tid();
+        Self::print_thread(tid, &thread);
+    }
+
+    pub fn print_thread(_tid: TID, _thread: &Thread) {
+        println!("Thread {}:", _tid);
         println!(
             "PC:{:08x}   SP:{:08x}   RA:{:08x}",
             _thread.sepc, _thread.registers[1], _thread.registers[0]

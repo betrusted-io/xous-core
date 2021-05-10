@@ -180,7 +180,7 @@ pub extern "C" fn trap_handler(
         println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
         ArchProcess::with_current(|process| {
             println!("Current thread {}:", process.current_tid());
-            process.print_thread();
+            process.print_current_thread();
         });
         MemoryMapping::current().print_map();
         loop {}
