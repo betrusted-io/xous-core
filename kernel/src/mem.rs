@@ -182,6 +182,7 @@ impl MemoryManager {
 
     /// Print the number of RAM bytes used by the specified process.
     /// This does not include memory such as peripherals and CSRs.
+    #[cfg(baremetal)]
     pub fn ram_used_by(&self, pid: PID) -> usize {
         let mut owned_bytes = 0;
         unsafe {
@@ -192,6 +193,11 @@ impl MemoryManager {
             }
         }
         owned_bytes
+    }
+
+    #[cfg(not(baremetal))]
+    pub fn ram_used_by(&self, _pid: PID) -> usize {
+        0
     }
 
     #[cfg(all(baremetal, feature = "print-debug"))]
