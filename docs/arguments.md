@@ -125,3 +125,15 @@ offsets must be in the range `0xffc0_0000` - `0xfff0_0000`.
 * ENTRYPOINT -- Virtual address of the `_start()` function
 
 The kernel will run in Supervisor mode, and have its own private stack.
+
+### PNam
+
+`PNam` maps process IDs to process names. If multiple `PNam` tags exist
+within a block, the first one that is encountered should take precedence.
+This tag is a series of entries that take the following format:
+
+| Size (bytes) | Name | Description
+| --------- | ---- | -----
+| 4         | PID | ID of the process that this name describes
+| 4 | Length | The length of the data that follows
+| varies | Data | The UTF-8 name string

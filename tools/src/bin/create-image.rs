@@ -10,6 +10,7 @@ use tools::elf::{read_minielf, read_program};
 use tools::tags::bflg::Bflg;
 use tools::tags::inie::IniE;
 use tools::tags::memory::{MemoryRegion, MemoryRegions};
+use tools::tags::pnam::ProcessNames;
 use tools::tags::xkrn::XousKernel;
 use tools::utils::{parse_csr_csv, parse_u32};
 use tools::xous_arguments::XousArguments;
@@ -138,6 +139,8 @@ fn main() {
         memory_required: 0,
     };
 
+    let mut process_names = ProcessNames::new();
+
     if let Some(val) = matches.value_of("ram") {
         let ram_parts: Vec<&str> = val.split(':').collect();
         if ram_parts.len() != 2 {
@@ -224,8 +227,20 @@ fn main() {
     )
     .expect("unable to read kernel");
 
+    process_names.set(1, "kernel");
     if let Some(init_paths) = matches.values_of("init") {
+        let mut pid = 2;
         for init_path in init_paths {
+            let program_name = std::path::Path::new(init_path);
+            process_names.set(
+                pid,
+                program_name
+                    .file_stem()
+                    .expect("program had no name")
+                    .to_str()
+                    .expect("program name is not valid utf-8"),
+            );
+            pid += 1;
             let init = read_minielf(init_path).expect("couldn't parse init file");
             args.add(IniE::new(init.entry_point, init.sections, init.program));
         }
@@ -241,6 +256,8 @@ fn main() {
         kernel.program,
     );
     args.add(xkrn);
+
+    args.add(process_names);
 
     // Add tags for init and kernel.  These point to the actual data, which should
     // immediately follow the tags.  Therefore, we must know the length of the tags
