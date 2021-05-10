@@ -229,7 +229,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
             );
             // Add this message to the queue.  If the queue is full, this
             // returns an error.
-            ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+            let _queue_idx = ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+            klog!("queued into index {:x}", _queue_idx);
 
             // Park this context if it's blocking.  This is roughly
             // equivalent to a "Yield".
@@ -529,7 +530,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
 
         // If there is a pending message, return it immediately.
         if let Some(msg) = server.take_next_message(sidx) {
-            klog!("waiting messages found -- returning {:?}", msg);
+            klog!("waiting messages found -- returning {:x?}", msg);
             return Ok(xous_kernel::Result::Message(msg));
         }
 
