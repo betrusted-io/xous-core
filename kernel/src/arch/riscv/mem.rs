@@ -12,6 +12,7 @@ pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
 pub const DEFAULT_BASE: usize = 0x6000_0000;
 
 pub const USER_AREA_END: usize = 0xff00_0000;
+pub const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
 pub const PAGE_SIZE: usize = 4096;
 const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
 const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
