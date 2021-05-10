@@ -1881,4 +1881,34 @@ impl SystemServices {
         }
         Ok(())
     }
+
+    /// Returns the process name, if any, of a given PID
+    pub fn process_name(&self, pid: PID) -> Option<&str> {
+        let args = crate::args::KernelArguments::get();
+        for arg in args.iter() {
+            if arg.name != make_type!("PNam") {
+                continue;
+            }
+            let data = unsafe {
+                let ptr = arg.data.as_ptr();
+                let len = arg.size;
+                core::slice::from_raw_parts(ptr as *const u8, len * 4)
+            };
+            let mut offset = 0;
+            while offset <= arg.size {
+                let check_pid = u32::from_le_bytes([data[offset+0],data[offset+1],data[offset+2],data[offset+3]]);
+                let str_len = u32::from_le_bytes([data[offset+4],data[offset+5],data[offset+6],data[offset+7]]) as usize;
+                if check_pid == pid.get() as _ {
+                    if let Ok(s) = core::str::from_utf8(&data[offset+8..offset+8+str_len]){
+                        return Some(s);
+                    } else {
+                        return None;
+                    }
+                }
+                offset += str_len + 8;
+                offset += (4-(offset & 3))&3;
+            }
+        }
+        None
+    }
 }
