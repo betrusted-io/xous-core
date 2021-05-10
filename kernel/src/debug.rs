@@ -100,8 +100,7 @@ impl Uart {
                 self.putc(b' ');
                 self.putc(b' ');
                 self.putc(b' ');
-            }
-            else {
+            } else {
                 CHAR_COUNT += 1;
             }
         }
@@ -130,13 +129,70 @@ impl Uart {
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
-    println!(
-        "Interrupt {}: Key pressed: {}",
-        _irq_number,
-        Uart {}
-            .getc()
-            .expect("no character queued despite interrupt") as char
-    );
+    let pressed_key = Uart {}
+        .getc()
+        .expect("no character queued despite interrupt") as char;
+    println!("Interrupt {}: Key pressed: {}", _irq_number, pressed_key,);
+    match pressed_key {
+        'm' => {
+            println!("Printing memory page tables");
+            crate::services::SystemServices::with(|system_services| {
+                let current_pid = system_services.current_pid();
+                for process in &system_services.processes {
+                    if !process.free() {
+                        println!("PID {}:", process.pid);
+                        process.activate().unwrap();
+                        crate::arch::mem::MemoryMapping::current().print_map();
+                    }
+                    println!();
+                }
+                system_services
+                    .get_process(current_pid)
+                    .unwrap()
+                    .activate()
+                    .unwrap();
+            });
+        }
+        'p' => {
+            println!("Printing processes");
+            crate::services::SystemServices::with(|system_services| {
+                let current_pid = system_services.current_pid();
+                for process in &system_services.processes {
+                    if !process.free() {
+                        println!("PID {}:", process.pid);
+                        process.activate().unwrap();
+                        crate::arch::process::Process::with_current_mut(|arch_process| {
+                            arch_process.print_all_threads()
+                        });
+                        println!();
+                    }
+                }
+                system_services
+                    .get_process(current_pid)
+                    .unwrap()
+                    .activate()
+                    .unwrap();
+            });
+        }
+        'r' => {
+            println!("RAM usage:");
+            crate::services::SystemServices::with(|system_services| {
+                crate::mem::MemoryManager::with(|mm| {
+                    for process in &system_services.processes {
+                        if !process.free() {
+                            println!(
+                                "    PID {}: {:>4} k {}",
+                                process.pid,
+                                mm.ram_used_by(process.pid) / 1024,
+                                system_services.process_name(process.pid).unwrap_or("")
+                            );
+                        }
+                    }
+                });
+            });
+        }
+        _ => {}
+    }
 }
 
 #[cfg(baremetal)]
