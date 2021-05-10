@@ -45,34 +45,40 @@ impl core::fmt::Display for MessageSender {
 
 /// Server ID
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct SID((u32, u32, u32, u32));
+pub struct SID([u32; 4]);
 impl SID {
     pub fn from_bytes(b: &[u8]) -> Option<SID> {
         if b.len() > 16 {
             None
         } else {
-            let mut sid = (0, 0, 0, 0);
+            let mut sid = [0; 4];
             let mut byte_iter = b.chunks_exact(4);
             if let Some(val) = byte_iter.next() {
-                sid.0 = u32::from_le_bytes(val.try_into().ok()?);
+                sid[0] = u32::from_le_bytes(val.try_into().ok()?);
             }
             if let Some(val) = byte_iter.next() {
-                sid.1 = u32::from_le_bytes(val.try_into().ok()?);
+                sid[1] = u32::from_le_bytes(val.try_into().ok()?);
             }
             if let Some(val) = byte_iter.next() {
-                sid.2 = u32::from_le_bytes(val.try_into().ok()?);
+                sid[2] = u32::from_le_bytes(val.try_into().ok()?);
             }
             if let Some(val) = byte_iter.next() {
-                sid.3 = u32::from_le_bytes(val.try_into().ok()?);
+                sid[3] = u32::from_le_bytes(val.try_into().ok()?);
             }
             Some(SID(sid))
         }
     }
     pub fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID {
-        SID((a0, a1, a2, a3))
+        SID([a0, a1, a2, a3])
+    }
+    pub fn from_array(a: [u32; 4]) -> SID {
+        SID(a)
     }
     pub fn to_u32(&self) -> (u32, u32, u32, u32) {
-        ((self.0).0, (self.0).1, (self.0).2, (self.0).3)
+        (self.0[0], self.0[1], self.0[2], self.0[3])
+    }
+    pub fn to_array(&self) -> [u32; 4] {
+        self.0
     }
 }
 
@@ -92,13 +98,13 @@ impl From<[u32; 4]> for SID {
 
 impl From<&[u32; 4]> for SID {
     fn from(src: &[u32; 4]) -> Self {
-        Self::from_u32(src[0], src[1], src[2], src[3])
+        Self::from_array(*src)
     }
 }
 
 impl Into<[u32; 4]> for SID {
     fn into(self) -> [u32; 4] {
-        [(self.0).0, (self.0).1, (self.0).2, (self.0).3]
+        self.0
     }
 }
 
