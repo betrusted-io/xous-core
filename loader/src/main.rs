@@ -35,7 +35,7 @@ const FLG_R: usize = 0x2;
 const FLG_U: usize = 0x10;
 const FLG_A: usize = 0x40;
 const FLG_D: usize = 0x80;
-const STACK_PAGE_COUNT: usize = 5;
+const STACK_PAGE_COUNT: usize = 8;
 
 const VDBG: bool = false; // verbose debug
 
