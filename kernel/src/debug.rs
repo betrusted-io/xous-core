@@ -176,20 +176,24 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
         }
         'r' => {
             println!("RAM usage:");
+            let mut total_bytes = 0;
             crate::services::SystemServices::with(|system_services| {
                 crate::mem::MemoryManager::with(|mm| {
                     for process in &system_services.processes {
                         if !process.free() {
+                            let bytes_used = mm.ram_used_by(process.pid);
+                            total_bytes += bytes_used;
                             println!(
-                                "    PID {}: {:>4} k {}",
+                                "    PID {:>3}: {:>4} k {}",
                                 process.pid,
-                                mm.ram_used_by(process.pid) / 1024,
+                                bytes_used / 1024,
                                 system_services.process_name(process.pid).unwrap_or("")
                             );
                         }
                     }
                 });
             });
+            println!("{} k total", total_bytes / 1024);
         }
         _ => {}
     }
