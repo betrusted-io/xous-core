@@ -114,6 +114,18 @@ impl MemoryManager {
         MEMORY_MANAGER.with(|ss| f(&mut ss.borrow_mut()))
     }
 
+    pub fn with<F, R>(f: F) -> R
+    where
+        F: FnOnce(&MemoryManager) -> R,
+    {
+        #[cfg(baremetal)]
+        unsafe {
+            f(&MEMORY_MANAGER)
+        }
+
+        #[cfg(not(baremetal))]
+        MEMORY_MANAGER.with(|ss| f(&ss.borrow_mut()))
+    }
     #[cfg(baremetal)]
     pub fn init_from_memory(
         &mut self,
@@ -166,6 +178,20 @@ impl MemoryManager {
             MEMORY_ALLOCATIONS = slice::from_raw_parts_mut(base as *mut Option<PID>, mem_size)
         };
         Ok(())
+    }
+
+    /// Print the number of RAM bytes used by the specified process.
+    /// This does not include memory such as peripherals and CSRs.
+    pub fn ram_used_by(&self, pid: PID) -> usize {
+        let mut owned_bytes = 0;
+        unsafe {
+            for owner in &MEMORY_ALLOCATIONS[0..self.ram_size / PAGE_SIZE] {
+                if owner == &Some(pid) {
+                    owned_bytes += PAGE_SIZE;
+                }
+            }
+        }
+        owned_bytes
     }
 
     #[cfg(all(baremetal, feature = "print-debug"))]
