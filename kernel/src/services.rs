@@ -527,7 +527,11 @@ impl SystemServices {
         // function returns, it will jump to the RETURN_FROM_ISR address,
         // causing an instruction fault and exiting the interrupt.
         ArchProcess::with_current_mut(|arch_process| {
-            let sp = arch_process.current_thread().stack_pointer();
+            let sp = if pid.get() == 1 {
+                arch::mem::EXCEPTION_STACK_TOP
+            } else {
+                arch_process.current_thread().stack_pointer()
+            };
 
             // Activate the current context
             arch_process.set_thread(arch::process::IRQ_TID).unwrap();
