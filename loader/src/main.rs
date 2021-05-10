@@ -26,6 +26,7 @@ const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
 const KERNEL_LOAD_OFFSET: usize = 0xffd0_0000;
 const KERNEL_STACK_PAGE_COUNT: usize = 1;
 const KERNEL_ARGUMENT_OFFSET: usize = 0xffc0_0000;
+const GUARD_MEMORY_BYTES: usize = 2 * PAGE_SIZE;
 
 const FLG_VALID: usize = 0x1;
 const FLG_X: usize = 0x8;
@@ -1266,7 +1267,7 @@ fn phase_1(cfg: &mut BootConfig) {
     // All other allocations will be placed below the stack pointer.
     //
     // As of Xous 0.8, the top page is bootloader stack, and the page below that is the 'clean suspend' page.
-    cfg.init_size += PAGE_SIZE * 2;
+    cfg.init_size += GUARD_MEMORY_BYTES;
 
     // The first region is defined as being "main RAM", which will be used
     // to keep track of allocations.
@@ -1347,7 +1348,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
 
     // Map boot-generated kernel structures into the kernel
     let satp = unsafe { &mut *(krn_l1_pt_addr as *mut PageTable) };
-    for addr in (0..cfg.init_size).step_by(PAGE_SIZE as usize) {
+    for addr in (0..cfg.init_size-GUARD_MEMORY_BYTES).step_by(PAGE_SIZE as usize) {
         cfg.map_page(
             satp,
             addr + krn_struct_start,
