@@ -317,8 +317,8 @@ impl Iterator for QuadrantIterator {
                         self.p.x = -(self.radius as i16);
                         self.p.y += 1;
                     }
-                    if self.p.y > 0 as i16 {
-                        break item;
+                    if self.p.y > 1 as i16 {
+                        break None;
                     }
                     if item.is_some() {
                         break item;
@@ -329,8 +329,8 @@ impl Iterator for QuadrantIterator {
                         self.p.x = 0;
                         self.p.y += 1;
                     }
-                    if self.p.y > 0 as i16 {
-                        break item;
+                    if self.p.y > 1 as i16 {
+                        break None;
                     }
                     if item.is_some() {
                         break item;
