@@ -68,16 +68,16 @@ impl SID {
             Some(SID(sid))
         }
     }
-    pub fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID {
+    pub const fn from_u32(a0: u32, a1: u32, a2: u32, a3: u32) -> SID {
         SID([a0, a1, a2, a3])
     }
-    pub fn from_array(a: [u32; 4]) -> SID {
+    pub const fn from_array(a: [u32; 4]) -> SID {
         SID(a)
     }
-    pub fn to_u32(&self) -> (u32, u32, u32, u32) {
+    pub const fn to_u32(&self) -> (u32, u32, u32, u32) {
         (self.0[0], self.0[1], self.0[2], self.0[3])
     }
-    pub fn to_array(&self) -> [u32; 4] {
+    pub const fn to_array(&self) -> [u32; 4] {
         self.0
     }
 }
@@ -376,15 +376,35 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn new_scalar(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> crate::Message {
+    pub fn new_scalar(
+        id: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+    ) -> crate::Message {
         Message::Scalar(crate::ScalarMessage {
-            id, arg1, arg2, arg3, arg4
+            id,
+            arg1,
+            arg2,
+            arg3,
+            arg4,
         })
     }
 
-    pub fn new_blocking_scalar(id: usize, arg1: usize, arg2: usize, arg3: usize, arg4: usize) -> crate::Message {
+    pub fn new_blocking_scalar(
+        id: usize,
+        arg1: usize,
+        arg2: usize,
+        arg3: usize,
+        arg4: usize,
+    ) -> crate::Message {
         Message::BlockingScalar(crate::ScalarMessage {
-            id, arg1, arg2, arg3, arg4
+            id,
+            arg1,
+            arg2,
+            arg3,
+            arg4,
         })
     }
 
@@ -419,6 +439,13 @@ impl Message {
         match self {
             Message::MutableBorrow(mem) | Message::Move(mem) => Some(mem),
             Message::BlockingScalar(_) | Message::Scalar(_) | Message::Borrow(_) => None,
+        }
+    }
+
+    pub fn scalar_message(&self) -> Option<&ScalarMessage> {
+        match self {
+            Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) => None,
+            Message::BlockingScalar(scalar) | Message::Scalar(scalar) => Some(&scalar),
         }
     }
 
@@ -520,7 +547,8 @@ impl Drop for MessageEnvelope {
     fn drop(&mut self) {
         match &self.body {
             Message::Borrow(x) | Message::MutableBorrow(x) => {
-                crate::syscall::return_memory_offset(self.sender, x.buf, x.offset).expect("couldn't return memory")
+                crate::syscall::return_memory_offset_valid(self.sender, x.buf, x.offset, x.valid)
+                    .expect("couldn't return memory")
             }
             Message::Move(msg) => {
                 crate::syscall::unmap_memory(msg.buf).expect("couldn't free memory message")
@@ -815,31 +843,37 @@ pub type SysCallResult = core::result::Result<Result, Error>;
 #[macro_export]
 macro_rules! msg_scalar_unpack {
     // the args are `tt` so that you can specify _ as the arg
-    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {{
+        if let xous::Message::Scalar(xous::ScalarMessage {
+            id: _,
+            arg1: $arg1,
+            arg2: $arg2,
+            arg3: $arg3,
+            arg4: $arg4,
+        }) = $msg.body
         {
-            if let xous::Message::Scalar(xous::ScalarMessage {
-                id: _, arg1: $arg1, arg2: $arg2, arg3: $arg3, arg4: $arg4
-            }) = $msg.body {
-               $body
-            } else {
-                log::error!("message expansion failed in msg_scalar_unpack macro")
-            }
+            $body
+        } else {
+            log::error!("message expansion failed in msg_scalar_unpack macro")
         }
-    }
+    }};
 }
 
 #[macro_export]
 macro_rules! msg_blocking_scalar_unpack {
     // the args are `tt` so that you can specify _ as the arg
-    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {
+    ($msg:ident, $arg1:tt, $arg2:tt, $arg3:tt, $arg4:tt, $body: block) => {{
+        if let xous::Message::BlockingScalar(xous::ScalarMessage {
+            id: _,
+            arg1: $arg1,
+            arg2: $arg2,
+            arg3: $arg3,
+            arg4: $arg4,
+        }) = $msg.body
         {
-            if let xous::Message::BlockingScalar(xous::ScalarMessage {
-                id: _, arg1: $arg1, arg2: $arg2, arg3: $arg3, arg4: $arg4
-            }) = $msg.body {
-               $body
-            } else {
-                log::error!("message expansion failed in msg_scalar_unpack macro")
-            }
+            $body
+        } else {
+            log::error!("message expansion failed in msg_scalar_unpack macro")
         }
-    }
+    }};
 }

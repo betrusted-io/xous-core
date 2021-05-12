@@ -1062,6 +1062,24 @@ pub fn return_memory_offset(
 
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
+pub fn return_memory_offset_valid(
+    sender: MessageSender,
+    mem: MemoryRange,
+    offset: Option<MemorySize>,
+    valid: Option<MemorySize>,
+) -> core::result::Result<(), Error> {
+    let result = rsyscall(SysCall::ReturnMemory(sender, mem, offset, valid))?;
+    if let crate::Result::Ok = result {
+        Ok(())
+    } else if let Result::Error(e) = result {
+        Err(e)
+    } else {
+        Err(Error::InternalError)
+    }
+}
+
+/// Map the given physical address to the given virtual address.
+/// The `size` field must be page-aligned.
 pub fn return_scalar(sender: MessageSender, val: usize) -> core::result::Result<(), Error> {
     let result = rsyscall(SysCall::ReturnScalar1(sender, val))?;
     if let crate::Result::Ok = result {

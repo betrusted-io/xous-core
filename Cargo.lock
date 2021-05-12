@@ -841,6 +841,8 @@ name = "log-server"
 version = "0.1.0"
 dependencies = [
  "log",
+ "num-derive",
+ "num-traits",
  "rkyv 0.4.3",
  "utralib",
  "vergen",

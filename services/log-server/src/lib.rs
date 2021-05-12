@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
+use num_traits::ToPrimitive;
 use xous_ipc::{Buffer, String};
 
 pub mod api;
@@ -65,12 +66,16 @@ impl XousLoggerBacking<'_> {
         };
 
         self.buffer.rewrite(lr).unwrap();
-        self.buffer.lend(self.conn, 0).unwrap(); // there is only one type of buffer we should be sending!
+        self.buffer
+            .lend(self.conn, crate::api::Opcode::LogRecord.to_u32().unwrap())
+            .unwrap();
     }
     fn resume(&self) {
-        xous::send_message(self.conn,
-            xous::Message::new_scalar(2000, 0, 0, 0, 0) // logger is one of the few servers that uses special, non-encoded message IDs.
-        ).expect("couldn't send resume message to the logger implementation");
+        xous::send_message(
+            self.conn,
+            xous::Message::new_scalar(2000, 0, 0, 0, 0), // logger is one of the few servers that uses special, non-encoded message IDs.
+        )
+        .expect("couldn't send resume message to the logger implementation");
     }
 }
 

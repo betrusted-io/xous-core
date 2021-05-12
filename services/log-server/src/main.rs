@@ -9,7 +9,7 @@ use api::*;
 mod debug;
 
 use core::fmt::Write;
-use xous_ipc::String;
+use num_traits::FromPrimitive;
 
 #[cfg(not(target_os = "none"))]
 mod implementation {
@@ -233,7 +233,7 @@ fn handle_scalar(
             #[cfg(target_os = "none")]
             crate::debug::DEFAULT.enable_rx();
             writeln!(output, "Resuming logger").unwrap();
-        },
+        }
         _ => writeln!(
             output,
             "Unrecognized scalar message from {}: {:#?}",
@@ -243,17 +243,79 @@ fn handle_scalar(
     }
 }
 
+fn handle_opcode(
+    output: &mut implementation::OutputWriter,
+    sender: xous::MessageSender,
+    opcode: api::Opcode,
+    message: &xous::Message,
+) {
+    if let Some(mem) = message.memory_message() {
+        match opcode {
+            api::Opcode::LogRecord => {
+                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
+                let lr: LogRecord = buffer.to_original::<LogRecord, _>().unwrap();
+                let level = if log::Level::Error as u32 == lr.level {
+                    "ERR "
+                } else if log::Level::Warn as u32 == lr.level {
+                    "WARN"
+                } else if log::Level::Info as u32 == lr.level {
+                    "INFO"
+                } else if log::Level::Debug as u32 == lr.level {
+                    "DBG "
+                } else if log::Level::Trace as u32 == lr.level {
+                    "TRCE"
+                } else {
+                    "UNKNOWN"
+                };
+                if let Some(line) = lr.line {
+                    writeln!(
+                        output,
+                        "{}:{}: {} ({}:{})",
+                        level, lr.module, lr.args, lr.file, line
+                    )
+                    .unwrap();
+                } else {
+                    writeln!(output, "{}:{}: {} ({})", level, lr.module, lr.args, lr.file).unwrap();
+                }
+            }
+            api::Opcode::StandardOutput | api::Opcode::StandardError => {
+                let string = unsafe { xous::stringbuffer::StringBuffer::from_memory_message(mem) };
+                write!(output, "{}", string).unwrap();
+            }
+            _ => {
+                writeln!(output, "Unhandled opcode").unwrap();
+            }
+        }
+    } else if let Some(scalar) = message.scalar_message() {
+        // Scalar message
+        handle_scalar(output, sender, scalar, sender.pid().unwrap());
+    }
+}
+
 fn reader_thread(arg: usize) {
-    let mut output = unsafe { &mut *(arg as *mut implementation::OutputWriter) };
+    let output = unsafe { &mut *(arg as *mut implementation::OutputWriter) };
     writeln!(output, "LOG: Xous Logging Server starting up...").unwrap();
 
-    writeln!(output, "LOG: ****************************************************************").unwrap();
-    writeln!(output, "LOG: *** Welcome to Xous {:40} ***", env!("VERGEN_SHA")).unwrap();
+    writeln!(
+        output,
+        "LOG: ****************************************************************"
+    )
+    .unwrap();
+    writeln!(
+        output,
+        "LOG: *** Welcome to Xous {:40} ***",
+        env!("VERGEN_SHA")
+    )
+    .unwrap();
     // time stamp isn't actually the time stamp of the build, unfortunately. It's the time stamp of the
     // last time you managed to force a rebuild that also causes log-server to be rebuilt, not necessarily
     // capturing the build time of the very most recent change!
     // writeln!(output, "LOG: *** Built: {:49} ***", env!("VERGEN_BUILD_TIMESTAMP")).unwrap();
-    writeln!(output, "LOG: ****************************************************************").unwrap();
+    writeln!(
+        output,
+        "LOG: ****************************************************************"
+    )
+    .unwrap();
     println!("LOG: my PID is {}", xous::process::id());
     let server_addr = xous::create_server_with_address(b"xous-log-server ").unwrap();
     writeln!(output, "LOG: Server listening on address {:?}", server_addr).unwrap();
@@ -265,86 +327,18 @@ fn reader_thread(arg: usize) {
         }
         counter += 1;
         // writeln!(output, "LOG: Waiting for an event...").unwrap();
-        let mut envelope =
-            xous::syscall::receive_message(server_addr).expect("couldn't get address");
+        let envelope = xous::syscall::receive_message(server_addr).expect("couldn't get address");
         let sender = envelope.sender;
-        // writeln!(output, "LOG: Got message envelope: {:?}", envelope).unwrap();
-        match &mut envelope.body {
-            xous::Message::Scalar(msg) =>
-                handle_scalar(&mut output, sender, msg, envelope.sender.pid().unwrap()),
-            xous::Message::BlockingScalar(msg) => {
-                writeln!(
-                    output,
-                    "LOG: BlockingScalar message from {}: {:?}",
-                    envelope.sender, msg
-                )
-                .unwrap();
-            }
-            xous::Message::Move(msg) => {
-                String::<4000>::from_message(msg)
-                    .map(|log_entry: String<4000>| {
-                        writeln!(
-                            output,
-                            "LOG: Moved log  message from {}: {}",
-                            sender, log_entry
-                        )
-                        .unwrap()
-                    })
-                    .or_else(|e| {
-                        writeln!(output, "LOG: unable to convert Move message to str: {}", e)
-                    })
-                    .ok();
-            }
-            xous::Message::Borrow(_msg) => {
-                let mem = envelope.body.memory_message().unwrap();
-                let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
-                let lr: LogRecord = buffer.to_original::<LogRecord, _>().unwrap();
-                let level =
-                    if log::Level::Error as u32 == lr.level {
-                        "ERR " }
-                    else if log::Level::Warn as u32 == lr.level {
-                        "WARN" }
-                    else if log::Level::Info as u32 == lr.level {
-                        "INFO" }
-                    else if log::Level::Debug as u32 == lr.level {
-                        "DBG " }
-                    else if log::Level::Trace as u32 == lr.level {
-                        "TRCE" }
-                    else {
-                        "UNKNOWN"
-                    };
-                if let Some(line)= lr.line {
-                    writeln!(output, "{}:{}: {} ({}:{})",
-                    level, lr.module, lr.args, lr.file, line
-                    ).unwrap();
-                } else {
-                    writeln!(output, "{}:{}: {} ({})",
-                    level, lr.module, lr.args, lr.file
-                    ).unwrap();
-                }
-            }
-            xous::Message::MutableBorrow(msg) => {
-                String::<4000>::from_message(msg)
-                    .map(|mut log_entry: String<4000>| {
-                        writeln!(
-                            output,
-                            "LOG: Mutable borrowed log message from {} len {}:\n\r  {}\n\r",
-                            sender,
-                            log_entry.len(),
-                            log_entry,
-                        )
-                        .unwrap();
-                        writeln!(log_entry, " << HELLO FROM THE SERVER").unwrap();
-                    })
-                    .or_else(|e| {
-                        writeln!(
-                            output,
-                            "LOG: unable to convert MutableBorrow message to str: {}",
-                            e
-                        )
-                    })
-                    .ok();
-            }
+        if let Some(opcode) = FromPrimitive::from_usize(envelope.body.id()) {
+            handle_opcode(output, sender, opcode, &envelope.body);
+        } else {
+            writeln!(
+                output,
+                "Unrecognized opcode from process {}: {}",
+                sender.pid().map(|v| v.get()).unwrap_or_default(),
+                envelope.body.id()
+            )
+            .unwrap();
         }
     }
     /* // all cases handled, this loop can never exit
@@ -378,7 +372,11 @@ fn some_main() -> ! {
     let mut writer = output.get_writer();
     println!("LOG: my PID is {}", xous::process::id());
     println!("LOG: Creating the reader thread");
-    xous::create_thread_1(reader_thread, &mut writer as *mut implementation::OutputWriter as usize).unwrap();
+    xous::create_thread_1(
+        reader_thread,
+        &mut writer as *mut implementation::OutputWriter as usize,
+    )
+    .unwrap();
     println!("LOG: Running the output");
     output.run();
     panic!("LOG: Exited");
