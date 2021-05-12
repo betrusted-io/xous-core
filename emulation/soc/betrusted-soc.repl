@@ -42,7 +42,7 @@ fbmem: Memory.MappedMemory @ sysbus 0xB0000000
 memlcd: Video.BetrustedLCD @ sysbus 0xF000B000
 
 keyboard: Input.BetrustedKbd @ sysbus 0xF0015000
-    -> cpu @ 1010
+    -> cpu @ 1011
 
 trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF001A000
 
