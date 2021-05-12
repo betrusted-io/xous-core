@@ -17,6 +17,7 @@ mod messages;
 
 pub mod process;
 pub mod string;
+pub mod stringbuffer;
 pub mod syscall;
 
 pub mod names;
@@ -25,6 +26,7 @@ pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;
 pub use string::*;
+pub use stringbuffer::*;
 pub use syscall::*;
 
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
