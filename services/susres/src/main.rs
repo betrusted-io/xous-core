@@ -400,7 +400,7 @@ enum TimeoutOpcode {
     Drop,
 }
 
-static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(250);
+static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(500);
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
