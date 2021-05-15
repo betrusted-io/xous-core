@@ -63,6 +63,7 @@ fn try_main() -> Result<(), DynError> {
         "keyboard",
         "trng",
         "susres",
+        "llio",
     ];
     let minimal_pkgs = [
         "ticktimer-server",
