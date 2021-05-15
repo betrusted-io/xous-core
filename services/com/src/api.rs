@@ -68,7 +68,7 @@ pub(crate) enum Opcode {
     //IsCharging,
 
     /// Set the backlight brightness
-    //SetBackLight,
+    SetBackLight,
 
     /// Request charging
     //RequestCharging,

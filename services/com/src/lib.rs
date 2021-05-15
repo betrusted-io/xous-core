@@ -189,6 +189,17 @@ impl Com {
             send_message(self.conn, Message::new_scalar(Opcode::BoostOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
         }
     }
+
+    // numbers from 0-255 represent backlight brightness. Note that only the top 5 bits are used.
+    pub fn set_backlight(&self, main: u8, secondary: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetBackLight.to_usize().unwrap(),
+                (main >> 3) as usize,
+                (secondary >> 3) as usize,
+                0, 0
+            )
+        ).map(|_| ())
+    }
     // note to future self: add other event listener registrations (such as network events) here
 }
 

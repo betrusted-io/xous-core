@@ -105,6 +105,8 @@ mod implementation {
             self.susres.resume();
             // issue a "link sync" command because the COM had continued running, and we may have sent garbage during suspend
             self.txrx(ComState::LINK_SYNC.verb);
+            // wait a moment for the link to stabilize, before allowing any other commands to issue
+            self.ticktimer.sleep_ms(5).unwrap();
         }
 
         pub fn txrx(&mut self, tx: u16) -> u16 {
@@ -292,15 +294,24 @@ fn xmain() -> ! {
     let mut battstats_conns: [Option<xous::CID>; 32] = [None; 32];
     // other future notification vectors shall go here
 
+    let mut bl_main = 0;
+    let mut bl_sec = 0;
+
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
         trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+                if bl_main != 0 || bl_sec != 0 {
+                    com.txrx(ComState::BL_START.verb); // this will turn off the backlights
+                }
                 com.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 com.resume();
+                if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
+                    com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
+                }
             }),
             Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                     let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -360,6 +371,11 @@ fn xmain() -> ! {
             Some(Opcode::BoostOn) => {
                 com.txrx(ComState::CHG_BOOST_ON.verb);
             }
+            Some(Opcode::SetBackLight) => msg_scalar_unpack!(msg, main, secondary, _, _, {
+                bl_main = main;
+                bl_sec = secondary;
+                com.txrx(ComState::BL_START.verb | (main as u16) & 0x1f | (((secondary as u16) & 0x1f) << 5));
+            }),
             Some(Opcode::BattStats) => {
                 info!("batt stats request received");
                 let stats = com.get_battstats();
