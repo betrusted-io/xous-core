@@ -33,7 +33,7 @@ fn battstats_cb(stats: BattStats) {
 }
 
 pub fn dt_callback(dt: rtc::DateTime) {
-    //log::trace!("dt_callback received with {:?}", dt);
+    //log::info!("dt_callback received with {:?}", dt);
     if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
         let buf = xous_ipc::Buffer::into_buf(dt).or(Err(xous::Error::InternalError)).unwrap();
         buf.send(cb_to_main_conn, StatusOpcode::DateTime.to_u32().unwrap()).unwrap();
@@ -158,7 +158,33 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     dt_pump_modulus += 1;
                     if dt_pump_modulus > 15 {
                         dt_pump_modulus = 0;
+                        #[cfg(target_os = "none")]
                         rtc.request_datetime().expect("|status: can't request datetime from RTC");
+                        #[cfg(not(target_os = "none"))]
+                        {
+                            log::trace!("hosted request of date time - short circuiting server call");
+                            use chrono::prelude::*;
+                            use rtc::Weekday;
+                            let now = Local::now();
+                            let wday: Weekday = match now.weekday() {
+                                chrono::Weekday::Mon => Weekday::Monday,
+                                chrono::Weekday::Tue => Weekday::Tuesday,
+                                chrono::Weekday::Wed => Weekday::Wednesday,
+                                chrono::Weekday::Thu => Weekday::Thursday,
+                                chrono::Weekday::Fri => Weekday::Friday,
+                                chrono::Weekday::Sat => Weekday::Saturday,
+                                chrono::Weekday::Sun => Weekday::Sunday,
+                            };
+                            datetime = Some(rtc::DateTime {
+                                seconds: now.second() as u8,
+                                minutes: now.minute() as u8,
+                                hours: now.hour() as u8,
+                                months: now.month() as u8,
+                                days: now.day() as u8,
+                                years: (now.year() - 2000) as u8,
+                                weekday: wday,
+                            });
+                        }
                     }
                     last_seconds = now_seconds;
                     uptime_tv.clear_str();
@@ -192,7 +218,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 }
             }
             Some(StatusOpcode::DateTime) => {
-                //log::trace!("got DateTime update");
+                //log::info!("got DateTime update");
                 let buffer = unsafe { xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
                 datetime = Some(dt);

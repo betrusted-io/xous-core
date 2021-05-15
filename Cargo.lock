@@ -524,6 +524,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "blitstr-ref",
+ "chrono",
  "com",
  "content-plugin-api",
  "graphics-server",

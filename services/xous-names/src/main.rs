@@ -38,6 +38,12 @@ mod implementation {
                 xous::yield_slice();
             }
         }
+        pub fn hosted_delay(&self) {
+            // this is a delay used in hosted mode to prevent threads from thrashing. We don't need this on
+            // raw hardware because we aren't multi-core, and thus a yield_slice() will always schedule
+            // a different process to run, whereas a yield_slice() on hosted/emulation can immediately return
+            // and cause troubles for other processes.
+        }
     }
 }
 
@@ -50,6 +56,9 @@ mod implementation {
         }
         pub fn deterministic_busy_wait(&self) {
             // don't do anything for hosted mode
+        }
+        pub fn hosted_delay(&self) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 }
@@ -179,26 +188,27 @@ fn xmain() -> ! {
                             response = api::Return::CID(connection_id)
                         }
                         _ => {
-                            info!(
+                            log::debug!(
                                 "Can't find request '{}' in table, dumping table:",
                                 name
                             );
                             for kv_tuple in name_table.map.iter() {
                                 if let Some((key, val)) = kv_tuple {
-                                    info!("name: '{}', sid: '{:?}'", key, val);
+                                    log::debug!("name: '{}', sid: '{:?}'", key, val);
                                 }
                             }
+                            d11ctimeout.hosted_delay();
                             response = api::Return::Failure
                         }
                     }
                 } else {
-                    info!(
+                    log::debug!(
                         "Can't find request '{}' in table, dumping table:",
                         name
                     );
                     for kv_tuple in name_table.map.iter() {
                         if let Some((key, val)) = kv_tuple {
-                            info!("name: '{}', sid: '{:?}'", key, val);
+                            log::debug!("name: '{}', sid: '{:?}'", key, val);
                         }
                     }
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
@@ -208,6 +218,7 @@ fn xmain() -> ! {
                         pubkey_id: [0; 20], // placeholder
                         challenge: [c1, c2, c3, c4],
                     };
+                    d11ctimeout.hosted_delay();
                     response = api::Return::AuthenticateRequest(auth_request) // this code just exists to exercise the return path
                 }
                 buffer.replace(response).expect("Lookup can't serialize return value");
