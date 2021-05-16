@@ -55,8 +55,8 @@ pub(crate) enum Opcode {
     /// Turn Boost Mode Off
     BoostOff,
 
-    /// Read the current accelerations off the IMU
-    //ImuAccelRead,
+    /// Read the current accelerations off the IMU; this blocks while the read takes place
+    ImuAccelReadBlocking,
 
     /// Power off the SoC
     PowerOffSoc,

@@ -384,6 +384,18 @@ fn xmain() -> ! {
                 bl_sec = secondary;
                 com.txrx(ComState::BL_START.verb | (main as u16) & 0x1f | (((secondary as u16) & 0x1f) << 5));
             }),
+            Some(Opcode::ImuAccelReadBlocking) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::GYRO_UPDATE.verb);
+                com.txrx(ComState::GYRO_READ.verb);
+                let x = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let y = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let z = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let id = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                xous::return_scalar2(msg.sender,
+                    ((x as usize) << 16) | y as usize,
+                    ((z as usize) << 16) | id as usize
+                ).expect("coludn't return acceleromotere read data");
+            }),
             Some(Opcode::BattStats) => {
                 info!("batt stats request received");
                 let stats = com.get_battstats();

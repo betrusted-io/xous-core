@@ -220,6 +220,22 @@ impl Com {
             Message::new_scalar(Opcode::RequestCharging.to_usize().unwrap(), 0, 0, 0, 0
         )).map(|_| ())
     }
+
+    pub fn gyro_read_blocking(&self) -> Result<(u16, u16, u16, u16), xous::Error> {
+        if let xous::Result::Scalar2(x_y, z_id) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::ImuAccelReadBlocking.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+
+            let x = (x_y >> 16) as u16;
+            let y = (x_y & 0xffff) as u16;
+            let z = (z_id >> 16) as u16;
+            let id = (z_id & 0xffff) as u16;
+            Ok((x, y, z, id))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     // note to future self: add other event listener registrations (such as network events) here
 }
 
