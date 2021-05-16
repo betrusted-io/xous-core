@@ -19,6 +19,7 @@ log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
 rtc = {path = "../rtc"}
+llio = {path = "../llio"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}

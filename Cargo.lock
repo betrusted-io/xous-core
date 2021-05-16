@@ -531,6 +531,7 @@ dependencies = [
  "heapless 0.7.0",
  "ime-plugin-api",
  "keyboard",
+ "llio",
  "log",
  "log-server",
  "num-derive",

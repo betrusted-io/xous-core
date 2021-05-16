@@ -329,6 +329,14 @@ fn xmain() -> ! {
                     }
                 }
             ),
+            Some(Opcode::IsCharging) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::POWER_CHARGER_STATE.verb);
+                let result = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                xous::return_scalar(msg.sender, result as usize).expect("couldn't return charging state");
+            }),
+            Some(Opcode::RequestCharging) => msg_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::CHG_START.verb);
+            }),
             Some(Opcode::StandbyCurrent) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if let Some(i) = com.stby_current() {
                     xous::return_scalar2(msg.sender, 1, i as usize).expect("couldn't return StandbyCurrent");

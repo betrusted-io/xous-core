@@ -65,13 +65,13 @@ pub(crate) enum Opcode {
     ShipMode,
 
     /// Is the battery charging?
-    //IsCharging,
+    IsCharging,
 
     /// Set the backlight brightness
     SetBackLight,
 
     /// Request charging
-    //RequestCharging,
+    RequestCharging,
 
     /// Erase a region of EC FLASH
     //FlashErase,

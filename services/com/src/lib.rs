@@ -200,6 +200,26 @@ impl Com {
             )
         ).map(|_| ())
     }
+
+    pub fn is_charging(&self) -> Result<bool, xous::Error> {
+        if let xous::Result::Scalar1(state) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::IsCharging.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+            if state != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn request_charging(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RequestCharging.to_usize().unwrap(), 0, 0, 0, 0
+        )).map(|_| ())
+    }
     // note to future self: add other event listener registrations (such as network events) here
 }
 
