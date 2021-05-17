@@ -12,13 +12,13 @@ pub enum Opcode {
     /// A `LogRecord` message, delivering structured log output
     LogRecord = 0,
 
-    /// A `xous::String` destined for stdout
+    /// A `&[u8]` destined for stdout
     StandardOutput = 1,
 
-    /// A `xous::String` destined for stderr
+    /// A `&[u8]` destined for stderr
     StandardError = 2,
 
-    /// A `xous::String` containing this program's name
+    /// A `xous::StringBuffer` containing this program's name
     ProgramName = 3,
 
     /// A panic occurred, and a panic log is forthcoming

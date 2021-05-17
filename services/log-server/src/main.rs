@@ -86,6 +86,20 @@ mod implementation {
         pub fn putc(&self, c: u8) {
             self.tx.send(ControlMessage::Byte(c)).unwrap();
         }
+
+        /// Write a buffer to the output and return the number of
+        /// bytes written. This is mostly compatible with `std::io::Write`,
+        /// except it is infallible.
+        pub fn write(&mut self, buf: &[u8]) -> usize {
+            for c in buf {
+                self.putc(*c);
+            }
+            buf.len()
+        }
+
+        pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
+            Ok(self.write(buf))
+        }
     }
 
     impl Write for OutputWriter {
@@ -177,6 +191,20 @@ mod implementation {
                 uart_csr.wo(utra::uart::RXTX, c as u32);
             }
         }
+
+        /// Write a buffer to the output and return the number of
+        /// bytes written. This is mostly compatible with `std::io::Write`,
+        /// except it is infallible.
+        pub fn write(&mut self, buf: &[u8]) -> usize {
+            for c in buf {
+                self.putc(*c);
+            }
+            buf.len()
+        }
+
+        pub fn write_all(&mut self, buf: &[u8]) -> core::result::Result<usize, ()> {
+            Ok(self.write(buf))
+        }
     }
 
     impl Write for OutputWriter {
@@ -199,7 +227,7 @@ fn handle_scalar(
     sender_pid: xous::PID,
 ) {
     match msg.id {
-        1000 => writeln!(output, "PANIC from PID {} | {}", sender_pid, sender).unwrap(),
+        1000 => writeln!(output, "PANIC in PID {}:", sender_pid).unwrap(),
         1100 => (),
         1101..=1132 => {
             let mut output_bfr = [0u8; core::mem::size_of::<usize>() * 4];
@@ -279,8 +307,10 @@ fn handle_opcode(
                 }
             }
             api::Opcode::StandardOutput | api::Opcode::StandardError => {
-                let string = unsafe { xous::stringbuffer::StringBuffer::from_memory_message(mem) };
-                write!(output, "{}", string).unwrap();
+                let buffer =
+                    unsafe { core::slice::from_raw_parts(mem.buf.as_ptr(), mem.buf.len()) };
+                output.write_all(buffer).unwrap();
+                // TODO: If the buffer is mutable, set `length` to 0.
             }
             _ => {
                 writeln!(output, "Unhandled opcode").unwrap();
