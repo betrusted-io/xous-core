@@ -46,6 +46,7 @@ members = [
   "services/rkyv-test-server",
   "services/rkyv-test-client",
   "services/shellchat",
+  "svd2repl",
   "svd2utra",
   "xtask",
   "imports/blitstr-ref",
