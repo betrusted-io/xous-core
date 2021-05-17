@@ -256,8 +256,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 }
 
 fn return_memory(
-    pid: PID,
-    tid: TID,
+    server_pid: PID,
+    server_tid: TID,
     in_irq: bool,
     sender: MessageSender,
     buf: MemoryRange,
@@ -270,7 +270,7 @@ fn return_memory(
         let server = ss
             .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        if server.pid != pid {
+        if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, Some(&buf))?;
@@ -354,9 +354,9 @@ fn return_memory(
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.switch_from_thread(pid, tid)?;
-            ss.ready_thread(pid, tid)?;
-            ss.set_thread_result(pid, tid, xous_kernel::Result::Ok)?;
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
             ss.ready_thread(client_pid, client_tid)?;
@@ -579,7 +579,7 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
 
     #[cfg(feature = "debug-print")]
     println!(
-        " -> ({}:{}) {:?}",
+        " -> ({}:{}) {:x?}",
         crate::arch::current_pid(),
         crate::arch::process::Process::current().current_tid(),
         result

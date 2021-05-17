@@ -76,7 +76,7 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
                 )
                 .expect("unable to map serial port")
         });
-        debug::Uart{}.init();
+        debug::Uart {}.init();
         println!("KMAIN (clean boot): Supervisor mode started...");
         println!("Claiming IRQ {} via syscall...", utra::uart::UART_IRQ);
         xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
@@ -168,7 +168,7 @@ pub extern "C" fn kmain() {
                 #[cfg(feature = "debug-print")]
                 SystemServices::with(|system_services| {
                     for (test_idx, process) in system_services.processes.iter().enumerate() {
-                        if ! process.free() {
+                        if !process.free() {
                             println!("PID {}: {:?}", test_idx + 1, process);
                         }
                     }

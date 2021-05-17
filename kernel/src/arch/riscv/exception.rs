@@ -213,9 +213,7 @@ impl RiscvException {
             15 => StorePageFault(epc, tval),
             x @ 10 | x @ 14 | x @ 16..=0x7fffffff => ReservedFault(x, epc, tval),
 
-            x => {
-                ReservedInterrupt(x & 0x7fffffff, epc)
-            }
+            x => ReservedInterrupt(x & 0x7fffffff, epc),
         }
     }
 }

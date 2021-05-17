@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use xous_kernel::{TID, PID};
+use xous_kernel::{PID, TID};
 
 pub fn enable_irq(_irq_no: usize) {
     unimplemented!();

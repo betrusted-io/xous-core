@@ -22,7 +22,7 @@ debug-print = []
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
-#default = ["print-panics", "debug-print"]
+# default = ["print-panics", "debug-print"]
 default = ["print-panics"]
 
 [target.'cfg(any(windows, unix))'.dependencies]

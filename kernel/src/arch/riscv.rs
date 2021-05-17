@@ -28,7 +28,6 @@ pub fn init() {
 /// Put the core to sleep until an interrupt hits. Returns `true`
 /// to indicate the kernel should not exit.
 pub fn idle() -> bool {
-
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
     unsafe { riscv::asm::wfi() };

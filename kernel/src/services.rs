@@ -567,10 +567,7 @@ impl SystemServices {
                 pid, tid, other
             ),
         };
-        // println!(
-        //     "KERNEL({}): Readying context {} -> {:?}",
-        //     pid, context, process.state
-        // );
+        klog!("Readying ({}:{}) -> {:?}", pid, tid, process.state);
         Ok(())
     }
 
@@ -1306,9 +1303,7 @@ impl SystemServices {
             let mut error = None;
 
             // Lend each subsequent page.
-            for offset in (0..usize_len)
-                .step_by(usize_page)
-            {
+            for offset in (0..usize_len).step_by(usize_page) {
                 assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
                 assert!(((dest_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
                 mm.unlend_page(
@@ -1330,7 +1325,8 @@ impl SystemServices {
                 });
             }
             error.map_or_else(|| Ok(dest_virt), |e| Err(e))
-        }).map(|val| val as *mut usize)
+        })
+        .map(|val| val as *mut usize)
     }
 
     #[cfg(not(baremetal))]
@@ -1572,7 +1568,6 @@ impl SystemServices {
         // yet connected.
 
         let pid = crate::arch::process::current_pid();
-        // println!("KERNEL({}): Server table: {:?}", _pid.get(), self.servers);
         ArchProcess::with_inner_mut(|process_inner| {
             assert_eq!(pid, process_inner.pid);
             let mut slot_idx = None;
@@ -1896,17 +1891,27 @@ impl SystemServices {
             };
             let mut offset = 0;
             while offset <= arg.size {
-                let check_pid = u32::from_le_bytes([data[offset+0],data[offset+1],data[offset+2],data[offset+3]]);
-                let str_len = u32::from_le_bytes([data[offset+4],data[offset+5],data[offset+6],data[offset+7]]) as usize;
+                let check_pid = u32::from_le_bytes([
+                    data[offset + 0],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+                let str_len = u32::from_le_bytes([
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                ]) as usize;
                 if check_pid == pid.get() as _ {
-                    if let Ok(s) = core::str::from_utf8(&data[offset+8..offset+8+str_len]){
+                    if let Ok(s) = core::str::from_utf8(&data[offset + 8..offset + 8 + str_len]) {
                         return Some(s);
                     } else {
                         return None;
                     }
                 }
                 offset += str_len + 8;
-                offset += (4-(offset & 3))&3;
+                offset += (4 - (offset & 3)) & 3;
             }
         }
         None

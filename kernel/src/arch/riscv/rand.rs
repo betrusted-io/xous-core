@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use utralib::generated::*;
 use crate::mem::MemoryManager;
+use utralib::generated::*;
 use xous_kernel::{MemoryFlags, MemoryType, PID};
 
 pub const TRNG_KERNEL: Trng = Trng {
