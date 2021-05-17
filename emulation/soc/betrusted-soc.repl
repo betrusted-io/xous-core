@@ -1,62 +1,114 @@
+
 cpu: CPU.VexRiscv @ sysbus
     cpuType: "rv32imac"
     privilegeArchitecture: PrivilegeArchitecture.Priv1_10
     PerformanceInMips: 120
+// Platform Peripherals
+// Unrecognized peripheral: reboot
 
-uart: UART.LiteX_UART @ {
-        sysbus 0xF0004000 // shadow
-    }
-    -> cpu@1002
+// Unrecognized peripheral: crg
 
-console: UART.LiteX_UART @ {
-        sysbus 0xF0006000
-    }
-    -> cpu@1003
+// Unrecognized peripheral: gpio
 
-app_uart: UART.LiteX_UART @ {
-        sysbus 0xF0008000
-    }
-    -> cpu@1004
+uart: UART.LiteX_UART @ sysbus 0xf0004000
+    -> cpu @ 1002
 
-timer0: Timers.LiteX_Timer_32 @ {
-        sysbus 0xF0022000
-    }
-    frequency: 100000000
-    -> cpu@1001
+console: UART.LiteX_UART @ sysbus 0xf0006000
+    -> cpu @ 1003
 
-rom: Memory.MappedMemory @ {
-        sysbus 0x00000000;
-        sysbus 0x80000000 // shadow
-    }
-    size: 0x00002000
+app_uart: UART.LiteX_UART @ sysbus 0xf0008000
+    -> cpu @ 1004
 
-sram: Memory.MappedMemory @ {
-        sysbus 0x40000000;
-        sysbus 0x90000000 // shadow
-    }
-    size: 16777216
+// Unrecognized peripheral: info
 
-fbmem: Memory.MappedMemory @ sysbus 0xB0000000
-    size: 0x6000
+// Unrecognized peripheral: sram_ext
 
-memlcd: Video.BetrustedLCD @ sysbus 0xF000B000
+memlcd: Video.BetrustedLCD @ sysbus 0xf000b000
 
-keyboard: Input.BetrustedKbd @ sysbus 0xF0015000
-    -> cpu @ 1011
+// Unrecognized peripheral: com
 
-trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xF001A000
+// Unrecognized peripheral: i2c
 
-trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xF001B000
+// Unrecognized peripheral: btevents
 
-ticktimer: Timers.TickTimer @ sysbus 0xF0011000
-    periodInMs: 1
+// Unrecognized peripheral: messible
+
+// Unrecognized peripheral: messible2
+
+ticktimer: Timers.TickTimer @ sysbus 0xf0011000
     -> cpu @ 1008
 
-flash_mem: Memory.MappedMemory @ {
-        sysbus 0x20000000;
-        sysbus 0xA0000000 // shadow
-    }
-    size: 0x8000000
+// Unrecognized peripheral: susres
+
+// Unrecognized peripheral: power
+
+// Unrecognized peripheral: spinor
+
+keyboard: Input.BetrustedKbd @ sysbus 0xf0015000
+    -> cpu @ 1011
+
+// Unrecognized peripheral: keyinject
+
+// Unrecognized peripheral: seed
+
+// Unrecognized peripheral: keyrom
+
+// Unrecognized peripheral: audio
+
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xf001a000
+    -> cpu @ 1013
+
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001b000
+    -> cpu @ 1014
+
+// Unrecognized peripheral: trng
+
+// Unrecognized peripheral: sha512
+
+// Unrecognized peripheral: engine
+
+// Unrecognized peripheral: jtag
+
+// Unrecognized peripheral: wdt
+
+// Unrecognized peripheral: d11ctime
+
+// Unrecognized peripheral: identifier_mem
+
+timer0: Timers.LiteX_Timer_32 @ sysbus 0xf0023000
+    frequency: 100000000
+    -> cpu @ 1000
+
+
+// Physical base addresses of memory regions
+rom: Memory.MappedMemory @ sysbus 0x00000000
+    size: 0x00008000
+
+sram: Memory.MappedMemory @ sysbus 0x10000000
+    size: 0x00020000
+
+vexriscv_debug: Memory.MappedMemory @ sysbus 0xefff0000
+    size: 0x00001000
+
+sram_ext: Memory.MappedMemory @ sysbus 0x40000000
+    size: 0x01000000
+
+fbmem: Memory.MappedMemory @ sysbus 0xb0000000
+    size: 0x00006000
+
+spiflash: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x08000000
+
+audio: Memory.MappedMemory @ sysbus 0xe0000000
+    size: 0x00001000
+
+sha512: Memory.MappedMemory @ sysbus 0xe0002000
+    size: 0x00001000
+
+engine: Memory.MappedMemory @ sysbus 0xe0020000
+    size: 0x00020000
+
+
 
 sysbus:
     init:

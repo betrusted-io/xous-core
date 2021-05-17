@@ -14,6 +14,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
     {
         public BetrustedRNGServer(Machine machine) : base(machine)
         {
+            this.IRQ = new GPIO();
             DefineRegisters();
         }
 
@@ -35,6 +36,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         }
 
         private readonly PseudorandomNumberGenerator rng = EmulationManager.Instance.CurrentEmulation.RandomGenerator;
+        public GPIO IRQ { get; private set; }
 
         private enum Registers
         {
