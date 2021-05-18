@@ -52,6 +52,7 @@ fn try_main() -> Result<(), DynError> {
         "rtc",
         "susres",
         "codec",
+        "engine-sha512",
     ];
     let benchmark_pkgs = [
         "benchmark",

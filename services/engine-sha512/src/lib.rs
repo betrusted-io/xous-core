@@ -1,0 +1,462 @@
+#![cfg_attr(target_os = "none", no_std)]
+
+pub mod api;
+use api::*;
+use xous::{CID, send_message};
+use num_traits::ToPrimitive;
+use xous_ipc::Buffer;
+
+use digest::{BlockInput, FixedOutputDirty, Reset, Update};
+use digest::generic_array::GenericArray;
+use digest::consts::{U28, U32, U48, U64, U128};
+use block_buffer::BlockBuffer;
+use core::slice::from_ref;
+type BlockSize = U128;
+
+use bitflags::*;
+
+mod soft;
+mod consts;
+use soft::*;
+use consts::*;
+
+bitflags! {
+    pub struct Sha512Config: u32 {
+        const NONE        = 0b0000_0000;
+        const SHA512_EN   = 0b0000_0001;
+        const ENDIAN_SWAP = 0b0000_0010;
+        const DIGEST_SWAP = 0b0000_0100;
+        const SHA512_256  = 0b0000_1000;
+    }
+}
+
+bitflags! {
+    pub struct Sha512Command: u32 {
+        const HASH_START  = 0b0000_0001;
+        const HASH_DIGEST = 0b0000_0010;
+    }
+}
+
+bitflags! {
+    pub struct Sha512Status: u32 {
+        const DONE = 0b0000_0001;
+    }
+}
+
+bitflags! {
+    pub struct Sha512Fifo: u32 {
+        const READ_COUNT_MASK  = 0b0000_0000_0000_0000_0001_1111_1111;
+        const WRITE_COUNT_MASK = 0b0000_0011_1111_1111_1110_0000_0000;
+        const READ_ERROR       = 0b0000_0100_0000_0000_0000_0000_0000;
+        const WRITE_ERROR      = 0b0000_1000_0000_0000_0000_0000_0000;
+        const ALMOST_FULL      = 0b0001_0000_0000_0000_0000_0000_0000;
+        const ALMOST_EMPTY     = 0b0010_0000_0000_0000_0000_0000_0000;
+        const ENGINE_RUNNING   = 0b0100_0000_0000_0000_0000_0000_0000;
+    }
+}
+
+bitflags! {
+    pub struct Sha512Event: u32 {
+        const ERROR       = 0b0001;
+        const FIFO_FULL   = 0b0010;
+        const SHA512_DONE = 0b0100;
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FallbackStrategy {
+    HardwareThenSoftware,
+    WaitForHardware,
+    SoftwareOnly,
+}
+
+/*
+   Software emulation vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
+   License is Apache 2.0
+ */
+/// Structure that keeps state of the software-emulated Sha-512 operation and
+/// contains the logic necessary to perform the final calculations.
+#[derive(Clone)]
+struct Engine512 {
+    len: u128,
+    buffer: BlockBuffer<BlockSize>,
+    state: [u64; 8],
+}
+
+impl Engine512 {
+    fn new(h: &[u64; STATE_LEN]) -> Engine512 {
+        Engine512 {
+            len: 0,
+            buffer: Default::default(),
+            state: *h,
+        }
+    }
+
+    fn update(&mut self, input: &[u8]) {
+        self.len += (input.len() as u128) << 3;
+        let s = &mut self.state;
+        self.buffer.input_blocks(input, |b| compress512(s, b));
+    }
+
+    fn finish(&mut self) {
+        let s = &mut self.state;
+        self.buffer
+            .len128_padding_be(self.len, |d| compress512(s, from_ref(d)));
+    }
+
+    fn reset(&mut self, h: &[u64; STATE_LEN]) {
+        self.len = 0;
+        self.buffer.reset();
+        self.state = *h;
+    }
+}
+
+/// The SHA-512 hash algorithm with the SHA-512 initial hash value.
+#[derive(Clone)]
+pub struct Sha512 {
+    /// connection to the accelerator engine
+    conn: CID,
+    /// whether or not this current hasher instance will use software or hardware acceleration
+    use_soft: bool,
+    /// specifies the strategy for fallback in case multiple hashes are initiated simultaneously
+    strategy: FallbackStrategy,
+    /// software fallback engine
+    engine: Engine512,
+    /// track if a hash is in progress
+    in_progress: bool,
+    /// a unique-enough random ID number to identify our connection to the hashing engine hardware
+    id: [u32; 3],
+    /// track the length of the message processed so far
+    length: u64,
+}
+impl Sha512 {
+    // use this function instead of default for more control over configuration of the hardware engine
+    pub fn new(xns: &xous_names::XousNames, maybe_strategy: Option<FallbackStrategy>) -> Self {
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_SHA512).expect("Can't connect to Sha512 server");
+        let trng = trng::Trng::new(&xns).expect("Can't connect to TRNG server");
+        let id1 = trng.get_u64().unwrap();
+        let id2 = trng.get_u32().unwrap();
+        let strategy = if let Some(strat) = maybe_strategy {
+            strat
+        } else {
+            FallbackStrategy::HardwareThenSoftware
+        };
+        Sha512 {
+            conn,
+            use_soft: true,
+            strategy,
+            engine: Engine512::new(&H512),
+            in_progress: false,
+            id: [(id1 >> 32) as u32, id1 as u32, id2],
+            length: 0,
+        }
+    }
+}
+
+impl Default for Sha512 {
+    fn default() -> Self {
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_SHA512).expect("Can't connect to Sha512 server");
+        let trng = trng::Trng::new(&xns).expect("Can't connect to TRNG server");
+        let id1 = trng.get_u64().unwrap();
+        let id2 = trng.get_u32().unwrap();
+        Sha512 {
+            conn,
+            use_soft: true,
+            strategy: FallbackStrategy::HardwareThenSoftware,
+            engine: Engine512::new(&H512),
+            in_progress: false,
+            id: [(id1 >> 32) as u32, id1 as u32, id2],
+            length: 0,
+        }
+        // xns should Drop here and release the connection allocated by it automatically
+    }
+}
+
+impl Drop for Sha512 {
+    fn drop(&mut self) {
+        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        unsafe{xous::disconnect(self.conn).unwrap();}
+    }
+}
+
+impl BlockInput for Sha512 {
+    type BlockSize = BlockSize;
+}
+
+impl Update for Sha512 {
+    fn update(&mut self, input: impl AsRef<[u8]>) {
+        if !self.in_progress && (self.strategy != FallbackStrategy::SoftwareOnly) {
+            loop {
+                let response = xous::send_message(self.conn,
+                    xous::Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                        self.id[0] as usize, self.id[1] as usize, self.id[2] as usize,
+                        Sha2Config::Sha512.to_usize().unwrap(),
+                    )
+                ).expect("couldn't send AcquireExclusive message to Sha2 hardware!");
+                if let xous::Result::Scalar1(result) = response {
+                    if result != 0 {
+                        self.use_soft = false;
+                        self.in_progress = true;
+                        break;
+                    } else {
+                        if self.strategy == FallbackStrategy::HardwareThenSoftware {
+                            self.use_soft = true;
+                            self.in_progress = true;
+                            break;
+                        } else {
+                            // this is hardware-exclusive mode, we block until we can get the hardware
+                            xous::yield_slice();
+                        }
+                    }
+                } else {
+                    log::error!("AcquireExclusive had an unexpected error: {:?}", response);
+                    panic!("Internal error in AcquireExclusive");
+                }
+            }
+        }
+        // split the incoming blocks to page size and send to the engine
+        if self.use_soft {
+            self.engine.update(input.as_ref());
+        } else {
+            for chunk in input.as_ref().chunks(3968) {
+                // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap handling
+                let mut update = Sha2Update {
+                    id: self.id,
+                    buffer: [0; 3968],
+                    len: 0,
+                };
+                self.length += (chunk.len() as u64) * 8;
+                for (&src, dest) in chunk.iter().zip(&mut update.buffer) {
+                    *dest = src;
+                }
+                update.len = chunk.len() as u16;
+                let buf = Buffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
+                buf.lend(self.conn, Opcode::Update.to_u32().unwrap()).expect("hardware rejected our hash chunk!");
+            }
+        }
+    }
+}
+
+impl FixedOutputDirty for Sha512 {
+    type OutputSize = U64;
+
+    fn finalize_into_dirty(&mut self, out: &mut digest::Output<Self>) {
+        if self.use_soft {
+            self.engine.finish();
+            let s = self.engine.state;
+            for (chunk, v) in out.chunks_exact_mut(8).zip(s.iter()) {
+                chunk.copy_from_slice(&v.to_be_bytes());
+            }
+        } else {
+            let result = Sha2Finalize {
+                id: self.id,
+                result: Sha2Result::Uninitialized,
+                length: None,
+            };
+            let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
+            buf.lend_mut(self.conn, Opcode::Finalize.to_u32().unwrap());
+
+            let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
+            match returned.result {
+                Sha2Result::Sha512Result(s) => {
+                    if self.length != returned.length.expect("hardware did not return a length field!") {
+                        panic!("Sha512 hardware did not hash as many bits as we had expected!")
+                    }
+                    for (chunk, v) in out.chunks_exact_mut(8).zip(s.iter()) {
+                        chunk.copy_from_slice(&v.to_be_bytes());
+                    }
+                }
+                Sha2Result::Sha512Trunc256Result(_) => {
+                    panic!("Sha512 hardware returned the wrong type of buffer!");
+                }
+                Sha2Result::SuspendError => {
+                    panic!("Hardware was suspended during Sha512 operation, result is invalid.");
+                }
+                Sha2Result::Uninitialized => {
+                    panic!("Hardware didn't copy Sha512 hash result to the return buffer.")
+                }
+            }
+        }
+    }
+}
+
+impl Reset for Sha512 {
+    fn reset(&mut self) {
+        if self.use_soft {
+            self.engine.reset(&H512);
+        } else {
+            xous::send_message(self.conn,
+                xous::Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(), self.id[0] as usize, self.id[1] as usize, self.id[2] as usize, 0)
+            ).expect("couldn't send reset to hardware");
+            // reset internal flags
+            self.length = 0;
+            self.in_progress = false;
+            self.use_soft = true;
+        }
+    }
+}
+
+
+/// The SHA-512 hash algorithm with the SHA-512/256 initial hash value. The
+/// result is truncated to 256 bits.
+
+/// TODO: this is a software-only implementation; this needs to be extended to have hardware
+/// support as the constants for this mode are supported in-hardware, once we have validated
+/// that the core hardware API even works...
+#[derive(Clone)]
+pub struct Sha512Trunc256 {
+    engine: Engine512,
+}
+
+impl Default for Sha512Trunc256 {
+    fn default() -> Self {
+        Sha512Trunc256 {
+            engine: Engine512::new(&H512_TRUNC_256),
+        }
+    }
+}
+
+impl BlockInput for Sha512Trunc256 {
+    type BlockSize = BlockSize;
+}
+
+impl Update for Sha512Trunc256 {
+    fn update(&mut self, input: impl AsRef<[u8]>) {
+        self.engine.update(input.as_ref());
+    }
+}
+
+impl FixedOutputDirty for Sha512Trunc256 {
+    type OutputSize = U32;
+
+    fn finalize_into_dirty(&mut self, out: &mut digest::Output<Self>) {
+        self.engine.finish();
+        let s = &self.engine.state[..4];
+        for (chunk, v) in out.chunks_exact_mut(8).zip(s.iter()) {
+            chunk.copy_from_slice(&v.to_be_bytes());
+        }
+    }
+}
+
+impl Reset for Sha512Trunc256 {
+    fn reset(&mut self) {
+        self.engine.reset(&H512_TRUNC_256);
+    }
+}
+
+//////////////////////////////////////////////
+//////////////// the following modes are software-only emulation, as we currently do not have the constants in hardware to support these.
+//////////////////////////////////////////////
+
+/// The SHA-512 hash algorithm with the SHA-384 initial hash value. The result
+/// is truncated to 384 bits.
+#[derive(Clone)]
+pub struct Sha384 {
+    engine: Engine512,
+}
+
+impl Default for Sha384 {
+    fn default() -> Self {
+        Sha384 {
+            engine: Engine512::new(&H384),
+        }
+    }
+}
+
+impl BlockInput for Sha384 {
+    type BlockSize = BlockSize;
+}
+
+impl Update for Sha384 {
+    fn update(&mut self, input: impl AsRef<[u8]>) {
+        self.engine.update(input.as_ref());
+    }
+}
+
+impl FixedOutputDirty for Sha384 {
+    type OutputSize = U48;
+
+    fn finalize_into_dirty(&mut self, out: &mut digest::Output<Self>) {
+        self.engine.finish();
+        let s = &self.engine.state[..6];
+        for (chunk, v) in out.chunks_exact_mut(8).zip(s.iter()) {
+            chunk.copy_from_slice(&v.to_be_bytes());
+        }
+    }
+}
+
+impl Reset for Sha384 {
+    fn reset(&mut self) {
+        self.engine.reset(&H384);
+    }
+}
+
+
+/// The SHA-512 hash algorithm with the SHA-512/224 initial hash value.
+/// The result is truncated to 224 bits.
+#[derive(Clone)]
+pub struct Sha512Trunc224 {
+    engine: Engine512,
+}
+
+impl Default for Sha512Trunc224 {
+    fn default() -> Self {
+        Sha512Trunc224 {
+            engine: Engine512::new(&H512_TRUNC_224),
+        }
+    }
+}
+
+impl BlockInput for Sha512Trunc224 {
+    type BlockSize = BlockSize;
+}
+
+impl Update for Sha512Trunc224 {
+    fn update(&mut self, input: impl AsRef<[u8]>) {
+        self.engine.update(input.as_ref());
+    }
+}
+
+impl FixedOutputDirty for Sha512Trunc224 {
+    type OutputSize = U28;
+
+    fn finalize_into_dirty(&mut self, out: &mut digest::Output<Self>) {
+        self.engine.finish();
+        let s = &self.engine.state;
+        for (chunk, v) in out.chunks_exact_mut(8).zip(s[..3].iter()) {
+            chunk.copy_from_slice(&v.to_be_bytes());
+        }
+        out[24..28].copy_from_slice(&s[3].to_be_bytes()[..4]);
+    }
+}
+
+impl Reset for Sha512Trunc224 {
+    fn reset(&mut self) {
+        self.engine.reset(&H512_TRUNC_224);
+    }
+}
+
+
+opaque_debug::implement!(Sha384);
+opaque_debug::implement!(Sha512);
+opaque_debug::implement!(Sha512Trunc224);
+opaque_debug::implement!(Sha512Trunc256);
+
+digest::impl_write!(Sha384);
+digest::impl_write!(Sha512);
+digest::impl_write!(Sha512Trunc224);
+digest::impl_write!(Sha512Trunc256);
+
+/// Raw SHA-512 compression function.
+///
+/// This is a low-level "hazmat" API which provides direct access to the core
+/// functionality of SHA-512.
+#[cfg_attr(docsrs, doc(cfg(feature = "compress")))]
+pub fn compress512(state: &mut [u64; 8], blocks: &[GenericArray<u8, U128>]) {
+    // SAFETY: GenericArray<u8, U128> and [u8; 128] have
+    // exactly the same memory layout
+    #[allow(unsafe_code)]
+    let blocks: &[[u8; 128]] = unsafe { &*(blocks as *const _ as *const [[u8; 128]]) };
+    compress(state, blocks)
+}

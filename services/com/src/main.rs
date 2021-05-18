@@ -394,7 +394,7 @@ fn xmain() -> ! {
                 xous::return_scalar2(msg.sender,
                     ((x as usize) << 16) | y as usize,
                     ((z as usize) << 16) | id as usize
-                ).expect("coludn't return acceleromotere read data");
+                ).expect("coludn't return accelerometer read data");
             }),
             Some(Opcode::BattStats) => {
                 info!("batt stats request received");
