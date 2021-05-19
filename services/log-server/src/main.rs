@@ -307,8 +307,27 @@ fn handle_opcode(
                 }
             }
             api::Opcode::StandardOutput | api::Opcode::StandardError => {
-                let buffer =
-                    unsafe { core::slice::from_raw_parts(mem.buf.as_ptr(), mem.buf.len()) };
+                // let mut buffer_start_offset = mem.offset.map(|o| o.get()).unwrap_or(0);
+                let mut buffer_start_offset = 0;
+                let mut buffer_length = mem.valid.map(|v| v.get()).unwrap_or(mem.buf.len());
+
+                // Ensure that `buffer_start_offset` is within the range of `buffer`.
+                if buffer_start_offset >= mem.buf.len() {
+                    buffer_start_offset = mem.buf.len() - 1;
+                }
+
+                // Clamp the buffer length so that it fits within the buffer
+                if buffer_start_offset + buffer_length >= mem.buf.len() {
+                    buffer_length = mem.buf.len() - buffer_start_offset;
+                }
+
+                // Safe because we validated the offsets above
+                let buffer = unsafe {
+                    core::slice::from_raw_parts(
+                        mem.buf.as_ptr().add(buffer_start_offset),
+                        buffer_length,
+                    )
+                };
                 output.write_all(buffer).unwrap();
                 // TODO: If the buffer is mutable, set `length` to 0.
             }
