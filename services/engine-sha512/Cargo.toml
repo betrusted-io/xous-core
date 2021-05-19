@@ -12,7 +12,6 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
 susres = {path = "../susres"}
-bitflags = "1.2.1"
 trng = { path = "../trng" }
 
 xous-ipc = { path = "../../xous-ipc" }

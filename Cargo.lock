@@ -490,7 +490,6 @@ dependencies = [
 name = "engine-sha512"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "block-buffer",
  "digest",
  "log",

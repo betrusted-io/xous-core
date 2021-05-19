@@ -19,7 +19,10 @@ pub(crate) enum Opcode {
     /// from the timeout thread
     SuspendTimeout,
 
-    /// not tested - reboot
+    /// queries if my suspend was clean or not
+    WasSuspendClean,
+
+    /// reboot opcodes
     RebootRequest,
     RebootSocConfirm, // all peripherals + CPU
     RebootCpuConfirm, // just the CPU, peripherals (in particular the USB debug bridge) keep state

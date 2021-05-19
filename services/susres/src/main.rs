@@ -391,6 +391,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
     ready_to_suspend: bool,
     token: u32,
+    failed_to_suspend: bool,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -607,10 +608,11 @@ fn xmain() -> ! {
                     // clear the resume gate
                     SHOULD_RESUME.store(false, Ordering::Relaxed);
                     RESUME_EXEC.store(false, Ordering::Relaxed);
-                    // clear the ready to suspend flag
+                    // clear the ready to suspend flag and failed to suspend flag
                     for maybe_sub in suspend_subscribers.iter_mut() {
                         if let Some(sub) = maybe_sub {
                             sub.ready_to_suspend = false;
+                            sub.failed_to_suspend = false;
                         };
                     }
                     // do we want to start the timeout before or after sending the notifications? hmm. 🤔
@@ -624,6 +626,12 @@ fn xmain() -> ! {
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
                         log::trace!("suspend call has timed out, forcing a suspend");
+                        // record which tokens had not reported in
+                        for maybe_sub in suspend_subscribers.iter_mut() {
+                            if let Some(sub) = maybe_sub {
+                                sub.failed_to_suspend = !sub.ready_to_suspend;
+                            }
+                        }
                         timeout_pending = false;
                         // force a suspend
                         susres_hw.do_suspend(true);
@@ -642,6 +650,21 @@ fn xmain() -> ! {
                         // just ignore the message.
                     }
                 }
+                Some(Opcode::WasSuspendClean) => msg_blocking_scalar_unpack!(msg, token, _, _, _, {
+                    let mut clean = true;
+                    for maybe_sub in suspend_subscribers.iter_mut() {
+                        if let Some(sub) = maybe_sub {
+                            if sub.token == token as u32 && sub.failed_to_suspend {
+                                clean = false;
+                            }
+                        }
+                    }
+                    if clean {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't return WasSuspendClean result");
+                    } else {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return WasSuspendClean result");
+                    }
+                }),
                 Some(Opcode::Quit) => {
                     break
                 }
@@ -670,6 +693,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         cb_to_client_id: hookdata.id,
         ready_to_suspend: false,
         token: 0,
+        failed_to_suspend: false,
     };
     for i in 0..cb_conns.len() {
         if cb_conns[i].is_none() {

@@ -6,17 +6,18 @@ pub(crate) enum Sha2Result {
     Sha512Trunc256Result([u8; 32]),
     SuspendError,
     Uninitialized,
+    IdMismatch,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Sha2Finalize {
     pub id: [u32; 3],
     pub result: Sha2Result,
-    pub length: Option<u64>,
+    pub length_in_bits: Option<u64>,
 }
 
-#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
-pub(crate) enum Sha2Config {
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, Copy, Clone)]
+pub enum Sha2Config {
     Sha512,
     Sha512Trunc256,
 }
@@ -39,6 +40,13 @@ pub(crate) enum Opcode {
     /// and we probably expect about 3-4 concurrent hash requests in the worst case.
     /// Acquisition will always fail if a Suspend request is pending.
     AcquireExclusive,
+
+    /// Used by higher level coordination processes to acquire a lock on the hardware unit
+    /// to prevent any new transactions from occuring. The lock is automatically cleared on
+    /// a resume, or by an explicit release
+    AcquireSuspendLock,
+    /// this is to be used if we decided in the end we aren't going to suspend.
+    AbortSuspendLock,
 
     /// sends a buffer of [u8] for updating the hash
     /// This function will fail if the hardware was shut down with a suspend/resume while hashing

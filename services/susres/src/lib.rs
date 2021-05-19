@@ -65,7 +65,7 @@ impl Susres {
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
-    pub fn suspend_until_resume(&mut self, token: usize) -> Result<(), xous::Error> {
+    pub fn suspend_until_resume(&mut self, token: usize) -> Result<bool, xous::Error> {
         if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
             return Err(xous::Error::UseBeforeInit)
         }
@@ -78,7 +78,20 @@ impl Susres {
         // now block until we've resumed
         send_message(self.execution_gate_conn,
             Message::new_blocking_scalar(ExecGateOpcode::SuspendingNow.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_|())
+        ).map(|_|())?;
+
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::WasSuspendClean.to_usize().unwrap(), token, 0, 0, 0)
+        ).expect("couldn't query if my suspend was successful");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
     }
 }
 fn drop_conn(sid: xous::SID) {

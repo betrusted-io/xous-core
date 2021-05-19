@@ -2,7 +2,7 @@
 
 pub mod api;
 use api::*;
-use xous::{CID, send_message};
+use xous::{CID, send_message, Message};
 use num_traits::ToPrimitive;
 use xous_ipc::Buffer;
 
@@ -13,55 +13,10 @@ use block_buffer::BlockBuffer;
 use core::slice::from_ref;
 type BlockSize = U128;
 
-use bitflags::*;
-
 mod soft;
 mod consts;
 use soft::*;
 use consts::*;
-
-bitflags! {
-    pub struct Sha512Config: u32 {
-        const NONE        = 0b0000_0000;
-        const SHA512_EN   = 0b0000_0001;
-        const ENDIAN_SWAP = 0b0000_0010;
-        const DIGEST_SWAP = 0b0000_0100;
-        const SHA512_256  = 0b0000_1000;
-    }
-}
-
-bitflags! {
-    pub struct Sha512Command: u32 {
-        const HASH_START  = 0b0000_0001;
-        const HASH_DIGEST = 0b0000_0010;
-    }
-}
-
-bitflags! {
-    pub struct Sha512Status: u32 {
-        const DONE = 0b0000_0001;
-    }
-}
-
-bitflags! {
-    pub struct Sha512Fifo: u32 {
-        const READ_COUNT_MASK  = 0b0000_0000_0000_0000_0001_1111_1111;
-        const WRITE_COUNT_MASK = 0b0000_0011_1111_1111_1110_0000_0000;
-        const READ_ERROR       = 0b0000_0100_0000_0000_0000_0000_0000;
-        const WRITE_ERROR      = 0b0000_1000_0000_0000_0000_0000_0000;
-        const ALMOST_FULL      = 0b0001_0000_0000_0000_0000_0000_0000;
-        const ALMOST_EMPTY     = 0b0010_0000_0000_0000_0000_0000_0000;
-        const ENGINE_RUNNING   = 0b0100_0000_0000_0000_0000_0000_0000;
-    }
-}
-
-bitflags! {
-    pub struct Sha512Event: u32 {
-        const ERROR       = 0b0001;
-        const FIFO_FULL   = 0b0010;
-        const SHA512_DONE = 0b0100;
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FallbackStrategy {
@@ -151,6 +106,40 @@ impl Sha512 {
             length: 0,
         }
     }
+    pub fn is_idle(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsIdle.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("Couldn't make IsIdle query");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AcquireSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("Couldn't issue AcquireSuspendLock message");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn abort_suspend(&self) -> Result<(), xous::Error> {
+        // we ignore the result and just turn it into () once we get anything back, as abort_suspend "can't fail"
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AbortSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
 }
 
 impl Default for Sha512 {
@@ -188,8 +177,8 @@ impl Update for Sha512 {
     fn update(&mut self, input: impl AsRef<[u8]>) {
         if !self.in_progress && (self.strategy != FallbackStrategy::SoftwareOnly) {
             loop {
-                let response = xous::send_message(self.conn,
-                    xous::Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                let response = send_message(self.conn,
+                    Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
                         self.id[0] as usize, self.id[1] as usize, self.id[2] as usize,
                         Sha2Config::Sha512.to_usize().unwrap(),
                     )
@@ -226,7 +215,7 @@ impl Update for Sha512 {
                     buffer: [0; 3968],
                     len: 0,
                 };
-                self.length += (chunk.len() as u64) * 8;
+                self.length += (chunk.len() as u64) * 8; // we need to keep track of length in bits
                 for (&src, dest) in chunk.iter().zip(&mut update.buffer) {
                     *dest = src;
                 }
@@ -252,15 +241,15 @@ impl FixedOutputDirty for Sha512 {
             let result = Sha2Finalize {
                 id: self.id,
                 result: Sha2Result::Uninitialized,
-                length: None,
+                length_in_bits: None,
             };
             let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.conn, Opcode::Finalize.to_u32().unwrap());
+            buf.lend_mut(self.conn, Opcode::Finalize.to_u32().unwrap()).expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Result(s) => {
-                    if self.length != returned.length.expect("hardware did not return a length field!") {
+                    if self.length != returned.length_in_bits.expect("hardware did not return a length field!") {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }
                     for (chunk, v) in out.chunks_exact_mut(8).zip(s.iter()) {
@@ -274,7 +263,10 @@ impl FixedOutputDirty for Sha512 {
                     panic!("Hardware was suspended during Sha512 operation, result is invalid.");
                 }
                 Sha2Result::Uninitialized => {
-                    panic!("Hardware didn't copy Sha512 hash result to the return buffer.")
+                    panic!("Hardware didn't copy Sha512 hash result to the return buffer.");
+                }
+                Sha2Result::IdMismatch => {
+                    panic!("Hardware is not currently processing our block, finalize call has no meaning.");
                 }
             }
         }
@@ -286,8 +278,8 @@ impl Reset for Sha512 {
         if self.use_soft {
             self.engine.reset(&H512);
         } else {
-            xous::send_message(self.conn,
-                xous::Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(), self.id[0] as usize, self.id[1] as usize, self.id[2] as usize, 0)
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(), self.id[0] as usize, self.id[1] as usize, self.id[2] as usize, 0)
             ).expect("couldn't send reset to hardware");
             // reset internal flags
             self.length = 0;
