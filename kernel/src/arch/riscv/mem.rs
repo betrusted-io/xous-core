@@ -392,7 +392,7 @@ pub fn map_page_inner(
                 | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits(),
         )
     };
-    // unsafe { flush_mmu() };
+    unsafe { flush_mmu() };
 
     Ok(())
 }
