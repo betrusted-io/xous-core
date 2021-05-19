@@ -1,7 +1,7 @@
 use crate::xous_arguments::{XousArgument, XousArgumentCode, XousSize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
-use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub struct ProcessNames {
@@ -21,7 +21,9 @@ impl fmt::Display for ProcessNames {
 
 impl ProcessNames {
     pub fn new() -> ProcessNames {
-        ProcessNames { names: BTreeMap::new() }
+        ProcessNames {
+            names: BTreeMap::new(),
+        }
     }
 
     pub fn set(&mut self, pid: u32, name: &str) {
@@ -41,7 +43,7 @@ impl XousArgument for ProcessNames {
             size += 4;
             size += val.len();
             // Pad it to 4-bytes
-            size += (4-(val.len() & 3))&3;
+            size += (4 - (val.len() & 3)) & 3;
         }
         size as XousSize
     }
@@ -54,7 +56,7 @@ impl XousArgument for ProcessNames {
             written += output.write(name.as_bytes())?;
 
             // Pad it to 4-bytes
-            for _ in 0..(4-(name.len() & 3))&3 {
+            for _ in 0..(4 - (name.len() & 3)) & 3 {
                 written += output.write(&[0])?;
             }
         }
