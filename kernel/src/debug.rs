@@ -60,9 +60,7 @@ macro_rules! println
 }
 
 #[cfg(baremetal)]
-pub struct Uart {
-    // pub base: *mut usize,
-}
+pub struct Uart {}
 #[cfg(baremetal)]
 static mut INITIALIZED: bool = false;
 
