@@ -394,7 +394,7 @@ fn reader_thread(arg: usize) {
     log::trace!("main loop exit, destroying servers");
     xous::destroy_server(server_addr).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
     */
 }
 

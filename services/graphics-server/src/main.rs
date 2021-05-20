@@ -394,5 +394,5 @@ fn xmain() -> ! {
     xns.unregister_server(sid).unwrap();
     xous::destroy_server(sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
 }

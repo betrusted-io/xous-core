@@ -675,5 +675,5 @@ fn xmain() -> ! {
     xns.unregister_server(rtc_sid).unwrap();
     xous::destroy_server(rtc_sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
 }

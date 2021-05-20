@@ -657,7 +657,7 @@ fn xmain() -> ! {
     xns.unregister_server(susres_sid).unwrap();
     xous::destroy_server(susres_sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
 }
 
 fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {

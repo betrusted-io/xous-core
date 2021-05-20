@@ -1,0 +1,12 @@
+[package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Program to test the log server"
+edition = "2018"
+name = "log-test-client"
+version = "0.1.0"
+
+[dependencies]
+xous = {path = "../../xous-rs"}
+
+[features]
+default = []

@@ -799,15 +799,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
         }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
-        SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
+        SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
-            let ppid = ss.terminate_process(pid)?;
-            if cfg!(baremetal) {
-                ss.switch_to_thread(ppid, None)
-                    .map(|_| xous_kernel::Result::ResumeProcess)
-            } else {
-                Ok(xous_kernel::Result::Ok)
-            }
+            ss.terminate_process(pid)?;
+            Ok(xous_kernel::Result::Ok)
         }),
         SysCall::Shutdown => {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))

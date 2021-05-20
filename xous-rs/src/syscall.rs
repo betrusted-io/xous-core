@@ -274,7 +274,7 @@ pub enum SysCall {
     CreateProcess(ProcessInit),
 
     /// Terminate the current process, closing all server connections.
-    TerminateProcess,
+    TerminateProcess(u32),
 
     /// Shut down the entire system
     Shutdown,
@@ -630,9 +630,9 @@ impl SysCall {
             SysCall::CreateProcess(init) => {
                 crate::arch::process_to_args(SysCallNumber::CreateProcess as usize, init)
             }
-            SysCall::TerminateProcess => [
+            SysCall::TerminateProcess(exit_code) => [
                 SysCallNumber::TerminateProcess as usize,
-                0,
+                *exit_code as usize,
                 0,
                 0,
                 0,
@@ -810,7 +810,7 @@ impl SysCall {
             SysCallNumber::CreateProcess => {
                 SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            SysCallNumber::TerminateProcess => SysCall::TerminateProcess,
+            SysCallNumber::TerminateProcess => SysCall::TerminateProcess(a1 as u32),
             SysCallNumber::Shutdown => SysCall::Shutdown,
             SysCallNumber::TryConnect => {
                 SysCall::TryConnect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
@@ -1336,8 +1336,8 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
     }
 }
 
-pub fn terminate_process() {
-    rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
+pub fn terminate_process(exit_code: u32) -> ! {
+    rsyscall(SysCall::TerminateProcess(exit_code)).expect("terminate_process returned an error");
     panic!("process didn't terminate");
 }
 
