@@ -70,16 +70,13 @@ struct ProcessTable {
     /// The process upon which the current syscall is operating
     current: PID,
 
-    /// The number of processes that exist
-    // total: usize,
-
-    /// The actual table contents
+    /// The actual table contents. `true` if a process is allocated,
+    /// `false` if it is free.
     table: [bool; MAX_PROCESS_COUNT],
 }
 
 static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     current: unsafe { PID::new_unchecked(1) },
-    // total: 0,
     table: [false; MAX_PROCESS_COUNT],
 };
 
@@ -432,17 +429,14 @@ impl Process {
         todo!();
     }
 
-    pub fn destroy(_pid: PID) -> Result<(), xous_kernel::Error> {
-        todo!();
-        // let mut process_table = unsafe { &mut *PROCESS };
-        // let pid_idx = pid.get() as usize - 1;
-        // if pid_idx >= process_table.table.len() {
-        //     panic!("attempted to destroy PID that exceeds table index: {}", pid);
-        // }
-        // let process = process_table.table[pid_idx].as_mut().unwrap();
-        // process_table.table[pid_idx] = None;
-        // process_table.total -= 1;
-        // Ok(())
+    pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
+        let mut process_table = unsafe { &mut PROCESS_TABLE };
+        let pid_idx = pid.get() as usize - 1;
+        if pid_idx >= process_table.table.len() {
+            panic!("attempted to destroy PID that exceeds table index: {}", pid);
+        }
+        process_table.table[pid_idx] = false;
+        Ok(())
     }
 }
 

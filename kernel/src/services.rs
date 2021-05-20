@@ -194,11 +194,15 @@ impl Process {
             return Err(xous_kernel::Error::ProcessNotFound);
         }
 
-        // TODO: Free all pages
+        // Free all associated memory pages
+        unsafe {
+            crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid))
+        };
 
-        // TODO: Free all IRQs
+        // Free all claimed IRQs
+        crate::irq::release_interrupts_for_pid(self.pid);
 
-        // TODO: Free memory mapping
+        // Remove this PID from the process table
         crate::arch::process::Process::destroy(self.pid)?;
         self.state = ProcessState::Free;
         Ok(())
@@ -582,12 +586,12 @@ impl SystemServices {
         tid: Option<TID>,
     ) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
-        // println!(
+        // klog!(
         //     "switch_to_thread({}:{:?}): Old state was {:?}",
         //     pid, tid, process.state
         // );
 
-        // Determine which context number to switch to
+        // Determine which thread to switch to
         process.state = match process.state {
             ProcessState::Free => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
@@ -1841,6 +1845,8 @@ impl SystemServices {
                     }
                 }
 
+                let process = self.processes[(server.pid.get() - 1) as usize];
+                process.activate().unwrap();
                 // Look through this server's memory space to determine if this process
                 // is mentioned there as having some memory lent out.
                 server.discard_messages_for_pid(target_pid);
@@ -1850,10 +1856,8 @@ impl SystemServices {
         process.activate()?;
         let parent_pid = process.ppid;
         process.terminate()?;
-        // println!("KERNEL({}): Terminated", target_pid);
 
-        let process = self.get_process(parent_pid)?;
-        process.activate().unwrap();
+        self.switch_to_thread(parent_pid, None).unwrap();
 
         Ok(parent_pid)
     }

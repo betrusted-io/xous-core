@@ -477,6 +477,16 @@ pub fn move_page_inner(
     result
 }
 
+/// Determine if a page has been lent.
+pub fn page_is_lent(src_addr: *mut u8) -> bool {
+    let entry = if let Ok(val) = pagetable_entry(src_addr as usize) {
+        val
+    } else {
+        return false;
+    };
+    *entry & MMUFlags::S.bits() != 0
+}
+
 /// Mark the given virtual address as being lent.  If `writable`, clear the
 /// `valid` bit so that this process can't accidentally write to this page while
 /// it is lent.

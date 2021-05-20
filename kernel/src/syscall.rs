@@ -718,7 +718,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             unsafe {
                 assert!(
                     SWITCHTO_CALLER.is_none(),
-                    "SWITCHTO_CALLER was not None, indicating SwitchTo was called twice"
+                    "SWITCHTO_CALLER was {:?} and not None, indicating SwitchTo was called twice",
+                    SWITCHTO_CALLER,
                 );
                 SWITCHTO_CALLER = Some((pid, tid));
             }
@@ -802,7 +803,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
             ss.terminate_process(pid)?;
-            Ok(xous_kernel::Result::Ok)
+            // Clear out `SWITCHTO_CALLER` since we're resuming the parent process.
+            unsafe { SWITCHTO_CALLER = None };
+            Ok(xous_kernel::Result::ResumeProcess)
         }),
         SysCall::Shutdown => {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
