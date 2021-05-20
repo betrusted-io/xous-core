@@ -275,7 +275,7 @@ fn return_memory(
         }
         let result = server.take_waiting_message(sender.idx, Some(&buf))?;
         klog!("waiting message was: {:?}", result);
-        let (client_pid, client_tid, server_addr, client_addr, len) = match result {
+        let (client_pid, client_tid, _server_addr, client_addr, len) = match result {
             WaitingMessage::BorrowedMemory(
                 client_pid,
                 client_ctx,
@@ -318,14 +318,14 @@ fn return_memory(
         //     "KERNEL({}): Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
         //     pid,
         //     len,
-        //     server_addr.get(),
+        //     _server_addr.get(),
         //     pid,
         //     client_addr.get(),
         //     client_pid,
         //     client_tid
         // );
         #[cfg(baremetal)]
-        let src_virt = server_addr.get() as _;
+        let src_virt = _server_addr.get() as _;
         #[cfg(not(baremetal))]
         let src_virt = buf.addr.get() as _;
 

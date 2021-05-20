@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use core::fmt;
-use core::slice;
 
-pub use crate::arch::mem::{page_is_lent, MemoryMapping, PAGE_SIZE};
+pub use crate::arch::mem::{MemoryMapping, PAGE_SIZE};
 use crate::arch::process::Process;
 
 use xous_kernel::{MemoryFlags, MemoryRange, PID};
@@ -108,6 +107,7 @@ impl MemoryManager {
         MEMORY_MANAGER.with(|ss| f(&mut ss.borrow_mut()))
     }
 
+    #[cfg(baremetal)]
     pub fn with<F, R>(f: F) -> R
     where
         F: FnOnce(&MemoryManager) -> R,
@@ -126,6 +126,7 @@ impl MemoryManager {
         base: *mut u32,
         args: &crate::args::KernelArguments,
     ) -> Result<(), xous_kernel::Error> {
+        use core::slice;
         let mut args_iter = args.iter();
         let xarg_def = args_iter.next().expect("mm: no kernel arguments found");
         unsafe {
@@ -187,11 +188,6 @@ impl MemoryManager {
             }
         }
         owned_bytes
-    }
-
-    #[cfg(not(baremetal))]
-    pub fn ram_used_by(&self, _pid: PID) -> usize {
-        0
     }
 
     #[cfg(all(baremetal, feature = "print-debug"))]
@@ -588,6 +584,7 @@ impl MemoryManager {
         )
     }
 
+    #[cfg(baremetal)]
     pub fn ensure_page_exists(&mut self, address: usize) -> Result<(), xous_kernel::Error> {
         crate::arch::mem::ensure_page_exists_inner(address).and(Ok(()))
     }
@@ -695,6 +692,7 @@ impl MemoryManager {
     }
 
     /// Convert an offset in the `MEMORY_ALLOCATIONS` array into a physical address.
+    #[cfg(baremetal)]
     fn allocation_offset_to_address(&self, offset: usize) -> Option<usize> {
         // If the offset is within the RAM size, simply turn it into
         // an address.
@@ -727,13 +725,14 @@ impl MemoryManager {
     /// memory from the process, it only marks it as free.
     /// This is very unsafe because the memory can immediately be re-allocated
     /// to another process, so only call this as part of destroying a process.
-    pub unsafe fn release_all_memory_for_process(&mut self, pid: PID) {
+    pub unsafe fn release_all_memory_for_process(&mut self, _pid: PID) {
+        #[cfg(baremetal)]
         for (idx, owner) in MEMORY_ALLOCATIONS.iter_mut().enumerate() {
             // If this address has been allocated to this process, consider
             // freeing it or reparenting it.
-            if owner == &mut Some(pid) {
+            if owner == &mut Some(_pid) {
                 let phys_addr = self.allocation_offset_to_address(idx).unwrap();
-                if page_is_lent(phys_addr as *mut u8) {
+                if crate::arch::mem::page_is_lent(phys_addr as *mut u8) {
                     // If the page is lent, reparent it to PID 1 so it will
                     // get freed when it is returned.
                     *owner = PID::new(1);

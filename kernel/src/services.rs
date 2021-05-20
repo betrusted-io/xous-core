@@ -1882,6 +1882,7 @@ impl SystemServices {
     }
 
     /// Returns the process name, if any, of a given PID
+    #[cfg(baremetal)]
     pub fn process_name(&self, pid: PID) -> Option<&str> {
         let args = crate::args::KernelArguments::get();
         for arg in args.iter() {
