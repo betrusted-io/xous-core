@@ -22,6 +22,8 @@ xous-names = {path = "../xous-names"}
 keyboard = {path = "../keyboard"}
 susres = {path = "../susres"}
 codec = {path = "../codec"}
+engine-sha512 = {path="../engine-sha512"}
+digest = "0.9"
 
 heapless = "0.7"
 trng = {path = "../trng"}

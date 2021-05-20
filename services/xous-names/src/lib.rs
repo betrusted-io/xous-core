@@ -6,6 +6,7 @@ use core::fmt::Write;
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct XousNames {
     conn: xous::CID,
 }

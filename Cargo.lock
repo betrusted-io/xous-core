@@ -1446,6 +1446,8 @@ dependencies = [
  "codec",
  "com",
  "content-plugin-api",
+ "digest",
+ "engine-sha512",
  "gam",
  "graphics-server",
  "heapless 0.7.0",

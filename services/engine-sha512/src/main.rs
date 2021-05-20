@@ -21,13 +21,13 @@ mod implementation {
     // Note: there is no susres manager for the Sha512 engine, because its state cannot be saved through a full power off
     // instead, we try to delay a suspend until the caller is finished hashing, and if not, we note that and return a failure
     // for the hash result.
-    pub struct Engine512 {
+    pub(crate) struct Engine512 {
         csr: utralib::CSR<u32>,
         fifo: xous::MemoryRange,
     }
 
     impl Engine512 {
-        pub fn new() -> Engine512 {
+        pub(crate) fn new() -> Engine512 {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::sha512::HW_SHA512_BASE),
                 None,
@@ -38,7 +38,7 @@ mod implementation {
             let fifo = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utralib::HW_SHA512_MEM),
                 None,
-                utralib::HW_SHA512_MEM_LEN,
+                4096,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Engine512 CSR range");
@@ -51,7 +51,7 @@ mod implementation {
             engine512
         }
 
-        pub fn setup(&mut self, config: Sha2Config) {
+        pub(crate) fn setup(&mut self, config: Sha2Config) {
             match config {
                 Sha2Config::Sha512 => {
                     self.csr.wo(utra::sha512::CONFIG,
@@ -73,7 +73,7 @@ mod implementation {
             self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
         }
 
-        pub fn update(&mut self, buf: &[u8]) {
+        pub(crate) fn update(&mut self, buf: &[u8]) {
             let sha = self.fifo.as_mut_ptr() as *mut u32;
             let sha_byte = self.fifo.as_mut_ptr() as *mut u8;
 
@@ -98,7 +98,7 @@ mod implementation {
             }
         }
 
-        pub fn finalize(&mut self) -> ([u8; 64], u64) {
+        pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) {
             self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
             while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
                 xous::yield_slice();
@@ -126,7 +126,7 @@ mod implementation {
             ];
             let mut i = 0;
             for &reg in digest_regs.iter() {
-                hash[i..i+3].clone_from_slice(&self.csr.r(reg).to_le_bytes());
+                hash[i..i+4].clone_from_slice(&self.csr.r(reg).to_le_bytes());
                 i += 4;
             }
             self.csr.wo(utra::sha512::CONFIG, 0);  // clear all config bits, including EN, which resets the unit
@@ -134,7 +134,7 @@ mod implementation {
             (hash, length_in_bits)
         }
 
-        pub fn reset(&mut self) {
+        pub(crate) fn reset(&mut self) {
             if self.csr.rf(utra::sha512::FIFO_RUNNING) != 0 {
                 // if it's running, call digest, then reset
                 let sha = self.fifo.as_mut_ptr() as *mut u32;
@@ -151,7 +151,7 @@ mod implementation {
             self.csr.wo(utra::sha512::CONFIG, 0);  // clear all config bits, including EN, which resets the unit
         }
 
-        pub fn is_idle(&self) -> bool {
+        pub(crate) fn is_idle(&self) -> bool {
             if self.csr.rf(utra::sha512::CONFIG_SHA_EN) == 0 && self.csr.rf(utra::sha512::FIFO_RUNNING) == 0 {
                 true
             } else {
@@ -166,19 +166,19 @@ mod implementation {
 mod implementation {
     use log::info;
 
-    pub struct Engine512 {
+    pub(crate) struct Engine512 {
     }
 
     impl Engine512 {
-        pub fn new() -> Engine512 {
+        pub(crate) fn new() -> Engine512 {
             Engine512 {
             }
         }
-        pub fn suspend(&self) {
+        pub(crate) fn suspend(&self) {
         }
-        pub fn resume(&self) {
+        pub(crate) fn resume(&self) {
         }
-        pub fn reset(&self) {
+        pub(crate) fn reset(&self) {
         }
     }
 }

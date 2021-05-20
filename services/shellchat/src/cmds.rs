@@ -46,6 +46,7 @@ pub struct CommonEnv {
     gam: gam::Gam,
     cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
     trng: trng::Trng,
+    xns: xous_names::XousNames,
 }
 impl CommonEnv {
     pub fn register_handler(&mut self, verb: String::<256>) -> u32 {
@@ -88,6 +89,7 @@ mod ver;      use ver::*;
 mod audio;    use audio::*;
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
+mod sha;      use sha::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -105,6 +107,7 @@ pub struct CmdEnv {
     vibe_cmd: Vibe,
     ssid_cmd: Ssid,
     audio_cmd: Audio,
+    sha_cmd: Sha,
 
     fcc_cmd: Fcc,
 }
@@ -118,8 +121,10 @@ impl CmdEnv {
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             cb_registrations: FnvIndexMap::new(),
             trng: trng::Trng::new(&xns).unwrap(),
+            xns: xous_names::XousNames::new().unwrap(),
         };
         let fcc = Fcc::new(&mut common);
+        let sha = Sha::new(&xns, &mut common);
         CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
@@ -132,6 +137,7 @@ impl CmdEnv {
             vibe_cmd: Vibe::new(&xns),
             ssid_cmd: Ssid::new(),
             audio_cmd: Audio::new(&xns),
+            sha_cmd: sha,
 
             fcc_cmd: fcc,
         }
@@ -158,6 +164,7 @@ impl CmdEnv {
             &mut self.audio_cmd,
             &mut backlight_cmd,
             &mut accel_cmd,
+            &mut self.sha_cmd,
 
             &mut self.fcc_cmd,
         ];

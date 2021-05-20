@@ -17,7 +17,7 @@ pub(crate) struct Sha2Finalize {
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, Copy, Clone)]
-pub enum Sha2Config {
+pub(crate) enum Sha2Config {
     Sha512,
     Sha512Trunc256,
 }

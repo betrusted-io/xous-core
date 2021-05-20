@@ -49,7 +49,7 @@ struct Repl {
 }
 impl Repl{
     fn new(xns: &xous_names::XousNames, my_server_name: &str) -> Self {
-        let gam = gam::Gam::new(&xns).expect("can't connect to GAM");
+        let gam = gam::Gam::new(xns).expect("can't connect to GAM");
         let content = gam.request_content_canvas(
             my_server_name,
             ShellOpcode::Redraw.to_usize().unwrap()
@@ -67,7 +67,7 @@ impl Repl{
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
-            env: CmdEnv::new(&xns),
+            env: CmdEnv::new(xns),
         }
     }
 
@@ -258,7 +258,7 @@ pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
