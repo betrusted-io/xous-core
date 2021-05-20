@@ -1,14 +1,14 @@
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Get the elapsed time in milliseconds
-    ElapsedMs,
+    ElapsedMs = 0,
 
     /// Sleep for the specified numer of milliseconds
-    SleepMs,
+    SleepMs = 1,
 
     /// Recalculate the sleep time
-    RecalculateSleep,
+    RecalculateSleep = 2,
 
     /// Suspend/resume callback
-    SuspendResume,
+    SuspendResume = 3,
 }
