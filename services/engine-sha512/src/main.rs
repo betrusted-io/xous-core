@@ -257,6 +257,7 @@ fn xmain() -> ! {
             Some(Opcode::AcquireExclusive) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, flags, {
                 if client_id.is_none() && !SUSPEND_PENDING.load(Ordering::Relaxed) {
                     client_id = Some([id0 as u32, id1 as u32, id2 as u32]);
+                    //log::trace!("giving {:x?} an exclusive lock", client_id);
                     mode = Some(FromPrimitive::from_usize(flags).unwrap());
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
                     HASH_IN_PROGRESS.store(true, Ordering::Relaxed);

@@ -179,7 +179,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                      ];
 
                     let mut pass: bool = true;
-                    let mut hasher = engine_sha512::Sha512Trunc256::new();
+                    let mut hasher = engine_sha512::Sha512Trunc256::new(Some(FallbackStrategy::WaitForHardware));
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
