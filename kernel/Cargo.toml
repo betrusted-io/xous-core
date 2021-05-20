@@ -3,7 +3,7 @@ authors = ["Sean Cross <sean@xobs.io>"]
 description = "Core kernel for Xous, including task switching and memory management"
 edition = "2018"
 name = "kernel"
-version = "0.8.0"
+version = "0.8.2"
 
 [dependencies]
 bitflags = "1.2.1"
