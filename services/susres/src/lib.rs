@@ -16,6 +16,7 @@ pub struct Susres {
 impl Susres {
     #[cfg(target_os = "none")]
     pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
 
@@ -43,6 +44,7 @@ impl Susres {
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
     #[cfg(not(target_os = "none"))]
     pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         Ok(Susres {
             conn: 0,
             suspend_cb_sid: None,
@@ -100,13 +102,16 @@ fn drop_conn(sid: xous::SID) {
         Message::new_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
 }
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Susres {
     fn drop(&mut self) {
         if let Some(sid) = self.suspend_cb_sid.take() {
             drop_conn(sid);
         }
-        unsafe{xous::disconnect(self.conn).unwrap();}
-
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }
 /// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.

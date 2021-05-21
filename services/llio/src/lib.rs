@@ -41,6 +41,7 @@ pub struct Llio {
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to LLIO");
         let i2c_conn = xns.request_connection_blocking(api::SERVER_NAME_I2C).expect("Can't connect to I2C");
         Ok(Llio {
@@ -475,6 +476,8 @@ fn drop_conn(sid: xous::SID) {
         Message::new_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
 }
+use core::sync::atomic::AtomicU32;
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Llio {
     fn drop(&mut self) {
         if let Some(sid) = self.i2c_sid.take() {
@@ -492,7 +495,9 @@ impl Drop for Llio {
         if let Some(sid) = self.gpio_sid.take() {
             drop_conn(sid);
         }
-        unsafe{xous::disconnect(self.conn).unwrap();}
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }
 
