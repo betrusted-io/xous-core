@@ -64,6 +64,34 @@ of wear leveling, however.
 +-----------+----------------------------------------+
 
 ```
+The EC update block is further structured as follows:
+```
++-----------+----------------------------------------+
++ 27F8_0000 |   wf200 firmware control page          |
++     +1000 |                                        |
++-----------+----------------------------------------+
++ 27F8_1000 |   up to 311k for wf200 firmware        |
++   +4_D000 |   padded with trailing 0xFF            |
++-----------+----------------------------------------+
++ 27FC_E000 |   EC firmware control page             |
++     +1000 |                                        |
++-----------+----------------------------------------+
++ 27FC_F000 |   up to 199k EC fw                     |
++   +3_1000 |   padded with trailing 0xFF            |
++-----------+----------------------------------------+
+
+```
+
+The firmware control pages have the following structure:
+```
+base + 0x0000: [u8; 32] = SHA-512/256 hash from base+0x20 to last byte of firmware
+base + 0x0020: u32      = length of firmware in bytes, computed from start of first firmware page
+base + 0x0024: [u8; 988] = [0xff as u8; 988] 0xff padding to start of first firmware page
+base + 0x1000: [u8; FW_LEN] = actual firmware
+
+remainder of unused sectors are 0xff pad.
+```
+
 
 The csr.csv block is further structured as follows:
 
