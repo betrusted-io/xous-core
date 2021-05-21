@@ -5,6 +5,8 @@ authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "System call interface for Xous"
+repository = "https://github.com/betrusted-io/xous-core/"
+homepage = "https://betrusted.io/"
 
 [dependencies]
 bitflags = {version = "1", optional = true }
