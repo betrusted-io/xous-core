@@ -154,7 +154,9 @@ pub extern "C" fn trap_handler(
 
                 // This address indicates a thread has exited. Destroy the thread.
                 // This activates another thread within this process.
-                SystemServices::with_mut(|ss| ss.destroy_thread(pid, tid)).unwrap();
+                if SystemServices::with_mut(|ss| ss.destroy_thread(pid, tid)).unwrap() {
+                    crate::syscall::reset_switchto_caller();
+                }
 
                 // Resume the new thread within the same process.
                 ArchProcess::with_current_mut(|p| {
