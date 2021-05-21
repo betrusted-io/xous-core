@@ -91,7 +91,8 @@ base + 0x0028: u32        = length of firmware in bytes, computed from start of 
 base + 0x002c: [u8; 4052] = [0xff as u8; 4052] 0xff padding to start of first firmware page
 base + 0x1000: [u8; FW_LEN] = actual firmware
 
-remainder of unused sectors are 0xff pad.
+remainder of unused sectors are 0xff pad. The 0xff pad is not hashed for performance reasons, and should
+be considered insecure/untrusted.
 ```
 
 
