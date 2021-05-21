@@ -85,7 +85,7 @@ The EC update block is further structured as follows:
 The firmware control pages have the following structure:
 ```
 base + 0x0000: [u8; 32]   = SHA-512/256 hash from base+0x20 to last byte of firmware
-base + 0x0020: [u8; 4]    = [0x70, 0x72, 0x65, 0x63]; // signature 'cerp' ('prec' in big endian)
+base + 0x0020: [u8; 4]    = EC: [0x70, 0x72, 0x65, 0x63]; // signature 'cerp' ('prec' in big endian) or WF200: [0x77, 0x66, 0x32, 0x30]; // 'wf20'
 base + 0x0024: u32        = firmware control page version number (currently 1)
 base + 0x0028: u32        = length of firmware in bytes, computed from start of first firmware page
 base + 0x002c: [u8; 4052] = [0xff as u8; 4052] 0xff padding to start of first firmware page
