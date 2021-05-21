@@ -1495,7 +1495,7 @@ where
     })
 }
 
-/// Wait for a thread to finish
+/// Wait for a thread to finish. This is equivalent to `join_thread`
 pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
     crate::arch::wait_thread(joiner)
 }
@@ -1605,6 +1605,8 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
     })
 }
 
+/// Perform a raw syscall and return the result. This will transform
+/// `xous::Result::Error(e)` into an `Err(e)`.
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;
     let args = call.as_args();
