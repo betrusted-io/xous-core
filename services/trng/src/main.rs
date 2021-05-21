@@ -400,9 +400,11 @@ fn xmain() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 trng.resume();
             }),
-            None => {
-                log::error!("couldn't convert opcode");
+            Some(api::Opcode::Quit) => {
                 break
+            },
+            None => {
+                log::error!("couldn't convert opcode, ignoring");
             }
         }
     }

@@ -77,6 +77,17 @@ mod implementation {
             let sha = self.fifo.as_mut_ptr() as *mut u32;
             let sha_byte = self.fifo.as_mut_ptr() as *mut u8;
 
+            // this unsafe version is very slightly faster than the safe version below
+            /*
+            let src_bfr = buf.as_ptr() as *mut u32;
+            for offset in 0 .. buf.len() / 4 {
+                unsafe { sha.write_volatile(src_bfr.add(offset).read_volatile()); }
+            }
+            if (buf.len() % 4) != 0 {
+                for index in (buf.len() - (buf.len() % 4))..buf.len() {
+                    unsafe{ sha_byte.write_volatile(buf[index]); }
+                }
+            } */
             for (_reg, chunk) in buf.chunks(4).enumerate() {
                 let mut temp: [u8; 4] = Default::default();
                 if chunk.len() == 4 {

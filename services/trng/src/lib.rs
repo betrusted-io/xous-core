@@ -11,6 +11,7 @@ pub struct Trng {
 impl Trng {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_TRNG).expect("Can't connect to TRNG server");
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         Ok(Trng {
             conn
         })
@@ -39,10 +40,13 @@ impl Trng {
     }
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Trng {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        unsafe{xous::disconnect(self.conn).unwrap();}
-
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }

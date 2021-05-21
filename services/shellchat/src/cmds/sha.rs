@@ -34,6 +34,14 @@ TEST_MAX_LEN = 512 (random length) / TEST_ITERS = 1000: hw 7.332ms/hash, sw 5.48
 TEST_MAX_LEN = 1024 (fixed length) / TEST_ITERS = 1000: hw 7.257ms/hash, sw 11.676ms/hash
 TEST_MAX_LEN = 8192 (random length) / TEST_ITERS = 1000: hw 10.528ms/hash, sw 40.631ms/hash
 TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 17.035ms/hash, sw 78.633ms/hash
+
+power consumption -
+4.1V system voltage
+159mA nominal
+182mA while running hw benchmark (17.569ms/hash)
+~ 23mA for SHA hardware unit doing 8k fixed length hashes, ~14% extra power, 1.65mJ/hash
+172mA while running sw benchmark (78.525ms/hash) -> ~10mA excess power for software -> 3.22mJ/hash
+~50% power savings to use hardware hasher
  */
 
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
@@ -210,6 +218,17 @@ impl<'a> ShellCmdApi<'a> for Sha {
                         xous::Message::new_scalar(BenchOp::StartSha512Sw.to_usize().unwrap(), 0, 0, 0, 0)
                     ).unwrap();
                     write!(ret, "Starting Sha512 software benchmark with {} iters, {} max_len, {} fixed_len", TEST_ITERS, TEST_MAX_LEN, TEST_FIXED_LEN).unwrap();
+                }
+                "susres" => {
+                    let start = env.ticktimer.elapsed_ms();
+                    self.start_time = Some(start);
+                    xous::send_message(self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartSha512Hw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                    let wait_time = (env.trng.get_u32().unwrap() % 2000) + 500; // at least half a second wait, up to 2 seconds
+                    env.ticktimer.sleep_ms(wait_time as _).unwrap();
+                    self.susres.initiate_suspend().unwrap();
+                    write!(ret, "Interrupted Sha512 hardware benchmark with a suspend/resume").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
