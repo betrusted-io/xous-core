@@ -272,6 +272,10 @@ impl Process {
         })
     }
 
+    pub fn thread_exists(&self, _tid: TID) -> bool {
+        false
+    }
+
     pub fn set_thread_result(&mut self, tid: TID, result: xous_kernel::Result) {
         assert!(tid > 0);
         PROCESS_TABLE.with(|pt| {

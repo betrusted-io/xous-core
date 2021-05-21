@@ -850,6 +850,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::DestroyServer(sid) => SystemServices::with_mut(|ss| {
             ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok))
         }),
+        SysCall::JoinThread(other_tid) => {
+            SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
+                unsafe { SWITCHTO_CALLER = None };
+                ret
+            })
+        }
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

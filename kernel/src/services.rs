@@ -1415,33 +1415,70 @@ impl SystemServices {
     ///
     /// * **ThreadNotAvailable**: The thread does not exist in this process
     #[cfg(baremetal)]
-    pub fn destroy_thread(&mut self, pid: PID, thread: TID) -> Result<usize, xous_kernel::Error> {
+    pub fn destroy_thread(&mut self, pid: PID, tid: TID) -> Result<usize, xous_kernel::Error> {
         let current_pid = self.current_pid();
         assert_eq!(pid, current_pid);
 
-        let mut process = self.get_process_mut(pid)?;
-        process.activate()?;
+        let mut waiting_threads = match self.get_process_mut(pid)?.state {
+            ProcessState::Running(x) => x,
+            state => panic!("Process was in an invalid state: {:?}", state),
+        };
 
         // Destroy the thread at a hardware level
         let mut arch_process = crate::arch::process::Process::current();
-        let return_value = arch_process.destroy_thread(thread).unwrap();
+        let return_value = arch_process.destroy_thread(tid).unwrap();
 
         // If there's another thread waiting on the return value of this thread,
         // wake it up and set its return value.
+        if let Some((waiting_tid, _thread)) = arch_process.find_thread(|waiting_tid, thr| {
+            (waiting_threads & (1 << waiting_tid)) == 0 // Thread is waiting (i.e. not ready to run)
+                && thr.a0() == (xous_kernel::SysCallNumber::JoinThread as usize) // Thread called `JoinThread`
+                && thr.a1() == (tid as usize) // It is waiting on our thread
+        }) {
+            // Wake up the thread
+            self.set_thread_result(pid, waiting_tid, xous_kernel::Result::Scalar1(return_value))?;
+            waiting_threads |= 1 << waiting_tid;
+        }
 
         // Mark this process as `Ready`.
         // We can do this because the current thread has just exited. Note that if there
         // are no threads available, this is an error.
-
-        process.state = match process.state {
-            ProcessState::Running(x) if x != 0 => ProcessState::Ready(x),
-            _ => panic!("Process was in an invalid state: {:?}", process.state),
-        };
+        self.get_process_mut(pid)?.state = ProcessState::Ready(waiting_threads);
 
         // Switch to the next available TID. This moves the process back to a `Running` state.
         self.switch_to_thread(pid, None)?;
 
         Ok(return_value)
+    }
+
+    /// Park this thread if the target thread is currently running. Otherwise,
+    /// return the value of the given thread.
+    pub fn join_thread(
+        &mut self,
+        pid: PID,
+        tid: TID,
+        join_tid: TID,
+    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        let current_pid = self.current_pid();
+        assert_eq!(pid, current_pid);
+
+        // We cannot wait on ourselves.
+        if tid == join_tid {
+            Err(xous_kernel::Error::ThreadNotAvailable)?
+        }
+
+        // If the target thread exists, put this thread to sleep.
+        let arch_process = crate::arch::process::Process::current();
+        if arch_process.thread_exists(join_tid) {
+            // The target thread exists -- put this thread to sleep
+            let ppid = self.get_process(pid).unwrap().ppid;
+            self.activate_process_thread(tid, ppid, 0, false)
+                .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+        } else {
+            // The thread does not exist -- continue execution
+            Err(xous_kernel::Error::ThreadNotAvailable)
+        }
     }
 
     /// Allocate a new server ID for this process and return the address. If the
