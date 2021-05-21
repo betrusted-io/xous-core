@@ -318,6 +318,9 @@ pub enum SysCall {
     /// in a future reconnection.
     Disconnect(CID),
 
+    /// Waits for a thread to finish, and returns the return value of that thread.
+    JoinThread(TID),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -359,6 +362,7 @@ pub enum SysCallNumber {
     GetProcessId = 33,
     DestroyServer = 34,
     Disconnect = 35,
+    JoinThread = 36,
     Invalid,
 }
 
@@ -400,6 +404,7 @@ impl SysCallNumber {
             33 => GetProcessId,
             34 => DestroyServer,
             35 => Disconnect,
+            36 => JoinThread,
             _ => Invalid,
         }
     }
@@ -721,6 +726,16 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::JoinThread(tid) => [
+                SysCallNumber::JoinThread as usize,
+                *tid as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -882,6 +897,7 @@ impl SysCall {
                 SysCall::DestroyServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
             SysCallNumber::Disconnect => SysCall::Disconnect(a1 as _),
+            SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1562,6 +1578,16 @@ pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
         if let Result::Ok = result {
             Ok(())
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
+    rsyscall(SysCall::JoinThread(tid)).and_then(|result| {
+        if let Result::Scalar1(val) = result {
+            Ok(val)
         } else {
             Err(Error::InternalError)
         }
