@@ -1574,6 +1574,9 @@ pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
     })
 }
 
+/// Disconnect the specified connection ID and mark it as free. This
+/// connection ID may be reused by the server in the future, so ensure
+/// no other threads are using the connection ID before disposing of it.
 pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
         if let Result::Ok = result {
@@ -1584,10 +1587,18 @@ pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     })
 }
 
+/// Block the current thread and wait for the specified thread to
+/// return. Returns the return value of the thread.
+///
+/// # Errors
+///
+/// * **ThreadNotAvailable**: The thread could not be found, or was not sleeping.
 pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
     rsyscall(SysCall::JoinThread(tid)).and_then(|result| {
         if let Result::Scalar1(val) = result {
             Ok(val)
+        } else if let Result::Error(Error::ThreadNotAvailable) = result {
+            Err(Error::ThreadNotAvailable)
         } else {
             Err(Error::InternalError)
         }
