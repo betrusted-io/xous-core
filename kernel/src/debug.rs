@@ -162,8 +162,8 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 for process in &system_services.processes {
                     if !process.free() {
                         println!(
-                            "PID {} {}:",
-                            process.pid,
+                            "{:?} {}:",
+                            process,
                             system_services.process_name(process.pid).unwrap_or("")
                         );
                         process.activate().unwrap();

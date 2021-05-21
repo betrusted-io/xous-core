@@ -19,7 +19,7 @@ pub const MAX_PROCESS_COUNT: usize = 64;
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
-const EXIT_THREAD: usize = 0xff80_3000;
+pub const EXIT_THREAD: usize = 0xff80_3000;
 
 // Thread IDs have three possible meaning:
 // Logical Thread ID: What the user sees
@@ -348,6 +348,38 @@ impl Process {
             &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
         );
         Ok(())
+    }
+
+    /// Destroy a given thread and return its return value.
+    ///
+    /// # Returns
+    ///     The return value of the function
+    ///
+    /// # Errors
+    ///     xous::ThreadNotAvailable - the thread did not exist
+    pub fn destroy_thread(&mut self, tid: TID) -> Result<usize, xous_kernel::Error> {
+        let thread = self.thread_mut(tid);
+
+        // Ensure this thread is valid
+        if thread.sepc == 0 || tid == IRQ_TID {
+            Err(xous_kernel::Error::ThreadNotAvailable)?;
+        }
+
+        // thread.registers[0] == x1
+        // thread.registers[1] == x2
+        // ...
+        // thread.registers[4] == x5 == t0
+        // ...
+        // thread.registers[9] == x10 == a0
+        // thread.registers[10] == x11 == a1
+        let return_value = thread.registers[9];
+
+        for val in &mut thread.registers {
+            *val = 0;
+        }
+        thread.sepc = 0;
+
+        Ok(return_value)
     }
 
     pub fn print_all_threads(&self) {

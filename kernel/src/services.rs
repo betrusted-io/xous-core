@@ -1290,6 +1290,10 @@ impl SystemServices {
             Err(xous_kernel::Error::BadAddress)?;
         }
 
+        // If memory is getting returned to the kernel, then it is memory that was
+        // borrowed but
+        if dest_pid.get() == 1 {}
+
         // Iterators and `ptr.wrapping_add()` operate on `usize` types,
         // which effectively lowers the `len`.
         let usize_len = len / core::mem::size_of::<usize>();
@@ -1403,6 +1407,41 @@ impl SystemServices {
         };
 
         Ok(new_tid)
+    }
+
+    /// Destroy the given thread.
+    /// NOTE: You MUST immediately switch away from this process.
+    /// # Errors
+    ///
+    /// * **ThreadNotAvailable**: The thread does not exist in this process
+    #[cfg(baremetal)]
+    pub fn destroy_thread(&mut self, pid: PID, thread: TID) -> Result<usize, xous_kernel::Error> {
+        let current_pid = self.current_pid();
+        assert_eq!(pid, current_pid);
+
+        let mut process = self.get_process_mut(pid)?;
+        process.activate()?;
+
+        // Destroy the thread at a hardware level
+        let mut arch_process = crate::arch::process::Process::current();
+        let return_value = arch_process.destroy_thread(thread).unwrap();
+
+        // If there's another thread waiting on the return value of this thread,
+        // wake it up and set its return value.
+
+        // Mark this process as `Ready`.
+        // We can do this because the current thread has just exited. Note that if there
+        // are no threads available, this is an error.
+
+        process.state = match process.state {
+            ProcessState::Running(x) if x != 0 => ProcessState::Ready(x),
+            _ => panic!("Process was in an invalid state: {:?}", process.state),
+        };
+
+        // Switch to the next available TID. This moves the process back to a `Running` state.
+        self.switch_to_thread(pid, None)?;
+
+        Ok(return_value)
     }
 
     /// Allocate a new server ID for this process and return the address. If the
