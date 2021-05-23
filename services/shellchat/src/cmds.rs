@@ -90,6 +90,7 @@ mod audio;    use audio::*;
 mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
+mod ecup;     use ecup::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -108,6 +109,7 @@ pub struct CmdEnv {
     ssid_cmd: Ssid,
     audio_cmd: Audio,
     sha_cmd: Sha,
+    ecup_cmd: EcUpdate,
 
     fcc_cmd: Fcc,
 }
@@ -125,6 +127,7 @@ impl CmdEnv {
         };
         let fcc = Fcc::new(&mut common);
         let sha = Sha::new(&xns, &mut common);
+        let ecup = EcUpdate::new(&mut common);
         CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
@@ -138,6 +141,7 @@ impl CmdEnv {
             ssid_cmd: Ssid::new(),
             audio_cmd: Audio::new(&xns),
             sha_cmd: sha,
+            ecup_cmd: ecup,
 
             fcc_cmd: fcc,
         }
@@ -165,6 +169,7 @@ impl CmdEnv {
             &mut backlight_cmd,
             &mut accel_cmd,
             &mut self.sha_cmd,
+            &mut self.ecup_cmd,
 
             &mut self.fcc_cmd,
         ];

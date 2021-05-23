@@ -525,6 +525,7 @@ fn xmain() -> ! {
     let mut suspend_requested = false;
     let mut timeout_pending = false;
     let mut reboot_requested: bool = false;
+    let mut allow_suspend = true;
 
     let mut suspend_subscribers: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
@@ -604,24 +605,27 @@ fn xmain() -> ! {
                     }
                 }),
                 Some(Opcode::SuspendRequest) => {
-                    suspend_requested = true;
-                    // clear the resume gate
-                    SHOULD_RESUME.store(false, Ordering::Relaxed);
-                    RESUME_EXEC.store(false, Ordering::Relaxed);
-                    // clear the ready to suspend flag and failed to suspend flag
-                    for maybe_sub in suspend_subscribers.iter_mut() {
-                        if let Some(sub) = maybe_sub {
-                            sub.ready_to_suspend = false;
-                            sub.failed_to_suspend = false;
-                        };
-                    }
-                    // do we want to start the timeout before or after sending the notifications? hmm. 🤔
-                    timeout_pending = true;
-                    send_message(timeout_outgoing_conn,
-                        Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate timeout before suspend!");
+                    if allow_suspend {
+                        suspend_requested = true;
+                        // clear the resume gate
+                        SHOULD_RESUME.store(false, Ordering::Relaxed);
+                        RESUME_EXEC.store(false, Ordering::Relaxed);
+                        // clear the ready to suspend flag and failed to suspend flag
+                        for maybe_sub in suspend_subscribers.iter_mut() {
+                            if let Some(sub) = maybe_sub {
+                                sub.ready_to_suspend = false;
+                                sub.failed_to_suspend = false;
+                            };
+                        }
+                        // do we want to start the timeout before or after sending the notifications? hmm. 🤔
+                        timeout_pending = true;
+                        send_message(timeout_outgoing_conn,
+                            Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't initiate timeout before suspend!");
 
-                    send_event(&suspend_subscribers);
+                        send_event(&suspend_subscribers);
+                    }
+                    // denied requests just silently fail.
                 },
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
@@ -665,6 +669,12 @@ fn xmain() -> ! {
                         xous::return_scalar(msg.sender, 0).expect("couldn't return WasSuspendClean result");
                     }
                 }),
+                Some(Opcode::SuspendAllow) => {
+                    allow_suspend = true;
+                },
+                Some(Opcode::SuspendDeny) => {
+                    allow_suspend = false;
+                },
                 Some(Opcode::Quit) => {
                     break
                 }

@@ -297,6 +297,10 @@ fn xmain() -> ! {
     let mut bl_main = 0;
     let mut bl_sec = 0;
 
+    let mut flash_id: Option<[u32;4]> = None; // only one process can acquire this, and its ID is stored here.
+    const FLASH_LEN: u32 = 0x10_0000;
+    const FLASH_TIMEOUT: u32 = 250;
+
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
@@ -313,6 +317,75 @@ fn xmain() -> ! {
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
             }),
+            Some(Opcode::FlashAcquire) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
+                let acquired = if flash_id.is_none() {
+                    flash_id = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
+                    1
+                } else {
+                    0
+                };
+                xous::return_scalar(msg.sender, acquired as usize).expect("couldn't acknowledge acquire message");
+            }),
+            Some(Opcode::FlashOp) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let flash_op = buffer.to_original::<api::FlashRecord, _>().unwrap();
+                let mut pass = false;
+                if let Some(id) = flash_id {
+                    if id == flash_op.id {
+                        match flash_op.op {
+                            api::FlashOp::Erase(addr, len) => {
+                                if addr < FLASH_LEN && len + addr < FLASH_LEN {
+                                    com.txrx(ComState::FLASH_ERASE.verb);
+                                    com.txrx((addr >> 16) as u16);
+                                    com.txrx(addr as u16);
+                                    com.txrx((len >> 16) as u16);
+                                    com.txrx(len as u16);
+                                    while ComState::FLASH_ACK.verb != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT)) {
+                                        xous::yield_slice();
+                                    }
+                                    pass = true;
+                                } else {
+                                    pass = false;
+                                }
+                            },
+                            api::FlashOp::Program(addr, some_pages) => {
+                                com.txrx(ComState::FLASH_LOCK.verb);
+                                let mut prog_ptr = addr;
+                                // this will fill the 1280-deep FIFO with up to 4 pages of data for programming
+                                pass = true;
+                                for &maybe_page in some_pages.iter() {
+                                    if prog_ptr < FLASH_LEN - 256 {
+                                        if let Some(page) = maybe_page {
+                                            com.txrx(ComState::FLASH_PP.verb);
+                                            com.txrx((prog_ptr >> 16) as u16);
+                                            com.txrx(prog_ptr as u16);
+                                            for i in 0..128 {
+                                                com.txrx(page[i*2] as u16 | ((page[i*2+1] as u16) << 8));
+                                            }
+                                        }
+                                        prog_ptr += 256;
+                                    } else {
+                                        pass = false;
+                                    }
+                                }
+                                // wait for completion only after all 4 pages are sent
+                                while ComState::FLASH_ACK.verb != com.wait_txrx(ComState::FLASH_WAITACK.verb, Some(FLASH_TIMEOUT)) {
+                                    xous::yield_slice();
+                                }
+                                com.txrx(ComState::FLASH_UNLOCK.verb);
+                            }
+                        }
+                    }
+                } else {
+                    pass = false;
+                }
+                let response = if pass {
+                    api::FlashResult::Pass
+                } else {
+                    api::FlashResult::Fail
+                };
+                buffer.replace(response).expect("couldn't return result on FlashOp");
+            }
             Some(Opcode::RegisterBattStatsListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                     let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                     let cid = Some(xous::connect(sid).unwrap());

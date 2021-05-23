@@ -8,6 +8,10 @@ pub(crate) const SERVER_NAME_EXEC_GATE: &str  = "_Suspend/resume execution gate_
 pub(crate) enum Opcode {
     /// requests a suspend
     SuspendRequest,
+    /// locks out suspend capability -- meant to be used only to prevent suspend during firmware updates
+    SuspendDeny,
+    /// unlocks suspend capability
+    SuspendAllow,
 
     /// register a subscriber to the suspend event
     /// (if you don't register, you just get suspend without any warning!)

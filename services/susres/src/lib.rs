@@ -67,6 +67,7 @@ impl Susres {
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
+
     pub fn suspend_until_resume(&mut self, token: usize) -> Result<bool, xous::Error> {
         if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
             return Err(xous::Error::UseBeforeInit)
@@ -95,6 +96,19 @@ impl Susres {
             Err(xous::Error::InternalError)
         }
     }
+
+    pub fn set_suspendable(&mut self, allow_suspend: bool) -> Result<(), xous::Error> {
+        if allow_suspend {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::SuspendAllow.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        } else {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::SuspendDeny.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        }
+    }
+
 }
 fn drop_conn(sid: xous::SID) {
     let cid = xous::connect(sid).unwrap();

@@ -42,6 +42,8 @@ pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,
     ticktimer: ticktimer_server::Ticktimer,
+    ec_lock_id: Option<[u32; 4]>,
+    ec_acquired: bool,
 }
 impl Com {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -51,6 +53,8 @@ impl Com {
             conn,
             battstats_sid: None,
             ticktimer: ticktimer_server::Ticktimer::new().expect("Can't connect to ticktimer"),
+            ec_lock_id: None,
+            ec_acquired: false,
         })
     }
 
@@ -237,7 +241,64 @@ impl Com {
         }
     }
 
-    // note to future self: add other event listener registrations (such as network events) here
+    pub fn flash_acquire(&mut self) -> Result<bool, xous::Error> {
+        let (id0, id1, id2, id3) = xous::create_server_id()?.to_u32();
+        self.ec_lock_id = Some([id0, id1, id2, id3]);
+        if let xous::Result::Scalar1(acquired) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::FlashAcquire.to_usize().unwrap(), id0 as usize, id1 as usize, id2 as usize, id3 as usize)).unwrap() {
+            if acquired != 0 {
+                self.ec_acquired = true;
+                Ok(true)
+            } else {
+                self.ec_acquired = false;
+                Ok(false)
+            }
+        } else {
+            self.ec_acquired = false;
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn flash_erase(&mut self, addr: u32, len: u32) -> Result<bool, xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Erase(addr, len),
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash erase command");
+        match buf.to_original().unwrap() {
+            api::FlashResult::Pass => {
+                Ok(true)
+            },
+            api::FlashResult::Fail => {
+                Ok(false)
+            }
+        }
+    }
+
+    pub fn flash_program(&mut self, addr: u32, page: [Option<[u8; 256]>; 4]) -> Result<bool, xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Program(addr, page)
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash program command");
+        match buf.to_original().unwrap() {
+            api::FlashResult::Pass => {
+                Ok(true)
+            },
+            api::FlashResult::Fail => {
+                Ok(false)
+            }
+        }
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
