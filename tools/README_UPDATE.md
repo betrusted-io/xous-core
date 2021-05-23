@@ -1,5 +1,7 @@
 # Tools
 
+Maintainer's note: this is a mirror of the README.md file found in [betrusted-ec](https://github.com/betrusted-io/betrusted-ec/tools/README.md). This is not the master copy and may be stale.
+
 ## usb_update.py
 
 `usb_update.py` is the script for copying firmware packages from a host onto a Precursor device.
