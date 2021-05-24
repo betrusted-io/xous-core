@@ -14,8 +14,7 @@ use core::fmt::Write;
 pub(crate) enum UpdateOp {
     UpdateGateware,
     UpdateFirmware,
-    //UpdateWf200,
-    //ResetEc,
+    UpdateWf200,
     Quit,
 }
 
@@ -70,7 +69,6 @@ const EC_GATEWARE_LEN: u32 = 0x1_a000;
 const EC_FIRMWARE_BASE: u32 = 0x1_a000;
 const WF200_FIRMWARE_BASE: u32 = 0x9_C000;
 const CTRL_PAGE_LEN: u32 = 0x1000;
-const EC_GATEWARE_PAD: u32 = 0x1000;
 
 /// copies an image stored in a `package` slice, starting from `pkg_offset` in the `package` with length `len`
 /// and writing to FLASH starting at a hardware offset of `flash_start`
@@ -84,7 +82,7 @@ fn do_update(com: &mut com::Com, callback_conn: xous::CID, package: &[u8], pkg_o
     write!(update_str, "Erasing {}...", name).unwrap();
     Buffer::into_buf(update_str).unwrap().lend(callback_conn, CB_ID.load(Ordering::Relaxed)).unwrap();
     update_str.clear();
-    log::debug!("erasing from 0x{:08x}, {} bytes", flash_start, image_len);
+    log::debug!("erasing from 0x{:08x}, 0x{:x} bytes", flash_start, image_len);
     if com.flash_erase(flash_start, image_len).unwrap() {
         write!(update_str, "Done.").unwrap();
     } else {
@@ -126,8 +124,8 @@ fn do_update(com: &mut com::Com, callback_conn: xous::CID, package: &[u8], pkg_o
         }
         prog_addr += 1024;
         progress_ctr += 1;
-        if (progress_ctr % 16) == 0 {
-            write!(update_str, "{:.1}% complete", ((prog_addr - flash_start) as f64 / image_len as f64) * 100.0).unwrap();
+        if (progress_ctr % 12) == 0 {
+            write!(update_str, "{:.0}% complete", ((prog_addr - flash_start) as f64 / image_len as f64) * 100.0).unwrap();
             Buffer::into_buf(update_str).unwrap().lend(callback_conn, CB_ID.load(Ordering::Relaxed)).unwrap();
             update_str.clear();
         }
@@ -167,15 +165,14 @@ fn do_update(com: &mut com::Com, callback_conn: xous::CID, package: &[u8], pkg_o
             }
         }
         log::debug!("prog 0x{:08x} {} pages (last op)", prog_addr, dbgcnt);
+        if com.flash_program(prog_addr, pages).unwrap() == false {
+            write!(update_str, "Program failed, aborting!").unwrap();
+            Buffer::into_buf(update_str).unwrap().lend(callback_conn, CB_ID.load(Ordering::Relaxed)).unwrap();
+            update_str.clear();
+            return false
+        }
     }
-    if com.flash_program(prog_addr, pages).unwrap() == false {
-        write!(update_str, "Program failed, aborting!").unwrap();
-        Buffer::into_buf(update_str).unwrap().lend(callback_conn, CB_ID.load(Ordering::Relaxed)).unwrap();
-        update_str.clear();
-        false
-    } else {
-        true
-    }
+    true
 }
 
 fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
@@ -249,6 +246,30 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                         EC_GATEWARE_LEN as usize, 0, 0)).unwrap();
                 }
             },
+            Some(UpdateOp::UpdateWf200) => {
+                let package = unsafe{ core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, xous::EC_WF200_PKG_LEN as usize)};
+                let mut temp: [u8; 4] = Default::default();
+                temp.copy_from_slice(&package[0x28..0x2c]);
+                let length = u32::from_le_bytes(temp); // total length of package
+
+                if !validate_package(package,PackageType::Wf200) {
+                    log::error!("WF200 firmware package did not pass validation");
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::Abort.to_usize().unwrap(),
+                        0, 0, 0)).unwrap();
+                } else {
+                    susres.set_suspendable(false).unwrap(); // block suspend/resume operations
+                    do_update(&mut com, callback_conn, package, CTRL_PAGE_LEN,
+                        WF200_FIRMWARE_BASE, length, "wf200");
+                    susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
+
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::ProgramDone.to_usize().unwrap(),
+                        EC_GATEWARE_LEN as usize, 0, 0)).unwrap();
+                }
+            },
             Some(UpdateOp::Quit) => {
                 log::info!("quitting updater thread");
                 break;
@@ -288,7 +309,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "ecup [all] [gw] [fw] [wf200]";
+        let helpstring = "ecup [gw] [fw] [wf200] [reset]";
 
         log::debug!("ecup handling {}", args.as_str().unwrap());
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -315,7 +336,20 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         xous::send_message(self.update_cid,
                             xous::Message::new_scalar(UpdateOp::UpdateGateware.to_usize().unwrap(), 0, 0, 0, 0)
                         ).unwrap();
-                        write!(ret, "Starting EC firmware update").unwrap();
+                        write!(ret, "Starting EC gateware update").unwrap();
+                    }
+                    "reset" => {
+                        env.llio.ec_reset().unwrap();
+                        write!(ret, "EC has been reset, and new firmware loaded.").unwrap();
+                    }
+                    "wf200" => {
+                        self.in_progress = true;
+                        let start = env.ticktimer.elapsed_ms();
+                        self.start_time = Some(start);
+                        xous::send_message(self.update_cid,
+                            xous::Message::new_scalar(UpdateOp::UpdateWf200.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).unwrap();
+                        write!(ret, "Starting EC wf200 update").unwrap();
                     }
                     _ => {
                         write!(ret, "{}", helpstring).unwrap();
@@ -348,11 +382,11 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         write!(ret, "Firmware package validated in {}ms", elapsed).unwrap();
                     },
                     Some(UpdateResult::ProgramDone) => {
-                        write!(ret, "Programming of {} bytes done in {:.1}s", progress, elapsed / 1000.0).unwrap();
+                        write!(ret, "Programming of {} bytes done in {:.1}s. Please restart EC with `ecup reset`.", progress, elapsed / 1000.0).unwrap();
                         self.in_progress = false;
                     },
                     Some(UpdateResult::Abort) => {
-                        write!(ret, "Programming aborted in {:.1}s due to an internal error!", elapsed / 1000.0).unwrap();
+                        write!(ret, "Programming aborted in {:.1}s. Did you stage all the firmware objects?", elapsed / 1000.0).unwrap();
                         self.in_progress = false;
                     }
                     _ => write!(ret, "Got unknown update callback: {:?}", result_code).unwrap()

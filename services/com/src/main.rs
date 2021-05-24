@@ -335,6 +335,7 @@ fn xmain() -> ! {
                         match flash_op.op {
                             api::FlashOp::Erase(addr, len) => {
                                 if addr < FLASH_LEN && len + addr < FLASH_LEN {
+                                    log::debug!("Erasing EC region starting at 0x{:x}, lenth 0x{:x}", addr, len);
                                     com.txrx(ComState::FLASH_ERASE.verb);
                                     com.txrx((addr >> 16) as u16);
                                     com.txrx(addr as u16);
@@ -355,6 +356,7 @@ fn xmain() -> ! {
                                 pass = true;
                                 for &maybe_page in some_pages.iter() {
                                     if prog_ptr < FLASH_LEN - 256 {
+                                        log::trace!("Prog EC page at 0x{:x}", prog_ptr);
                                         if let Some(page) = maybe_page {
                                             com.txrx(ComState::FLASH_PP.verb);
                                             com.txrx((prog_ptr >> 16) as u16);
