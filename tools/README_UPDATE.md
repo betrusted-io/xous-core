@@ -11,8 +11,7 @@ Maintainer's note: this is a mirror of the README.md file found in [betrusted-ec
 * `sudo pip3 install pyusb progressbar2` (you need `pyusb` and `progressbar2` in the sudo environment)
 * you probably need to run as `sudo`: `sudo ./usb_update.py [args]` to access the USB port; add the appropriate command line arguments
 
-In order to get `xtask` to work (it calls `usb_update.py`) you will need to add a udev rule to eliminate the need for sudo privs. Under
-Ubuntu 18.04LTS, it looks something like this:
+In order to get `xtask` to work (it calls `usb_update.py`) you will need to add a udev rule to eliminate the need for sudo privs. Under Ubuntu 18.04LTS, it looks something like this:
 
 1. Add a file called `99-precursor-usb.rules` to /etc/udev/rules.d/ with the following content as a single line terminated by a carriage return:
 `SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="5bf0", GROUP="plugdev", TAG+="uaccess"`
@@ -21,6 +20,7 @@ Ubuntu 18.04LTS, it looks something like this:
 to take effect.
 
 We would appreciate any improvements/suggestions for alternate Linux distros. `udev` rules seem very distro-specific and change with time.
+
 ### Installation: Windows 10
 
 * You will need to install python3 from the Windows App store
