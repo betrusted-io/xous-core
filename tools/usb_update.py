@@ -253,7 +253,7 @@ class PrecursorUsb:
         erased = 0
         while erased < len(data):
             self.ping_wdt()
-            if len(data) - erased >= 65536:
+            if (len(data) - erased >= 65536) and ((addr & 0xFFFF) == 0):
                 blocksize = 65536
             else:
                 blocksize = 4096
@@ -264,7 +264,7 @@ class PrecursorUsb:
                 if status & 0x02 != 0:
                     break
 
-            if blocksize <= 4096:
+            if blocksize == 4096:
                 self.flash_se4b(addr + erased)
             else:
                 self.flash_be4b(addr + erased)
