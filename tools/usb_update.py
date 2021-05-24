@@ -491,7 +491,7 @@ def main():
     except usb.core.USBError:
         pass # we expect an error because we reset the SOC and that includes the USB core
 
-    print("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
+    # print("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
 
 if __name__ == "__main__":
     main()
