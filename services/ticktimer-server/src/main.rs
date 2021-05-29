@@ -66,6 +66,7 @@ mod implementation {
         wdt_sr_manager: RegManager::<{utra::wdt::WDT_NUMREGS}>,
     }
 
+    #[cfg(feature = "watchdog")]
     fn handle_wdt(_irq_no: usize, arg: *mut usize) {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
         // disarm the WDT -- do it in an interrupt context, to make sure we aren't interrupted while doing this.
@@ -77,7 +78,6 @@ mod implementation {
         //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
         //  - the CPU runs at 100MHz with a tight tolerance
         //  - thus it is impossible to guarantee sync between the domains, so we do a two-step query/response interlock
-        #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
             if xtt.wdt.rf(utra::wdt::STATE_ARMED1) != 0 {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
@@ -87,7 +87,6 @@ mod implementation {
             }
         }
         // Clear the interrupt
-        #[cfg(feature = "watchdog")]
         xtt.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
     }
 
@@ -161,6 +160,7 @@ mod implementation {
             )
             .expect("couldn't claim irq");
 
+            #[cfg(feature = "watchdog")]
             xous::claim_interrupt(
                 utra::wdt::WDT_IRQ,
                 handle_wdt,
