@@ -68,7 +68,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus] [stress]";
+        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus] [stress] [crypton] [cryptoff]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -78,6 +78,14 @@ impl<'a> ShellCmdApi<'a> for Sleep {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "crypton" => {
+                    env.llio.crypto_on(true).unwrap();
+                    write!(ret, "crypto power is now on").unwrap();
+                }
+                "cryptoff" => {
+                    env.llio.crypto_on(false).unwrap();
+                    write!(ret, "crypto power is now off").unwrap();
+                }
                 "sus" => {
                     self.susres.initiate_suspend().unwrap();
                     // the message below is sent after we wake up

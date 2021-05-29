@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-05-23 23:36:44]]></description>
+    <description><![CDATA[Litex SoC 2021-05-29 23:04:25]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1070,10 +1070,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``974ecf35``, so this value is 2538524469, which should be enough to check out
+``15a07b18``, so this value is 362838808, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x974ecf35</resetValue>
+                    <resetValue>0x15a07b18</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1090,7 +1090,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x13</resetValue>
+                    <resetValue>0x15</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2392,7 +2392,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>POWER</name>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x0a</resetValue>
+                    <resetValue>0x20a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2456,12 +2456,64 @@ the host role.]]></description>
                             <description><![CDATA[Set this bit to clear BBRAM AES key (if used) and cut power in an annoying-to-
 reset fashion]]></description>
                         </field>
+                        <field>
+                            <name>crypto_on</name>
+                            <msb>9</msb>
+                            <bitRange>[9:9]</bitRange>
+                            <lsb>9</lsb>
+                            <description><![CDATA[Writing a `1` to this bit turns the clock on to the crypto accelerators.
+Configured to currently override power to `on` at boot to ease system setup.]]></description>
+                        </field>
+                        <field>
+                            <name>ignore_locked</name>
+                            <msb>10</msb>
+                            <bitRange>[10:10]</bitRange>
+                            <lsb>10</lsb>
+                            <description><![CDATA[Writing a `1` to this bit causes the reset to ignore the PLL lock status]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CLK_STATUS</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>crypto_on</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[The actual crypto clock power on signal, after OR'ing between three separate
+sources (power, sha512, and engine25519)]]></description>
+                        </field>
+                        <field>
+                            <name>sha_on</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Readback of SHA block power setting]]></description>
+                        </field>
+                        <field>
+                            <name>engine_on</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Readback of Engine25519 block power setting]]></description>
+                        </field>
+                        <field>
+                            <name>btpower_on</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Readback of this block's override-on power setting]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>VIBE</name>
                     <description><![CDATA[Vibration motor configuration register]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2477,7 +2529,7 @@ reset fashion]]></description>
                 <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2493,7 +2545,7 @@ reset fashion]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2509,7 +2561,7 @@ reset fashion]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x0010</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2525,7 +2577,7 @@ reset fashion]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x14</size>
+                <size>0x18</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3117,7 +3169,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x229e8191</resetValue>
+                    <resetValue>0x3b676dbb</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3132,7 +3184,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x261d606f</resetValue>
+                    <resetValue>0x2a12256d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4351,9 +4403,25 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
             <groupName>SHA512</groupName>
             <registers>
                 <register>
+                    <name>POWER</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>on</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Writing `1` turns ot the clocks to this block, `0` stops the clocks (for power
+savings)]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>CONFIG</name>
                     <description><![CDATA[Configuration register for the HMAC block]]></description>
-                    <addressOffset>0x0000</addressOffset>
+                    <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4390,7 +4458,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>COMMAND</name>
                     <description><![CDATA[Command register for the HMAC block]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4413,7 +4481,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST01</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST0`. digest word 0]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x000c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4428,7 +4496,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST00</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST0`.]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4443,7 +4511,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST11</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST1`. digest word 1]]></description>
-                    <addressOffset>0x0010</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4458,7 +4526,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST10</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST1`.]]></description>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4473,7 +4541,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST21</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST2`. digest word 2]]></description>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4488,7 +4556,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST20</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST2`.]]></description>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4503,7 +4571,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST31</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST3`. digest word 3]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4518,7 +4586,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST30</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST3`.]]></description>
-                    <addressOffset>0x0024</addressOffset>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4533,7 +4601,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST41</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST4`. digest word 4]]></description>
-                    <addressOffset>0x0028</addressOffset>
+                    <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4548,7 +4616,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST40</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST4`.]]></description>
-                    <addressOffset>0x002c</addressOffset>
+                    <addressOffset>0x0030</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4563,7 +4631,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST51</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST5`. digest word 5]]></description>
-                    <addressOffset>0x0030</addressOffset>
+                    <addressOffset>0x0034</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4578,7 +4646,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST50</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST5`.]]></description>
-                    <addressOffset>0x0034</addressOffset>
+                    <addressOffset>0x0038</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4593,7 +4661,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST61</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST6`. digest word 6]]></description>
-                    <addressOffset>0x0038</addressOffset>
+                    <addressOffset>0x003c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4608,7 +4676,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST60</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST6`.]]></description>
-                    <addressOffset>0x003c</addressOffset>
+                    <addressOffset>0x0040</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4623,7 +4691,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST71</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_DIGEST7`. digest word 7]]></description>
-                    <addressOffset>0x0040</addressOffset>
+                    <addressOffset>0x0044</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4638,7 +4706,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                 <register>
                     <name>DIGEST70</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_DIGEST7`.]]></description>
-                    <addressOffset>0x0044</addressOffset>
+                    <addressOffset>0x0048</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4654,7 +4722,7 @@ VCCBRAM (V) = ``Value`` x 3 / 4096.]]></description>
                     <name>MSG_LENGTH1</name>
                     <description><![CDATA[Bits 32-63 of `SHA512_MSG_LENGTH`. Bottom 64 bits of length of digested message,
 in bits]]></description>
-                    <addressOffset>0x0048</addressOffset>
+                    <addressOffset>0x004c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4669,7 +4737,7 @@ in bits]]></description>
                 <register>
                     <name>MSG_LENGTH0</name>
                     <description><![CDATA[Bits 0-31 of `SHA512_MSG_LENGTH`.]]></description>
-                    <addressOffset>0x004c</addressOffset>
+                    <addressOffset>0x0050</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4684,7 +4752,7 @@ in bits]]></description>
                 <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[SHA512 is done]]></description>
-                    <addressOffset>0x0050</addressOffset>
+                    <addressOffset>0x0054</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4714,7 +4782,7 @@ in bits]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[SHA512 is done]]></description>
-                    <addressOffset>0x0054</addressOffset>
+                    <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4744,7 +4812,7 @@ in bits]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[SHA512 is done]]></description>
-                    <addressOffset>0x0058</addressOffset>
+                    <addressOffset>0x005c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4774,7 +4842,7 @@ in bits]]></description>
                 <register>
                     <name>FIFO</name>
                     <description><![CDATA[FIFO status]]></description>
-                    <addressOffset>0x005c</addressOffset>
+                    <addressOffset>0x0060</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4832,7 +4900,7 @@ in bits]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x60</size>
+                <size>0x64</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -4908,8 +4976,24 @@ microcode instructions starting at mpstart]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>STATUS</name>
+                    <name>POWER</name>
                     <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>on</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Writing `1` turns ot the clocks to this block, `0` stops the clocks (for power
+savings)]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>STATUS</name>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4933,7 +5017,7 @@ microcode memory areas will stall until this bit is clear]]></description>
                 <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4956,7 +5040,7 @@ microcode memory areas will stall until this bit is clear]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4979,7 +5063,7 @@ microcode memory areas will stall until this bit is clear]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5003,7 +5087,7 @@ microcode memory areas will stall until this bit is clear]]></description>
                     <name>INSTRUCTION</name>
                     <description><![CDATA[Current instruction being executed by the engine. The format of this register
 exactly reflects the binary layout of an Engine instruction.]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5061,7 +5145,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x24</size>
+                <size>0x28</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>

@@ -52,6 +52,7 @@ mod implementation {
         }
 
         pub(crate) fn setup(&mut self, config: Sha2Config) {
+            self.csr.wfo(utra::sha512::POWER_ON, 1);
             match config {
                 Sha2Config::Sha512 => {
                     self.csr.wo(utra::sha512::CONFIG,
@@ -71,9 +72,11 @@ mod implementation {
             }
             self.csr.wfo(utra::sha512::COMMAND_HASH_START, 1);
             self.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
+            self.csr.wfo(utra::sha512::POWER_ON, 0);
         }
 
         pub(crate) fn update(&mut self, buf: &[u8]) {
+            self.csr.wfo(utra::sha512::POWER_ON, 1);
             let sha = self.fifo.as_mut_ptr() as *mut u32;
             let sha_byte = self.fifo.as_mut_ptr() as *mut u8;
 
@@ -107,9 +110,11 @@ mod implementation {
                     }
                 }
             }
+            self.csr.wfo(utra::sha512::POWER_ON, 0);
         }
 
         pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) {
+            self.csr.wfo(utra::sha512::POWER_ON, 1);
             self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
             while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
                 xous::yield_slice();
@@ -142,10 +147,12 @@ mod implementation {
             }
             self.csr.wo(utra::sha512::CONFIG, 0);  // clear all config bits, including EN, which resets the unit
 
+            self.csr.wfo(utra::sha512::POWER_ON, 0);
             (hash, length_in_bits)
         }
 
         pub(crate) fn reset(&mut self) {
+            self.csr.wfo(utra::sha512::POWER_ON, 1);
             if self.csr.rf(utra::sha512::FIFO_RUNNING) != 0 {
                 // if it's running, call digest, then reset
                 let sha = self.fifo.as_mut_ptr() as *mut u32;
@@ -160,12 +167,16 @@ mod implementation {
             }
             self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
             self.csr.wo(utra::sha512::CONFIG, 0);  // clear all config bits, including EN, which resets the unit
+            self.csr.wfo(utra::sha512::POWER_ON, 0);
         }
 
-        pub(crate) fn is_idle(&self) -> bool {
+        pub(crate) fn is_idle(&mut self) -> bool {
+            self.csr.wfo(utra::sha512::POWER_ON, 1);
             if self.csr.rf(utra::sha512::CONFIG_SHA_EN) == 0 && self.csr.rf(utra::sha512::FIFO_RUNNING) == 0 {
+                self.csr.wfo(utra::sha512::POWER_ON, 0);
                 true
             } else {
+                self.csr.wfo(utra::sha512::POWER_ON, 0);
                 false
             }
         }

@@ -184,6 +184,8 @@ pub(crate) enum Opcode {
     PowerAudio, //(bool),
     PowerSelf, //(bool), // setting this to false allows the EC to turn off our power
     PowerBoostMode, //(bool),
+    PowerCrypto,
+    PowerCryptoStatus,
     EcSnoopAllow, //(bool),
     EcReset,
     EcPowerOn,

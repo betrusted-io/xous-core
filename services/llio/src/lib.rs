@@ -437,6 +437,26 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    // -149mA @ 4152mV crypto on // -143mA @ 4149mV crypto off
+    pub fn crypto_on(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PowerCrypto.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn crypto_power_status(&self) -> Result<(bool, bool, bool), xous::Error> { // sha, engine, override status
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PowerCryptoStatus.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(val) = response {
+            let sha =  if (val & 1) == 0 { false } else { true };
+            let engine =  if (val & 2) == 0 { false } else { true };
+            let force =  if (val & 4) == 0 { false } else { true };
+            Ok((sha, engine, force))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
     pub fn soc_gitrev(&self) -> Result<(u8, u8, u8, u8, u32), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::InfoGit.to_usize().unwrap(), 0, 0, 0, 0))?;

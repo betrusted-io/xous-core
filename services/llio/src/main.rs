@@ -202,6 +202,7 @@ mod implementation {
             xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
             xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
 
+            xl.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
             xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
             xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
             xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
@@ -281,6 +282,20 @@ mod implementation {
             } else {
                 self.power_csr.rmwf(utra::power::POWER_AUDIO, 0);
             }
+        }
+        pub fn power_crypto(&mut self, power_on: bool) {
+            if power_on {
+                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0);
+            }
+        }
+        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
+            let sha = if self.power_csr.rf(utra::power::CLK_STATUS_SHA_ON) == 0 {false} else {true};
+            let engine = if self.power_csr.rf(utra::power::CLK_STATUS_ENGINE_ON) == 0 {false} else {true};
+            let force = if self.power_csr.rf(utra::power::CLK_STATUS_BTPOWER_ON) == 0 {false} else {true};
+            let overall = if self.power_csr.rf(utra::power::CLK_STATUS_CRYPTO_ON) == 0 {false} else {true};
+            (overall, sha, engine, force)
         }
         pub fn power_self(&mut self, power_on: bool) {
             if power_on {
@@ -421,6 +436,10 @@ mod implementation {
         pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn power_audio(&self, _power_on: bool) {}
+        pub fn power_crypto(&self, _power_on: bool) {}
+        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
+            (true, true, true, true)
+        }
         pub fn power_self(&self, _power_on: bool) {}
         pub fn power_boost_mode(&self, _power_on: bool) {}
         pub fn ec_snoop_allow(&self, _power_on: bool) {}
@@ -623,6 +642,22 @@ fn xmain() -> ! {
                     llio.power_audio(true);
                 }
                 xous::return_scalar(msg.sender, 0).expect("couldn't confirm audio power was set");
+            }),
+            Some(Opcode::PowerCrypto) => msg_blocking_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.power_crypto(false);
+                } else {
+                    llio.power_crypto(true);
+                }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm crypto power was set");
+            }),
+            Some(Opcode::PowerCryptoStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (_, sha, engine, force) = llio.power_crypto_status();
+                let mut ret = 0;
+                if sha { ret |= 1 };
+                if engine { ret |= 2 };
+                if force { ret |= 4 };
+                xous::return_scalar(msg.sender, ret).expect("couldn't return crypto unit power status");
             }),
             Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
