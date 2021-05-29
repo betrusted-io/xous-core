@@ -36,7 +36,7 @@ mod implementation {
     use core::sync::atomic::Ordering;
     use num_traits::ToPrimitive;
 
-    const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
+    const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
     const SYSTEM_TICK_INTERVAL_MS: u32 = 20;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
