@@ -59,7 +59,7 @@ pub fn idle() -> bool {
 
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
-    if true {
+    if false {
         unsafe { riscv::asm::wfi() };
     } else {
         wfi_kernel_csr.wfo(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, 1);
