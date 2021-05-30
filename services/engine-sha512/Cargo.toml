@@ -28,4 +28,5 @@ opaque-debug = "0.3" # prevents internal hash state leakage from debug structure
 utralib = { path = "../../utralib"}
 
 [features]
+event_wait = [] # in theory, event_wait should be more efficient, but at the moment it just hangs so there are bugs
 default = []

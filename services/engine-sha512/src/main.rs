@@ -24,6 +24,24 @@ mod implementation {
     pub(crate) struct Engine512 {
         csr: utralib::CSR<u32>,
         fifo: xous::MemoryRange,
+        #[cfg(feature = "event_wait")]
+        done: bool,
+    }
+
+    /*
+      Note: in theory, xous::wait_event() should be a more efficient way to do this than yield_slice(),
+      as it should resume scheduling immediately upon an interrupt being fired by the sha512 engine, instead
+      of just waiting until the next time slice which can be some ms away. However, attempts to use this
+      feature seem to indicate there is either a configuration or a hardware problem in triggering the
+      interrupts for this block. This is a thing to fix later.
+     */
+    #[cfg(feature = "event_wait")]
+    fn handle_irq(_irq_no: usize, arg: *mut usize) {
+        let engine512 = unsafe { &mut *(arg as *mut Engine512) };
+        // note we are done and clear the pending request, as this is used as a "wait" until interrupt mechanism with xous::wait_event()
+        engine512.done = true;
+        engine512.csr
+            .wo(utra::sha512::EV_PENDING, engine512.csr.r(utra::sha512::EV_PENDING));
     }
 
     impl Engine512 {
@@ -43,10 +61,28 @@ mod implementation {
             )
             .expect("couldn't map Engine512 CSR range");
 
+            #[cfg(not(feature = "event_wait"))]
             let engine512 = Engine512 {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 fifo,
             };
+
+            #[cfg(feature = "event_wait")]
+            {
+                let mut engine512 = Engine512 {
+                    csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                    fifo,
+                    #[cfg(feature = "event_wait")]
+                    done: false,
+                };
+                xous::claim_interrupt(
+                    utra::sha512::SHA512_IRQ,
+                    handle_irq,
+                    (&mut engine512) as *mut Engine512 as *mut usize,
+                )
+                .expect("couldn't claim irq");
+                engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
+            }
 
             engine512
         }
@@ -115,11 +151,24 @@ mod implementation {
 
         pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
-            self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
-            while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
-                xous::yield_slice();
+            #[cfg(feature = "event_wait")]
+            {
+                self.done = false;
+                self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
+                while !self.done {
+                    log::trace!("waiting for sha512_done");
+                    xous::wait_event();
+                }
+                log::trace!("moving on");
             }
-            self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
+            #[cfg(not(feature = "event_wait"))]
+            {
+                self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
+                while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
+                    xous::yield_slice();
+                }
+                self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
+            }
             let length_in_bits: u64 = (self.csr.r(utra::sha512::MSG_LENGTH0) as u64) | ((self.csr.r(utra::sha512::MSG_LENGTH1) as u64) << 32);
             let mut hash: [u8; 64] = [0; 64];
             let digest_regs: [utralib::Register; 16] = [
@@ -157,10 +206,22 @@ mod implementation {
                 // if it's running, call digest, then reset
                 let sha = self.fifo.as_mut_ptr() as *mut u32;
                 unsafe { sha.write_volatile(0x0); } // stuff a dummy byte, in case the hash was empty
-
-                self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
-                while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
-                    xous::yield_slice();
+                #[cfg(feature = "event_wait")]
+                {
+                    self.done = false;
+                    self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
+                    while !self.done {
+                        log::trace!("waiting for sha512_done (reset)");
+                        xous::wait_event();
+                    }
+                    log::trace!("moving on (reset)");
+                }
+                #[cfg(not(feature = "event_wait"))]
+                {
+                    self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
+                    while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
+                        xous::yield_slice();
+                    }
                 }
             } else {
                 // engine is already stopped, just clear the pending bits and reset the config
@@ -253,7 +314,7 @@ fn xmain() -> ! {
     use crate::implementation::Engine512;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
