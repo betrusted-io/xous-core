@@ -72,7 +72,6 @@ mod implementation {
                 let mut engine512 = Engine512 {
                     csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                     fifo,
-                    #[cfg(feature = "event_wait")]
                     done: false,
                 };
                 xous::claim_interrupt(
@@ -81,9 +80,10 @@ mod implementation {
                     (&mut engine512) as *mut Engine512 as *mut usize,
                 )
                 .expect("couldn't claim irq");
+                // note: we can't use a "susres" manager here because this block has un-suspendable state
+                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon in
                 engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
             }
-
             engine512
         }
 
@@ -153,6 +153,7 @@ mod implementation {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
             #[cfg(feature = "event_wait")]
             {
+                engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
                 self.done = false;
                 self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
                 while !self.done {
@@ -208,6 +209,7 @@ mod implementation {
                 unsafe { sha.write_volatile(0x0); } // stuff a dummy byte, in case the hash was empty
                 #[cfg(feature = "event_wait")]
                 {
+                    engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
                     self.done = false;
                     self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
                     while !self.done {

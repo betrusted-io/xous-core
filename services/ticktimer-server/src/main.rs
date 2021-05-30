@@ -58,15 +58,13 @@ mod implementation {
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
-        #[cfg(feature = "watchdog")]
-        wdt: utralib::CSR<u32>,
         current_response: Option<SleepRequest>,
         connection: xous::CID,
         ticktimer_sr_manager: RegManager::<{utra::ticktimer::TICKTIMER_NUMREGS}>,
         wdt_sr_manager: RegManager::<{utra::wdt::WDT_NUMREGS}>,
+        wdt: utralib::CSR<u32>,
     }
 
-    #[cfg(feature = "watchdog")]
     fn handle_wdt(_irq_no: usize, arg: *mut usize) {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
         // disarm the WDT -- do it in an interrupt context, to make sure we aren't interrupted while doing this.
@@ -78,6 +76,7 @@ mod implementation {
         //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
         //  - the CPU runs at 100MHz with a tight tolerance
         //  - thus it is impossible to guarantee sync between the domains, so we do a two-step query/response interlock
+        #[cfg(feature = "watchdog")]
         if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
             if xtt.wdt.rf(utra::wdt::STATE_ARMED1) != 0 {
                 xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
@@ -138,12 +137,11 @@ mod implementation {
 
             let mut xtt = XousTickTimer {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                #[cfg(feature = "watchdog")]
-                wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
                 current_response: None,
                 connection,
                 ticktimer_sr_manager,
                 wdt_sr_manager,
+                wdt: CSR::new(wdt.as_mut_ptr() as *mut u32),
             };
 
             #[cfg(feature = "watchdog")]
@@ -160,7 +158,6 @@ mod implementation {
             )
             .expect("couldn't claim irq");
 
-            #[cfg(feature = "watchdog")]
             xous::claim_interrupt(
                 utra::wdt::WDT_IRQ,
                 handle_wdt,
@@ -171,6 +168,11 @@ mod implementation {
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
+                xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+            }
+            #[cfg(not(feature = "watchdog"))]
+            {
+                xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 0);
                 xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
             }
 
@@ -248,7 +250,7 @@ mod implementation {
             self.csr.wfo(utra::ticktimer::EV_ENABLE_ALARM, 1);
         }
 
-        #[cfg(feature = "watchdog")]
+        #[allow(dead_code)]
         pub fn reset_wdt(&mut self) {
             // this triggers an interrupt, and the handler of the interrupt does the actual reset
             // this is done because we don't want the WDT reset to be interrupted
@@ -256,7 +258,6 @@ mod implementation {
         }
 
         #[allow(dead_code)]
-        #[cfg(feature = "watchdog")]
         pub fn check_wdt(&mut self) {
             let state = self.wdt.r(utra::wdt::STATE);
             if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
@@ -427,7 +428,7 @@ mod implementation {
                 .unwrap();
         }
 
-        #[cfg(feature = "watchdog")]
+        #[allow(dead_code)]
         pub fn reset_wdt(&self) {
             // dummy function, does nothing
         }
