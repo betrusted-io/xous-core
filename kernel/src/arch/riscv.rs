@@ -60,9 +60,13 @@ pub fn idle() -> bool {
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
     if false {
+        // "traditional" path for stopping a clock
         unsafe { riscv::asm::wfi() };
     } else {
+        // this invokes Precusor-SoC specific path to gate clocks:
+        // 1. ignore_locked prevents the chip from going into reset if the PLL goes unlocked
         wfi_kernel_csr.wfo(utra::wfi::IGNORE_LOCKED_IGNORE_LOCKED, 1);
+        // 2. wfi gates all the clocks (stops them) until a SoC-defined interrupt comes in
         wfi_kernel_csr.wfo(utra::wfi::WFI_WFI, 1);
     }
 
