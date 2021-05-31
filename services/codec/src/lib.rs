@@ -43,6 +43,11 @@ impl Codec {
             Message::new_scalar(Opcode::Setup8kStereo.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn power_off(&mut self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::PowerOff.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
 
     pub fn free_frames(&mut self) -> Result<(usize, usize), xous::Error> {
         let response = send_message(self.conn,
