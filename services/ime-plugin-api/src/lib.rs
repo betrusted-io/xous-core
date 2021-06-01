@@ -220,6 +220,7 @@ pub struct ImeFrontEnd {
 }
 impl ImeFrontEnd {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(SERVER_NAME_IME_FRONT).expect("Can't connect to IMEF");
         Ok(ImeFrontEnd {
             cid: conn,
@@ -227,6 +228,8 @@ impl ImeFrontEnd {
           })
     }
 }
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for ImeFrontEnd {
     fn drop(&mut self) {
         if let Some(sid) = self.callback_sid.take() {
@@ -240,8 +243,9 @@ impl Drop for ImeFrontEnd {
             unsafe{xous::disconnect(cid).unwrap();}
             xous::destroy_server(sid).unwrap();
         }
-
-        unsafe{xous::disconnect(self.cid).unwrap();}
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.cid).unwrap();}
+        }
     }
 }
 

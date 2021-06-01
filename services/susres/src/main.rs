@@ -36,7 +36,7 @@ mod implementation {
     use core::sync::atomic::Ordering;
     use num_traits::ToPrimitive;
 
-    const SYSTEM_CLOCK_FREQUENCY: u32 = 100_000_000;
+    const SYSTEM_CLOCK_FREQUENCY: u32 = 12_000_000; // timer0 is now in the always-on domain
     const SYSTEM_TICK_INTERVAL_MS: u32 = 20;
 
     fn timer_tick(_irq_no: usize, arg: *mut usize) {
@@ -391,6 +391,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
     ready_to_suspend: bool,
     token: u32,
+    failed_to_suspend: bool,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -400,7 +401,7 @@ enum TimeoutOpcode {
     Drop,
 }
 
-static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(250);
+static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(500);
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
@@ -524,6 +525,7 @@ fn xmain() -> ! {
     let mut suspend_requested = false;
     let mut timeout_pending = false;
     let mut reboot_requested: bool = false;
+    let mut allow_suspend = true;
 
     let mut suspend_subscribers: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
@@ -603,27 +605,37 @@ fn xmain() -> ! {
                     }
                 }),
                 Some(Opcode::SuspendRequest) => {
-                    suspend_requested = true;
-                    // clear the resume gate
-                    SHOULD_RESUME.store(false, Ordering::Relaxed);
-                    RESUME_EXEC.store(false, Ordering::Relaxed);
-                    // clear the ready to suspend flag
-                    for maybe_sub in suspend_subscribers.iter_mut() {
-                        if let Some(sub) = maybe_sub {
-                            sub.ready_to_suspend = false;
-                        };
-                    }
-                    // do we want to start the timeout before or after sending the notifications? hmm. 🤔
-                    timeout_pending = true;
-                    send_message(timeout_outgoing_conn,
-                        Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't initiate timeout before suspend!");
+                    if allow_suspend {
+                        suspend_requested = true;
+                        // clear the resume gate
+                        SHOULD_RESUME.store(false, Ordering::Relaxed);
+                        RESUME_EXEC.store(false, Ordering::Relaxed);
+                        // clear the ready to suspend flag and failed to suspend flag
+                        for maybe_sub in suspend_subscribers.iter_mut() {
+                            if let Some(sub) = maybe_sub {
+                                sub.ready_to_suspend = false;
+                                sub.failed_to_suspend = false;
+                            };
+                        }
+                        // do we want to start the timeout before or after sending the notifications? hmm. 🤔
+                        timeout_pending = true;
+                        send_message(timeout_outgoing_conn,
+                            Message::new_scalar(TimeoutOpcode::Run.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).expect("couldn't initiate timeout before suspend!");
 
-                    send_event(&suspend_subscribers);
+                        send_event(&suspend_subscribers);
+                    }
+                    // denied requests just silently fail.
                 },
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
                         log::trace!("suspend call has timed out, forcing a suspend");
+                        // record which tokens had not reported in
+                        for maybe_sub in suspend_subscribers.iter_mut() {
+                            if let Some(sub) = maybe_sub {
+                                sub.failed_to_suspend = !sub.ready_to_suspend;
+                            }
+                        }
                         timeout_pending = false;
                         // force a suspend
                         susres_hw.do_suspend(true);
@@ -642,6 +654,27 @@ fn xmain() -> ! {
                         // just ignore the message.
                     }
                 }
+                Some(Opcode::WasSuspendClean) => msg_blocking_scalar_unpack!(msg, token, _, _, _, {
+                    let mut clean = true;
+                    for maybe_sub in suspend_subscribers.iter_mut() {
+                        if let Some(sub) = maybe_sub {
+                            if sub.token == token as u32 && sub.failed_to_suspend {
+                                clean = false;
+                            }
+                        }
+                    }
+                    if clean {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't return WasSuspendClean result");
+                    } else {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't return WasSuspendClean result");
+                    }
+                }),
+                Some(Opcode::SuspendAllow) => {
+                    allow_suspend = true;
+                },
+                Some(Opcode::SuspendDeny) => {
+                    allow_suspend = false;
+                },
                 Some(Opcode::Quit) => {
                     break
                 }
@@ -670,6 +703,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         cb_to_client_id: hookdata.id,
         ready_to_suspend: false,
         token: 0,
+        failed_to_suspend: false,
     };
     for i in 0..cb_conns.len() {
         if cb_conns[i].is_none() {

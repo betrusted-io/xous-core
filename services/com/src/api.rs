@@ -35,6 +35,30 @@ impl Into<[usize; 2]> for BattStats {
         ]
     }
 }
+
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum FlashOp {
+    /// erase a region defined by (address, len)
+    Erase(u32, u32),
+    /// Send up to 1kiB of data at a time. This reduces messaging overhead and makes
+    /// programming more efficient, while taking full advantage of the 1280-deep receive FIFO on the EC.
+    /// Address + up to 4 pages. page 0 is at address, page 1 is at address + 256, etc.
+    /// Pages stored as None are skipped, yet the address pointer is still incremented.
+    Program(u32, [Option<[u8; 256]>; 4])
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub enum FlashResult {
+    Pass,
+    Fail,
+}
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct FlashRecord {
+    /// identifier to validate that we're authorized to do this
+    pub id: [u32; 4],
+    /// operation
+    pub op: FlashOp,
+}
+
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
     /// Battery stats
@@ -55,8 +79,8 @@ pub(crate) enum Opcode {
     /// Turn Boost Mode Off
     BoostOff,
 
-    /// Read the current accelerations off the IMU
-    //ImuAccelRead,
+    /// Read the current accelerations off the IMU; this blocks while the read takes place
+    ImuAccelReadBlocking,
 
     /// Power off the SoC
     PowerOffSoc,
@@ -65,19 +89,20 @@ pub(crate) enum Opcode {
     ShipMode,
 
     /// Is the battery charging?
-    //IsCharging,
+    IsCharging,
 
     /// Set the backlight brightness
-    //SetBackLight,
+    SetBackLight,
 
     /// Request charging
-    //RequestCharging,
+    RequestCharging,
 
-    /// Erase a region of EC FLASH
-    //FlashErase,
+    /// Erase or program a region of EC FLASH
+    FlashOp,
 
-    /// Program a page of FLASH
-    //FlashProgram(&'a [u8]),
+    /// Take the mutex on EC update operations.
+    /// Only one process is allowed to acquire this ever, right now, for security reasons.
+    FlashAcquire,
 
     /// Checks if an updated SSID list is available
     SsidCheckUpdate,

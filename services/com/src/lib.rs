@@ -42,14 +42,19 @@ pub struct Com {
     conn: CID,
     battstats_sid: Option<xous::SID>,
     ticktimer: ticktimer_server::Ticktimer,
+    ec_lock_id: Option<[u32; 4]>,
+    ec_acquired: bool,
 }
 impl Com {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_COM).expect("Can't connect to COM server");
         Ok(Com {
             conn,
             battstats_sid: None,
             ticktimer: ticktimer_server::Ticktimer::new().expect("Can't connect to ticktimer"),
+            ec_lock_id: None,
+            ec_acquired: false,
         })
     }
 
@@ -189,9 +194,115 @@ impl Com {
             send_message(self.conn, Message::new_scalar(Opcode::BoostOff.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
         }
     }
-    // note to future self: add other event listener registrations (such as network events) here
+
+    // numbers from 0-255 represent backlight brightness. Note that only the top 5 bits are used.
+    pub fn set_backlight(&self, main: u8, secondary: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetBackLight.to_usize().unwrap(),
+                (main >> 3) as usize,
+                (secondary >> 3) as usize,
+                0, 0
+            )
+        ).map(|_| ())
+    }
+
+    pub fn is_charging(&self) -> Result<bool, xous::Error> {
+        if let xous::Result::Scalar1(state) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::IsCharging.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+            if state != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn request_charging(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RequestCharging.to_usize().unwrap(), 0, 0, 0, 0
+        )).map(|_| ())
+    }
+
+    pub fn gyro_read_blocking(&self) -> Result<(u16, u16, u16, u16), xous::Error> {
+        if let xous::Result::Scalar2(x_y, z_id) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::ImuAccelReadBlocking.to_usize().unwrap(), 0, 0, 0, 0)).unwrap() {
+
+            let x = (x_y >> 16) as u16;
+            let y = (x_y & 0xffff) as u16;
+            let z = (z_id >> 16) as u16;
+            let id = (z_id & 0xffff) as u16;
+            Ok((x, y, z, id))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn flash_acquire(&mut self) -> Result<bool, xous::Error> {
+        let (id0, id1, id2, id3) = xous::create_server_id()?.to_u32();
+        self.ec_lock_id = Some([id0, id1, id2, id3]);
+        if let xous::Result::Scalar1(acquired) =
+            send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::FlashAcquire.to_usize().unwrap(), id0 as usize, id1 as usize, id2 as usize, id3 as usize)).unwrap() {
+            if acquired != 0 {
+                self.ec_acquired = true;
+                Ok(true)
+            } else {
+                self.ec_acquired = false;
+                Ok(false)
+            }
+        } else {
+            self.ec_acquired = false;
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn flash_erase(&mut self, addr: u32, len: u32) -> Result<bool, xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Erase(addr, len),
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash erase command");
+        match buf.to_original().unwrap() {
+            api::FlashResult::Pass => {
+                Ok(true)
+            },
+            api::FlashResult::Fail => {
+                Ok(false)
+            }
+        }
+    }
+
+    pub fn flash_program(&mut self, addr: u32, page: [Option<[u8; 256]>; 4]) -> Result<bool, xous::Error> {
+        if !self.ec_acquired {
+            return Err(xous::Error::AccessDenied)
+        }
+        let flashop = api::FlashRecord {
+            id: self.ec_lock_id.unwrap(),
+            op: api::FlashOp::Program(addr, page)
+        };
+        let mut buf = Buffer::into_buf(flashop).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::FlashOp.to_u32().unwrap()).expect("couldn't send flash program command");
+        match buf.to_original().unwrap() {
+            api::FlashResult::Pass => {
+                Ok(true)
+            },
+            api::FlashResult::Fail => {
+                Ok(false)
+            }
+        }
+    }
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Com {
     fn drop(&mut self) {
         // if we have callbacks, destroy the battstats callback server
@@ -207,6 +318,8 @@ impl Drop for Com {
         }
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        unsafe{xous::disconnect(self.conn).unwrap();}
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }

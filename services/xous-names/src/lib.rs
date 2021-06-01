@@ -6,11 +6,13 @@ use core::fmt::Write;
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
+#[derive(Debug)]
 pub struct XousNames {
     conn: xous::CID,
 }
 impl XousNames {
     pub fn new() -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xous::connect(xous::SID::from_bytes(b"xous-name-server").unwrap()).expect("Couldn't connect to XousNames");
         Ok(XousNames {
            conn,
@@ -87,10 +89,13 @@ impl XousNames {
     }
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for XousNames {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        unsafe{xous::disconnect(self.conn).unwrap();}
-
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }

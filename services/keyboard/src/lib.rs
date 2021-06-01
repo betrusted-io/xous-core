@@ -19,6 +19,7 @@ pub struct Keyboard {
 }
 impl Keyboard {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KBD).expect("Can't connect to KBD");
         Ok(Keyboard {
             conn,
@@ -82,6 +83,8 @@ impl Keyboard {
     }
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Keyboard {
     fn drop(&mut self) {
         // if we have callbacks, destroy the callback server
@@ -108,7 +111,9 @@ impl Drop for Keyboard {
         }
 
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        unsafe{xous::disconnect(self.conn).unwrap();}
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }
 

@@ -184,6 +184,12 @@ pub(crate) enum Opcode {
     PowerAudio, //(bool),
     PowerSelf, //(bool), // setting this to false allows the EC to turn off our power
     PowerBoostMode, //(bool),
+    PowerCrypto,
+    PowerCryptoStatus,
+    WfiOverride,
+    DebugPowerdown,
+    GetActivity,
+    DebugWakeup,
     EcSnoopAllow, //(bool),
     EcReset,
     EcPowerOn,
@@ -210,6 +216,7 @@ pub(crate) enum Opcode {
     EventComEnable, //(bool),
     EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),
+    EventActivityHappened,
 
     /// internal from handler to main loop
     EventComHappened,
