@@ -155,8 +155,7 @@ macro_rules! maybe_main {
                 try_send_message(conn, Message::Scalar(panic_start_msg)).ok();
             }
             wait_event();
-            terminate_process();
-            loop {}
+            terminate_process(1);
         }
 
         extern "Rust" {

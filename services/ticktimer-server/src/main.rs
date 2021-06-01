@@ -559,5 +559,5 @@ fn xmain() -> ! {
     log::trace!("main loop exit, destroying servers");
     xous::destroy_server(ticktimer_server).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0);
 }

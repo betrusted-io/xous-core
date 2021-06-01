@@ -4,7 +4,7 @@
 use crate::arch::current_pid;
 use crate::arch::mem::MemoryMapping;
 use crate::arch::process::Process as ArchProcess;
-use crate::arch::process::{Thread, RETURN_FROM_ISR};
+use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
 use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
 use xous_kernel::{SysCall, PID, TID};
@@ -77,7 +77,7 @@ pub extern "C" fn trap_handler(
         panic!("Ran out of kernel stack");
     }
 
-    let pid = crate::arch::current_pid();
+    let pid = current_pid();
 
     if (sc.bits() == 9) || (sc.bits() == 8) {
         // We got here because of an `ecall` instruction.  When we return, skip
@@ -148,6 +148,18 @@ pub extern "C" fn trap_handler(
                     pid, ex, pc, addr
                 );
                 println!("Page was not allocated");
+            }
+            RiscvException::InstructionPageFault(EXIT_THREAD, _offset) => {
+                let tid = ArchProcess::with_current(|process| process.current_tid());
+
+                // This address indicates a thread has exited. Destroy the thread.
+                // This activates another thread within this process.
+                SystemServices::with_mut(|ss| ss.destroy_thread(pid, tid)).unwrap();
+
+                // Resume the new thread within the same process.
+                ArchProcess::with_current_mut(|p| {
+                    crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
+                });
             }
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
                 // If we hit this address, then an ISR has just returned.  Since

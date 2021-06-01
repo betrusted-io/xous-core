@@ -60,9 +60,7 @@ macro_rules! println
 }
 
 #[cfg(baremetal)]
-pub struct Uart {
-    // pub base: *mut usize,
-}
+pub struct Uart {}
 #[cfg(baremetal)]
 static mut INITIALIZED: bool = false;
 
@@ -140,7 +138,11 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 let current_pid = system_services.current_pid();
                 for process in &system_services.processes {
                     if !process.free() {
-                        println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
+                        println!(
+                            "PID {} {}:",
+                            process.pid,
+                            system_services.process_name(process.pid).unwrap_or("")
+                        );
                         process.activate().unwrap();
                         crate::arch::mem::MemoryMapping::current().print_map();
                         println!();
@@ -159,7 +161,11 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 let current_pid = system_services.current_pid();
                 for process in &system_services.processes {
                     if !process.free() {
-                        println!("PID {} {}:", process.pid, system_services.process_name(process.pid).unwrap_or(""));
+                        println!(
+                            "{:?} {}:",
+                            process,
+                            system_services.process_name(process.pid).unwrap_or("")
+                        );
                         process.activate().unwrap();
                         crate::arch::process::Process::with_current_mut(|arch_process| {
                             arch_process.print_all_threads()

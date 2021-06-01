@@ -70,7 +70,10 @@ pub struct ProcessInit {
     pub key: ProcessKey,
 }
 
-pub struct WaitHandle<T>(core::marker::PhantomData<T>);
+pub struct WaitHandle<T> {
+    tid: TID,
+    data: core::marker::PhantomData<T>,
+}
 pub struct ProcessHandle(());
 
 pub fn thread_to_args(syscall: usize, init: &ThreadInit) -> [usize; 8] {
@@ -130,8 +133,9 @@ where
     todo!()
 }
 
-pub fn wait_thread<T>(_joiner: WaitHandle<T>) -> crate::SysCallResult {
-    todo!()
+pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
+    let call = crate::SysCall::JoinThread(joiner.tid);
+    crate::syscall::rsyscall(call)
 }
 
 pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
@@ -359,12 +363,15 @@ pub fn create_thread_n_post<U>(
     _arg2: usize,
     _arg3: usize,
     _arg4: usize,
-    _thread_id: TID,
+    thread_id: TID,
 ) -> core::result::Result<WaitHandle<U>, crate::Error>
 where
     U: Send + 'static,
 {
-    Ok(WaitHandle(core::marker::PhantomData))
+    Ok(WaitHandle {
+        tid: thread_id,
+        data: core::marker::PhantomData,
+    })
 }
 
 pub fn wait_process(_joiner: ProcessHandle) -> crate::SysCallResult {

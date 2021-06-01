@@ -186,18 +186,35 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         log::error!("couldn't acquire exclusive access to the EC updater mechanism. All other operations will fail!");
     }
 
+    #[cfg(target_os = "none")]
     let ec_package = xous::syscall::map_memory(
         xous::MemoryAddress::new(xous::EC_FW_PKG_LOC as usize),
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
+    #[cfg(target_os = "none")]
     let wf_package = xous::syscall::map_memory(
         xous::MemoryAddress::new(xous::EC_WF200_PKG_LOC as usize),
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
+    #[cfg(not(target_os = "none"))]
+    let ec_package = xous::syscall::map_memory(
+        None,
+        None,
+        xous::EC_FW_PKG_LEN as usize,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    ).expect("couldn't map EC firmware package memory range");
+    #[cfg(not(target_os = "none"))]
+    let wf_package = xous::syscall::map_memory(
+        None,
+        None,
+        xous::EC_WF200_PKG_LEN as usize,
+        xous::MemoryFlags::R | xous::MemoryFlags::W,
+    ).expect("couldn't map EC wf200 package memory range");
+
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("EC updater got msg {:?}", msg);

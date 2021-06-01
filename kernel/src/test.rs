@@ -4,11 +4,9 @@
 use crate::kmain;
 use std::thread::JoinHandle;
 
-use std::net::ToSocketAddrs;
 use crossbeam_channel::unbounded;
+use std::net::ToSocketAddrs;
 use xous_kernel::{rsyscall, SysCall};
-
-mod shutdown;
 
 #[cfg(feature = "report-memory")]
 use stats_alloc::{Region, Stats, StatsAlloc, INSTRUMENTED_SYSTEM};
@@ -170,7 +168,8 @@ fn connect_for_process() {
             } else {
                 panic!("Unexpected return value");
             };
-            xous_kernel::return_scalar(envelope.sender, new_cid as usize).expect("couldn't return scalar");
+            xous_kernel::return_scalar(envelope.sender, new_cid as usize)
+                .expect("couldn't return scalar");
         }),
     )
     .expect("couldn't spawn client process");

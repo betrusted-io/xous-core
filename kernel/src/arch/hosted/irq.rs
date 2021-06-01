@@ -1,10 +1,14 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use xous_kernel::{TID, PID};
+use xous_kernel::{PID, TID};
 
 pub fn enable_irq(_irq_no: usize) {
-    unimplemented!();
+    unimplemented!()
+}
+
+pub fn disable_irq(_irq_no: usize) -> Result<(), xous_kernel::Error> {
+    unimplemented!()
 }
 
 pub unsafe fn set_isr_return_pair(_pid: PID, _ctx: TID) {

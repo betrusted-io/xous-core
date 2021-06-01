@@ -600,5 +600,5 @@ fn xmain() -> ! {
     xns.unregister_server(com_sid).unwrap();
     xous::destroy_server(com_sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
 }

@@ -102,22 +102,31 @@ fn try_main() -> Result<(), DynError> {
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
-        Some("renode-test") => renode_image(
-            false,
-            &cbtest_pkgs,
-        )?,
+        Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, None)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, None)?,
         Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, None)?,
-        Some("trng-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
-            Some(&["--features", "ringosctest", "--features", "avalanchetest"]))?,
-        Some("ro-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
-        Some(&["--features", "ringosctest"]))?,
-        Some("av-test") => build_hw_image(false, env::args().nth(2), &hw_pkgs,
-            Some(&["--features", "avalanchetest"]))?,
+        Some("trng-test") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &hw_pkgs,
+            Some(&["--features", "ringosctest", "--features", "avalanchetest"]),
+        )?,
+        Some("ro-test") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &hw_pkgs,
+            Some(&["--features", "ringosctest"]),
+        )?,
+        Some("av-test") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &hw_pkgs,
+            Some(&["--features", "avalanchetest"]),
+        )?,
         Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, None)?,
         Some("debug") => run(true, &hw_pkgs)?,
         Some("burn-kernel") => update_usb(true, false, false)?,
@@ -209,7 +218,12 @@ fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynE
     Ok(())
 }
 
-fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_args: Option<&[&str]>) -> Result<(), DynError> {
+fn build_hw_image(
+    debug: bool,
+    svd: Option<String>,
+    packages: &[&str],
+    extra_args: Option<&[&str]>,
+) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),
@@ -233,7 +247,13 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_arg
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
-    let mut loader = build(&["loader"], debug, Some(TARGET), Some("loader".into()), None)?;
+    let mut loader = build(
+        &["loader"],
+        debug,
+        Some(TARGET),
+        Some("loader".into()),
+        None,
+    )?;
     loader.push(PathBuf::from("loader"));
 
     let output_bundle = create_image(&kernel, &init, debug, MemorySpec::SvdFile(svd_file))?;
@@ -256,7 +276,8 @@ fn build_hw_image(debug: bool, svd: Option<String>, packages: &[&str], extra_arg
             "--",
             loader.as_os_str().to_str().unwrap(),
             loader_bin.as_os_str().to_str().unwrap(),
-        ]).status()?;
+        ])
+        .status()?;
     if !status.success() {
         return Err("cargo build failed".into());
     }
@@ -290,7 +311,13 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
-    build(&["loader"], debug, Some(TARGET), Some("loader".into()), None)?;
+    build(
+        &["loader"],
+        debug,
+        Some(TARGET),
+        Some("loader".into()),
+        None,
+    )?;
 
     create_image(
         &kernel,
@@ -298,6 +325,24 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         debug,
         MemorySpec::SvdFile("emulation/soc/renode.svd".into()),
     )?;
+
+    // Regenerate the Platform file
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "run",
+            "-p",
+            "svd2repl",
+            "--",
+            "-i",
+            "emulation/soc/renode.svd",
+            "-o",
+            "emulation/soc/betrusted-soc.repl",
+        ])
+        .status()?;
+    if !status.success() {
+        Err("Unable to regenerate Renode platform file")?;
+    }
 
     Ok(())
 }
@@ -346,7 +391,13 @@ fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
 }
 
 fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
-    let mut path = build(&["kernel"], debug, Some(TARGET), Some("kernel".into()), None)?;
+    let mut path = build(
+        &["kernel"],
+        debug,
+        Some(TARGET),
+        Some("kernel".into()),
+        None,
+    )?;
     path.push("kernel");
     Ok(path)
 }

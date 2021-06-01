@@ -65,3 +65,18 @@ pub fn interrupt_claim(
         result
     }
 }
+
+/// Iterate through the IRQ handlers and remove any handler that exists
+/// for the given PID.
+pub fn release_interrupts_for_pid(pid: PID) {
+    unsafe {
+        for (irq, handler) in IRQ_HANDLERS.iter_mut().enumerate() {
+            if let Some(h) = handler {
+                if h.0 == pid {
+                    arch::irq::disable_irq(irq).unwrap();
+                    *handler = None;
+                }
+            }
+        }
+    }
+}

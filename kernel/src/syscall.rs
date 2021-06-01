@@ -256,8 +256,8 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 }
 
 fn return_memory(
-    pid: PID,
-    tid: TID,
+    server_pid: PID,
+    server_tid: TID,
     in_irq: bool,
     sender: MessageSender,
     buf: MemoryRange,
@@ -270,12 +270,12 @@ fn return_memory(
         let server = ss
             .server_from_sidx_mut(sender.sidx)
             .ok_or(xous_kernel::Error::ServerNotFound)?;
-        if server.pid != pid {
+        if server.pid != server_pid {
             return Err(xous_kernel::Error::ServerNotFound);
         }
         let result = server.take_waiting_message(sender.idx, Some(&buf))?;
         klog!("waiting message was: {:?}", result);
-        let (client_pid, client_tid, server_addr, client_addr, len) = match result {
+        let (client_pid, client_tid, _server_addr, client_addr, len) = match result {
             WaitingMessage::BorrowedMemory(
                 client_pid,
                 client_ctx,
@@ -318,14 +318,14 @@ fn return_memory(
         //     "KERNEL({}): Returning {} bytes from {:08x} in PID {} to {:08x} in PID {} in context {}",
         //     pid,
         //     len,
-        //     server_addr.get(),
+        //     _server_addr.get(),
         //     pid,
         //     client_addr.get(),
         //     client_pid,
         //     client_tid
         // );
         #[cfg(baremetal)]
-        let src_virt = server_addr.get() as _;
+        let src_virt = _server_addr.get() as _;
         #[cfg(not(baremetal))]
         let src_virt = buf.addr.get() as _;
 
@@ -354,9 +354,9 @@ fn return_memory(
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.switch_from_thread(pid, tid)?;
-            ss.ready_thread(pid, tid)?;
-            ss.set_thread_result(pid, tid, xous_kernel::Result::Ok)?;
+            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.ready_thread(server_pid, server_tid)?;
+            ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
             // Switch to the client
             ss.ready_thread(client_pid, client_tid)?;
@@ -579,7 +579,7 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
 
     #[cfg(feature = "debug-print")]
     println!(
-        " -> ({}:{}) {:?}",
+        " -> ({}:{}) {:x?}",
         crate::arch::current_pid(),
         crate::arch::process::Process::current().current_tid(),
         result
@@ -718,7 +718,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             unsafe {
                 assert!(
                     SWITCHTO_CALLER.is_none(),
-                    "SWITCHTO_CALLER was not None, indicating SwitchTo was called twice"
+                    "SWITCHTO_CALLER was {:?} and not None, indicating SwitchTo was called twice",
+                    SWITCHTO_CALLER,
                 );
                 SWITCHTO_CALLER = Some((pid, tid));
             }
@@ -799,15 +800,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             return_scalar2(pid, tid, in_irq, sender, arg1, arg2)
         }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
-        SysCall::TerminateProcess => SystemServices::with_mut(|ss| {
+        SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
             ss.switch_from_thread(pid, tid)?;
-            let ppid = ss.terminate_process(pid)?;
-            if cfg!(baremetal) {
-                ss.switch_to_thread(ppid, None)
-                    .map(|_| xous_kernel::Result::ResumeProcess)
-            } else {
-                Ok(xous_kernel::Result::Ok)
-            }
+            ss.terminate_process(pid)?;
+            // Clear out `SWITCHTO_CALLER` since we're resuming the parent process.
+            unsafe { SWITCHTO_CALLER = None };
+            Ok(xous_kernel::Result::ResumeProcess)
         }),
         SysCall::Shutdown => {
             SystemServices::with_mut(|ss| ss.shutdown().map(|_| xous_kernel::Result::Ok))
@@ -852,6 +850,12 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::DestroyServer(sid) => SystemServices::with_mut(|ss| {
             ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok))
         }),
+        SysCall::JoinThread(other_tid) => {
+            SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
+                unsafe { SWITCHTO_CALLER = None };
+                ret
+            })
+        }
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

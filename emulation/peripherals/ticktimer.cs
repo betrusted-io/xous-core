@@ -21,7 +21,7 @@ namespace Antmicro.Renode.Peripherals.Timers
     [AllowedTranslations(AllowedTranslation.ByteToDoubleWord)]
     public class TickTimer : BasicDoubleWordPeripheral, IKnownSize
     {
-        public TickTimer(Machine machine, ulong periodInMs) : base(machine)
+        public TickTimer(Machine machine, ulong periodInMs = 1) : base(machine)
         {
             machine.ClockSource.AddClockEntry(new ClockEntry(periodInMs, ClockEntry.FrequencyToRatio(this, 1000), OnTick, this, "TickTimer"));
             this.IRQ = new GPIO();
