@@ -444,6 +444,13 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::PowerCrypto.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    // setting this to true turns off WFI capabilities, forcing power always on
+    pub fn wfi_override(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::WfiOverride.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
     pub fn crypto_power_status(&self) -> Result<(bool, bool, bool), xous::Error> { // sha, engine, override status
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::PowerCryptoStatus.to_usize().unwrap(), 0, 0, 0, 0)
@@ -486,6 +493,23 @@ impl Llio {
             log::error!("LLIO: unexpected return value: {:#?}", response);
             Err(xous::Error::InternalError)
         }
+    }
+    pub fn gpio_data_direction(&self, dir: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::GpioDataDrive.to_usize().unwrap(), dir as usize, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn gpio_debug_powerdown(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DebugPowerdown.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn gpio_debug_wakeup(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DebugWakeup.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
     }
 }
 

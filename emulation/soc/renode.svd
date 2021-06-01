@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-06-01 05:00:53]]></description>
+    <description><![CDATA[Litex SoC 2021-06-01 16:27:12]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -409,10 +409,35 @@ console, others reserved based on build]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>DEBUG</name>
+                    <description><![CDATA[Various debugging configurations]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>wfi</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Whet set, patches CRG powerdown into GPIO0 instead of the usual data line. Must
+configure as output for the value to appear on the pin]]></description>
+                        </field>
+                        <field>
+                            <name>wakeup</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Whet set, patches wakeup signal into GPIO1 instead of the usual data line. Must
+configure as output for the value to appear on the pin]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[This register contains the current raw level of the event7 event trigger.
 Writes to this register have no effect.]]></description>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -478,7 +503,7 @@ Writes to this register have no effect.]]></description>
                     <name>EV_PENDING</name>
                     <description><![CDATA[When a  event7 event occurs, the corresponding bit will be set in this register.
 To clear the Event, set the corresponding bit in this register.]]></description>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -552,7 +577,7 @@ edge.]]></description>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[This register enables the corresponding event7 events.  Write a ``0`` to this
 register to disable individual events.]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -617,7 +642,7 @@ register to disable individual events.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x24</size>
+                <size>0x28</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -1137,7 +1162,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MAJOR</name>
                     <description><![CDATA[Major git tag version.  For example, this firmware was built from git tag
-``v0.8.0``, so this value is ``0``.]]></description>
+``v0.0.0``, so this value is ``0``.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1153,9 +1178,9 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_MINOR</name>
                     <description><![CDATA[Minor git tag version.  For example, this firmware was built from git tag
-``v0.8.0``, so this value is ``8``.]]></description>
+``v0.0.0``, so this value is ``0``.]]></description>
                     <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x08</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1169,7 +1194,7 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_REVISION</name>
                     <description><![CDATA[Revision git tag version.  For example, this firmware was built from git tag
-``v0.8.0``, so this value is ``0``.]]></description>
+``v0.0.0``, so this value is ``0``.]]></description>
                     <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1185,10 +1210,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``effda53c``, so this value is 4026377532, which should be enough to check out
+``9e77f50e``, so this value is 2658661646, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xeffda53c</resetValue>
+                    <resetValue>0x9e77f50e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1205,7 +1230,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x1c</resetValue>
+                    <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2586,6 +2611,13 @@ Configured to currently override power to `on` at boot to ease system setup.]]><
                             <lsb>10</lsb>
                             <description><![CDATA[Writing a `1` to this bit causes the reset to ignore the PLL lock status]]></description>
                         </field>
+                        <field>
+                            <name>disable_wfi</name>
+                            <msb>11</msb>
+                            <bitRange>[11:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Writing a `1` to this bit causes WFI throttling to be disabled]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -3284,7 +3316,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x45bc8216</resetValue>
+                    <resetValue>0x56f38707</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3299,7 +3331,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5762a598</resetValue>
+                    <resetValue>0x400f5344</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

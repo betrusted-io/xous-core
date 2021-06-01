@@ -290,6 +290,28 @@ mod implementation {
                 self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0);
             }
         }
+        // apparently "override" is a reserved keyword in Rust???
+        pub fn wfi_override(&mut self, override_: bool) {
+            if override_ {
+                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+            }
+        }
+        pub fn debug_powerdown(&mut self, ena: bool) {
+            if ena {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 1);
+            } else {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 0);
+            }
+        }
+        pub fn debug_wakeup(&mut self, ena: bool) {
+            if ena {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 1);
+            } else {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 0);
+            }
+        }
         pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
             let sha = if self.power_csr.rf(utra::power::CLK_STATUS_SHA_ON) == 0 {false} else {true};
             let engine = if self.power_csr.rf(utra::power::CLK_STATUS_ENGINE_ON) == 0 {false} else {true};
@@ -616,6 +638,14 @@ fn xmain() -> ! {
             Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
                 llio.gpio_int_ena(d as u32);
             }),
+            Some(Opcode::DebugPowerdown) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                let ena = if arg == 0 {false} else {true};
+                llio.debug_powerdown(ena);
+            }),
+            Some(Opcode::DebugWakeup) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                let ena = if arg == 0 {false} else {true};
+                llio.debug_wakeup(ena);
+            }),
             Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
                 llio.set_uart_mux(mux.into());
             }),
@@ -650,6 +680,14 @@ fn xmain() -> ! {
                     llio.power_crypto(true);
                 }
                 xous::return_scalar(msg.sender, 0).expect("couldn't confirm crypto power was set");
+            }),
+            Some(Opcode::WfiOverride) => msg_blocking_scalar_unpack!(msg, override_, _, _, _, {
+                if override_ == 0 {
+                    llio.wfi_override(false);
+                } else {
+                    llio.wfi_override(true);
+                }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm wfi override was updated");
             }),
             Some(Opcode::PowerCryptoStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 let (_, sha, engine, force) = llio.power_crypto_status();

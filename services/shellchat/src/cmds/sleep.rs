@@ -68,7 +68,7 @@ impl<'a> ShellCmdApi<'a> for Sleep {
         use core::fmt::Write;
 
         let mut ret = String::<1024>::new();
-        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus] [stress] [crypton] [cryptoff]";
+        let helpstring = "sleep [now] [current] [ship] [kill] [coldboot] [killbounce] [sus] [stress] [crypton] [cryptoff] [wfioff] [wfion] [debugwfi]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -189,6 +189,20 @@ impl<'a> ShellCmdApi<'a> for Sleep {
                         write!(ret, "Killing this device in 3 seconds, then bouncing into ship mode\n").unwrap();
                         xous::create_thread_1(kill_thread, 1).unwrap();
                     }
+                }
+                "wfioff" => {
+                    env.llio.wfi_override(true).unwrap();
+                    write!(ret, "Overriding WFI signal, forcing always ON").unwrap();
+                }
+                "wfion" => {
+                    env.llio.wfi_override(false).unwrap();
+                    write!(ret, "Allowing WFI auto-control by kernel").unwrap();
+                }
+                "debugwfi" => {
+                    env.llio.gpio_data_direction(0x3).unwrap(); // set bits 0 and 1 to output
+                    env.llio.gpio_debug_powerdown(true).unwrap();
+                    env.llio.gpio_debug_wakeup(true).unwrap();
+                    write!(ret, "Connecting CRG powerdown to GPIO0, wakeup interrupt to GPIO1").unwrap();
                 }
                 _ =>  write!(ret, "{}", helpstring).unwrap(),
             }
