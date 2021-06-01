@@ -58,9 +58,12 @@ struct ProcessImpl {
     /// Global parameters used by the operating system
     pub inner: ProcessInner,
 
+    /// The last thread ID that was allocated
+    last_tid_allocated: u8,
+
     /// Pad everything to 128 bytes, so the Thread slice starts at
     /// offset 128.
-    _padding: [u32; 14],
+    _padding: [u32; 13],
 
     /// This enables the kernel to keep track of threads in the
     /// target process, and know which threads are ready to
@@ -224,9 +227,18 @@ impl Process {
 
     pub fn find_free_thread(&self) -> Option<TID> {
         let process = unsafe { &mut *PROCESS };
-        for (index, thread) in process.threads.iter().enumerate() {
-            if index != IRQ_TID && thread.sepc == 0 {
-                return Some(index as TID);
+        let start_tid = process.last_tid_allocated as usize;
+        let a = &process.threads[start_tid..process.threads.len()];
+        let b = &process.threads[0..start_tid];
+        for (index, thread) in a.iter().chain(b.iter()).enumerate() {
+            let mut tid = index + start_tid;
+            if tid >= process.threads.len() {
+                tid -= process.threads.len()
+            }
+
+            if tid != IRQ_TID && thread.sepc == 0 {
+                process.last_tid_allocated = tid as _;
+                return Some(tid as TID);
             }
         }
         None
@@ -508,7 +520,6 @@ impl Thread {
     pub fn a1(&self) -> usize {
         self.registers[10]
     }
-
 }
 
 pub fn set_current_pid(pid: PID) {

@@ -30,6 +30,10 @@ enum ExecutionType {
     NonBlocking,
 }
 
+pub fn reset_switchto_caller() {
+    unsafe { SWITCHTO_CALLER = None };
+}
+
 fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
     if cfg!(baremetal) {
         arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;

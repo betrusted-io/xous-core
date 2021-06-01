@@ -31,6 +31,7 @@ members = [
   "xous-rs",
   "tools",
   "macros",
+  "services/aes-test",
   "services/graphics-server",
   "services/log-server",
   "services/ticktimer-server",

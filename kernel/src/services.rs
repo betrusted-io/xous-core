@@ -1409,13 +1409,12 @@ impl SystemServices {
         Ok(new_tid)
     }
 
-    /// Destroy the given thread.
-    /// NOTE: You MUST immediately switch away from this process.
+    /// Destroy the given thread. Returns `true` if the PID has been updated.
     /// # Errors
     ///
     /// * **ThreadNotAvailable**: The thread does not exist in this process
     #[cfg(baremetal)]
-    pub fn destroy_thread(&mut self, pid: PID, tid: TID) -> Result<usize, xous_kernel::Error> {
+    pub fn destroy_thread(&mut self, pid: PID, tid: TID) -> Result<bool, xous_kernel::Error> {
         let current_pid = self.current_pid();
         assert_eq!(pid, current_pid);
 
@@ -1426,7 +1425,7 @@ impl SystemServices {
 
         // Destroy the thread at a hardware level
         let mut arch_process = crate::arch::process::Process::current();
-        let return_value = arch_process.destroy_thread(tid).unwrap();
+        let return_value = arch_process.destroy_thread(tid).unwrap_or_default();
 
         // If there's another thread waiting on the return value of this thread,
         // wake it up and set its return value.
@@ -1440,15 +1439,23 @@ impl SystemServices {
             waiting_threads |= 1 << waiting_tid;
         }
 
-        // Mark this process as `Ready`.
-        // We can do this because the current thread has just exited. Note that if there
-        // are no threads available, this is an error.
-        self.get_process_mut(pid)?.state = ProcessState::Ready(waiting_threads);
+        // Mark this process as `Ready` if there are waiting threads, or `Sleeping` if
+        // there are no waiting threads.
+        let mut new_pid = pid;
+        {
+            let process = self.get_process_mut(pid)?;
+            process.state = if waiting_threads == 0 {
+                new_pid = process.ppid;
+                ProcessState::Sleeping
+            } else {
+                ProcessState::Ready(waiting_threads)
+            };
+        }
 
         // Switch to the next available TID. This moves the process back to a `Running` state.
-        self.switch_to_thread(pid, None)?;
+        self.switch_to_thread(new_pid, None)?;
 
-        Ok(return_value)
+        Ok(new_pid != pid)
     }
 
     /// Park this thread if the target thread is currently running. Otherwise,
@@ -1477,7 +1484,8 @@ impl SystemServices {
                 .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
         } else {
             // The thread does not exist -- continue execution
-            Err(xous_kernel::Error::ThreadNotAvailable)
+            // Err(xous_kernel::Error::ThreadNotAvailable)
+            Ok(xous_kernel::Result::Scalar1(0))
         }
     }
 

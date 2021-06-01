@@ -49,6 +49,8 @@ macro reset
 """
 
 runMacro $reset
+sysbus.cpu InstallCustomInstructionHandlerFromFile "00ss0fdbbbbbaaaaa000ddddd0001011" @vexriscv-aes.py
+
 mach clear
 
 ############### Define the Betrusted EC ###############
