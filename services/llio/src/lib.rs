@@ -511,6 +511,18 @@ impl Llio {
             Message::new_scalar(Opcode::DebugWakeup.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    pub fn activity_instantaneous(&self) -> Result<(u32, u32), xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetActivity.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(active, total) = response {
+            Ok(
+                (active as u32, total as u32)
+            )
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
 }
 
 

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-06-01 16:48:00]]></description>
+    <description><![CDATA[Litex SoC 2021-06-02 00:30:35]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1244,7 +1244,7 @@ beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                 <register>
                     <name>GIT_DIRTY</name>
                     <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
+                    <resetValue>0x01</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -2658,9 +2658,111 @@ sources (power, sha512, and engine25519)]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>WAKEUP_SOURCE</name>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0xff</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>kbd</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Use the keyboard as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>ticktimer</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Use the ticktimer as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>timer0</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Use timer0 (os timer) as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>usb</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Use USB k-transition as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>audio</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[Use audio FIFO empty as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>com</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[Use COM hold falling as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>rtc</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[Use RTC external interrupt as wakeup source]]></description>
+                        </field>
+                        <field>
+                            <name>console</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[Use the console UART RX line dropping as wakeup source]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>ACTIVITY_RATE</name>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>counts_awake</name>
+                            <msb>30</msb>
+                            <bitRange>[30:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[number of counts in the last sample interval that we were active]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SAMPLING_PERIOD</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>sample_period</name>
+                            <msb>30</msb>
+                            <bitRange>[30:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Sampling period for counts awake, in 12MHz cycles]]></description>
+                        </field>
+                        <field>
+                            <name>kill_sampler</name>
+                            <msb>31</msb>
+                            <bitRange>[31:31]</bitRange>
+                            <lsb>31</lsb>
+                            <description><![CDATA[When set, permanently disable reporting (in case you don't want the high-
+resolutionn timing sidechannel)]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>VIBE</name>
                     <description><![CDATA[Vibration motor configuration register]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2675,8 +2777,8 @@ sources (power, sha512, and engine25519)]]></description>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
-                    <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <description><![CDATA[update available to activity register]]></description>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2687,12 +2789,19 @@ sources (power, sha512, and engine25519)]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Level of the ``usb_attach`` event]]></description>
                         </field>
+                        <field>
+                            <name>activity_update</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Level of the ``activity_update`` event]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_PENDING</name>
-                    <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x0010</addressOffset>
+                    <description><![CDATA[update available to activity register]]></description>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2703,12 +2812,19 @@ sources (power, sha512, and engine25519)]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[USB attach event]]></description>
                         </field>
+                        <field>
+                            <name>activity_update</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[update available to activity register]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_ENABLE</name>
-                    <description><![CDATA[USB attach event]]></description>
-                    <addressOffset>0x0014</addressOffset>
+                    <description><![CDATA[update available to activity register]]></description>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -2719,12 +2835,19 @@ sources (power, sha512, and engine25519)]]></description>
                             <lsb>0</lsb>
                             <description><![CDATA[Write a ``1`` to enable the ``usb_attach`` Event]]></description>
                         </field>
+                        <field>
+                            <name>activity_update</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``activity_update`` Event]]></description>
+                        </field>
                     </fields>
                 </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x18</size>
+                <size>0x24</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -3316,7 +3439,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x178b8559</resetValue>
+                    <resetValue>0x742b5c26</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3331,7 +3454,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x1c2378e2</resetValue>
+                    <resetValue>0x645c9ef4</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

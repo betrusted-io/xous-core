@@ -225,8 +225,11 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                         };
                         write!(&mut uptime_tv, "{:02}:{:02} {} {}/{}", dt.hours, dt.minutes, day, dt.months, dt.days).unwrap();
                     } else {
-                        write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
-                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds).expect("|status: can't write string");
+                        let (latest_activity, period) = llio.activity_instantaneous().expect("couldn't get CPU activity");
+                        write!(&mut uptime_tv, "Up {}:{:02}:{:02} {:.0}%",
+                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds,
+                            ((latest_activity as f32) / (period as f32)) * 100.0
+                        ).expect("|status: can't write string");
                     }
                     log::trace!("|status: requesting draw of '{}'", uptime_tv);
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");

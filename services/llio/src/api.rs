@@ -188,6 +188,7 @@ pub(crate) enum Opcode {
     PowerCryptoStatus,
     WfiOverride,
     DebugPowerdown,
+    GetActivity,
     DebugWakeup,
     EcSnoopAllow, //(bool),
     EcReset,
@@ -215,6 +216,7 @@ pub(crate) enum Opcode {
     EventComEnable, //(bool),
     EventRtcEnable, //(bool),
     EventUsbAttachEnable, //(bool),
+    EventActivityHappened,
 
     /// internal from handler to main loop
     EventComHappened,

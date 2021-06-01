@@ -42,6 +42,7 @@ mod implementation {
         power_susres: RegManager::<{utra::power::POWER_NUMREGS}>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer: ticktimer_server::Ticktimer,
+        activity_period: u32, // 12mhz clock cycles over which to sample activity
         destruct_armed: bool,
     }
 
@@ -81,12 +82,23 @@ mod implementation {
     }
     fn handle_power_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
-                    0, 0, 0, 0)).map(|_|()).unwrap();
-        } else {
-            log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
+        if xl.power_csr.rf(utra::power::EV_PENDING_USB_ATTACH) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
+                        0, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
+            }
+        } else if xl.power_csr.rf(utra::power::EV_PENDING_ACTIVITY_UPDATE) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                let activity = xl.power_csr.rf(utra::power::ACTIVITY_RATE_COUNTS_AWAKE);
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventActivityHappened.to_usize().unwrap(),
+                        activity as usize, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: activity interrupt, but no connection for notification!")
+            }
         }
         xl.power_csr
             .wo(utra::power::EV_PENDING, xl.power_csr.r(utra::power::EV_PENDING));
@@ -167,6 +179,7 @@ mod implementation {
                 power_susres: RegManager::new(power_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer,
+                activity_period: 24_000_000, // 2 second interval initially
                 destruct_armed: false,
             };
 
@@ -205,6 +218,12 @@ mod implementation {
             xl.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
             xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
             xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
+
+            xl.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, xl.activity_period); // 2 second sampling intervals
+            xl.power_susres.push(RegOrField::Reg(utra::power::SAMPLING_PERIOD), None);
+            xl.power_csr.wfo(utra::power::EV_PENDING_ACTIVITY_UPDATE, 1);
+            xl.power_csr.rmwf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
+
             xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
             xl.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
 
@@ -224,6 +243,14 @@ mod implementation {
             self.power_susres.resume();
             self.event_susres.resume();
             self.gpio_susres.resume();
+        }
+        #[allow(dead_code)]
+        pub fn activity_set_period(&mut self, period: u32) {
+            self.activity_period =  period;
+            self.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, period);
+        }
+        pub fn activity_get_period(&mut self) -> u32 {
+            self.activity_period
         }
 
         pub fn gpio_dout(&mut self, d: u32) {
@@ -598,6 +625,7 @@ fn xmain() -> ! {
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut latest_activity = 0;
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut com_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
@@ -809,6 +837,15 @@ fn xmain() -> ! {
             },
             Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
                 send_event(&gpio_cb_conns, channel as usize);
+            }),
+            Some(Opcode::EventActivityHappened) => msg_scalar_unpack!(msg, activity, _, _, _, {
+                log::debug!("activity: {}", activity);
+                latest_activity = activity as u32;
+            }),
+            Some(Opcode::GetActivity) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let period = llio.activity_get_period() as u32;
+                log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
+                xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
             }),
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
