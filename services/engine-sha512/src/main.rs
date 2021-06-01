@@ -250,6 +250,7 @@ mod implementation {
 #[cfg(not(target_os = "none"))]
 mod implementation {
     use log::info;
+    use crate::Sha2Config;
 
     pub(crate) struct Engine512 {
     }
@@ -264,6 +265,16 @@ mod implementation {
         pub(crate) fn resume(&self) {
         }
         pub(crate) fn reset(&self) {
+        }
+        pub(crate) fn setup(&mut self, _config: Sha2Config) {
+        }
+        pub(crate) fn update(&mut self, _buf: &[u8]) {
+        }
+        pub(crate) fn finalize(&mut self) -> ([u8; 64], u64) {
+            ([0; 64], 0)
+        }
+        pub(crate) fn is_idle(&mut self) -> bool {
+            false
         }
     }
 }

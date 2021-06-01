@@ -436,7 +436,7 @@ def main():
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
     else:
-        print("SoC is from an unknow rev, use --force to continue anyways with v0.8 firmware offsets")
+        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)

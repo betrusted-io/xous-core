@@ -534,6 +534,15 @@ mod implementation {
         }
         pub fn usb_int_ena(self, _ena: bool) {
         }
+        pub fn debug_powerdown(&mut self, _ena: bool) {
+        }
+        pub fn debug_wakeup(&mut self, _ena: bool) {
+        }
+        pub fn activity_get_period(&mut self) -> u32 {
+            12_000_000
+        }
+        pub fn wfi_override(&mut self, _override_: bool) {
+        }
     }
 }
 
