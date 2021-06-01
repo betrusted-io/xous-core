@@ -274,7 +274,7 @@ pub enum SysCall {
     CreateProcess(ProcessInit),
 
     /// Terminate the current process, closing all server connections.
-    TerminateProcess,
+    TerminateProcess(u32),
 
     /// Shut down the entire system
     Shutdown,
@@ -318,6 +318,9 @@ pub enum SysCall {
     /// in a future reconnection.
     Disconnect(CID),
 
+    /// Waits for a thread to finish, and returns the return value of that thread.
+    JoinThread(TID),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -359,6 +362,7 @@ pub enum SysCallNumber {
     GetProcessId = 33,
     DestroyServer = 34,
     Disconnect = 35,
+    JoinThread = 36,
     Invalid,
 }
 
@@ -400,6 +404,7 @@ impl SysCallNumber {
             33 => GetProcessId,
             34 => DestroyServer,
             35 => Disconnect,
+            36 => JoinThread,
             _ => Invalid,
         }
     }
@@ -630,9 +635,9 @@ impl SysCall {
             SysCall::CreateProcess(init) => {
                 crate::arch::process_to_args(SysCallNumber::CreateProcess as usize, init)
             }
-            SysCall::TerminateProcess => [
+            SysCall::TerminateProcess(exit_code) => [
                 SysCallNumber::TerminateProcess as usize,
-                0,
+                *exit_code as usize,
                 0,
                 0,
                 0,
@@ -714,6 +719,16 @@ impl SysCall {
             SysCall::Disconnect(cid) => [
                 SysCallNumber::Disconnect as usize,
                 *cid as usize,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            SysCall::JoinThread(tid) => [
+                SysCallNumber::JoinThread as usize,
+                *tid as usize,
                 0,
                 0,
                 0,
@@ -810,7 +825,7 @@ impl SysCall {
             SysCallNumber::CreateProcess => {
                 SysCall::CreateProcess(crate::arch::args_to_process(a1, a2, a3, a4, a5, a6, a7)?)
             }
-            SysCallNumber::TerminateProcess => SysCall::TerminateProcess,
+            SysCallNumber::TerminateProcess => SysCall::TerminateProcess(a1 as u32),
             SysCallNumber::Shutdown => SysCall::Shutdown,
             SysCallNumber::TryConnect => {
                 SysCall::TryConnect(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
@@ -882,6 +897,7 @@ impl SysCall {
                 SysCall::DestroyServer(SID::from_u32(a1 as _, a2 as _, a3 as _, a4 as _))
             }
             SysCallNumber::Disconnect => SysCall::Disconnect(a1 as _),
+            SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1338,8 +1354,8 @@ pub fn send_message(connection: CID, message: Message) -> core::result::Result<R
     }
 }
 
-pub fn terminate_process() {
-    rsyscall(SysCall::TerminateProcess).expect("terminate_process returned an error");
+pub fn terminate_process(exit_code: u32) -> ! {
+    rsyscall(SysCall::TerminateProcess(exit_code)).expect("terminate_process returned an error");
     panic!("process didn't terminate");
 }
 
@@ -1481,7 +1497,7 @@ where
     })
 }
 
-/// Wait for a thread to finish
+/// Wait for a thread to finish. This is equivalent to `join_thread`
 pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
     crate::arch::wait_thread(joiner)
 }
@@ -1560,6 +1576,9 @@ pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
     })
 }
 
+/// Disconnect the specified connection ID and mark it as free. This
+/// connection ID may be reused by the server in the future, so ensure
+/// no other threads are using the connection ID before disposing of it.
 pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
         if let Result::Ok = result {
@@ -1570,6 +1589,26 @@ pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     })
 }
 
+/// Block the current thread and wait for the specified thread to
+/// return. Returns the return value of the thread.
+///
+/// # Errors
+///
+/// * **ThreadNotAvailable**: The thread could not be found, or was not sleeping.
+pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
+    rsyscall(SysCall::JoinThread(tid)).and_then(|result| {
+        if let Result::Scalar1(val) = result {
+            Ok(val)
+        } else if let Result::Error(Error::ThreadNotAvailable) = result {
+            Err(Error::ThreadNotAvailable)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Perform a raw syscall and return the result. This will transform
+/// `xous::Result::Error(e)` into an `Err(e)`.
 pub fn rsyscall(call: SysCall) -> SysCallResult {
     let mut ret = Result::Ok;
     let args = call.as_args();

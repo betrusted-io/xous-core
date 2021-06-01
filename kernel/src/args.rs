@@ -28,7 +28,9 @@ pub struct KernelArgumentsIterator {
 #[allow(dead_code)]
 impl KernelArguments {
     pub fn get() -> Self {
-        KernelArguments { base: unsafe { KERNEL_ARGUMENTS_BASE } }
+        KernelArguments {
+            base: unsafe { KERNEL_ARGUMENTS_BASE },
+        }
     }
 
     pub unsafe fn init(base: *const u32) {
@@ -58,14 +60,8 @@ pub struct KernelArgument {
 impl KernelArgument {
     pub fn new(base: *const u32, offset: usize) -> Self {
         let name = unsafe { base.add(offset / 4).read() } as u32;
-        let size = unsafe {
-            (base.add(offset / 4 + 1) as *const u16)
-                .add(1)
-                .read()
-        } as usize;
-        let data = unsafe {
-            core::slice::from_raw_parts(base.add(offset / 4 + 2), size)
-        };
+        let size = unsafe { (base.add(offset / 4 + 1) as *const u16).add(1).read() } as usize;
+        let data = unsafe { core::slice::from_raw_parts(base.add(offset / 4 + 2), size) };
         KernelArgument {
             name,
             size: size * 4,

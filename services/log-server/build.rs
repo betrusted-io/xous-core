@@ -2,7 +2,7 @@
 use std::env;
 
 extern crate vergen;
-use vergen::{ConstantsFlags, generate_cargo_keys};
+use vergen::{generate_cargo_keys, ConstantsFlags};
 
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -16,7 +16,10 @@ fn main() {
         println!("cargo:rustc-cfg=baremetal");
     }
 
-    generate_cargo_keys(ConstantsFlags::SHA /*| ConstantsFlags::BUILD_TIMESTAMP*/).unwrap();
+    generate_cargo_keys(
+        ConstantsFlags::SHA, /*| ConstantsFlags::BUILD_TIMESTAMP*/
+    )
+    .unwrap();
     // BUILD_TIMESTAMP doesn't work -- it doesn't update because of the below line
     // removing the below line causes a lengthy full-rebuild just to capture a timestamp.
     // so, we're removing the timestamp.

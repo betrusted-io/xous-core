@@ -129,5 +129,5 @@ fn xmain() -> ! {
     xns.unregister_server(ime_sh_sid).unwrap();
     xous::destroy_server(ime_sh_sid).unwrap();
     log::trace!("quitting");
-    xous::terminate_process(); loop {}
+    xous::terminate_process(0)
 }

@@ -1,13 +1,13 @@
 use crate::{
-    map_memory, send_message, unmap_memory, Error, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, Message, Result, CID,
+    map_memory, send_message, unmap_memory, Error, MemoryMessage, MemoryRange, MemorySize, Message,
+    Result, CID,
 };
 
 /// A buffered String suitable for sending across as a message
 pub struct StringBuffer<'a> {
     /// The backing store for this string, as a mutable pointer to
     /// page-aligned memory.
-    bytes: &'a mut [u8],
+    bytes: Option<&'a mut [u8]>,
 
     // Current length of the string, in bytes
     length: u32,
@@ -28,9 +28,7 @@ impl<'a> StringBuffer<'a> {
     /// resized as soon as data is written to it.
     pub fn new() -> Self {
         StringBuffer {
-            bytes: unsafe {
-                core::slice::from_raw_parts_mut(core::ptr::NonNull::dangling().as_ptr(), 0)
-            },
+            bytes: None,
             length: 0,
             should_free: true,
             memory_message: None,
@@ -46,7 +44,10 @@ impl<'a> StringBuffer<'a> {
             0x1000 - (capacity & 0xFFF)
         };
 
-        let flags = MemoryFlags::R | MemoryFlags::W;
+        #[cfg(feature = "bit-flags")]
+        let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
+        #[cfg(not(feature = "bit-flags"))]
+        let flags = 0b0000_0010 | 0b0000_0100;
 
         // Allocate enough memory to hold the requested data
         let new_mem = map_memory(
@@ -62,9 +63,9 @@ impl<'a> StringBuffer<'a> {
         valid.size = MemorySize::new(capacity + remainder).unwrap();
 
         StringBuffer {
-            bytes: unsafe {
+            bytes: Some(unsafe {
                 core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), capacity + remainder)
-            },
+            }),
             length: 0,
             should_free: true,
             memory_message: None,
@@ -85,29 +86,40 @@ impl<'a> StringBuffer<'a> {
 
         // If the new size is the same as the current size, don't do anything.
         let rounded_new_capacity = new_capacity + remainder;
-        if rounded_new_capacity == self.bytes.len() {
+        if rounded_new_capacity == self.bytes.as_ref().map(|b| b.len()).unwrap_or(0) {
             return;
         }
 
-        let flags = MemoryFlags::R | MemoryFlags::W;
+        #[cfg(feature = "bit-flags")]
+        let flags = crate::MemoryFlags::R | crate::MemoryFlags::W;
+        #[cfg(not(feature = "bit-flags"))]
+        let flags = 0b0000_0010 | 0b0000_0100;
 
         // Allocate enough memory to hold the new requested data
-        let new_mem = map_memory(None, None, rounded_new_capacity, flags)
-            .expect("Buffer: error in new()/map_memory");
-        let new_slice =
-            unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), rounded_new_capacity) };
+        let new_slice = if rounded_new_capacity > 0 {
+            let new_mem = map_memory(None, None, rounded_new_capacity, flags)
+                .expect("Buffer: error in new()/map_memory");
+            let new_slice = unsafe {
+                core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), rounded_new_capacity)
+            };
+            // Copy the existing string to the new slice
+            for (dest_byte, src_byte) in new_slice
+                .iter_mut()
+                .zip(self.as_bytes()[0..self.len()].iter())
+            {
+                *dest_byte = *src_byte;
+            }
+            Some(new_slice)
+        } else {
+            None
+        };
 
-        // Copy the existing string to the new slice
-        for (dest_byte, src_byte) in new_slice.iter_mut().zip(self.bytes[0..self.len()].iter()) {
-            *dest_byte = *src_byte;
-        }
-
-        let old_addr = self.bytes.as_ptr();
-        let old_length = self.bytes.len();
-        self.bytes = new_slice;
-        if old_length != 0 {
+        if let Some(old_slice) = self.bytes.take() {
+            let old_addr = old_slice.as_ptr();
+            let old_length = old_slice.len();
             unmap_memory(MemoryRange::new(old_addr as usize, old_length).unwrap()).unwrap();
         }
+        self.bytes = new_slice;
 
         // If the string has shrunk, truncate the string.
         if new_capacity < self.len() {
@@ -122,12 +134,12 @@ impl<'a> StringBuffer<'a> {
         let src = src.as_ref();
         let mut s = Self::with_capacity(src.len());
         // Copy the string into our backing store.
-        for (dest_byte, src_byte) in s.bytes.iter_mut().zip(src.as_bytes()) {
+        for (dest_byte, src_byte) in s.bytes.as_mut().unwrap().iter_mut().zip(src.as_bytes()) {
             *dest_byte = *src_byte;
         }
         // Set the string length to the length of the passed-in String,
         // or the maximum possible length. Which ever is smaller.
-        s.length = s.bytes.len().min(src.as_bytes().len()) as u32;
+        s.length = s.as_bytes().len().min(src.as_bytes().len()) as u32;
 
         // If the string is not valid, set its length to 0.
         if s.as_str().is_err() {
@@ -138,11 +150,27 @@ impl<'a> StringBuffer<'a> {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes
+        if let Some(bytes) = &self.bytes {
+            bytes
+        } else {
+            &[]
+        }
+    }
+
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        if let Some(bytes) = self.bytes.as_mut() {
+            bytes
+        } else {
+            &mut []
+        }
     }
 
     pub fn as_str(&self) -> core::result::Result<&str, core::str::Utf8Error> {
-        core::str::from_utf8(&self.bytes[0..self.len()])
+        if let Some(bytes) = &self.bytes {
+            core::str::from_utf8(&bytes[0..self.len()])
+        } else {
+            Ok("")
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -162,23 +190,34 @@ impl<'a> StringBuffer<'a> {
     }
 
     pub fn to_str(&self) -> &str {
-        unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
+        if let Some(bytes) = &self.bytes {
+            unsafe { core::str::from_utf8_unchecked(&bytes[0..self.len()]) }
+        } else {
+            ""
+        }
     }
 
     fn create_memory_message(&self, id: u32) -> MemoryMessage {
-        let backing_store = MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
-        MemoryMessage {
-            id: id as usize,
-            buf: backing_store,
-            offset: None,
-            valid: MemorySize::new(self.len()),
+        if let Some(bytes) = &self.bytes {
+            let backing_store = MemoryRange::new(bytes.as_ptr() as _, bytes.len()).unwrap();
+            MemoryMessage {
+                id: id as usize,
+                buf: backing_store,
+                offset: None,
+                valid: MemorySize::new(self.len()),
+            }
+        } else {
+            panic!("Tried to create a memory message with no string!");
         }
     }
 
     pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
-            bytes: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),
+            bytes: Some(core::slice::from_raw_parts_mut(
+                mem.buf.as_mut_ptr(),
+                mem.buf.len(),
+            )),
             length: mem.valid.map(|v| v.get()).unwrap_or(0) as u32,
             // offset: mem.offset,
             should_free: false,
@@ -189,7 +228,10 @@ impl<'a> StringBuffer<'a> {
     pub unsafe fn from_memory_message_mut(mem: &'a mut MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
-            bytes: core::slice::from_raw_parts_mut(mem.buf.as_mut_ptr(), mem.buf.len()),
+            bytes: Some(core::slice::from_raw_parts_mut(
+                mem.buf.as_mut_ptr(),
+                mem.buf.len(),
+            )),
             length: mem.valid.map(|v| v.get()).unwrap_or(0) as u32,
             // valid: mem.buf,
             // offset: mem.offset,
@@ -239,7 +281,7 @@ impl<'a> core::fmt::Write for StringBuffer<'a> {
 
         // Copy the data over
         let length = self.len();
-        for (dest, src) in self.bytes[length..].iter_mut().zip(s.as_bytes()) {
+        for (dest, src) in self.as_bytes_mut()[length..].iter_mut().zip(s.as_bytes()) {
             *dest = *src;
         }
         self.length += s.len() as u32;
@@ -264,7 +306,8 @@ impl<'a> core::convert::AsRef<str> for StringBuffer<'a> {
 
 impl<'a> PartialEq for StringBuffer<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.length == other.length && self.bytes[..self.len()] == other.bytes[..other.len()]
+        self.length == other.length
+            && self.as_bytes()[..self.len()] == other.as_bytes()[..other.len()]
     }
 }
 
@@ -272,8 +315,9 @@ impl<'a> Eq for StringBuffer<'a> {}
 
 impl<'a> Drop for StringBuffer<'a> {
     fn drop(&mut self) {
-        if self.should_free {
-            let range = MemoryRange::new(self.bytes.as_ptr() as _, self.bytes.len()).unwrap();
+        if self.should_free && self.as_bytes().len() != 0 {
+            let range =
+                MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap();
             unmap_memory(range).expect("Buffer: failed to drop memory");
         }
     }

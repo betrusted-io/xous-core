@@ -19,7 +19,7 @@ pub const MAX_PROCESS_COUNT: usize = 64;
 pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
-const EXIT_THREAD: usize = 0xff80_3000;
+pub const EXIT_THREAD: usize = 0xff80_3000;
 
 // Thread IDs have three possible meaning:
 // Logical Thread ID: What the user sees
@@ -35,13 +35,16 @@ const EXIT_THREAD: usize = 0xff80_3000;
 // Therefore, the first Logical Thread ID is 1, which maps
 // to Hardware Thread ID 2, which is Thread Context Index 1.
 //
-// +----------------+---------------+------------------+
-// | Logical Thread | Context Index | Hardware Thread  |
-// +================+===============+==================+
-// |  ISR Context   |       0       |        1         |
-// |        1       |       1       |        2         |
-// |        2       |       2       |        3         |
+// +-----------------+-----------------+-----------------+
+// |    Thread ID    |  Context Index  | Hardware Thread |
+// +=================+=================+=================+
+// |   ISR Context   |        0        |        1        |
+// |        1        |        1        |        2        |
+// |        2        |        2        |        3        |
 
+// ProcessImpl occupies a multiple of pages mapped to virtual address `0xff80_1000`.
+// Each thread is 128 bytes (32 4-byte registers). The first "thread" does not exist,
+// and instead is any bookkeeping information related to the process.
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 struct ProcessImpl {
@@ -70,16 +73,13 @@ struct ProcessTable {
     /// The process upon which the current syscall is operating
     current: PID,
 
-    /// The number of processes that exist
-    // total: usize,
-
-    /// The actual table contents
+    /// The actual table contents. `true` if a process is allocated,
+    /// `false` if it is free.
     table: [bool; MAX_PROCESS_COUNT],
 }
 
 static mut PROCESS_TABLE: ProcessTable = ProcessTable {
     current: unsafe { PID::new_unchecked(1) },
-    // total: 0,
     table: [false; MAX_PROCESS_COUNT],
 };
 
@@ -185,6 +185,10 @@ impl Process {
         process.hardware_thread - 1
     }
 
+    pub fn thread_exists(&self, tid: TID) -> bool {
+        self.thread(tid).sepc != 0
+    }
+
     /// Set the current thread number.
     pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         let mut process = unsafe { &mut *PROCESS };
@@ -208,15 +212,15 @@ impl Process {
         &mut process.threads[thread]
     }
 
-    // pub fn thread(&self, thread: TID) -> &Thread {
-    //     let process = unsafe { &mut *PROCESS };
-    //     assert!(
-    //         thread <= process.threads.len(),
-    //         "attempt to retrieve an invalid thread {}",
-    //         thread
-    //     );
-    //     &process.threads[thread]
-    // }
+    pub fn thread(&self, thread: TID) -> &Thread {
+        let process = unsafe { &mut *PROCESS };
+        assert!(
+            thread <= process.threads.len(),
+            "attempt to retrieve an invalid thread {}",
+            thread
+        );
+        &process.threads[thread]
+    }
 
     pub fn find_free_thread(&self) -> Option<TID> {
         let process = unsafe { &mut *PROCESS };
@@ -353,6 +357,38 @@ impl Process {
         Ok(())
     }
 
+    /// Destroy a given thread and return its return value.
+    ///
+    /// # Returns
+    ///     The return value of the function
+    ///
+    /// # Errors
+    ///     xous::ThreadNotAvailable - the thread did not exist
+    pub fn destroy_thread(&mut self, tid: TID) -> Result<usize, xous_kernel::Error> {
+        let thread = self.thread_mut(tid);
+
+        // Ensure this thread is valid
+        if thread.sepc == 0 || tid == IRQ_TID {
+            Err(xous_kernel::Error::ThreadNotAvailable)?;
+        }
+
+        // thread.registers[0] == x1
+        // thread.registers[1] == x2
+        // ...
+        // thread.registers[4] == x5 == t0
+        // ...
+        // thread.registers[9] == x10 == a0
+        // thread.registers[10] == x11 == a1
+        let return_value = thread.registers[9];
+
+        for val in &mut thread.registers {
+            *val = 0;
+        }
+        thread.sepc = 0;
+
+        Ok(return_value)
+    }
+
     pub fn print_all_threads(&self) {
         let process = unsafe { &mut *PROCESS };
         &mut process.threads[process.hardware_thread - 1];
@@ -432,17 +468,30 @@ impl Process {
         todo!();
     }
 
-    pub fn destroy(_pid: PID) -> Result<(), xous_kernel::Error> {
-        todo!();
-        // let mut process_table = unsafe { &mut *PROCESS };
-        // let pid_idx = pid.get() as usize - 1;
-        // if pid_idx >= process_table.table.len() {
-        //     panic!("attempted to destroy PID that exceeds table index: {}", pid);
-        // }
-        // let process = process_table.table[pid_idx].as_mut().unwrap();
-        // process_table.table[pid_idx] = None;
-        // process_table.total -= 1;
-        // Ok(())
+    pub fn destroy(pid: PID) -> Result<(), xous_kernel::Error> {
+        let mut process_table = unsafe { &mut PROCESS_TABLE };
+        let pid_idx = pid.get() as usize - 1;
+        if pid_idx >= process_table.table.len() {
+            panic!("attempted to destroy PID that exceeds table index: {}", pid);
+        }
+        process_table.table[pid_idx] = false;
+        Ok(())
+    }
+
+    pub fn find_thread<F>(&self, op: F) -> Option<(TID, &mut Thread)>
+    where
+        F: Fn(TID, &Thread) -> bool,
+    {
+        let process = unsafe { &mut *PROCESS };
+        for (idx, thread) in process.threads.iter_mut().enumerate() {
+            if thread.sepc == 0 {
+                continue;
+            }
+            if op(idx, thread) {
+                return Some((idx, thread));
+            }
+        }
+        None
     }
 }
 
@@ -451,6 +500,15 @@ impl Thread {
     pub fn stack_pointer(&self) -> usize {
         self.registers[1]
     }
+
+    pub fn a0(&self) -> usize {
+        self.registers[9]
+    }
+
+    pub fn a1(&self) -> usize {
+        self.registers[10]
+    }
+
 }
 
 pub fn set_current_pid(pid: PID) {
@@ -473,31 +531,3 @@ pub fn current_pid() -> PID {
 pub fn current_tid() -> TID {
     unsafe { ((*PROCESS).hardware_thread) - 1 }
 }
-
-// pub struct ProcessHandle<'a> {
-//     process: &'a mut Process,
-// }
-
-// /// Wraps the MemoryManager in a safe mutex.  Because of this, accesses
-// /// to the Memory Manager should only be made during interrupt contexts.
-// impl<'a> ProcessHandle<'a> {
-//     /// Get the singleton Process.
-//     pub fn get() -> ProcessHandle<'a> {
-//         ProcessHandle {
-//             process: unsafe { &mut *PROCESS },
-//         }
-//     }
-// }
-
-// use core::ops::{Deref, DerefMut};
-// impl Deref for ProcessHandle<'_> {
-//     type Target = Process;
-//     fn deref(&self) -> &Process {
-//         &*self.process
-//     }
-// }
-// impl DerefMut for ProcessHandle<'_> {
-//     fn deref_mut(&mut self) -> &mut Process {
-//         &mut *self.process
-//     }
-// }

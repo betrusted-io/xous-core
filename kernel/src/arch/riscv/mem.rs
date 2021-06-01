@@ -21,6 +21,15 @@ extern "C" {
     fn flush_mmu();
 }
 
+pub unsafe fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
+    let mut i = 0;
+    while i < n {
+        *s.offset(i as isize) = c as u8;
+        i += 1;
+    }
+    s
+}
+
 bitflags! {
     pub struct MMUFlags: usize {
         const NONE      = 0b00_0000_0000;
@@ -199,7 +208,7 @@ impl MemoryMapping {
 
             // Zero-out the new page
             let page_addr = l0pt_virt as *mut usize;
-            unsafe { page_addr.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
+            unsafe { memset(page_addr as *mut u8, 0, PAGE_SIZE) };
         }
 
         let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
@@ -337,46 +346,52 @@ pub fn map_page_inner(
     assert!((virt & 0xfff) == 0);
 
     // The root (l1) pagetable is defined to be mapped into our virtual
-    // address space at this address.
-    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let ref mut l1_pt = l1_pt.entries;
+    // address space at 0xff80_0000.
+    let l1_pt = PAGE_TABLE_ROOT_OFFSET as *mut usize;
 
     // Subsequent pagetables are defined as being mapped starting at
-    // offset 0x0020_0004, so 4 must be added to the ppn1 value.
-    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+    // offset 0xff40_0000.
+    let l0_pt = (PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE) as *mut usize;
 
     // Allocate a new level 1 pagetable entry if one doesn't exist.
-    if l1_pt[vpn1 as usize] & MMUFlags::VALID.bits() == 0 {
-        // Allocate a fresh page
-        let l0pt_phys = mm.alloc_page(pid)?;
+    if unsafe { l1_pt.add(vpn1).read_volatile() } & MMUFlags::VALID.bits() == 0 {
+        // Allocate a fresh page for the level 1 page table.
+        let l0_pt_phys = mm.alloc_page(pid)?;
 
         // Mark this entry as a leaf node (WRX as 0), and indicate
         // it is a valid page by setting "V".
-        l1_pt[vpn1 as usize] = ((l0pt_phys >> 12) << 10) | MMUFlags::VALID.bits();
-        unsafe { flush_mmu() };
+        unsafe {
+            l1_pt
+                .add(vpn1)
+                .write_volatile(((l0_pt_phys >> 12) << 10) | MMUFlags::VALID.bits());
+            flush_mmu();
+        }
 
         // Map the new physical page to the virtual page, so we can access it.
         map_page_inner(
             mm,
             pid,
-            l0pt_phys,
-            l0pt_virt,
+            l0_pt_phys,
+            l0_pt as usize,
             MemoryFlags::W | MemoryFlags::R,
             false,
         )?;
 
         // Zero-out the new page
-        let page_addr = l0pt_virt as *mut usize;
-        unsafe { page_addr.write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>()) };
+        unsafe { memset(l0_pt as *mut u8, 0, PAGE_SIZE) };
     }
 
     // Ensure the entry hasn't already been mapped.
-    if l0_pt.entries[vpn0 as usize] & 1 != 0 {
+    if unsafe { l0_pt.add(vpn0).read_volatile() } & 1 != 0 {
         panic!("Page {:08x} already allocated!", virt);
     }
-    l0_pt.entries[vpn0 as usize] =
-        (ppn1 << 20) | (ppn0 << 10) | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits();
+    unsafe {
+        l0_pt.add(vpn0).write_volatile(
+            (ppn1 << 20)
+                | (ppn0 << 10)
+                | (flags | MMUFlags::VALID | MMUFlags::D | MMUFlags::A).bits(),
+        )
+    };
     unsafe { flush_mmu() };
 
     Ok(())
@@ -460,6 +475,16 @@ pub fn move_page_inner(
     // Switch back to the original address space and return
     src_space.activate().unwrap();
     result
+}
+
+/// Determine if a page has been lent.
+pub fn page_is_lent(src_addr: *mut u8) -> bool {
+    let entry = if let Ok(val) = pagetable_entry(src_addr as usize) {
+        val
+    } else {
+        return false;
+    };
+    *entry & MMUFlags::S.bits() != 0
 }
 
 /// Mark the given virtual address as being lent.  If `writable`, clear the
@@ -650,7 +675,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
         flush_mmu();
 
         // Zero-out the page
-        (virt as *mut usize).write_bytes(0, PAGE_SIZE / core::mem::size_of::<usize>());
+        memset(virt as *mut u8, 0, PAGE_SIZE);
 
         // Move the page into userspace
         *entry = (ppn1 << 20)

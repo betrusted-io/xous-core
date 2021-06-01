@@ -60,7 +60,7 @@ pub fn idle() -> bool {
     // Issue `wfi`. This will return as soon as an external interrupt
     // is available.
     if false {
-        // "traditional" path for stopping a clock
+        // "traditional" path for stopping a clock - effectively a NOP, doesn't do anything
         unsafe { riscv::asm::wfi() };
     } else {
         // this invokes Precusor-SoC specific path to gate clocks:

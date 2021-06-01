@@ -297,9 +297,7 @@ fn xous_address() -> SocketAddr {
         .unwrap_or_else(default_xous_address)
 }
 
-pub fn create_thread_0_pre<U>(
-    _f: &fn() -> U,
-) -> core::result::Result<ThreadInit, crate::Error>
+pub fn create_thread_0_pre<U>(_f: &fn() -> U) -> core::result::Result<ThreadInit, crate::Error>
 where
     U: Send + 'static,
 {

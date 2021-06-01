@@ -413,6 +413,34 @@ impl Message {
         })
     }
 
+    pub fn new_lend(
+        id: usize,
+        buf: MemoryRange,
+        offset: Option<MemoryAddress>,
+        valid: Option<MemorySize>,
+    ) -> crate::Message {
+        Message::Borrow(crate::MemoryMessage {
+            id,
+            buf,
+            offset,
+            valid,
+        })
+    }
+
+    pub fn new_lend_mut(
+        id: usize,
+        buf: MemoryRange,
+        offset: Option<MemoryAddress>,
+        valid: Option<MemorySize>,
+    ) -> crate::Message {
+        Message::MutableBorrow(crate::MemoryMessage {
+            id,
+            buf,
+            offset,
+            valid,
+        })
+    }
+
     /// Determine whether the specified Message will block
     pub fn is_blocking(&self) -> bool {
         match *self {

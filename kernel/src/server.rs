@@ -308,11 +308,7 @@ impl Server {
     /// Take a current slot and replace it with `None`, clearing out the contents of the queue.
     /// Returns an error if the queue has any waiting elements.
     /// Returns a list of threads that should be readied.
-    pub fn destroy(
-        mut self,
-        ss: &mut SystemServices,
-    ) -> Result<(), Self> {
-
+    pub fn destroy(mut self, ss: &mut SystemServices) -> Result<(), Self> {
         // First determine if the server has any Waiting messages. That is, any messages
         // that are currently sitting in the memory space of the Server. These cannot
         // safely be handled, and will cause an error if we try to mess with them.

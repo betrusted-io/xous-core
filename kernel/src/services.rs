@@ -194,11 +194,15 @@ impl Process {
             return Err(xous_kernel::Error::ProcessNotFound);
         }
 
-        // TODO: Free all pages
+        // Free all associated memory pages
+        unsafe {
+            crate::mem::MemoryManager::with_mut(|mm| mm.release_all_memory_for_process(self.pid))
+        };
 
-        // TODO: Free all IRQs
+        // Free all claimed IRQs
+        crate::irq::release_interrupts_for_pid(self.pid);
 
-        // TODO: Free memory mapping
+        // Remove this PID from the process table
         crate::arch::process::Process::destroy(self.pid)?;
         self.state = ProcessState::Free;
         Ok(())
@@ -567,10 +571,7 @@ impl SystemServices {
                 pid, tid, other
             ),
         };
-        // println!(
-        //     "KERNEL({}): Readying context {} -> {:?}",
-        //     pid, context, process.state
-        // );
+        klog!("Readying ({}:{}) -> {:?}", pid, tid, process.state);
         Ok(())
     }
 
@@ -585,12 +586,12 @@ impl SystemServices {
         tid: Option<TID>,
     ) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
-        // println!(
+        // klog!(
         //     "switch_to_thread({}:{:?}): Old state was {:?}",
         //     pid, tid, process.state
         // );
 
-        // Determine which context number to switch to
+        // Determine which thread to switch to
         process.state = match process.state {
             ProcessState::Free => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
@@ -1289,6 +1290,10 @@ impl SystemServices {
             Err(xous_kernel::Error::BadAddress)?;
         }
 
+        // If memory is getting returned to the kernel, then it is memory that was
+        // borrowed but
+        if dest_pid.get() == 1 {}
+
         // Iterators and `ptr.wrapping_add()` operate on `usize` types,
         // which effectively lowers the `len`.
         let usize_len = len / core::mem::size_of::<usize>();
@@ -1306,9 +1311,7 @@ impl SystemServices {
             let mut error = None;
 
             // Lend each subsequent page.
-            for offset in (0..usize_len)
-                .step_by(usize_page)
-            {
+            for offset in (0..usize_len).step_by(usize_page) {
                 assert!(((src_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
                 assert!(((dest_virt.wrapping_add(offset) as usize) & 0xfff) == 0);
                 mm.unlend_page(
@@ -1330,7 +1333,8 @@ impl SystemServices {
                 });
             }
             error.map_or_else(|| Ok(dest_virt), |e| Err(e))
-        }).map(|val| val as *mut usize)
+        })
+        .map(|val| val as *mut usize)
     }
 
     #[cfg(not(baremetal))]
@@ -1403,6 +1407,78 @@ impl SystemServices {
         };
 
         Ok(new_tid)
+    }
+
+    /// Destroy the given thread.
+    /// NOTE: You MUST immediately switch away from this process.
+    /// # Errors
+    ///
+    /// * **ThreadNotAvailable**: The thread does not exist in this process
+    #[cfg(baremetal)]
+    pub fn destroy_thread(&mut self, pid: PID, tid: TID) -> Result<usize, xous_kernel::Error> {
+        let current_pid = self.current_pid();
+        assert_eq!(pid, current_pid);
+
+        let mut waiting_threads = match self.get_process_mut(pid)?.state {
+            ProcessState::Running(x) => x,
+            state => panic!("Process was in an invalid state: {:?}", state),
+        };
+
+        // Destroy the thread at a hardware level
+        let mut arch_process = crate::arch::process::Process::current();
+        let return_value = arch_process.destroy_thread(tid).unwrap();
+
+        // If there's another thread waiting on the return value of this thread,
+        // wake it up and set its return value.
+        if let Some((waiting_tid, _thread)) = arch_process.find_thread(|waiting_tid, thr| {
+            (waiting_threads & (1 << waiting_tid)) == 0 // Thread is waiting (i.e. not ready to run)
+                && thr.a0() == (xous_kernel::SysCallNumber::JoinThread as usize) // Thread called `JoinThread`
+                && thr.a1() == (tid as usize) // It is waiting on our thread
+        }) {
+            // Wake up the thread
+            self.set_thread_result(pid, waiting_tid, xous_kernel::Result::Scalar1(return_value))?;
+            waiting_threads |= 1 << waiting_tid;
+        }
+
+        // Mark this process as `Ready`.
+        // We can do this because the current thread has just exited. Note that if there
+        // are no threads available, this is an error.
+        self.get_process_mut(pid)?.state = ProcessState::Ready(waiting_threads);
+
+        // Switch to the next available TID. This moves the process back to a `Running` state.
+        self.switch_to_thread(pid, None)?;
+
+        Ok(return_value)
+    }
+
+    /// Park this thread if the target thread is currently running. Otherwise,
+    /// return the value of the given thread.
+    pub fn join_thread(
+        &mut self,
+        pid: PID,
+        tid: TID,
+        join_tid: TID,
+    ) -> Result<xous_kernel::Result, xous_kernel::Error> {
+        let current_pid = self.current_pid();
+        assert_eq!(pid, current_pid);
+
+        // We cannot wait on ourselves.
+        if tid == join_tid {
+            Err(xous_kernel::Error::ThreadNotAvailable)?
+        }
+
+        // If the target thread exists, put this thread to sleep.
+        let arch_process = crate::arch::process::Process::current();
+        if arch_process.thread_exists(join_tid) {
+            // The target thread exists -- put this thread to sleep
+            let ppid = self.get_process(pid).unwrap().ppid;
+            self.activate_process_thread(tid, ppid, 0, false)
+                .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+        } else {
+            // The thread does not exist -- continue execution
+            Err(xous_kernel::Error::ThreadNotAvailable)
+        }
     }
 
     /// Allocate a new server ID for this process and return the address. If the
@@ -1572,7 +1648,6 @@ impl SystemServices {
         // yet connected.
 
         let pid = crate::arch::process::current_pid();
-        // println!("KERNEL({}): Server table: {:?}", _pid.get(), self.servers);
         ArchProcess::with_inner_mut(|process_inner| {
             assert_eq!(pid, process_inner.pid);
             let mut slot_idx = None;
@@ -1846,6 +1921,8 @@ impl SystemServices {
                     }
                 }
 
+                let process = self.processes[(server.pid.get() - 1) as usize];
+                process.activate().unwrap();
                 // Look through this server's memory space to determine if this process
                 // is mentioned there as having some memory lent out.
                 server.discard_messages_for_pid(target_pid);
@@ -1855,10 +1932,8 @@ impl SystemServices {
         process.activate()?;
         let parent_pid = process.ppid;
         process.terminate()?;
-        // println!("KERNEL({}): Terminated", target_pid);
 
-        let process = self.get_process(parent_pid)?;
-        process.activate().unwrap();
+        self.switch_to_thread(parent_pid, None).unwrap();
 
         Ok(parent_pid)
     }
@@ -1883,6 +1958,7 @@ impl SystemServices {
     }
 
     /// Returns the process name, if any, of a given PID
+    #[cfg(baremetal)]
     pub fn process_name(&self, pid: PID) -> Option<&str> {
         let args = crate::args::KernelArguments::get();
         for arg in args.iter() {
@@ -1896,17 +1972,27 @@ impl SystemServices {
             };
             let mut offset = 0;
             while offset <= arg.size {
-                let check_pid = u32::from_le_bytes([data[offset+0],data[offset+1],data[offset+2],data[offset+3]]);
-                let str_len = u32::from_le_bytes([data[offset+4],data[offset+5],data[offset+6],data[offset+7]]) as usize;
+                let check_pid = u32::from_le_bytes([
+                    data[offset + 0],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+                let str_len = u32::from_le_bytes([
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                ]) as usize;
                 if check_pid == pid.get() as _ {
-                    if let Ok(s) = core::str::from_utf8(&data[offset+8..offset+8+str_len]){
+                    if let Ok(s) = core::str::from_utf8(&data[offset + 8..offset + 8 + str_len]) {
                         return Some(s);
                     } else {
                         return None;
                     }
                 }
                 offset += str_len + 8;
-                offset += (4-(offset & 3))&3;
+                offset += (4 - (offset & 3)) & 3;
             }
         }
         None

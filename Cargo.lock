@@ -1509,6 +1509,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "svd2repl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "convert_case",
+ "quick-xml",
+]
+
+[[package]]
 name = "svd2utra"
 version = "0.1.0"
 dependencies = [
@@ -1922,7 +1932,7 @@ checksum = "b07db065a5cf61a7e4ba64f29e67db906fb1787316516c4e6e5ff0fea1efcd8a"
 
 [[package]]
 name = "xous"
-version = "0.8.0"
+version = "0.8.3"
 dependencies = [
  "bitflags",
  "compiler_builtins",

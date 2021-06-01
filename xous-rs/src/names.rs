@@ -26,7 +26,7 @@ Here is the allocation so far:
 
 */
 
-pub const GID_KEYBOARD_KEYSTATE_EVENT: usize      = 0x01_000000;
-pub const GID_KEYBOARD_RAW_KEYSTATE_EVENT: usize  = 0x01_000001;
+pub const GID_KEYBOARD_KEYSTATE_EVENT: usize = 0x01_000000;
+pub const GID_KEYBOARD_RAW_KEYSTATE_EVENT: usize = 0x01_000001;
 
-pub const GID_COM_BATTSTATS_EVENT: usize          = 0x02_000000;
+pub const GID_COM_BATTSTATS_EVENT: usize = 0x02_000000;

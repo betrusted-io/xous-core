@@ -53,7 +53,7 @@ pub mod syscall {
 
 pub mod mem {
     use crate::mem::MemoryManager;
-    use xous::{MemoryFlags, Error, PID};
+    use xous::{Error, MemoryFlags, PID};
     #[derive(Copy, Clone, Default, PartialEq)]
     pub struct MemoryMapping {}
     impl MemoryMapping {
@@ -101,10 +101,7 @@ pub mod mem {
         unimplemented!();
     }
 
-    pub fn unmap_page_inner(
-        mm: &mut MemoryManager,
-        virt: usize,
-    ) -> Result<usize, XousError> {
+    pub fn unmap_page_inner(mm: &mut MemoryManager, virt: usize) -> Result<usize, XousError> {
         unimplemented!();
     }
 
