@@ -44,6 +44,7 @@ the need from ever switching back to process 1.
 Note that the kernel takes up a single 4 MB megapage, so it can be
 assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 
+```
 | Address    | Description
 | ---------- | -----------
 | 0x00100000 | Default entrypoint for riscv64-unknown-elf-ld (as shown by `riscv64-unknown-elf-ld --verbose`)
@@ -54,12 +55,14 @@ assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 | 0xff801000 | Context data (registers, etc.)
 | 0xff802000 | Return address from syscalls (never allocated)
 | 0xffc00000 | Kernel arguments, allocation tables
+| 0xffcd0000 | Kernel WFI CSR page
 | 0xffce0000 | Kernel TRNG CSR page
 | 0xffcf0000 | Supervisor UART CSR page
 | 0xffd00000 | Kernel binary image and data section
 | 0xfffefffc | "default" stack pointer (used by interrupt handlers)
 | 0xffff0000 | Kernel stack top
 | 0xfff00000 | {unused}
+```
 
 Note that the stack pointer is not necessarily fixed, and may be changed
 in a later revision.
