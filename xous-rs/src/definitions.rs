@@ -203,6 +203,7 @@ pub enum Error {
     AccessDenied = 23,
     UseBeforeInit = 24,
     DoubleFree = 25,
+    DebugInProgress = 26,
 }
 
 impl Error {
@@ -234,6 +235,7 @@ impl Error {
             23 => AccessDenied,
             24 => UseBeforeInit,
             25 => DoubleFree,
+            26 => DebugInProgress,
             _ => UnknownError,
         }
     }
@@ -265,6 +267,7 @@ impl Error {
             AccessDenied => 23,
             UseBeforeInit => 24,
             DoubleFree => 25,
+            DebugInProgress => 26,
             UnknownError => usize::MAX,
         }
     }

@@ -967,10 +967,12 @@ impl SysCall {
 
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
+        if let SysCall::TrySendMessage(_cid, msg) = self {
+            return ! msg.is_blocking();
+        }
         matches!(
             self,
-            SysCall::TrySendMessage(_, _)
-                | SysCall::TryConnect(_)
+            SysCall::TryConnect(_)
                 | SysCall::TryReceiveMessage(_)
                 | SysCall::ReturnToParent(_, _)
                 | SysCall::ReturnScalar2(_, _, _)

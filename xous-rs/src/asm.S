@@ -18,3 +18,23 @@ _xous_syscall:
     sw          a6, 6*REGBYTES(t0)
     sw          a7, 7*REGBYTES(t0)
     ret
+
+.global aes_enc_round
+aes_enc_round:
+    .word       0xb5050b // aes_enc_round a0, a1, a0
+    ret
+
+.global aes_enc_round_last
+aes_enc_round_last:
+    .word       0x4b5050b // aes_enc_round_last a0, a1, a0
+    ret
+
+.global aes_dec_round
+aes_dec_round:
+    .word       0x2b5050b // aes_dec_round a0, a1, a0
+    ret
+
+.global aes_dec_round_last
+aes_dec_round_last:
+    .word       0x6b5050b // aes_dec_round_last a0, a1, a0
+    ret

@@ -104,15 +104,7 @@ pub extern "C" fn trap_handler(
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
             let thread = p.current_thread();
-            // If we're resuming a process that was previously sleeping, restore the
-            // context. Otherwise, keep the context the same but pass the return
-            // values in 8 return registers.
-            if response == xous_kernel::Result::ResumeProcess {
-                crate::arch::syscall::resume(current_pid().get() == 1, thread);
-            } else {
-                // println!("Returning to address {:08x}", thread.sepc);
-                unsafe { _xous_syscall_return_result(&response, thread) };
-            }
+            unsafe { _xous_syscall_return_result(&response, thread) };
         });
     }
 

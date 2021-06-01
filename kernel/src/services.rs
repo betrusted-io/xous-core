@@ -52,8 +52,13 @@ pub enum ProcessState {
     Running(usize /* context bitmask */),
 
     /// This process is waiting for an event, such as as message or an
-    /// interrupt.  There are no contexts that can be run.
+    /// interrupt.  There are no contexts that can be run. This is
+    /// functionally equivalent to the invalid `Ready(0)` state.
     Sleeping,
+
+    /// The process is currently being debugged. When it is resumed,
+    /// this will turn into `Ready(usize)`
+    Debug(usize),
 }
 
 impl core::fmt::Debug for ProcessState {
@@ -65,6 +70,7 @@ impl core::fmt::Debug for ProcessState {
             Setup(ti) => write!(fmt, "Setup({:?})", ti),
             Ready(rt) => write!(fmt, "Ready({:b})", rt),
             Running(rt) => write!(fmt, "Running({:b})", rt),
+            Debug(rt) => write!(fmt, "Debug({:b})", rt),
             Sleeping => write!(fmt, "Sleeping"),
         }
     }
@@ -510,7 +516,7 @@ impl SystemServices {
             let mut process = self.get_process_mut(pid)?;
             let available_threads = match process.state {
                 ProcessState::Ready(x) | ProcessState::Running(x) => x,
-                ProcessState::Sleeping => 0,
+                ProcessState::Sleeping | ProcessState::Debug(_) => 0,
                 ProcessState::Free => panic!("process was not allocated"),
                 ProcessState::Setup(_) | ProcessState::Allocated => {
                     panic!("process hasn't been set up yet")
@@ -596,6 +602,7 @@ impl SystemServices {
             ProcessState::Free => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Allocated => return Err(xous_kernel::Error::ProcessNotFound),
+            ProcessState::Debug(_) => return Err(xous_kernel::Error::DebugInProgress),
             ProcessState::Setup(setup) => {
                 // Activate the process, which enables its memory mapping
                 process.activate()?;
@@ -862,9 +869,9 @@ impl SystemServices {
                         new.current_thread = new_tid as _;
                     }
                 }
-                ProcessState::Sleeping => {
-                    // println!("PID {} was sleeping", new_pid);
-                    return Err(xous_kernel::Error::ProcessNotFound);
+                ProcessState::Sleeping | ProcessState::Debug(_) => {
+                    // println!("PID {} was sleeping or being debugged", new_pid);
+                    Err(xous_kernel::Error::ProcessNotFound)?;
                 }
             }
 
@@ -893,6 +900,7 @@ impl SystemServices {
                     ProcessState::Running(x & !(1 << new_tid))
                 }
                 ProcessState::Sleeping => ProcessState::Running(0),
+                ProcessState::Debug(_) => panic!("Process was being debugged"),
             };
             new.activate()?;
 

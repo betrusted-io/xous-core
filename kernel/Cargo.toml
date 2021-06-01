@@ -7,6 +7,8 @@ version = "0.8.2"
 
 [dependencies]
 bitflags = "1.2.1"
+gdbstub = {path = "../../gdbstub", optional = true, default_features = false}
+gdbstub_arch = {path = "../../gdbstub/gdbstub_arch", optional = true}
 sha3 = {default-features = false, version = "0.8.2"}
 stats_alloc = {version = "0.1.8", optional = true}
 xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages"]}
@@ -19,11 +21,12 @@ riscv = "0.5.6"
 
 [features]
 debug-print = []
+gdbserver = ["gdbstub", "gdbstub_arch"]
 print-panics = []
 report-memory = ["stats_alloc"]
 wrap-print = []
 # default = ["print-panics", "debug-print", "wrap-print"]
-default = ["print-panics"]
+default = ["print-panics", "gdbserver"]
 
 [target.'cfg(any(windows, unix))'.dependencies]
 crossbeam-channel = "0.5"
@@ -35,6 +38,6 @@ rand = "0.7"
 [profile.release]
 codegen-units = 1 # 1 better optimizations
 debug = true # symbols are nice and they don't increase the size on Flash
-lto = "fat"
+lto = "fat" 
 # panic = "abort" # Remove some panic information
 # opt-level = 'z'  # Optimize for size instead of performance
