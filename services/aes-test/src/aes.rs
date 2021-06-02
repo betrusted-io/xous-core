@@ -367,7 +367,7 @@ fn aes_dec_round_last(arg1: u32, arg2: u32, id: AesByte) -> u32 {
     }
 }
 
-// use core::convert::TryInto;
+use core::convert::TryInto;
 
 fn get_u32(input: &[u8], offset: usize) -> u32 {
     // let tmp = [
@@ -376,23 +376,17 @@ fn get_u32(input: &[u8], offset: usize) -> u32 {
     //     input[offset + 2],
     //     input[offset + 3],
     // ];
-    let tmp = [
-        input[offset + 3],
-        input[offset + 2],
-        input[offset + 1],
-        input[offset + 0],
-    ];
-    u32::from_le_bytes(tmp)
+    // let tmp = [
+    //     input[offset + 3],
+    //     input[offset + 2],
+    //     input[offset + 1],
+    //     input[offset + 0],
+    // ];
+    u32::from_be_bytes(input[offset..offset+4].try_into().unwrap())
 }
 
 fn get_u32_swapped(input: &[u8], offset: usize) -> u32 {
-    let tmp = [
-        input[offset + 0],
-        input[offset + 1],
-        input[offset + 2],
-        input[offset + 3],
-    ];
-    u32::from_le_bytes(tmp)
+    u32::from_le_bytes(input[offset..offset+4].try_into().unwrap())
 }
 
 fn set_u32(output: &mut [u8], offset: usize, value: u32) {
