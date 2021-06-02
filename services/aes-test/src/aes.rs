@@ -369,23 +369,11 @@ fn aes_dec_round_last(arg1: u32, arg2: u32, id: AesByte) -> u32 {
 
 use core::convert::TryInto;
 
-fn get_u32(input: &[u8], offset: usize) -> u32 {
-    // let tmp = [
-    //     input[offset + 0],
-    //     input[offset + 1],
-    //     input[offset + 2],
-    //     input[offset + 3],
-    // ];
-    // let tmp = [
-    //     input[offset + 3],
-    //     input[offset + 2],
-    //     input[offset + 1],
-    //     input[offset + 0],
-    // ];
+fn get_u32_be(input: &[u8], offset: usize) -> u32 {
     u32::from_be_bytes(input[offset..offset+4].try_into().unwrap())
 }
 
-fn get_u32_swapped(input: &[u8], offset: usize) -> u32 {
+fn get_u32_le(input: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(input[offset..offset+4].try_into().unwrap())
 }
 
@@ -415,10 +403,10 @@ fn set_encrypt_key_inner(
         _ => Err("unrecognized keylength")?,
     };
 
-    rk[0] = get_u32(user_key, 0);
-    rk[1] = get_u32(user_key, 4);
-    rk[2] = get_u32(user_key, 8);
-    rk[3] = get_u32(user_key, 12);
+    rk[0] = get_u32_be(user_key, 0);
+    rk[1] = get_u32_be(user_key, 4);
+    rk[2] = get_u32_be(user_key, 8);
+    rk[3] = get_u32_be(user_key, 12);
     let mut rk_offset = 0;
     if user_key.len() == 16 {
         for i in 0..10 {
@@ -441,8 +429,8 @@ fn set_encrypt_key_inner(
         }
         return Ok(());
     }
-    rk[4] = get_u32(user_key, 16);
-    rk[5] = get_u32(user_key, 20);
+    rk[4] = get_u32_be(user_key, 16);
+    rk[5] = get_u32_be(user_key, 20);
     if user_key.len() == 24 {
         let mut rk_offset = 0;
         for i in 0.. {
@@ -470,8 +458,8 @@ fn set_encrypt_key_inner(
         }
         return Ok(());
     }
-    rk[6] = get_u32(user_key, 24);
-    rk[7] = get_u32(user_key, 28);
+    rk[6] = get_u32_be(user_key, 24);
+    rk[7] = get_u32_be(user_key, 28);
     if user_key.len() == 32 {
         let mut rk_offset = 0;
         for i in 0.. {
@@ -573,10 +561,10 @@ pub fn vexriscv_aes_encrypt(input: &[u8], output: &mut [u8], key: &Aes) {
     // We do two rounds per loop
     let mut round_count = key.rounds / 2;
 
-    let mut s0 = get_u32_swapped(input, 0);
-    let mut s1 = get_u32_swapped(input, 4);
-    let mut s2 = get_u32_swapped(input, 8);
-    let mut s3 = get_u32_swapped(input, 12);
+    let mut s0 = get_u32_le(input, 0);
+    let mut s1 = get_u32_le(input, 4);
+    let mut s2 = get_u32_le(input, 8);
+    let mut s3 = get_u32_le(input, 12);
 
     let mut t0 = rk[0];
     let mut t1 = rk[1];
@@ -684,10 +672,10 @@ pub fn vexriscv_aes_decrypt(input: &[u8], output: &mut [u8], key: &Aes) {
     // We do two rounds per loop
     let mut round_count = key.rounds / 2;
 
-    let mut s0 = get_u32_swapped(input, 0);
-    let mut s1 = get_u32_swapped(input, 4);
-    let mut s2 = get_u32_swapped(input, 8);
-    let mut s3 = get_u32_swapped(input, 12);
+    let mut s0 = get_u32_le(input, 0);
+    let mut s1 = get_u32_le(input, 4);
+    let mut s2 = get_u32_le(input, 8);
+    let mut s3 = get_u32_le(input, 12);
 
     let mut t0 = rk[0];
     let mut t1 = rk[1];
