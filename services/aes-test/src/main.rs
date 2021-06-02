@@ -37,10 +37,10 @@ impl<'a, 'b, 'c> AesTest<'a, 'b, 'c> {
         aes::set_encrypt_key(&self.key, &mut aes_key).unwrap();
         log::info!("Running encryption");
         aes::vexriscv_aes_encrypt(&self.plaintext, &mut output, &aes_key);
-        log::info!("Plaintext: {:?}", self.plaintext);
-        log::info!("Key:       {:?}", self.key);
-        log::info!("Reference: {:?}", self.ciphertext);
-        log::info!("Result:    {:?}", output);
+        log::info!("Key:       {:x?}", self.key);
+        log::info!("Plaintext: {:x?}", self.plaintext);
+        log::info!("Reference: {:x?}", self.ciphertext);
+        log::info!("Result:    {:x?}", output);
         if self.ciphertext.len() != output.len() {
             Err("encrypt error: ciphertext and output lengths do not match")?;
         }
@@ -99,13 +99,13 @@ fn aes_test_main() -> ! {
             &hex!("f5d3d58503b9699de785895a96fdbaaf"),
         ),
         AesTest::new_ecb(
+            &hex!("2b7e151628aed2a6abf7158809cf4f3c"),
             &hex!("30c81c46a35ce411e5fbc1191a0a52ef"),
-            &hex!("ae2d8a571e03ac9c9eb76fac45af8e51"),
             &hex!("43b1cd7f598ece23881b00e3ed030688"),
         ),
         AesTest::new_ecb(
+            &hex!("2b7e151628aed2a6abf7158809cf4f3c"),
             &hex!("f69f2445df4f9b17ad2b417be66c3710"),
-            &hex!("ae2d8a571e03ac9c9eb76fac45af8e51"),
             &hex!("7b0c785e27e8ad3f8223207104725dd4"),
         ),
 
