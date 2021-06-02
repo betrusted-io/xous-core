@@ -449,27 +449,33 @@ fn set_encrypt_key_inner(
     }
     rk[4] = get_u32(user_key, 16);
     rk[5] = get_u32(user_key, 20);
-    // if (bits == 192) {
-    // 	while (1) {
-    // 		temp = rk[5];
-    // 		rk[6] = rk[ 0] ^
-    // 		    (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
-    // 		    (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
-    // 		    (Te0[(temp) & 0xff] & 0x0000ff00) ^
-    // 		    (Te1[(temp >> 24)] & 0x000000ff) ^
-    // 		    rcon[i];
-    // 		rk[7] = rk[1] ^ rk[6];
-    // 		rk[8] = rk[2] ^ rk[7];
-    // 		rk[9] = rk[3] ^ rk[8];
-    // 		if (++i == 8) {
-    // 		    vexriscv_aes_swap_key(key->rd_key);
-    // 			return 0;
-    // 		}
-    // 		rk[10] = rk[4] ^ rk[9];
-    // 		rk[11] = rk[5] ^ rk[10];
-    // 		rk += 6;
-    // 	}
-    // }
+    if user_key.len() == 24 {
+        let mut rk_offset = 0;
+        for i in 0.. {
+            let temp = rk[5 + rk_offset] as usize;
+            rk[6 + rk_offset] = rk[0 + rk_offset]
+                ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
+                ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
+                ^ (TE0[(temp) & 0xff] & 0x0000ff00)
+                ^ (TE1[(temp >> 24)] & 0x000000ff)
+                ^ RCON[i];
+            rk[7 + rk_offset] = rk[1 + rk_offset] ^ rk[6 + rk_offset];
+            rk[8 + rk_offset] = rk[2 + rk_offset] ^ rk[7 + rk_offset];
+            rk[9 + rk_offset] = rk[3 + rk_offset] ^ rk[8 + rk_offset];
+            if i == 7 {
+                break;
+            }
+            rk[10 + rk_offset] = rk[4 + rk_offset] ^ rk[9 + rk_offset];
+            rk[11 + rk_offset] = rk[5 + rk_offset] ^ rk[10 + rk_offset];
+            rk_offset += 6;
+        }
+        if swap_final {
+            for value in &mut key.key {
+                *value = value.swap_bytes();
+            }
+        }
+        return Ok(());
+    }
     rk[6] = get_u32(user_key, 24);
     rk[7] = get_u32(user_key, 28);
     if user_key.len() == 32 {
