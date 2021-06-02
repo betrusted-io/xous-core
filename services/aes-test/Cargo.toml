@@ -1,0 +1,16 @@
+[package]
+authors = ["Sean Cross <sean@xobs.io>"]
+description = "Program to test AES hardware support"
+edition = "2018"
+name = "aes-test"
+version = "0.1.0"
+
+[dependencies]
+log = "0.4"
+log-server = {path = "../log-server"}
+hex-literal = "0.3"
+xous = {path = "../../xous-rs"}
+
+[features]
+default = []
+low_level_tests = []

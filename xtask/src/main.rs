@@ -99,10 +99,16 @@ fn try_main() -> Result<(), DynError> {
         "com",
         "susres",
     ];
+    let aestest_pkgs = [
+            "ticktimer-server",
+            "log-server",
+            "aes-test",
+    ];
     let task = env::args().nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
+        Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
