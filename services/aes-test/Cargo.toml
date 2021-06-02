@@ -12,3 +12,4 @@ xous = {path = "../../xous-rs"}
 
 [features]
 default = []
+low_level_tests = []
