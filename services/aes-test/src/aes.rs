@@ -423,6 +423,14 @@ fn set_u32(output: &mut [u8], offset: usize, value: u32) {
 }
 
 pub fn set_encrypt_key(user_key: &[u8], key: &mut Aes) -> Result<(), &'static str> {
+    set_encrypt_key_inner(user_key, key, true)
+}
+
+fn set_encrypt_key_inner(
+    user_key: &[u8],
+    key: &mut Aes,
+    swap_final: bool,
+) -> Result<(), &'static str> {
     let rk = &mut key.key;
 
     key.rounds = match user_key.len() {
@@ -451,8 +459,10 @@ pub fn set_encrypt_key(user_key: &[u8], key: &mut Aes) -> Result<(), &'static st
             rk[7 + rk_offset] = rk[3 + rk_offset] ^ rk[6 + rk_offset];
             rk_offset += 4;
         }
-        for value in &mut key.key {
-            *value = value.swap_bytes();
+        if swap_final {
+            for value in &mut key.key {
+                *value = value.swap_bytes();
+            }
         }
         return Ok(());
     }
@@ -484,38 +494,96 @@ pub fn set_encrypt_key(user_key: &[u8], key: &mut Aes) -> Result<(), &'static st
     if user_key.len() == 32 {
         let mut rk_offset = 0;
         for i in 0.. {
-    		let temp = rk[7 + rk_offset] as usize;
-    		rk[8 + rk_offset] = rk[0 + rk_offset] ^
-    		    (TE2[(temp >> 16) & 0xff] & 0xff000000) ^
-    		    (TE3[(temp >> 8) & 0xff] & 0x00ff0000) ^
-    		    (TE0[(temp) & 0xff] & 0x0000ff00) ^
-    		    (TE1[(temp >> 24)] & 0x000000ff) ^
-    		    RCON[i];
-    		rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
-    		rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
-    		rk[11 + rk_offset] = rk[3 + rk_offset] ^ rk[10 + rk_offset];
+            let temp = rk[7 + rk_offset] as usize;
+            rk[8 + rk_offset] = rk[0 + rk_offset]
+                ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
+                ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
+                ^ (TE0[(temp) & 0xff] & 0x0000ff00)
+                ^ (TE1[(temp >> 24)] & 0x000000ff)
+                ^ RCON[i];
+            rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
+            rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
+            rk[11 + rk_offset] = rk[3 + rk_offset] ^ rk[10 + rk_offset];
 
             if i == 6 {
                 break;
             }
             let temp = rk[11 + rk_offset] as usize;
-    		rk[12 + rk_offset] = rk[4 + rk_offset] ^
-    		    (TE2[(temp >> 24)] & 0xff000000) ^
-    		    (TE3[(temp >> 16) & 0xff] & 0x00ff0000) ^
-    		    (TE0[(temp >> 8) & 0xff] & 0x0000ff00) ^
-    		    (TE1[(temp) & 0xff] & 0x000000ff);
-    		rk[13 + rk_offset] = rk[5 + rk_offset] ^ rk[12 + rk_offset];
-    		rk[14 + rk_offset] = rk[6 + rk_offset] ^ rk[13 + rk_offset];
-    		rk[15 + rk_offset] = rk[7 + rk_offset] ^ rk[14 + rk_offset];
+            rk[12 + rk_offset] = rk[4 + rk_offset]
+                ^ (TE2[(temp >> 24)] & 0xff000000)
+                ^ (TE3[(temp >> 16) & 0xff] & 0x00ff0000)
+                ^ (TE0[(temp >> 8) & 0xff] & 0x0000ff00)
+                ^ (TE1[(temp) & 0xff] & 0x000000ff);
+            rk[13 + rk_offset] = rk[5 + rk_offset] ^ rk[12 + rk_offset];
+            rk[14 + rk_offset] = rk[6 + rk_offset] ^ rk[13 + rk_offset];
+            rk[15 + rk_offset] = rk[7 + rk_offset] ^ rk[14 + rk_offset];
 
-    		rk_offset += 8;
-    	}
-        for value in &mut key.key {
-            *value = value.swap_bytes();
+            rk_offset += 8;
+        }
+        if swap_final {
+            for value in &mut key.key {
+                *value = value.swap_bytes();
+            }
         }
         return Ok(());
     }
     unreachable!();
+}
+
+pub fn set_decrypt_key(user_key: &[u8], key: &mut Aes) -> Result<(), &'static str> {
+    set_encrypt_key_inner(user_key, key, false)?;
+    let rk = &mut key.key;
+
+    /* invert the order of the round keys: */
+    let mut i = 0;
+    let mut j = 4 * key.rounds;
+    while i < j {
+        let temp = rk[i];
+        rk[i] = rk[j];
+        rk[j] = temp;
+
+        let temp = rk[i + 1];
+        rk[i + 1] = rk[j + 1];
+        rk[j + 1] = temp;
+
+        let temp = rk[i + 2];
+        rk[i + 2] = rk[j + 2];
+        rk[j + 2] = temp;
+
+        let temp = rk[i + 3];
+        rk[i + 3] = rk[j + 3];
+        rk[j + 3] = temp;
+
+        i += 4;
+        j -= 4;
+    }
+
+    /* apply the inverse MixColumn transform to all round keys but the first and the last: */
+    let mut rk_offset = 4;
+    for _ in 1..key.rounds {
+        rk[0 + rk_offset] = TD0[TE1[(rk[0 + rk_offset] as usize >> 24)] as usize & 0xff]
+            ^ TD1[TE1[(rk[0 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
+            ^ TD2[TE1[(rk[0 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
+            ^ TD3[TE1[(rk[0 + rk_offset] as usize) & 0xff] as usize & 0xff];
+        rk[1 + rk_offset] = TD0[TE1[(rk[1 + rk_offset] as usize >> 24)] as usize & 0xff]
+            ^ TD1[TE1[(rk[1 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
+            ^ TD2[TE1[(rk[1 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
+            ^ TD3[TE1[(rk[1 + rk_offset] as usize) & 0xff] as usize & 0xff];
+        rk[2 + rk_offset] = TD0[TE1[(rk[2 + rk_offset] as usize >> 24)] as usize & 0xff]
+            ^ TD1[TE1[(rk[2 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
+            ^ TD2[TE1[(rk[2 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
+            ^ TD3[TE1[(rk[2 + rk_offset] as usize) & 0xff] as usize & 0xff];
+        rk[3 + rk_offset] = TD0[TE1[(rk[3 + rk_offset] as usize >> 24)] as usize & 0xff]
+            ^ TD1[TE1[(rk[3 + rk_offset] as usize >> 16) & 0xff] as usize & 0xff]
+            ^ TD2[TE1[(rk[3 + rk_offset] as usize >> 8) & 0xff] as usize & 0xff]
+            ^ TD3[TE1[(rk[3 + rk_offset] as usize) & 0xff] as usize & 0xff];
+        rk_offset += 4;
+    }
+
+    for value in &mut key.key {
+        *value = value.swap_bytes();
+    }
+    Ok(())
 }
 
 pub fn vexriscv_aes_encrypt(input: &[u8], output: &mut [u8], key: &Aes) {
@@ -622,6 +690,117 @@ pub fn vexriscv_aes_encrypt(input: &[u8], output: &mut [u8], key: &Aes) {
     s1 = aes_enc_round_last(s1, t0, AesId::AesId3);
     s2 = aes_enc_round_last(s2, t1, AesId::AesId3);
     s3 = aes_enc_round_last(s3, t2, AesId::AesId3);
+
+    set_u32(output, 0, s0);
+    set_u32(output, 4, s1);
+    set_u32(output, 8, s2);
+    set_u32(output, 12, s3);
+}
+
+pub fn vexriscv_aes_decrypt(input: &[u8], output: &mut [u8], key: &Aes) {
+    let rk = key.key;
+
+    // We do two rounds per loop
+    let mut round_count = key.rounds / 2;
+
+    let mut s0 = get_u32_swapped(input, 0);
+    let mut s1 = get_u32_swapped(input, 4);
+    let mut s2 = get_u32_swapped(input, 8);
+    let mut s3 = get_u32_swapped(input, 12);
+
+    let mut t0 = rk[0];
+    let mut t1 = rk[1];
+    let mut t2 = rk[2];
+    let mut t3 = rk[3];
+
+    s0 ^= t0;
+    s1 ^= t1;
+    s2 ^= t2;
+    s3 ^= t3;
+
+    let mut rk_offset = 0;
+    loop {
+        t0 = rk[rk_offset + 4];
+        t1 = rk[rk_offset + 5];
+        t2 = rk[rk_offset + 6];
+        t3 = rk[rk_offset + 7];
+
+        t0 = aes_dec_round(t0, s0, AesId::AesId0);
+        t1 = aes_dec_round(t1, s1, AesId::AesId0);
+        t2 = aes_dec_round(t2, s2, AesId::AesId0);
+        t3 = aes_dec_round(t3, s3, AesId::AesId0);
+
+        t0 = aes_dec_round(t0, s3, AesId::AesId1);
+        t1 = aes_dec_round(t1, s0, AesId::AesId1);
+        t2 = aes_dec_round(t2, s1, AesId::AesId1);
+        t3 = aes_dec_round(t3, s2, AesId::AesId1);
+
+        t0 = aes_dec_round(t0, s2, AesId::AesId2);
+        t1 = aes_dec_round(t1, s3, AesId::AesId2);
+        t2 = aes_dec_round(t2, s0, AesId::AesId2);
+        t3 = aes_dec_round(t3, s1, AesId::AesId2);
+
+        t0 = aes_dec_round(t0, s1, AesId::AesId3);
+        t1 = aes_dec_round(t1, s2, AesId::AesId3);
+        t2 = aes_dec_round(t2, s3, AesId::AesId3);
+        t3 = aes_dec_round(t3, s0, AesId::AesId3);
+
+        rk_offset += 8;
+        round_count -= 1;
+        if round_count == 0 {
+            break;
+        }
+
+        s0 = rk[rk_offset + 0];
+        s1 = rk[rk_offset + 1];
+        s2 = rk[rk_offset + 2];
+        s3 = rk[rk_offset + 3];
+
+        s0 = aes_dec_round(s0, t0, AesId::AesId0);
+        s1 = aes_dec_round(s1, t1, AesId::AesId0);
+        s2 = aes_dec_round(s2, t2, AesId::AesId0);
+        s3 = aes_dec_round(s3, t3, AesId::AesId0);
+
+        s0 = aes_dec_round(s0, t3, AesId::AesId1);
+        s1 = aes_dec_round(s1, t0, AesId::AesId1);
+        s2 = aes_dec_round(s2, t1, AesId::AesId1);
+        s3 = aes_dec_round(s3, t2, AesId::AesId1);
+
+        s0 = aes_dec_round(s0, t2, AesId::AesId2);
+        s1 = aes_dec_round(s1, t3, AesId::AesId2);
+        s2 = aes_dec_round(s2, t0, AesId::AesId2);
+        s3 = aes_dec_round(s3, t1, AesId::AesId2);
+
+        s0 = aes_dec_round(s0, t1, AesId::AesId3);
+        s1 = aes_dec_round(s1, t2, AesId::AesId3);
+        s2 = aes_dec_round(s2, t3, AesId::AesId3);
+        s3 = aes_dec_round(s3, t0, AesId::AesId3);
+    }
+
+    s0 = rk[rk_offset + 0];
+    s1 = rk[rk_offset + 1];
+    s2 = rk[rk_offset + 2];
+    s3 = rk[rk_offset + 3];
+
+    s0 = aes_dec_round_last(s0, t0, AesId::AesId0);
+    s1 = aes_dec_round_last(s1, t1, AesId::AesId0);
+    s2 = aes_dec_round_last(s2, t2, AesId::AesId0);
+    s3 = aes_dec_round_last(s3, t3, AesId::AesId0);
+
+    s0 = aes_dec_round_last(s0, t3, AesId::AesId1);
+    s1 = aes_dec_round_last(s1, t0, AesId::AesId1);
+    s2 = aes_dec_round_last(s2, t1, AesId::AesId1);
+    s3 = aes_dec_round_last(s3, t2, AesId::AesId1);
+
+    s0 = aes_dec_round_last(s0, t2, AesId::AesId2);
+    s1 = aes_dec_round_last(s1, t3, AesId::AesId2);
+    s2 = aes_dec_round_last(s2, t0, AesId::AesId2);
+    s3 = aes_dec_round_last(s3, t1, AesId::AesId2);
+
+    s0 = aes_dec_round_last(s0, t1, AesId::AesId3);
+    s1 = aes_dec_round_last(s1, t2, AesId::AesId3);
+    s2 = aes_dec_round_last(s2, t3, AesId::AesId3);
+    s3 = aes_dec_round_last(s3, t0, AesId::AesId3);
 
     set_u32(output, 0, s0);
     set_u32(output, 4, s1);
