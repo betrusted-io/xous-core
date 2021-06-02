@@ -1,4 +1,4 @@
-const Te0: [u32; 256] = [
+const TE0: [u32; 256] = [
     0xc66363a5, 0xf87c7c84, 0xee777799, 0xf67b7b8d, 0xfff2f20d, 0xd66b6bbd, 0xde6f6fb1, 0x91c5c554,
     0x60303050, 0x02010103, 0xce6767a9, 0x562b2b7d, 0xe7fefe19, 0xb5d7d762, 0x4dababe6, 0xec76769a,
     0x8fcaca45, 0x1f82829d, 0x89c9c940, 0xfa7d7d87, 0xeffafa15, 0xb25959eb, 0x8e4747c9, 0xfbf0f00b,
@@ -33,7 +33,7 @@ const Te0: [u32; 256] = [
     0x824141c3, 0x299999b0, 0x5a2d2d77, 0x1e0f0f11, 0x7bb0b0cb, 0xa85454fc, 0x6dbbbbd6, 0x2c16163a,
 ];
 
-const Te1: [u32; 256] = [
+const TE1: [u32; 256] = [
     0xa5c66363, 0x84f87c7c, 0x99ee7777, 0x8df67b7b, 0x0dfff2f2, 0xbdd66b6b, 0xb1de6f6f, 0x5491c5c5,
     0x50603030, 0x03020101, 0xa9ce6767, 0x7d562b2b, 0x19e7fefe, 0x62b5d7d7, 0xe64dabab, 0x9aec7676,
     0x458fcaca, 0x9d1f8282, 0x4089c9c9, 0x87fa7d7d, 0x15effafa, 0xebb25959, 0xc98e4747, 0x0bfbf0f0,
@@ -67,7 +67,8 @@ const Te1: [u32; 256] = [
     0x8f038c8c, 0xf859a1a1, 0x80098989, 0x171a0d0d, 0xda65bfbf, 0x31d7e6e6, 0xc6844242, 0xb8d06868,
     0xc3824141, 0xb0299999, 0x775a2d2d, 0x111e0f0f, 0xcb7bb0b0, 0xfca85454, 0xd66dbbbb, 0x3a2c1616,
 ];
-const Te2: [u32; 256] = [
+
+const TE2: [u32; 256] = [
     0x63a5c663, 0x7c84f87c, 0x7799ee77, 0x7b8df67b, 0xf20dfff2, 0x6bbdd66b, 0x6fb1de6f, 0xc55491c5,
     0x30506030, 0x01030201, 0x67a9ce67, 0x2b7d562b, 0xfe19e7fe, 0xd762b5d7, 0xabe64dab, 0x769aec76,
     0xca458fca, 0x829d1f82, 0xc94089c9, 0x7d87fa7d, 0xfa15effa, 0x59ebb259, 0x47c98e47, 0xf00bfbf0,
@@ -101,7 +102,8 @@ const Te2: [u32; 256] = [
     0x8c8f038c, 0xa1f859a1, 0x89800989, 0x0d171a0d, 0xbfda65bf, 0xe631d7e6, 0x42c68442, 0x68b8d068,
     0x41c38241, 0x99b02999, 0x2d775a2d, 0x0f111e0f, 0xb0cb7bb0, 0x54fca854, 0xbbd66dbb, 0x163a2c16,
 ];
-const Te3: [u32; 256] = [
+
+const TE3: [u32; 256] = [
     0x6363a5c6, 0x7c7c84f8, 0x777799ee, 0x7b7b8df6, 0xf2f20dff, 0x6b6bbdd6, 0x6f6fb1de, 0xc5c55491,
     0x30305060, 0x01010302, 0x6767a9ce, 0x2b2b7d56, 0xfefe19e7, 0xd7d762b5, 0xababe64d, 0x76769aec,
     0xcaca458f, 0x82829d1f, 0xc9c94089, 0x7d7d87fa, 0xfafa15ef, 0x5959ebb2, 0x4747c98e, 0xf0f00bfb,
@@ -136,7 +138,7 @@ const Te3: [u32; 256] = [
     0x4141c382, 0x9999b029, 0x2d2d775a, 0x0f0f111e, 0xb0b0cb7b, 0x5454fca8, 0xbbbbd66d, 0x16163a2c,
 ];
 
-const Td0: [u32; 256] = [
+const TD0: [u32; 256] = [
     0x51f4a750, 0x7e416553, 0x1a17a4c3, 0x3a275e96, 0x3bab6bcb, 0x1f9d45f1, 0xacfa58ab, 0x4be30393,
     0x2030fa55, 0xad766df6, 0x88cc7691, 0xf5024c25, 0x4fe5d7fc, 0xc52acbd7, 0x26354480, 0xb562a38f,
     0xdeb15a49, 0x25ba1b67, 0x45ea0e98, 0x5dfec0e1, 0xc32f7502, 0x814cf012, 0x8d4697a3, 0x6bd3f9c6,
@@ -170,7 +172,8 @@ const Td0: [u32; 256] = [
     0xcaaff381, 0xb968c43e, 0x3824342c, 0xc2a3405f, 0x161dc372, 0xbce2250c, 0x283c498b, 0xff0d9541,
     0x39a80171, 0x080cb3de, 0xd8b4e49c, 0x6456c190, 0x7bcb8461, 0xd532b670, 0x486c5c74, 0xd0b85742,
 ];
-const Td1: [u32; 256] = [
+
+const TD1: [u32; 256] = [
     0x5051f4a7, 0x537e4165, 0xc31a17a4, 0x963a275e, 0xcb3bab6b, 0xf11f9d45, 0xabacfa58, 0x934be303,
     0x552030fa, 0xf6ad766d, 0x9188cc76, 0x25f5024c, 0xfc4fe5d7, 0xd7c52acb, 0x80263544, 0x8fb562a3,
     0x49deb15a, 0x6725ba1b, 0x9845ea0e, 0xe15dfec0, 0x02c32f75, 0x12814cf0, 0xa38d4697, 0xc66bd3f9,
@@ -204,7 +207,8 @@ const Td1: [u32; 256] = [
     0x81caaff3, 0x3eb968c4, 0x2c382434, 0x5fc2a340, 0x72161dc3, 0x0cbce225, 0x8b283c49, 0x41ff0d95,
     0x7139a801, 0xde080cb3, 0x9cd8b4e4, 0x906456c1, 0x617bcb84, 0x70d532b6, 0x74486c5c, 0x42d0b857,
 ];
-const Td2: [u32; 256] = [
+
+const TD2: [u32; 256] = [
     0xa75051f4, 0x65537e41, 0xa4c31a17, 0x5e963a27, 0x6bcb3bab, 0x45f11f9d, 0x58abacfa, 0x03934be3,
     0xfa552030, 0x6df6ad76, 0x769188cc, 0x4c25f502, 0xd7fc4fe5, 0xcbd7c52a, 0x44802635, 0xa38fb562,
     0x5a49deb1, 0x1b6725ba, 0x0e9845ea, 0xc0e15dfe, 0x7502c32f, 0xf012814c, 0x97a38d46, 0xf9c66bd3,
@@ -238,7 +242,7 @@ const Td2: [u32; 256] = [
     0xf381caaf, 0xc43eb968, 0x342c3824, 0x405fc2a3, 0xc372161d, 0x250cbce2, 0x498b283c, 0x9541ff0d,
     0x017139a8, 0xb3de080c, 0xe49cd8b4, 0xc1906456, 0x84617bcb, 0xb670d532, 0x5c74486c, 0x5742d0b8,
 ];
-const Td3: [u32; 256] = [
+const TD3: [u32; 256] = [
     0xf4a75051, 0x4165537e, 0x17a4c31a, 0x275e963a, 0xab6bcb3b, 0x9d45f11f, 0xfa58abac, 0xe303934b,
     0x30fa5520, 0x766df6ad, 0xcc769188, 0x024c25f5, 0xe5d7fc4f, 0x2acbd7c5, 0x35448026, 0x62a38fb5,
     0xb15a49de, 0xba1b6725, 0xea0e9845, 0xfec0e15d, 0x2f7502c3, 0x4cf01281, 0x4697a38d, 0xd3f9c66b,
@@ -273,7 +277,7 @@ const Td3: [u32; 256] = [
     0xa8017139, 0x0cb3de08, 0xb4e49cd8, 0x56c19064, 0xcb84617b, 0x32b670d5, 0x6c5c7448, 0xb85742d0,
 ];
 
-const Td4: [u8; 256] = [
+const TD4: [u8; 256] = [
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
     0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3, 0x4e,
@@ -292,111 +296,335 @@ const Td4: [u8; 256] = [
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 ];
 
-const Rcon: [u32; 10] = [
+const RCON: [u32; 10] = [
     0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000,
     0x1B000000,
     0x36000000, /* for 128-bit blocks, Rijndael never uses more than 10 rcon values */
 ];
 
-const MAXNR: usize = 14;
-pub struct Key {
-    key: [u32; 4 * (MAXNR + 1)],
+#[derive(Clone, Copy, Debug)]
+enum AesId {
+    AesId0 = 0,
+    AesId1 = 1,
+    AesId2 = 2,
+    AesId3 = 3,
+}
+
+#[derive(Debug)]
+pub struct Aes {
+    // Why does this need to be so large?
+    key: [u32; 60],
     rounds: usize,
 }
 
-pub fn
-set_encrypt_key(user_key: [u8; 32], bits: usize, key: &mut Key) -> usize
-{
-	u32 *rk;
-	int i = 0;
-	u32 temp;
+impl Default for Aes {
+    fn default() -> Self {
+        Aes {
+            key: [0u32; 60],
+            rounds: 0,
+        }
+    }
+}
 
-	let rk = &mut key.key;
+fn aes_enc_round(arg1: u32, arg2: u32, id: AesId) -> u32 {
+    extern "C" {
+        fn vex_aes_enc_id_0(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_1(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_2(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_3(arg1: u32, arg2: u32) -> u32;
+    }
+    match id {
+        AesId::AesId0 => unsafe { vex_aes_enc_id_0(arg1, arg2) },
+        AesId::AesId1 => unsafe { vex_aes_enc_id_1(arg1, arg2) },
+        AesId::AesId2 => unsafe { vex_aes_enc_id_2(arg1, arg2) },
+        AesId::AesId3 => unsafe { vex_aes_enc_id_3(arg1, arg2) },
+    }
+}
 
-    key.rounds = match bits {
-        128 => 10,
-        192 => 12,
-        256 => 14,
-        _ => return -2,
+fn aes_enc_round_last(arg1: u32, arg2: u32, id: AesId) -> u32 {
+    extern "C" {
+        fn vex_aes_enc_id_last_0(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_last_1(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_last_2(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_enc_id_last_3(arg1: u32, arg2: u32) -> u32;
+    }
+    match id {
+        AesId::AesId0 => unsafe { vex_aes_enc_id_last_0(arg1, arg2) },
+        AesId::AesId1 => unsafe { vex_aes_enc_id_last_1(arg1, arg2) },
+        AesId::AesId2 => unsafe { vex_aes_enc_id_last_2(arg1, arg2) },
+        AesId::AesId3 => unsafe { vex_aes_enc_id_last_3(arg1, arg2) },
+    }
+}
+
+fn aes_dec_round(arg1: u32, arg2: u32, id: AesId) -> u32 {
+    extern "C" {
+        fn vex_aes_dec_id_0(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_1(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_2(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_3(arg1: u32, arg2: u32) -> u32;
+    }
+    match id {
+        AesId::AesId0 => unsafe { vex_aes_dec_id_0(arg1, arg2) },
+        AesId::AesId1 => unsafe { vex_aes_dec_id_1(arg1, arg2) },
+        AesId::AesId2 => unsafe { vex_aes_dec_id_2(arg1, arg2) },
+        AesId::AesId3 => unsafe { vex_aes_dec_id_3(arg1, arg2) },
+    }
+}
+
+fn aes_dec_round_last(arg1: u32, arg2: u32, id: AesId) -> u32 {
+    extern "C" {
+        fn vex_aes_dec_id_last_0(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_last_1(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_last_2(arg1: u32, arg2: u32) -> u32;
+        fn vex_aes_dec_id_last_3(arg1: u32, arg2: u32) -> u32;
+    }
+    match id {
+        AesId::AesId0 => unsafe { vex_aes_dec_id_last_0(arg1, arg2) },
+        AesId::AesId1 => unsafe { vex_aes_dec_id_last_1(arg1, arg2) },
+        AesId::AesId2 => unsafe { vex_aes_dec_id_last_2(arg1, arg2) },
+        AesId::AesId3 => unsafe { vex_aes_dec_id_last_3(arg1, arg2) },
+    }
+}
+
+// use core::convert::TryInto;
+
+fn get_u32(input: &[u8], offset: usize) -> u32 {
+    // let tmp = [
+    //     input[offset + 0],
+    //     input[offset + 1],
+    //     input[offset + 2],
+    //     input[offset + 3],
+    // ];
+    let tmp = [
+        input[offset + 3],
+        input[offset + 2],
+        input[offset + 1],
+        input[offset + 0],
+    ];
+    u32::from_le_bytes(tmp)
+}
+
+fn get_u32_swapped(input: &[u8], offset: usize) -> u32 {
+    let tmp = [
+        input[offset + 0],
+        input[offset + 1],
+        input[offset + 2],
+        input[offset + 3],
+    ];
+    u32::from_le_bytes(tmp)
+}
+
+fn set_u32(output: &mut [u8], offset: usize, value: u32) {
+    let tmp = value.to_le_bytes();
+    output[offset + 0] = tmp[0];
+    output[offset + 1] = tmp[1];
+    output[offset + 2] = tmp[2];
+    output[offset + 3] = tmp[3];
+}
+
+pub fn set_encrypt_key(user_key: &[u8], key: &mut Aes) -> Result<(), &'static str> {
+    let rk = &mut key.key;
+
+    key.rounds = match user_key.len() {
+        16 => 10,
+        24 => 12,
+        32 => 14,
+        _ => Err("unrecognized keylength")?,
     };
 
-	rk[0] = GETU32(user_key);
-	rk[1] = GETU32(user_key + 4);
-	rk[2] = GETU32(user_key + 8);
-	rk[3] = GETU32(user_key + 12);
-	if (bits == 128) {
-		while (1) {
-			temp = rk[3];
-			rk[4] = rk[0] ^
-			    (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
-			    (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
-			    (Te0[(temp) & 0xff] & 0x0000ff00) ^
-			    (Te1[(temp >> 24)] & 0x000000ff) ^
-			    rcon[i];
-			rk[5] = rk[1] ^ rk[4];
-			rk[6] = rk[2] ^ rk[5];
-			rk[7] = rk[3] ^ rk[6];
-			if (++i == 10) {
-			    vexriscv_aes_swap_key(key->rd_key);
-				return 0;
-			}
-			rk += 4;
-		}
-	}
-    panic!("Unsupported number of bits");
-	// rk[4] = GETU32(userKey + 16);
-	// rk[5] = GETU32(userKey + 20);
-	// if (bits == 192) {
-	// 	while (1) {
-	// 		temp = rk[5];
-	// 		rk[6] = rk[ 0] ^
-	// 		    (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
-	// 		    (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
-	// 		    (Te0[(temp) & 0xff] & 0x0000ff00) ^
-	// 		    (Te1[(temp >> 24)] & 0x000000ff) ^
-	// 		    rcon[i];
-	// 		rk[7] = rk[1] ^ rk[6];
-	// 		rk[8] = rk[2] ^ rk[7];
-	// 		rk[9] = rk[3] ^ rk[8];
-	// 		if (++i == 8) {
-	// 		    vexriscv_aes_swap_key(key->rd_key);
-	// 			return 0;
-	// 		}
-	// 		rk[10] = rk[4] ^ rk[9];
-	// 		rk[11] = rk[5] ^ rk[10];
-	// 		rk += 6;
-	// 	}
-	// }
-	// rk[6] = GETU32(userKey + 24);
-	// rk[7] = GETU32(userKey + 28);
-	// if (bits == 256) {
-	// 	while (1) {
-	// 		temp = rk[7];
-	// 		rk[8] = rk[0] ^
-	// 		    (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
-	// 		    (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
-	// 		    (Te0[(temp) & 0xff] & 0x0000ff00) ^
-	// 		    (Te1[(temp >> 24)] & 0x000000ff) ^
-	// 		    rcon[i];
-	// 		rk[9] = rk[1] ^ rk[8];
-	// 		rk[10] = rk[2] ^ rk[9];
-	// 		rk[11] = rk[3] ^ rk[10];
-	// 		if (++i == 7) {
-	// 		    vexriscv_aes_swap_key(key->rd_key);
-	// 			return 0;
-	// 		}
-	// 		temp = rk[11];
-	// 		rk[12] = rk[4] ^
-	// 		    (Te2[(temp >> 24)] & 0xff000000) ^
-	// 		    (Te3[(temp >> 16) & 0xff] & 0x00ff0000) ^
-	// 		    (Te0[(temp >> 8) & 0xff] & 0x0000ff00) ^
-	// 		    (Te1[(temp) & 0xff] & 0x000000ff);
-	// 		rk[13] = rk[5] ^ rk[12];
-	// 		rk[14] = rk[6] ^ rk[13];
-	// 		rk[15] = rk[7] ^ rk[14];
+    rk[0] = get_u32(user_key, 0);
+    rk[1] = get_u32(user_key, 4);
+    rk[2] = get_u32(user_key, 8);
+    rk[3] = get_u32(user_key, 12);
+    let mut rk_offset = 0;
+    if user_key.len() == 16 {
+        for i in 0..10 {
+            let temp = rk[3 + rk_offset] as usize;
+            rk[4 + rk_offset] = rk[0 + rk_offset]
+                ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
+                ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
+                ^ (TE0[(temp) & 0xff] & 0x0000ff00)
+                ^ (TE1[(temp >> 24)] & 0x000000ff)
+                ^ RCON[i];
+            rk[5 + rk_offset] = rk[1 + rk_offset] ^ rk[4 + rk_offset];
+            rk[6 + rk_offset] = rk[2 + rk_offset] ^ rk[5 + rk_offset];
+            rk[7 + rk_offset] = rk[3 + rk_offset] ^ rk[6 + rk_offset];
+            rk_offset += 4;
+        }
+        for value in &mut key.key {
+            *value = value.swap_bytes();
+        }
+        return Ok(());
+    }
+    rk[4] = get_u32(user_key, 16);
+    rk[5] = get_u32(user_key, 20);
+    // if (bits == 192) {
+    // 	while (1) {
+    // 		temp = rk[5];
+    // 		rk[6] = rk[ 0] ^
+    // 		    (Te2[(temp >> 16) & 0xff] & 0xff000000) ^
+    // 		    (Te3[(temp >> 8) & 0xff] & 0x00ff0000) ^
+    // 		    (Te0[(temp) & 0xff] & 0x0000ff00) ^
+    // 		    (Te1[(temp >> 24)] & 0x000000ff) ^
+    // 		    rcon[i];
+    // 		rk[7] = rk[1] ^ rk[6];
+    // 		rk[8] = rk[2] ^ rk[7];
+    // 		rk[9] = rk[3] ^ rk[8];
+    // 		if (++i == 8) {
+    // 		    vexriscv_aes_swap_key(key->rd_key);
+    // 			return 0;
+    // 		}
+    // 		rk[10] = rk[4] ^ rk[9];
+    // 		rk[11] = rk[5] ^ rk[10];
+    // 		rk += 6;
+    // 	}
+    // }
+    rk[6] = get_u32(user_key, 24);
+    rk[7] = get_u32(user_key, 28);
+    if user_key.len() == 32 {
+        let mut rk_offset = 0;
+        for i in 0.. {
+    		let temp = rk[7 + rk_offset] as usize;
+    		rk[8 + rk_offset] = rk[0 + rk_offset] ^
+    		    (TE2[(temp >> 16) & 0xff] & 0xff000000) ^
+    		    (TE3[(temp >> 8) & 0xff] & 0x00ff0000) ^
+    		    (TE0[(temp) & 0xff] & 0x0000ff00) ^
+    		    (TE1[(temp >> 24)] & 0x000000ff) ^
+    		    RCON[i];
+    		rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
+    		rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
+    		rk[11 + rk_offset] = rk[3 + rk_offset] ^ rk[10 + rk_offset];
 
-	// 		rk += 8;
-	// 	}
-	// }
-	return 0;
+            if i == 6 {
+                break;
+            }
+            let temp = rk[11 + rk_offset] as usize;
+    		rk[12 + rk_offset] = rk[4 + rk_offset] ^
+    		    (TE2[(temp >> 24)] & 0xff000000) ^
+    		    (TE3[(temp >> 16) & 0xff] & 0x00ff0000) ^
+    		    (TE0[(temp >> 8) & 0xff] & 0x0000ff00) ^
+    		    (TE1[(temp) & 0xff] & 0x000000ff);
+    		rk[13 + rk_offset] = rk[5 + rk_offset] ^ rk[12 + rk_offset];
+    		rk[14 + rk_offset] = rk[6 + rk_offset] ^ rk[13 + rk_offset];
+    		rk[15 + rk_offset] = rk[7 + rk_offset] ^ rk[14 + rk_offset];
+
+    		rk_offset += 8;
+    	}
+        for value in &mut key.key {
+            *value = value.swap_bytes();
+        }
+        return Ok(());
+    }
+    unreachable!();
+}
+
+pub fn vexriscv_aes_encrypt(input: &[u8], output: &mut [u8], key: &Aes) {
+    let rk = key.key;
+
+    // We do two rounds per loop
+    let mut round_count = key.rounds / 2;
+
+    let mut s0 = get_u32_swapped(input, 0);
+    let mut s1 = get_u32_swapped(input, 4);
+    let mut s2 = get_u32_swapped(input, 8);
+    let mut s3 = get_u32_swapped(input, 12);
+
+    let mut t0 = rk[0];
+    let mut t1 = rk[1];
+    let mut t2 = rk[2];
+    let mut t3 = rk[3];
+
+    s0 ^= t0;
+    s1 ^= t1;
+    s2 ^= t2;
+    s3 ^= t3;
+
+    let mut rk_offset = 0;
+    loop {
+        t0 = rk[rk_offset + 4];
+        t1 = rk[rk_offset + 5];
+        t2 = rk[rk_offset + 6];
+        t3 = rk[rk_offset + 7];
+
+        t0 = aes_enc_round(t0, s0, AesId::AesId0);
+        t1 = aes_enc_round(t1, s1, AesId::AesId0);
+        t2 = aes_enc_round(t2, s2, AesId::AesId0);
+        t3 = aes_enc_round(t3, s3, AesId::AesId0);
+
+        t0 = aes_enc_round(t0, s1, AesId::AesId1);
+        t1 = aes_enc_round(t1, s2, AesId::AesId1);
+        t2 = aes_enc_round(t2, s3, AesId::AesId1);
+        t3 = aes_enc_round(t3, s0, AesId::AesId1);
+
+        t0 = aes_enc_round(t0, s2, AesId::AesId2);
+        t1 = aes_enc_round(t1, s3, AesId::AesId2);
+        t2 = aes_enc_round(t2, s0, AesId::AesId2);
+        t3 = aes_enc_round(t3, s1, AesId::AesId2);
+
+        t0 = aes_enc_round(t0, s3, AesId::AesId3);
+        t1 = aes_enc_round(t1, s0, AesId::AesId3);
+        t2 = aes_enc_round(t2, s1, AesId::AesId3);
+        t3 = aes_enc_round(t3, s2, AesId::AesId3);
+
+        rk_offset += 8;
+        round_count -= 1;
+        if round_count == 0 {
+            break;
+        }
+
+        s0 = rk[rk_offset + 0];
+        s1 = rk[rk_offset + 1];
+        s2 = rk[rk_offset + 2];
+        s3 = rk[rk_offset + 3];
+
+        s0 = aes_enc_round(s0, t0, AesId::AesId0);
+        s1 = aes_enc_round(s1, t1, AesId::AesId0);
+        s2 = aes_enc_round(s2, t2, AesId::AesId0);
+        s3 = aes_enc_round(s3, t3, AesId::AesId0);
+
+        s0 = aes_enc_round(s0, t1, AesId::AesId1);
+        s1 = aes_enc_round(s1, t2, AesId::AesId1);
+        s2 = aes_enc_round(s2, t3, AesId::AesId1);
+        s3 = aes_enc_round(s3, t0, AesId::AesId1);
+
+        s0 = aes_enc_round(s0, t2, AesId::AesId2);
+        s1 = aes_enc_round(s1, t3, AesId::AesId2);
+        s2 = aes_enc_round(s2, t0, AesId::AesId2);
+        s3 = aes_enc_round(s3, t1, AesId::AesId2);
+
+        s0 = aes_enc_round(s0, t3, AesId::AesId3);
+        s1 = aes_enc_round(s1, t0, AesId::AesId3);
+        s2 = aes_enc_round(s2, t1, AesId::AesId3);
+        s3 = aes_enc_round(s3, t2, AesId::AesId3);
+    }
+
+    s0 = rk[rk_offset + 0];
+    s1 = rk[rk_offset + 1];
+    s2 = rk[rk_offset + 2];
+    s3 = rk[rk_offset + 3];
+
+    s0 = aes_enc_round_last(s0, t0, AesId::AesId0);
+    s1 = aes_enc_round_last(s1, t1, AesId::AesId0);
+    s2 = aes_enc_round_last(s2, t2, AesId::AesId0);
+    s3 = aes_enc_round_last(s3, t3, AesId::AesId0);
+
+    s0 = aes_enc_round_last(s0, t1, AesId::AesId1);
+    s1 = aes_enc_round_last(s1, t2, AesId::AesId1);
+    s2 = aes_enc_round_last(s2, t3, AesId::AesId1);
+    s3 = aes_enc_round_last(s3, t0, AesId::AesId1);
+
+    s0 = aes_enc_round_last(s0, t2, AesId::AesId2);
+    s1 = aes_enc_round_last(s1, t3, AesId::AesId2);
+    s2 = aes_enc_round_last(s2, t0, AesId::AesId2);
+    s3 = aes_enc_round_last(s3, t1, AesId::AesId2);
+
+    s0 = aes_enc_round_last(s0, t3, AesId::AesId3);
+    s1 = aes_enc_round_last(s1, t0, AesId::AesId3);
+    s2 = aes_enc_round_last(s2, t1, AesId::AesId3);
+    s3 = aes_enc_round_last(s3, t2, AesId::AesId3);
+
+    set_u32(output, 0, s0);
+    set_u32(output, 4, s1);
+    set_u32(output, 8, s2);
+    set_u32(output, 12, s3);
 }
