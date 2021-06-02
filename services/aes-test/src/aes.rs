@@ -377,6 +377,27 @@ fn get_u32_le(input: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes(input[offset..offset+4].try_into().unwrap())
 }
 
+// Const versions of these functions
+// const fn get_u32_be(input: &[u8], offset: usize) -> u32 {
+//     let tmp = [
+//         input[offset + 3],
+//         input[offset + 2],
+//         input[offset + 1],
+//         input[offset + 0],
+//     ];
+//     u32::from_le_bytes(tmp)
+// }
+
+// const fn get_u32_le(input: &[u8], offset: usize) -> u32 {
+//     let tmp = [
+//         input[offset + 0],
+//         input[offset + 1],
+//         input[offset + 2],
+//         input[offset + 3],
+//     ];
+//     u32::from_le_bytes(tmp)
+// }
+
 fn set_u32(output: &mut [u8], offset: usize, value: u32) {
     let tmp = value.to_le_bytes();
     output[offset + 0] = tmp[0];
@@ -445,7 +466,7 @@ fn set_encrypt_key_inner(
             rk[8 + rk_offset] = rk[2 + rk_offset] ^ rk[7 + rk_offset];
             rk[9 + rk_offset] = rk[3 + rk_offset] ^ rk[8 + rk_offset];
 
-            // Stop midway through the 6th run
+            // Stop midway through the 7th run
             if *rcon == RCON[7] {
                 break;
             }
