@@ -409,14 +409,14 @@ fn set_encrypt_key_inner(
     rk[3] = get_u32_be(user_key, 12);
     let mut rk_offset = 0;
     if user_key.len() == 16 {
-        for i in 0..10 {
+        for rcon in &RCON {
             let temp = rk[3 + rk_offset] as usize;
             rk[4 + rk_offset] = rk[0 + rk_offset]
                 ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
                 ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
                 ^ (TE0[(temp) & 0xff] & 0x0000ff00)
                 ^ (TE1[(temp >> 24)] & 0x000000ff)
-                ^ RCON[i];
+                ^ rcon;
             rk[5 + rk_offset] = rk[1 + rk_offset] ^ rk[4 + rk_offset];
             rk[6 + rk_offset] = rk[2 + rk_offset] ^ rk[5 + rk_offset];
             rk[7 + rk_offset] = rk[3 + rk_offset] ^ rk[6 + rk_offset];
@@ -429,24 +429,27 @@ fn set_encrypt_key_inner(
         }
         return Ok(());
     }
+
     rk[4] = get_u32_be(user_key, 16);
     rk[5] = get_u32_be(user_key, 20);
     if user_key.len() == 24 {
-        let mut rk_offset = 0;
-        for i in 0.. {
+        for rcon in &RCON {
             let temp = rk[5 + rk_offset] as usize;
             rk[6 + rk_offset] = rk[0 + rk_offset]
                 ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
                 ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
                 ^ (TE0[(temp) & 0xff] & 0x0000ff00)
                 ^ (TE1[(temp >> 24)] & 0x000000ff)
-                ^ RCON[i];
+                ^ rcon;
             rk[7 + rk_offset] = rk[1 + rk_offset] ^ rk[6 + rk_offset];
             rk[8 + rk_offset] = rk[2 + rk_offset] ^ rk[7 + rk_offset];
             rk[9 + rk_offset] = rk[3 + rk_offset] ^ rk[8 + rk_offset];
-            if i == 7 {
+
+            // Stop midway through the 6th run
+            if *rcon == RCON[7] {
                 break;
             }
+
             rk[10 + rk_offset] = rk[4 + rk_offset] ^ rk[9 + rk_offset];
             rk[11 + rk_offset] = rk[5 + rk_offset] ^ rk[10 + rk_offset];
             rk_offset += 6;
@@ -458,25 +461,28 @@ fn set_encrypt_key_inner(
         }
         return Ok(());
     }
+
     rk[6] = get_u32_be(user_key, 24);
     rk[7] = get_u32_be(user_key, 28);
     if user_key.len() == 32 {
         let mut rk_offset = 0;
-        for i in 0.. {
+        for rcon in &RCON {
             let temp = rk[7 + rk_offset] as usize;
             rk[8 + rk_offset] = rk[0 + rk_offset]
                 ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
                 ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
                 ^ (TE0[(temp) & 0xff] & 0x0000ff00)
                 ^ (TE1[(temp >> 24)] & 0x000000ff)
-                ^ RCON[i];
+                ^ rcon;
             rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
             rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
             rk[11 + rk_offset] = rk[3 + rk_offset] ^ rk[10 + rk_offset];
 
-            if i == 6 {
+            // Stop midway through the 6th run
+            if *rcon == RCON[6] {
                 break;
             }
+
             let temp = rk[11 + rk_offset] as usize;
             rk[12 + rk_offset] = rk[4 + rk_offset]
                 ^ (TE2[(temp >> 24)] & 0xff000000)

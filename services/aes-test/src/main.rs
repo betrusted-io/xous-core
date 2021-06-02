@@ -51,8 +51,8 @@ impl<'a, 'b, 'c> AesTest<'a, 'b, 'c> {
         aes::set_decrypt_key(&self.key, &mut aes_key).unwrap();
         log::info!("Running decryption");
         aes::vexriscv_aes_decrypt(&self.ciphertext, &mut output, &aes_key);
-        log::info!("Plaintext: {:?}", self.plaintext);
-        log::info!("Result:    {:?}", output);
+        log::info!("Plaintext: {:x?}", self.plaintext);
+        log::info!("Result:    {:x?}", output);
         if self.plaintext.len() != output.len() {
             Err("decrypt error: plaintext and output lengths do not match")?;
         }
