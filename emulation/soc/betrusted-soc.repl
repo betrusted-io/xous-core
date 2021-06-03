@@ -7,24 +7,28 @@ cpu: CPU.VexRiscv @ sysbus
 // Platform Peripherals
 // Unrecognized peripheral: reboot
 
+timer0: Timers.LiteX_Timer_32 @ sysbus 0xf0001000
+    frequency: 100000000
+    -> cpu @ 1000
+
 // Unrecognized peripheral: crg
 
 // Unrecognized peripheral: gpio
 
-uart: UART.LiteX_UART @ sysbus 0xf0004000
+uart: UART.LiteX_UART @ sysbus 0xf0005000
     -> cpu @ 1002
 
-console: UART.LiteX_UART @ sysbus 0xf0006000
+console: UART.LiteX_UART @ sysbus 0xf0007000
     -> cpu @ 1003
 
-app_uart: UART.LiteX_UART @ sysbus 0xf0008000
+app_uart: UART.LiteX_UART @ sysbus 0xf0009000
     -> cpu @ 1004
 
 // Unrecognized peripheral: info
 
 // Unrecognized peripheral: sram_ext
 
-memlcd: Video.BetrustedLCD @ sysbus 0xf000b000
+memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
 
 // Unrecognized peripheral: com
 
@@ -36,7 +40,7 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000b000
 
 // Unrecognized peripheral: messible2
 
-ticktimer: Timers.TickTimer @ sysbus 0xf0011000
+ticktimer: Timers.TickTimer @ sysbus 0xf0012000
     -> cpu @ 1008
 
 // Unrecognized peripheral: susres
@@ -45,7 +49,7 @@ ticktimer: Timers.TickTimer @ sysbus 0xf0011000
 
 // Unrecognized peripheral: spinor
 
-keyboard: Input.BetrustedKbd @ sysbus 0xf0015000
+keyboard: Input.BetrustedKbd @ sysbus 0xf0016000
     -> cpu @ 1011
 
 // Unrecognized peripheral: keyinject
@@ -56,10 +60,10 @@ keyboard: Input.BetrustedKbd @ sysbus 0xf0015000
 
 // Unrecognized peripheral: audio
 
-trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xf001a000
+trng_kernel: Miscellaneous.BetrustedRNGKernel @ sysbus 0xf001b000
     -> cpu @ 1013
 
-trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001b000
+trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001c000
     -> cpu @ 1014
 
 // Unrecognized peripheral: trng
@@ -74,11 +78,9 @@ trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001b000
 
 // Unrecognized peripheral: d11ctime
 
-// Unrecognized peripheral: identifier_mem
+// Unrecognized peripheral: wfi
 
-timer0: Timers.LiteX_Timer_32 @ sysbus 0xf0023000
-    frequency: 100000000
-    -> cpu @ 1000
+// Unrecognized peripheral: identifier_mem
 
 
 // Physical base addresses of memory regions

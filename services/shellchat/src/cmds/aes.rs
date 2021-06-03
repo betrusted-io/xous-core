@@ -1,0 +1,337 @@
+
+use core::fmt::Write;
+
+mod aes128tests;
+mod aes256tests;
+
+/// Define block cipher test
+macro_rules! block_cipher_test {
+    ($name:ident, $test_name:expr, $test_case_name:ident, $cipher:ty) => {
+        fn $name() -> String::<1024> {
+            use cipher::generic_array::{typenum::Unsigned, GenericArray};
+            use cipher::{
+                BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher,
+            };
+
+            fn run_test(key: &[u8], pt: &[u8], ct: &[u8]) -> bool {
+                let state = <$cipher as NewBlockCipher>::new_from_slice(key).unwrap();
+
+                let mut block = GenericArray::clone_from_slice(pt);
+                state.encrypt_block(&mut block);
+                if ct != block.as_slice() {
+                    return false;
+                }
+
+                state.decrypt_block(&mut block);
+                if pt != block.as_slice() {
+                    return false;
+                }
+
+                true
+            }
+
+            fn run_par_test(key: &[u8], pt: &[u8]) -> bool {
+                type ParBlocks = <$cipher as BlockCipher>::ParBlocks;
+                type BlockSize = <$cipher as BlockCipher>::BlockSize;
+                type Block = GenericArray<u8, BlockSize>;
+                type ParBlock = GenericArray<Block, ParBlocks>;
+
+                let state = <$cipher as NewBlockCipher>::new_from_slice(key).unwrap();
+
+                let block = Block::clone_from_slice(pt);
+                let mut blocks1 = ParBlock::default();
+                for (i, b) in blocks1.iter_mut().enumerate() {
+                    *b = block;
+                    b[0] = b[0].wrapping_add(i as u8);
+                }
+                let mut blocks2 = blocks1.clone();
+
+                // check that `encrypt_blocks` and `encrypt_block`
+                // result in the same ciphertext
+                state.encrypt_blocks(&mut blocks1);
+                for b in blocks2.iter_mut() {
+                    state.encrypt_block(b);
+                }
+                if blocks1 != blocks2 {
+                    return false;
+                }
+
+                // check that `encrypt_blocks` and `encrypt_block`
+                // result in the same plaintext
+                state.decrypt_blocks(&mut blocks1);
+                for b in blocks2.iter_mut() {
+                    state.decrypt_block(b);
+                }
+                if blocks1 != blocks2 {
+                    return false;
+                }
+
+                true
+            }
+
+            let mut ret = String::<1024>::new();
+            write!(ret, "test {} passed", $test_name).unwrap();
+            let pb = <$cipher as BlockCipher>::ParBlocks::to_usize();
+            let mut i = 0;
+            for test in $test_case_name.iter() {
+                if !run_test(&test.key, &test.pt, &test.ct) {
+                    ret.clear();
+                    write!(ret, "Failed test #{}\nkey: {:?}\nplaintext: {:?}\nciphertext: {:?}\n",
+                        i, test.key, test.pt, test.ct,).unwrap();
+                    return ret;
+                }
+
+                // test parallel blocks encryption/decryption
+                if pb != 1 {
+                    if !run_par_test(&test.key, &test.pt) {
+                        write!(ret, "Failed parallel test #{}\nkey: {:?}\nplaintext: {:?}\nciphertext: {:?}\n",
+                            i, test.key, test.pt, test.ct,).unwrap();
+                        return ret;
+                    }
+                }
+                i += 1;
+            }
+            // test if cipher can be cloned
+            let key = Default::default();
+            let _ = <$cipher as NewBlockCipher>::new(&key).clone();
+
+            ret
+        }
+    };
+}
+
+use crate::{ShellCmdApi, CommonEnv};
+use xous_ipc::String;
+
+use aes_xous::*;
+use cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
+
+use num_traits::*;
+
+use core::sync::atomic::{AtomicU32, Ordering};
+static CB_ID: AtomicU32 = AtomicU32::new(0);
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum BenchOp {
+    StartAesHw,
+    StartAesSw,
+    Quit,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum BenchResult {
+    AesHwDone,
+    AesSwDone,
+}
+
+const TEST_ITERS: usize = 500;
+const TEST_MAX_LEN: usize = 8192;
+use cipher::generic_array::GenericArray;
+
+/*
+hardware: -148mA @ 100% CPU usage, 77.74us/block enc+dec AES128 (500 iters, 8192 len)
+software: -151mA @ 100% CPU usage, 158.36us/block enc+dec AES128 (500 iters, 8192 len)
+
+hardware: -148mA @ 100% CPU usage, 103.73us/block enc+dec AES256 (500 iters, 8192 len)
+software: -149mA @ 100% CPU usage, 217.95us/block enc+dec AES256 (500 iters, 8192 len)
+*/
+pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    let mut dataset_ref: [u8; TEST_MAX_LEN] = [0; TEST_MAX_LEN];
+    let xns = xous_names::XousNames::new().unwrap();
+    let trng = trng::Trng::new(&xns).unwrap();
+    let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
+
+    // fill a random array with words
+    for chunk in dataset_ref.chunks_exact_mut(8) {
+        chunk.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
+    }
+    // pick a random key
+    let mut key_array: [u8; 32] = [0; 32];
+    for k in key_array.chunks_exact_mut(8) {
+        k.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
+    }
+    let key = GenericArray::from_slice(&key_array);
+    let cipher_hw = Aes256::new(&key);
+    let cipher_sw = Aes256Soft::new(&key);
+
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        log::debug!("benchmark got msg {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(BenchOp::StartAesHw) | Some(BenchOp::StartAesSw) => {
+                let hw_mode = match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(BenchOp::StartAesSw) => false,
+                    _ => true,
+                };
+                let mut dataset_op: [u8; TEST_MAX_LEN] = [0; TEST_MAX_LEN];
+                for (&src, dst) in dataset_ref.iter().zip(dataset_op.iter_mut()) {
+                    *dst = src;
+                }
+
+                for _ in 0..TEST_ITERS {
+                    if hw_mode {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                            let mut block = GenericArray::clone_from_slice(&mut chunk);
+                            cipher_hw.encrypt_block(&mut block);
+                            for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                                *dst = src;
+                            }
+                        }
+                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                            let mut block = GenericArray::clone_from_slice(&mut chunk);
+                            cipher_hw.decrypt_block(&mut block);
+                            for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                                *dst = src;
+                            }
+                        }
+                    } else {
+                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                            let mut block = GenericArray::clone_from_slice(&mut chunk);
+                            cipher_sw.encrypt_block(&mut block);
+                            for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                                *dst = src;
+                            }
+                        }
+                        for mut chunk in dataset_op.chunks_exact_mut(aes_xous::BLOCK_SIZE) {
+                            let mut block = GenericArray::clone_from_slice(&mut chunk);
+                            cipher_sw.decrypt_block(&mut block);
+                            for (&src, dst) in block.iter().zip(chunk.iter_mut()) {
+                                *dst = src;
+                            }
+                        }
+                    }
+                }
+                let mut pass = true;
+                for (&current, &previous) in dataset_ref.iter().zip(dataset_op.iter()) {
+                    if current != previous {
+                        pass = false;
+                    }
+                }
+                xous::send_message(callback_conn,
+                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                    if pass {1} else {0},
+                    if hw_mode {1} else {0}, cipher_hw.key_size(), 0)
+                ).unwrap();
+            },
+            Some(BenchOp::Quit) => {
+                log::info!("quitting benchmark thread");
+                break;
+            },
+            None => {
+                log::error!("received unknown opcode");
+            }
+        }
+    }
+    xous::destroy_server(sid).unwrap();
+}
+
+#[derive(Debug)]
+pub struct Aes {
+    susres: susres::Susres,
+    benchmark_cid: xous::CID,
+    start_time: Option<u64>,
+}
+impl Aes {
+    pub fn new(xns: &xous_names::XousNames, env: &mut CommonEnv) -> Self {
+        let sid = xous::create_server().unwrap();
+        let sid_tuple = sid.to_u32();
+
+        let cb_id = env.register_handler(String::<256>::from_str("aes"));
+        CB_ID.store(cb_id, Ordering::Relaxed);
+
+        xous::create_thread_4(benchmark_thread, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+        Aes {
+            susres: susres::Susres::new_without_hook(&xns).unwrap(),
+            benchmark_cid: xous::connect(sid).unwrap(),
+            start_time: None,
+        }
+    }
+}
+
+use aes128tests::AES128_TESTS;
+use aes256tests::AES256_TESTS;
+block_cipher_test!(aes128_test, "aes128", AES128_TESTS, Aes128);
+block_cipher_test!(aes128soft_test, "aes128", AES128_TESTS, Aes128Soft);
+block_cipher_test!(aes256_test, "aes256", AES256_TESTS, Aes256);
+block_cipher_test!(aes256soft_test, "aes256", AES256_TESTS, Aes256);
+
+impl<'a> ShellCmdApi<'a> for Aes {
+    cmd_api!(aes); // inserts boilerplate for command API
+
+    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        let mut ret = String::<1024>::new();
+        let helpstring = "Aes [check128] [check128sw] [check256] [check256sw] [hwbench] [swbench] [susres]";
+
+        let mut tokens = args.as_str().unwrap().split(' ');
+
+        if let Some(sub_cmd) = tokens.next() {
+            match sub_cmd {
+                "check128" => {
+                    write!(ret, "{}", aes128_test()).unwrap();
+                }
+                "check128sw" => {
+                    write!(ret, "{}", aes128soft_test()).unwrap();
+                }
+                "check256" => {
+                    write!(ret, "{}", aes256_test()).unwrap();
+                }
+                "check256sw" => {
+                    write!(ret, "{}", aes256soft_test()).unwrap();
+                }
+                "hwbench" => {
+                    let start = env.ticktimer.elapsed_ms();
+                    self.start_time = Some(start);
+                    xous::send_message(self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                    write!(ret, "Starting Aes hardware benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes_xous::BLOCK_SIZE).unwrap();
+                }
+                "swbench" => {
+                    let start = env.ticktimer.elapsed_ms();
+                    self.start_time = Some(start);
+                    xous::send_message(self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesSw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                    write!(ret, "Starting Aes software benchmark with {} iters of {} blocks", TEST_ITERS, TEST_MAX_LEN / aes_xous::BLOCK_SIZE).unwrap();
+                }
+                "susres" => {
+                    let start = env.ticktimer.elapsed_ms();
+                    self.start_time = Some(start);
+                    xous::send_message(self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartAesHw.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                    let wait_time = (env.trng.get_u32().unwrap() % 2000) + 500; // at least half a second wait, up to 2 seconds
+                    env.ticktimer.sleep_ms(wait_time as _).unwrap();
+                    self.susres.initiate_suspend().unwrap();
+                    write!(ret, "Interrupted Aes hardware benchmark with a suspend/resume").unwrap();
+                }
+                _ => {
+                    write!(ret, "{}", helpstring).unwrap();
+                }
+            }
+
+        } else {
+            write!(ret, "{}", helpstring).unwrap();
+        }
+        Ok(Some(ret))
+    }
+
+    fn callback(&mut self, msg: &xous::MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        log::debug!("benchmark callback");
+        let mut ret = String::<1024>::new();
+
+        xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
+            let end = env.ticktimer.elapsed_ms();
+            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / (TEST_ITERS as f64 * (TEST_MAX_LEN / aes_xous::BLOCK_SIZE) as f64);
+            let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
+            if pass != 0 {
+                write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
+            } else {
+                // pass was 0, we failed
+                write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
+            }
+        });
+        Ok(Some(ret))
+    }
+}
