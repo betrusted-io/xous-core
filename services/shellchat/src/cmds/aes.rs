@@ -254,13 +254,14 @@ use aes256tests::AES256_TESTS;
 block_cipher_test!(aes128_test, "aes128", AES128_TESTS, Aes128);
 block_cipher_test!(aes128soft_test, "aes128", AES128_TESTS, Aes128Soft);
 block_cipher_test!(aes256_test, "aes256", AES256_TESTS, Aes256);
+block_cipher_test!(aes256soft_test, "aes256", AES256_TESTS, Aes256);
 
 impl<'a> ShellCmdApi<'a> for Aes {
     cmd_api!(aes); // inserts boilerplate for command API
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "Aes [check128] [check128sw] [check256] [hwbench] [swbench] [susres]";
+        let helpstring = "Aes [check128] [check128sw] [check256] [check256sw] [hwbench] [swbench] [susres]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -274,6 +275,9 @@ impl<'a> ShellCmdApi<'a> for Aes {
                 }
                 "check256" => {
                     write!(ret, "{}", aes256_test()).unwrap();
+                }
+                "check256sw" => {
+                    write!(ret, "{}", aes256soft_test()).unwrap();
                 }
                 "hwbench" => {
                     let start = env.ticktimer.elapsed_ms();
