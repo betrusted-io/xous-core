@@ -1,6 +1,6 @@
 
-/// AES-128 round keys
-pub(crate) type VexKeys128 = [u32; 60];
+/// AES-256 round keys
+pub(crate) type VexKeys256 = [u32; 60];
 
 #[derive(Clone, Copy, Debug)]
 enum AesByte {
@@ -394,34 +394,56 @@ fn set_u32(output: &mut [u8], offset: usize, value: u32) {
     output[offset + 3] = tmp[3];
 }
 
-pub fn aes128_enc_key_schedule(user_key: &[u8]) -> VexKeys128 {
-    set_encrypt_key_inner_128(user_key, true)
+pub fn aes256_enc_key_schedule(user_key: &[u8]) -> VexKeys256 {
+    set_encrypt_key_inner_256(user_key, true)
 }
 
-fn set_encrypt_key_inner_128(
+fn set_encrypt_key_inner_256(
     user_key: &[u8],
     swap_final: bool,
-) -> VexKeys128 {
-    let mut rk: VexKeys128 = [0; 60];
+) -> VexKeys256 {
+    let mut rk: VexKeys256 = [0; 60];
 
     rk[0] = get_u32_be(user_key, 0);
     rk[1] = get_u32_be(user_key, 4);
     rk[2] = get_u32_be(user_key, 8);
     rk[3] = get_u32_be(user_key, 12);
+    rk[4] = get_u32_be(user_key, 16);
+    rk[5] = get_u32_be(user_key, 20);
+    rk[6] = get_u32_be(user_key, 24);
+    rk[7] = get_u32_be(user_key, 28);
+
     let mut rk_offset = 0;
     for rcon in &RCON {
-        let temp = rk[3 + rk_offset] as usize;
-        rk[4 + rk_offset] = rk[0 + rk_offset]
+        let temp = rk[7 + rk_offset] as usize;
+        rk[8 + rk_offset] = rk[0 + rk_offset]
             ^ (TE2[(temp >> 16) & 0xff] & 0xff000000)
             ^ (TE3[(temp >> 8) & 0xff] & 0x00ff0000)
             ^ (TE0[(temp) & 0xff] & 0x0000ff00)
             ^ (TE1[(temp >> 24)] & 0x000000ff)
             ^ rcon;
-        rk[5 + rk_offset] = rk[1 + rk_offset] ^ rk[4 + rk_offset];
-        rk[6 + rk_offset] = rk[2 + rk_offset] ^ rk[5 + rk_offset];
-        rk[7 + rk_offset] = rk[3 + rk_offset] ^ rk[6 + rk_offset];
-        rk_offset += 4;
+        rk[9 + rk_offset] = rk[1 + rk_offset] ^ rk[8 + rk_offset];
+        rk[10 + rk_offset] = rk[2 + rk_offset] ^ rk[9 + rk_offset];
+        rk[11 + rk_offset] = rk[3 + rk_offset] ^ rk[10 + rk_offset];
+
+        // Stop midway through the 6th run
+        if *rcon == RCON[6] {
+            break;
+        }
+
+        let temp = rk[11 + rk_offset] as usize;
+        rk[12 + rk_offset] = rk[4 + rk_offset]
+            ^ (TE2[(temp >> 24)] & 0xff000000)
+            ^ (TE3[(temp >> 16) & 0xff] & 0x00ff0000)
+            ^ (TE0[(temp >> 8) & 0xff] & 0x0000ff00)
+            ^ (TE1[(temp) & 0xff] & 0x000000ff);
+        rk[13 + rk_offset] = rk[5 + rk_offset] ^ rk[12 + rk_offset];
+        rk[14 + rk_offset] = rk[6 + rk_offset] ^ rk[13 + rk_offset];
+        rk[15 + rk_offset] = rk[7 + rk_offset] ^ rk[14 + rk_offset];
+
+        rk_offset += 8;
     }
+
     if swap_final {
         for value in &mut rk {
             *value = value.swap_bytes();
@@ -430,10 +452,10 @@ fn set_encrypt_key_inner_128(
     rk
 }
 
-pub fn aes128_dec_key_schedule(user_key: &[u8]) -> VexKeys128 {
-    let mut rk = set_encrypt_key_inner_128(user_key, false);
+pub fn aes256_dec_key_schedule(user_key: &[u8]) -> VexKeys256 {
+    let mut rk = set_encrypt_key_inner_256(user_key, false);
 
-    let rounds = 10;
+    let rounds = 14;
 
     /* invert the order of the round keys: */
     let mut i = 0;
@@ -487,13 +509,13 @@ pub fn aes128_dec_key_schedule(user_key: &[u8]) -> VexKeys128 {
     rk
 }
 
-pub fn aes128_vexriscv_encrypt(key: &VexKeys128, block: &mut [u8]) {
+pub fn aes256_vexriscv_encrypt(key: &VexKeys256, block: &mut [u8]) {
     let rk = key;
     let mut input: [u8; 16] = [0; 16];
     for (&src, dst) in block.iter().zip(input.iter_mut()) {
         *dst = src;
     }
-    let rounds = 10;
+    let rounds = 14;
 
     // We do two rounds per loop
     let mut round_count = rounds / 2;
@@ -603,13 +625,13 @@ pub fn aes128_vexriscv_encrypt(key: &VexKeys128, block: &mut [u8]) {
     set_u32(block, 12, s3);
 }
 
-pub fn aes128_vexriscv_decrypt(key: &VexKeys128, block: &mut [u8]) {
+pub fn aes256_vexriscv_decrypt(key: &VexKeys256, block: &mut [u8]) {
     let rk = key;
     let mut input: [u8; 16] = [0; 16];
     for (&src, dst) in block.iter().zip(input.iter_mut()) {
         *dst = src;
     }
-    let rounds = 10;
+    let rounds = 14;
 
     // We do two rounds per loop
     let mut round_count = rounds / 2;

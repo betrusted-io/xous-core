@@ -14,8 +14,8 @@
 mod soft;
 mod vex;
 
-pub use soft::{Aes128Soft, Aes192, Aes256};
-pub use vex::Aes128;
+pub use soft::{Aes128Soft, Aes192, Aes256Soft};
+pub use vex::{Aes128, Aes256};
 
 #[cfg(feature = "ctr")]
 pub use soft::{Aes128Ctr, Aes192Ctr, Aes256Ctr};

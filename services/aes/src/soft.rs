@@ -115,7 +115,7 @@ define_aes_impl!(
 );
 
 define_aes_impl!(
-    Aes256,
+    Aes256Soft,
     U32,
     FixsliceKeys256,
     fixslice::aes256_key_schedule,

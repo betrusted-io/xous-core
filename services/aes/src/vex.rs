@@ -1,16 +1,20 @@
 use crate::{Block, ParBlocks};
 use cipher::{
-    consts::{U16, U24, U32, U8},
+    consts::{U16, U32, U8},
     generic_array::GenericArray,
     BlockCipher, BlockDecrypt, BlockEncrypt, NewBlockCipher,
 };
 mod aes128;
 use aes128::*;
+mod aes256;
+use aes256::*;
+pub(crate) const VEX_BLOCKS: usize = 1;
 
 macro_rules! define_aes_impl {
     (
         $name:ident,
         $key_size:ty,
+        $key_bits:expr,
         $vex_keys:ty,
         $vex_dec_key_schedule:path,
         $vex_enc_key_schedule:path,
@@ -23,6 +27,11 @@ macro_rules! define_aes_impl {
         pub struct $name {
             enc_key: $vex_keys,
             dec_key: $vex_keys,
+        }
+        impl $name {
+            pub fn key_size(&self) -> usize {
+                $key_bits as usize
+            }
         }
 
         impl NewBlockCipher for $name {
@@ -83,6 +92,7 @@ macro_rules! define_aes_impl {
 define_aes_impl!(
     Aes128,
     U16,
+    128,
     VexKeys128,
     aes128_dec_key_schedule,
     aes128_enc_key_schedule,
@@ -91,14 +101,14 @@ define_aes_impl!(
     "AES-128 block cipher instance"
 );
 
-/*
 define_aes_impl!(
     Aes256,
     U32,
-    vexKeys256,
-    vex::aes256_key_schedule,
-    vex::aes256_decrypt,
-    vex::aes256_encrypt,
+    256,
+    VexKeys256,
+    aes256_dec_key_schedule,
+    aes256_enc_key_schedule,
+    aes256_vexriscv_decrypt,
+    aes256_vexriscv_encrypt,
     "AES-256 block cipher instance"
 );
-*/

@@ -129,8 +129,11 @@ const TEST_MAX_LEN: usize = 8192;
 use cipher::generic_array::GenericArray;
 
 /*
-hardware: -148mA @ 100% CPU usage, 77.74us/block enc+dec (500 iters, 8192 len)
-software: -151mA @ 100% CPU usage, 158.36us/block enc+dec (500 iters, 8192 len)
+hardware: -148mA @ 100% CPU usage, 77.74us/block enc+dec AES128 (500 iters, 8192 len)
+software: -151mA @ 100% CPU usage, 158.36us/block enc+dec AES128 (500 iters, 8192 len)
+
+hardware: -148mA @ 100% CPU usage, 103.73us/block enc+dec AES256 (500 iters, 8192 len)
+software: -149mA @ 100% CPU usage, 217.95us/block enc+dec AES256 (500 iters, 8192 len)
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
@@ -144,13 +147,13 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         chunk.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
     }
     // pick a random key
-    let mut key_array: [u8; 16] = [0; 16];
+    let mut key_array: [u8; 32] = [0; 32];
     for k in key_array.chunks_exact_mut(8) {
         k.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
     }
     let key = GenericArray::from_slice(&key_array);
-    let cipher_hw = Aes128::new(&key);
-    let cipher_sw = Aes128Soft::new(&key);
+    let cipher_hw = Aes256::new(&key);
+    let cipher_sw = Aes256Soft::new(&key);
 
     loop {
         let msg = xous::receive_message(sid).unwrap();
@@ -208,7 +211,7 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 xous::send_message(callback_conn,
                     xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                     if pass {1} else {0},
-                    if hw_mode {1} else {0}, 0, 0)
+                    if hw_mode {1} else {0}, cipher_hw.key_size(), 0)
                 ).unwrap();
             },
             Some(BenchOp::Quit) => {
@@ -314,15 +317,15 @@ impl<'a> ShellCmdApi<'a> for Aes {
         log::debug!("benchmark callback");
         let mut ret = String::<1024>::new();
 
-        xous::msg_scalar_unpack!(msg, pass, hw_mode, _, _, {
+        xous::msg_scalar_unpack!(msg, pass, hw_mode, keybits, _, {
             let end = env.ticktimer.elapsed_ms();
             let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / (TEST_ITERS as f64 * (TEST_MAX_LEN / aes_xous::BLOCK_SIZE) as f64);
             let modestr = if hw_mode != 0 { &"hw" } else { &"sw" };
             if pass != 0 {
-                write!(ret, "[{}] passed: {:.02}µs/block enc+dec", modestr, elapsed * 1000.0).unwrap();
+                write!(ret, "[{}] passed: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
             } else {
                 // pass was 0, we failed
-                write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec", modestr, elapsed * 1000.0).unwrap();
+                write!(ret, "[{}] FAILED: {:.02}µs/block enc+dec AES{}", modestr, elapsed * 1000.0, keybits).unwrap();
             }
         });
         Ok(Some(ret))
