@@ -25,6 +25,7 @@ default-members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/aes",
 ]
 members = [
   "xous-ipc",
@@ -63,6 +64,7 @@ members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/aes",
 ]
 resolver = "2"
 

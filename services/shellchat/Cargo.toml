@@ -24,6 +24,8 @@ susres = {path = "../susres"}
 codec = {path = "../codec"}
 engine-sha512 = {path="../engine-sha512"}
 digest = "0.9"
+aes-xous={path="../aes"}
+cipher = "0.3"
 
 heapless = "0.7"
 trng = {path = "../trng"}
