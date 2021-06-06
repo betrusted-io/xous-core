@@ -201,6 +201,7 @@ dependencies = [
 [[package]]
 name = "gdbstub"
 version = "0.5.0"
+source = "git+https://github.com/daniel5151/gdbstub.git?branch=feature/state-machine-recv-packet#7f0c04094a12a20ec0c9191c24c0d8b824ab5d96"
 dependencies = [
  "cfg-if 0.1.10",
  "log",
@@ -212,6 +213,7 @@ dependencies = [
 [[package]]
 name = "gdbstub_arch"
 version = "0.1.0"
+source = "git+https://github.com/daniel5151/gdbstub.git?branch=feature/state-machine-recv-packet#7f0c04094a12a20ec0c9191c24c0d8b824ab5d96"
 dependencies = [
  "gdbstub",
  "num-traits",
