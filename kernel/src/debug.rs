@@ -137,9 +137,12 @@ mod gdb_server {
         tid: Option<xous_kernel::TID>,
         thread_mask: usize,
     }
+    pub struct XousDebugState<'a> {
+        pub target: XousTarget,
+        pub server: GdbStubStateMachine<'a, XousTarget, super::Uart>,
+    }
 
-    pub static mut GDB_SERVER: Option<GdbStubStateMachine<XousTarget, super::Uart>> = None;
-    pub static mut GDB_TARGET: Option<XousTarget> = None;
+    pub static mut GDB_STATE: Option<XousDebugState> = None;
     pub static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
 
     impl XousTarget {
@@ -302,13 +305,16 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
 
     #[cfg(feature = "gdbserver")]
     unsafe {
-        use crate::debug::gdb_server::{GDB_SERVER, GDB_TARGET};
+        use crate::debug::gdb_server::{GDB_STATE, XousDebugState};
         use gdbstub::state_machine::GdbStubStateMachine;
         use gdbstub::{DisconnectReason, GdbStubError};
-        if let Some(gdb) = GDB_SERVER.take() {
-            let target = GDB_TARGET.as_mut().unwrap();
+        if let Some(XousDebugState {
+            mut target,
+            server: gdb,
+        }) = GDB_STATE.take()
+        {
             let new_gdb = match gdb {
-                GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(target, b) {
+                GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(&mut target, b) {
                     // Remote disconnected -- leave the `GDB_SERVER` as `None`.
                     Ok((_, Some(disconnect_reason))) => {
                         match disconnect_reason {
@@ -334,7 +340,10 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                     panic!("Deferred stop shouldn't happen")
                 }
             };
-            GDB_SERVER = Some(new_gdb);
+            GDB_STATE = Some(XousDebugState {
+                target,
+                server: new_gdb,
+            });
             return;
         }
     }
@@ -411,15 +420,19 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
         }
         #[cfg(feature = "gdbserver")]
         b'g' => {
-            use gdb_server::{XousTarget, GDB_BUFFER, GDB_SERVER, GDB_TARGET};
+            use gdb_server::{XousDebugState, XousTarget, GDB_BUFFER, GDB_STATE};
             println!("Starting GDB server -- attach your debugger now");
-            unsafe { GDB_TARGET = Some(XousTarget::new()) };
             match gdbstub::GdbStubBuilder::new(Uart {})
                 .with_packet_buffer(unsafe { &mut GDB_BUFFER })
                 .build()
             {
                 Ok(gdb) => match gdb.run_state_machine() {
-                    Ok(state) => unsafe { GDB_SERVER = Some(state) },
+                    Ok(state) => unsafe {
+                        GDB_STATE = Some(XousDebugState {
+                            target: XousTarget::new(),
+                            server: state,
+                        });
+                    },
                     Err(e) => println!("Unable to start GDB state machine: {}", e),
                 },
                 Err(e) => println!("Unable to start GDB server: {}", e),
