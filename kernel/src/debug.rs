@@ -128,9 +128,9 @@ mod gdb_server {
         GdbInterrupt, MultiThreadOps, ResumeAction, ThreadStopReason,
     };
 
+    use gdbstub::state_machine::GdbStubStateMachine;
     use gdbstub::target::ext::base::BaseOps;
     use gdbstub::target::{Target, TargetResult};
-    use gdbstub::GdbStubStateMachine;
 
     pub struct XousTarget {
         pid: Option<xous_kernel::PID>,
@@ -138,8 +138,8 @@ mod gdb_server {
         thread_mask: usize,
     }
 
-    pub static mut GDB_SERVER: Option<(GdbStubStateMachine<XousTarget, super::Uart>, XousTarget)> =
-        None;
+    pub static mut GDB_SERVER: Option<GdbStubStateMachine<XousTarget, super::Uart>> = None;
+    pub static mut GDB_TARGET: Option<XousTarget> = None;
     pub static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
 
     impl XousTarget {
@@ -298,19 +298,49 @@ impl gdbstub::Connection for Uart {
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
     let b = Uart {}
         .getc()
-        .expect("no character queued despite interrupt") as char;
+        .expect("no character queued despite interrupt");
 
     #[cfg(feature = "gdbserver")]
     unsafe {
-        use crate::debug::gdb_server::GDB_SERVER;
-        if let Some((gdb, target)) = &mut GDB_SERVER.as_mut() {
-            gdb.pump(target, b as u8).unwrap();
+        use crate::debug::gdb_server::{GDB_SERVER, GDB_TARGET};
+        use gdbstub::state_machine::GdbStubStateMachine;
+        use gdbstub::{DisconnectReason, GdbStubError};
+        if let Some(gdb) = GDB_SERVER.take() {
+            let target = GDB_TARGET.as_mut().unwrap();
+            let new_gdb = match gdb {
+                GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(target, b) {
+                    // Remote disconnected -- leave the `GDB_SERVER` as `None`.
+                    Ok((_, Some(disconnect_reason))) => {
+                        match disconnect_reason {
+                            DisconnectReason::Disconnect => println!("GDB Disconnected"),
+                            DisconnectReason::TargetExited(_) => println!("Target exited"),
+                            DisconnectReason::TargetTerminated(_) => println!("Target halted"),
+                            DisconnectReason::Kill => println!("GDB sent a kill command"),
+                        }
+                        return;
+                    }
+                    Err(GdbStubError::TargetError(_e)) => {
+                        println!("Target raised a fatal error");
+                        return;
+                    }
+                    Err(_e) => {
+                        println!("gdbstub internal error");
+                        return;
+                    }
+                    Ok((gdb, None)) => gdb,
+                },
+                // example_no_std stubs out resume, so this will never happen
+                GdbStubStateMachine::DeferredStopReason(_) => {
+                    panic!("Deferred stop shouldn't happen")
+                }
+            };
+            GDB_SERVER = Some(new_gdb);
             return;
         }
     }
 
     match b {
-        'm' => {
+        b'm' => {
             println!("Printing memory page tables");
             crate::services::SystemServices::with(|system_services| {
                 let current_pid = system_services.current_pid();
@@ -333,7 +363,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                     .unwrap();
             });
         }
-        'p' => {
+        b'p' => {
             println!("Printing processes");
             crate::services::SystemServices::with(|system_services| {
                 let current_pid = system_services.current_pid();
@@ -358,7 +388,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                     .unwrap();
             });
         }
-        'r' => {
+        b'r' => {
             println!("RAM usage:");
             let mut total_bytes = 0;
             crate::services::SystemServices::with(|system_services| {
@@ -380,24 +410,22 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
             println!("{} k total", total_bytes / 1024);
         }
         #[cfg(feature = "gdbserver")]
-        'g' => {
-            use gdb_server::{XousTarget, GDB_BUFFER, GDB_SERVER};
+        b'g' => {
+            use gdb_server::{XousTarget, GDB_BUFFER, GDB_SERVER, GDB_TARGET};
             println!("Starting GDB server -- attach your debugger now");
-            let xous_target = XousTarget::new();
+            unsafe { GDB_TARGET = Some(XousTarget::new()) };
             match gdbstub::GdbStubBuilder::new(Uart {})
                 .with_packet_buffer(unsafe { &mut GDB_BUFFER })
                 .build()
             {
                 Ok(gdb) => match gdb.run_state_machine() {
-                    Ok(gdb_state_machine) => unsafe {
-                        GDB_SERVER = Some((gdb_state_machine, xous_target))
-                    },
+                    Ok(state) => unsafe { GDB_SERVER = Some(state) },
                     Err(e) => println!("Unable to start GDB state machine: {}", e),
                 },
                 Err(e) => println!("Unable to start GDB server: {}", e),
             }
         }
-        'h' => {
+        b'h' => {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");

@@ -760,11 +760,6 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             unsafe { SWITCHTO_CALLER = None };
             // TODO: Advance thread
             if cfg!(baremetal) {
-                ss.set_thread_result(
-                    pid,
-                    tid,
-                    xous_kernel::Result::Ok,
-                )
                 ss.activate_process_thread(tid, ppid, 0, false)
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
