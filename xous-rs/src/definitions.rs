@@ -11,6 +11,11 @@ pub type Connection = usize;
 
 pub const MAX_CID: usize = 34;
 
+pub const EC_WF200_PKG_LOC: u32 = 0x27F8_0000;
+pub const EC_WF200_PKG_LEN: u32 = 0x4_E000;
+pub const EC_FW_PKG_LOC: u32 = 0x27FC_E000;
+pub const EC_FW_PKG_LEN: u32 = 0x3_2000;
+
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
     data: usize,

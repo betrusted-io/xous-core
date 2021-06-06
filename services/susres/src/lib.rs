@@ -16,6 +16,7 @@ pub struct Susres {
 impl Susres {
     #[cfg(target_os = "none")]
     pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES).expect("Can't connect to SUSRES");
         let execution_gate_conn = xns.request_connection_blocking(api::SERVER_NAME_EXEC_GATE).expect("Can't connect to the execution gate");
 
@@ -43,6 +44,7 @@ impl Susres {
     // during boot when all the hosted mode servers try to connect. This isn't an issue on real hardware.
     #[cfg(not(target_os = "none"))]
     pub fn new(xns: &xous_names::XousNames, cb_discriminant: u32, cid: CID) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         Ok(Susres {
             conn: 0,
             suspend_cb_sid: None,
@@ -65,7 +67,8 @@ impl Susres {
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_|())
     }
-    pub fn suspend_until_resume(&mut self, token: usize) -> Result<(), xous::Error> {
+
+    pub fn suspend_until_resume(&mut self, token: usize) -> Result<bool, xous::Error> {
         if self.suspend_cb_sid.is_none() { // this happens if you created without a hook
             return Err(xous::Error::UseBeforeInit)
         }
@@ -78,8 +81,34 @@ impl Susres {
         // now block until we've resumed
         send_message(self.execution_gate_conn,
             Message::new_blocking_scalar(ExecGateOpcode::SuspendingNow.to_usize().unwrap(), 0, 0, 0, 0)
-        ).map(|_|())
+        ).map(|_|())?;
+
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::WasSuspendClean.to_usize().unwrap(), token, 0, 0, 0)
+        ).expect("couldn't query if my suspend was successful");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
     }
+
+    pub fn set_suspendable(&mut self, allow_suspend: bool) -> Result<(), xous::Error> {
+        if allow_suspend {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::SuspendAllow.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        } else {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::SuspendDeny.to_usize().unwrap(), 0, 0, 0, 0)
+            ).map(|_|())
+        }
+    }
+
 }
 fn drop_conn(sid: xous::SID) {
     let cid = xous::connect(sid).unwrap();
@@ -87,13 +116,16 @@ fn drop_conn(sid: xous::SID) {
         Message::new_scalar(SuspendEventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
 }
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Susres {
     fn drop(&mut self) {
         if let Some(sid) = self.suspend_cb_sid.take() {
             drop_conn(sid);
         }
-        unsafe{xous::disconnect(self.conn).unwrap();}
-
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }
 /// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.

@@ -1362,12 +1362,12 @@ pub fn terminate_process(exit_code: u32) -> ! {
 /// Return execution to the kernel. This function may return at any time,
 /// including immediately
 pub fn yield_slice() {
-    rsyscall(SysCall::Yield).expect("yield_slice returned an error");
+    rsyscall(SysCall::Yield).ok();
 }
 
 /// Return execution to the kernel and wait for a message or an interrupt.
 pub fn wait_event() {
-    rsyscall(SysCall::WaitEvent).expect("wait_event returned an error");
+    rsyscall(SysCall::WaitEvent).ok();
 }
 
 #[deprecated(

@@ -52,6 +52,7 @@ fn try_main() -> Result<(), DynError> {
         "rtc",
         "susres",
         "codec",
+        "engine-sha512",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -128,6 +129,9 @@ fn try_main() -> Result<(), DynError> {
         )?,
         Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, None)?,
         Some("debug") => run(true, &hw_pkgs)?,
+        Some("burn-kernel") => update_usb(true, false, false)?,
+        Some("burn-loader") => update_usb(false, true, false)?,
+        Some("burn-soc") => update_usb(false, false, true)?,
         _ => print_help(),
     }
     Ok(())
@@ -149,8 +153,69 @@ trng-test [soc.svd]     builds an image for TRNG testing (both avalanche and rin
 ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
 av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
 sr-test [soc.svd]       builds the suspend/resume testing image
+burn-kernel             invoke the `usb_update.py` utility to burn the kernel
+burn-loader             invoke the `usb_update.py` utility to burn the loader
+burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
+
+Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
     )
+}
+
+fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynError> {
+    use std::process::Stdio;
+    use std::io::{BufRead, BufReader, Error, ErrorKind};
+
+    if do_kernel {
+        println!("Burning kernel");
+        let stdout = Command::new("python3")
+        .arg("tools/usb_update.py")
+        .arg("-k")
+        .arg("target/riscv32imac-unknown-none-elf/release/xous.img")
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+
+        let reader = BufReader::new(stdout);
+        reader.lines().for_each(|line|
+            println!("{}", line.unwrap())
+        );
+    }
+    if do_loader {
+        println!("Burning loader");
+        let stdout = Command::new("python3")
+        .arg("tools/usb_update.py")
+        .arg("-l")
+        .arg("target/riscv32imac-unknown-none-elf/release/loader.bin")
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+
+        let reader = BufReader::new(stdout);
+        reader.lines().for_each(|line|
+            println!("{}", line.unwrap())
+        );
+    }
+    if do_soc {
+        println!("Burning SoC gateware");
+        let stdout = Command::new("python3")
+        .arg("tools/usb_update.py")
+        .arg("-s")
+        .arg("precursors/soc_csr.bin")
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+
+        let reader = BufReader::new(stdout);
+        reader.lines().for_each(|line|
+            println!("{}", line.unwrap())
+        );
+    }
+
+    Ok(())
 }
 
 fn build_hw_image(

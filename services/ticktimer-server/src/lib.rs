@@ -11,6 +11,7 @@ pub struct Ticktimer {
 }
 impl Ticktimer {
     pub fn new() -> Result<Self, Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xous::connect(xous::SID::from_bytes(b"ticktimer-server").unwrap())?;
         Ok(Ticktimer {
            conn,
@@ -38,11 +39,13 @@ impl Ticktimer {
         ).map(|_| ())
     }
 }
-
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Ticktimer {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
-        unsafe{xous::disconnect(self.conn).unwrap();}
-
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }

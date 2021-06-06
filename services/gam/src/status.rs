@@ -98,7 +98,13 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
 
-    let mut stats: BattStats;
+    // initialize to some "sane" mid-point defaults, so we don't trigger errors later on before the first real battstat reading comes
+    let mut stats = BattStats {
+        voltage: 3700,
+        soc: 50,
+        current: 0,
+        remaining_capacity: 650,
+    };
     let mut last_time: u64 = ticktimer.elapsed_ms();
     let mut stats_phase: usize = 0;
     let mut last_seconds: usize = ((last_time / 1000) % 60) as usize;
@@ -122,6 +128,9 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<rtc::DateTime> = None;
     let mut dt_pump_modulus = 15;
+
+    let mut charger_pump_modulus = 0;
+    let llio = llio::Llio::new(&xns).unwrap();
 
     let secs_interval;
     let batt_interval;
@@ -155,6 +164,21 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 let elapsed_time = ticktimer.elapsed_ms();
                 let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
                 if (now_seconds / secs_interval) != (last_seconds / secs_interval) {
+                    charger_pump_modulus += 1;
+                    if charger_pump_modulus > 60 {
+                        // once a minute confirm that the charger is in the right state.
+                        charger_pump_modulus = 0;
+                        if stats.soc < 95 || stats.remaining_capacity < 1000 { // only request if we aren't fully charged, either by SOC or capacity metrics
+                            if (llio.adc_vbus().unwrap() as f64) * 0.005033 > 4.45 { // 4.45V is our threshold for deciding if a cable is present
+                                // charging cable is present
+                                if !com.is_charging().expect("couldn't check charging state") {
+                                    // not charging, but cable is present
+                                    log::info!("Charger present, but not currently charging. Automatically requesting charge start.");
+                                    com.request_charging().expect("couldn't send charge request");
+                                }
+                            }
+                        }
+                    }
                     dt_pump_modulus += 1;
                     if dt_pump_modulus > 15 {
                         dt_pump_modulus = 0;
@@ -201,8 +225,11 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                         };
                         write!(&mut uptime_tv, "{:02}:{:02} {} {}/{}", dt.hours, dt.minutes, day, dt.months, dt.days).unwrap();
                     } else {
-                        write!(&mut uptime_tv, "Up {:02}:{:02}:{:02}",
-                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds).expect("|status: can't write string");
+                        let (latest_activity, period) = llio.activity_instantaneous().expect("couldn't get CPU activity");
+                        write!(&mut uptime_tv, "Up {}:{:02}:{:02} {:.0}%",
+                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds,
+                            ((latest_activity as f32) / (period as f32)) * 100.0
+                        ).expect("|status: can't write string");
                     }
                     log::trace!("|status: requesting draw of '{}'", uptime_tv);
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");

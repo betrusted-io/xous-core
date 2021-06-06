@@ -39,7 +39,7 @@ impl Audio {
             xous::MemoryFlags::R,
         ).expect("couldn't map in the audio sample");
 
-        let mut codec = codec::Codec::new(xns).unwrap();
+        let codec = codec::Codec::new(xns).unwrap();
         let samples: *const [u8; 16] = unsafe{sample.as_ptr().add(20)} as *const [u8; 16];
         let mut raw_header: [u8; 16] = [0; 16];
         for i in 0..16 {
@@ -51,9 +51,6 @@ impl Audio {
             0x8_0000,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't allocate record buffer");
-
-        log::trace!("setting up codec hardware parameters");
-        codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
 
         let audio = Audio {
             codec,
@@ -88,6 +85,10 @@ impl<'a> ShellCmdApi<'a> for Audio {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "play" => {
+                    log::trace!("setting up codec hardware parameters");
+                    self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
+                    env.ticktimer.sleep_ms(50).unwrap();
+
                     if self.callback_id.is_none() {
                         let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
                         log::trace!("hooking frame callback with ID {}", cb_id);
@@ -114,6 +115,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;
                     self.rec_ptr_words = 0;
+                    self.codec.power_off().unwrap();
                 }
                 "fromrec" => {
                     self.play_or_rec_n = false;
@@ -207,6 +209,7 @@ impl<'a> ShellCmdApi<'a> for Audio {
                     self.framecount = 0;
                     self.play_ptr_bytes = 0;
                     self.rec_ptr_words = 0;
+                    self.codec.power_off().unwrap();
                 } else {
                     // we will get extra callbacks as the pipe clears
                     return Ok(None)

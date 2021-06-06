@@ -8,4 +8,6 @@ pub(crate) enum Opcode {
 
     /// Suspend/resume callback
     SuspendResume,
+
+    Quit,
 }

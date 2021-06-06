@@ -36,7 +36,7 @@ def convert(ifile, ofile):
             while line > 0:
                 horiz = 0
                 while horiz < 11:
-                    position = offset + (line-1) * 44 + horiz * 4 
+                    position = offset + (line-1) * 44 + horiz * 4
                     word = int.from_bytes(image[position:position + 4], byteorder='big')
                     word = int('{:032b}'.format(word)[::-1],2)
                     if horiz == 10:
@@ -45,7 +45,7 @@ def convert(ifile, ofile):
                     horiz = horiz + 1
                 line = line - 1
                 output.write("\n")
-            
+
             output.write("];");
 
 
@@ -66,4 +66,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+

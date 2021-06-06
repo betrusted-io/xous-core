@@ -49,7 +49,7 @@ struct Repl {
 }
 impl Repl{
     fn new(xns: &xous_names::XousNames, my_server_name: &str) -> Self {
-        let gam = gam::Gam::new(&xns).expect("can't connect to GAM");
+        let gam = gam::Gam::new(xns).expect("can't connect to GAM");
         let content = gam.request_content_canvas(
             my_server_name,
             ShellOpcode::Redraw.to_usize().unwrap()
@@ -67,7 +67,7 @@ impl Repl{
             bubble_margin: Point::new(4, 4),
             bubble_radius: 4,
             bubble_space: 4,
-            env: CmdEnv::new(&xns),
+            env: CmdEnv::new(xns),
         }
     }
 

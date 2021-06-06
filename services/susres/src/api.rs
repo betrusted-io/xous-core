@@ -8,6 +8,10 @@ pub(crate) const SERVER_NAME_EXEC_GATE: &str  = "_Suspend/resume execution gate_
 pub(crate) enum Opcode {
     /// requests a suspend
     SuspendRequest,
+    /// locks out suspend capability -- meant to be used only to prevent suspend during firmware updates
+    SuspendDeny,
+    /// unlocks suspend capability
+    SuspendAllow,
 
     /// register a subscriber to the suspend event
     /// (if you don't register, you just get suspend without any warning!)
@@ -19,7 +23,10 @@ pub(crate) enum Opcode {
     /// from the timeout thread
     SuspendTimeout,
 
-    /// not tested - reboot
+    /// queries if my suspend was clean or not
+    WasSuspendClean,
+
+    /// reboot opcodes
     RebootRequest,
     RebootSocConfirm, // all peripherals + CPU
     RebootCpuConfirm, // just the CPU, peripherals (in particular the USB debug bridge) keep state
