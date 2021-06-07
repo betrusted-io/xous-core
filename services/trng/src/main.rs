@@ -2,27 +2,91 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+use api::*;
 
-use num_traits::FromPrimitive;
+use num_traits::*;
+use xous::CID;
+use xous_ipc::Buffer;
 
 use log::info;
 
+#[derive(Copy, Clone, Debug)]
+struct ScalarCallback {
+    server_to_cb_cid: CID,
+    cb_to_client_cid: CID,
+    cb_to_client_id: u32,
+}
 
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
-    // use crate::api::*;
-    use log::info;
+    use crate::api::{ExcursionTest, MiniRunsTest, NistTests, HealthTests, TrngErrors};
     use susres::{RegManager, RegOrField, SuspendResume};
+    use num_traits::*;
 
     pub struct Trng {
         csr: utralib::CSR<u32>,
-        // TODO: allocate a software buffer for whitened TRNGs
         susres_manager: RegManager::<{utra::trng_server::TRNG_SERVER_NUMREGS}>, // probably can be reduced to save space?
+        conn: xous::CID,
+        errors: TrngErrors,
+    }
+
+    fn trng_handler(_irq_no: usize, arg: *mut usize) {
+        let trng = unsafe { &mut *(arg as *mut Trng) };
+
+        let pending = trng.csr.r(utra::trng_server::EV_PENDING);
+        if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)) != 0 {
+            trng.errors.excursion_errs[0] = Some(ExcursionTest {
+                min: trng.csr.rf(utra::trng_server::AV_EXCURSION0_LAST_ERR_MIN) as u16,
+                max: trng.csr.rf(utra::trng_server::AV_EXCURSION0_LAST_ERR_MAX) as u16,
+            });
+            trng.csr.rmwf(utra::trng_server::AV_EXCURSION0_CTRL_RESET, 1);
+        }
+        if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION1, 1)) != 0 {
+            trng.errors.excursion_errs[1] = Some(ExcursionTest {
+                min: trng.csr.rf(utra::trng_server::AV_EXCURSION1_LAST_ERR_MIN) as u16,
+                max: trng.csr.rf(utra::trng_server::AV_EXCURSION1_LAST_ERR_MAX) as u16,
+            });
+            trng.csr.rmwf(utra::trng_server::AV_EXCURSION1_CTRL_RESET, 1);
+        }
+        if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_HEALTH, 1)) != 0 {
+            let av_repcount = trng.csr.rf(utra::trng_server::NIST_ERRORS_AV_REPCOUNT);
+            let av_adaptive = trng.csr.rf(utra::trng_server::NIST_ERRORS_AV_ADAPTIVE);
+            let ro_repcount = trng.csr.rf(utra::trng_server::NIST_ERRORS_RO_REPCOUNT);
+            let ro_adaptive = trng.csr.rf(utra::trng_server::NIST_ERRORS_RO_ADAPTIVE);
+            if av_repcount != 0 {
+                trng.errors.av_repcount_errs = Some(av_repcount as u8);
+            }
+            if av_adaptive != 0 {
+                trng.errors.av_adaptive_errs = Some(av_adaptive as u8);
+            }
+            if ro_repcount != 0 {
+                trng.errors.ro_repcount_errs = Some(ro_repcount as u8);
+            }
+            if ro_adaptive != 0 {
+                trng.errors.ro_adaptive_errs = Some(ro_adaptive as u8);
+            }
+        }
+        if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_ERROR, 1)) != 0 {
+            if trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) != 0 {
+                trng.errors.server_underruns = Some(trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) as u16);
+            }
+            if trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) != 0 {
+                trng.errors.kernel_underruns = Some(trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16);
+            }
+        }
+        // reset any error flags
+        trng.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
+        // clear the pending interrupt(s)
+        trng.csr.wo(utra::trng_server::EV_PENDING, pending);
+
+        // notify the main loop of the error condition
+        xous::try_send_message(trng.conn,
+            xous::Message::new_scalar(crate::api::Opcode::ErrorNotification.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
     }
 
     impl Trng {
-        pub fn new() -> Trng {
+        pub fn new(xns: &xous_names::XousNames) -> Trng {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::trng_server::HW_TRNG_SERVER_BASE),
                 None,
@@ -33,7 +97,17 @@ mod implementation {
 
             let mut trng = Trng {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
+                conn: xns.request_connection_blocking(crate::api::SERVER_NAME_TRNG).unwrap(),
                 susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
+                errors: TrngErrors {
+                    excursion_errs: [None; 2],
+                    av_repcount_errs: None,
+                    av_adaptive_errs: None,
+                    ro_repcount_errs: None,
+                    ro_adaptive_errs: None,
+                    kernel_underruns: None,
+                    server_underruns: None,
+                }
             };
 
             ///// configure power settings and which generator to use
@@ -94,7 +168,29 @@ mod implementation {
             );
             trng.susres_manager.push(RegOrField::Reg(utra::trng_server::RO_CONFIG), None);
 
-            info!("hardware initialized");
+            // handle error interrupts
+            xous::claim_interrupt(
+                utra::trng_server::TRNG_SERVER_IRQ,
+                trng_handler,
+                (&mut trng) as *mut Trng as *mut usize,
+            )
+            .expect("couldn't claim audio irq");
+            trng.csr.wo(utra::trng_server::EV_PENDING,
+                trng.csr.ms(utra::trng_server::EV_PENDING_ERROR, 1)
+                | trng.csr.ms(utra::trng_server::EV_PENDING_HEALTH, 1)
+                | trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)
+                | trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION1, 1)
+            );
+            trng.csr.wo(utra::trng_server::EV_ENABLE,
+                trng.csr.ms(utra::trng_server::EV_ENABLE_ERROR, 1)
+                | trng.csr.ms(utra::trng_server::EV_ENABLE_HEALTH, 1)
+                | trng.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION0, 1)
+                | trng.csr.ms(utra::trng_server::EV_ENABLE_EXCURSION1, 1)
+            );
+            trng.susres_manager.push_fixed_value(RegOrField::Reg(utra::trng_server::EV_PENDING), 0xFFFF_FFFF);
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
+
+            log::debug!("hardware initialized");
 
             trng
         }
@@ -102,6 +198,101 @@ mod implementation {
         #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
         pub fn get_trng_csr(&self) -> *mut u32 {
             self.csr.base
+        }
+
+        pub fn get_errors(&self) -> TrngErrors {
+            self.errors
+        }
+
+        pub fn get_tests(&self) -> HealthTests {
+            HealthTests {
+                av_excursion: [
+                    ExcursionTest {
+                        min: self.csr.rf(utra::trng_server::AV_EXCURSION0_STAT_MIN) as u16,
+                        max: self.csr.rf(utra::trng_server::AV_EXCURSION0_STAT_MAX) as u16,
+                    },
+                    ExcursionTest {
+                        min: self.csr.rf(utra::trng_server::AV_EXCURSION1_STAT_MIN) as u16,
+                        max: self.csr.rf(utra::trng_server::AV_EXCURSION1_STAT_MAX) as u16,
+                    },
+                ],
+                av_nist: [
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_AV_STAT0_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_AV_STAT0_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_AV_STAT0_FRESH) == 0 {false} else {true},
+                    },
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_AV_STAT1_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_AV_STAT1_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_AV_STAT1_FRESH) == 0 {false} else {true},
+                    },
+                ],
+                ro_miniruns: [
+                    MiniRunsTest {
+                        run_count: [
+                            self.csr.r(utra::trng_server::RO_RUN0_COUNT1) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN0_COUNT2) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN0_COUNT3) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN0_COUNT4) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN0_COUNT5) as u16,
+                        ],
+                        fresh: if self.csr.rf(utra::trng_server::RO_RUN0_FRESH_RO_RUN0_FRESH) == 0 {false} else {true},
+                    },
+                    MiniRunsTest {
+                        run_count: [
+                            self.csr.r(utra::trng_server::RO_RUN1_COUNT1) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN1_COUNT2) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN1_COUNT3) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN1_COUNT4) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN1_COUNT5) as u16,
+                        ],
+                        fresh: if self.csr.rf(utra::trng_server::RO_RUN1_FRESH_RO_RUN1_FRESH) == 0 {false} else {true},
+                    },
+                    MiniRunsTest {
+                        run_count: [
+                            self.csr.r(utra::trng_server::RO_RUN2_COUNT1) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN2_COUNT2) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN2_COUNT3) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN2_COUNT4) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN2_COUNT5) as u16,
+                        ],
+                        fresh: if self.csr.rf(utra::trng_server::RO_RUN2_FRESH_RO_RUN2_FRESH) == 0 {false} else {true},
+                    },
+                    MiniRunsTest {
+                        run_count: [
+                            self.csr.r(utra::trng_server::RO_RUN3_COUNT1) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN3_COUNT2) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN3_COUNT3) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN3_COUNT4) as u16,
+                            self.csr.r(utra::trng_server::RO_RUN3_COUNT5) as u16,
+                        ],
+                        fresh: if self.csr.rf(utra::trng_server::RO_RUN3_FRESH_RO_RUN3_FRESH) == 0 {false} else {true},
+                    },
+                ],
+                ro_nist: [
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT0_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT0_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT0_FRESH) == 0 {false} else {true},
+                    },
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
+                    },
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
+                    },
+                    NistTests {
+                        adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
+                        repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
+                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
+                    },
+                ]
+            }
         }
 
         pub fn get_data_eager(&self) -> u32 {
@@ -192,6 +383,20 @@ mod implementation {
         pub fn suspend(&self) {
         }
         pub fn resume(&self) {
+        }
+        pub fn get_tests(&self) -> HealthTests {
+            HealthTests::default()
+        }
+        pub fn get_errors(&self) -> TrngErrors {
+            TrngErrors {
+                excursion_errs: [None; 2],
+                av_repcount_errs: None,
+                av_adaptive_errs: None,
+                ro_repcount_errs: None,
+                ro_adaptive_errs: None,
+                kernel_underruns: None,
+                server_underruns: None,
+            }
         }
     }
 }
@@ -368,7 +573,7 @@ fn xmain() -> ! {
     let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
     log::trace!("registered with NS -- {:?}", trng_sid);
 
-    let mut trng = Trng::new();
+    let mut trng = Trng::new(&xns);
 
     #[cfg(feature = "avalanchetest")]
     log::info!("TRNG built with avalanche test enabled");
@@ -387,8 +592,9 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(trng_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut error_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
-        let msg = xous::receive_message(trng_sid).unwrap();
+        let mut msg = xous::receive_message(trng_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::GetTrng) => xous::msg_blocking_scalar_unpack!(msg, count, _, _, _, {
                 let val: [u32; 2] = trng.get_trng(count);
@@ -400,6 +606,23 @@ fn xmain() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 trng.resume();
             }),
+            Some(api::Opcode::ErrorSubscribe) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let hookdata = buffer.to_original::<api::ScalarHook, _>().unwrap();
+                do_hook(hookdata, &mut error_cb_conns);
+            },
+            Some(api::Opcode::ErrorNotification) => {
+                log::error!("Got an error condition in the TRNG. Syndrome: {:?}", trng.get_errors());
+                send_event(&error_cb_conns);
+            },
+            Some(api::Opcode::HealthStats) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                buffer.replace(trng.get_tests()).unwrap();
+            },
+            Some(api::Opcode::ErrorStats) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                buffer.replace(trng.get_errors()).unwrap();
+            },
             Some(api::Opcode::Quit) => {
                 break
             },
@@ -410,8 +633,54 @@ fn xmain() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
+    unhook(&mut error_cb_conns);
     xns.unregister_server(trng_sid).unwrap();
     xous::destroy_server(trng_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
+}
+
+
+fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
+    let (s0, s1, s2, s3) = hookdata.sid;
+    let sid = xous::SID::from_u32(s0, s1, s2, s3);
+    let server_to_cb_cid = xous::connect(sid).unwrap();
+    let cb_dat = Some(ScalarCallback {
+        server_to_cb_cid,
+        cb_to_client_cid: hookdata.cid,
+        cb_to_client_id: hookdata.id,
+    });
+    let mut found = false;
+    for entry in cb_conns.iter_mut() {
+        if entry.is_none() {
+            *entry = cb_dat;
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        log::error!("ran out of space registering callback");
+    }
+}
+fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
+    for entry in cb_conns.iter_mut() {
+        if let Some(scb) = entry {
+            xous::send_message(scb.server_to_cb_cid,
+                xous::Message::new_blocking_scalar(api::EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)
+            ).unwrap();
+            unsafe{xous::disconnect(scb.server_to_cb_cid).unwrap();}
+        }
+        *entry = None;
+    }
+}
+fn send_event(cb_conns: &[Option<ScalarCallback>; 32]) {
+    for entry in cb_conns.iter() {
+        if let Some(scb) = entry {
+            // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
+            xous::send_message(scb.server_to_cb_cid,
+                xous::Message::new_scalar(api::EventCallback::Event.to_usize().unwrap(),
+                   scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, 0, 0)
+            ).unwrap();
+        };
+    }
 }

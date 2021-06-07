@@ -14,6 +14,8 @@ log = "0.4"
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 susres = {path = "../susres"}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+xous-ipc = {path = "../../xous-ipc"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
