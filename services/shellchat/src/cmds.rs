@@ -92,6 +92,7 @@ mod accel;    use accel::*;
 mod sha;      use sha::*;
 mod ecup;     use ecup::*;
 mod aes;      use aes::*;
+mod trng_cmd; use trng_cmd::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -112,6 +113,7 @@ pub struct CmdEnv {
     sha_cmd: Sha,
     ecup_cmd: EcUpdate,
     aes_cmd: Aes,
+    trng_cmd: TrngCmd,
 
     fcc_cmd: Fcc,
 }
@@ -146,6 +148,7 @@ impl CmdEnv {
             sha_cmd: sha,
             ecup_cmd: ecup,
             aes_cmd: aes,
+            trng_cmd: TrngCmd::new(),
 
             fcc_cmd: fcc,
         }
@@ -175,6 +178,7 @@ impl CmdEnv {
             &mut self.sha_cmd,
             &mut self.ecup_cmd,
             &mut self.aes_cmd,
+            &mut self.trng_cmd,
 
             &mut self.fcc_cmd,
         ];

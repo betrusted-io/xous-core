@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-06-08 00:08:29]]></description>
+    <description><![CDATA[Litex SoC 2021-06-08 20:07:03]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1210,10 +1210,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``54f46891``, so this value is 1425303697, which should be enough to check out
+``a97001d2``, so this value is 2842690002, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x54f46891</resetValue>
+                    <resetValue>0xa97001d2</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1230,7 +1230,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x0f</resetValue>
+                    <resetValue>0x10</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3439,7 +3439,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x5243fcb</resetValue>
+                    <resetValue>0x67ec0023</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3454,7 +3454,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x34203b8b</resetValue>
+                    <resetValue>0x64b8f094</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4235,7 +4235,7 @@ avalanche generator]]></description>
                 <register>
                     <name>RO_NIST</name>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x1a433</resetValue>
+                    <resetValue>0x1a443</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4306,14 +4306,21 @@ generators]]></description>
                             <msb>7</msb>
                             <bitRange>[7:4]</bitRange>
                             <lsb>4</lsb>
-                            <description><![CDATA[Inducates a failure in the repcount test for the ring oscillators]]></description>
+                            <description><![CDATA[Indicates a failure in the repcount test for the ring oscillators]]></description>
                         </field>
                         <field>
                             <name>ro_adaptive</name>
                             <msb>11</msb>
                             <bitRange>[11:8]</bitRange>
                             <lsb>8</lsb>
-                            <description><![CDATA[Inducates a failure in the adaptive proportion test for the ring oscillators]]></description>
+                            <description><![CDATA[Indicates a failure in the adaptive proportion test for the ring oscillators]]></description>
+                        </field>
+                        <field>
+                            <name>ro_miniruns</name>
+                            <msb>15</msb>
+                            <bitRange>[15:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[Indicates a failure in the miniruns test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4342,7 +4349,7 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4371,7 +4378,7 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4400,7 +4407,7 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4429,7 +4436,7 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4458,7 +4465,7 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4487,13 +4494,123 @@ generators]]></description>
                             <msb>17</msb>
                             <bitRange>[17:11]</bitRange>
                             <lsb>11</lsb>
-                            <description><![CDATA[instantaneous `b` value for core 0 repetition count test]]></description>
+                            <description><![CDATA[max `b` value for core 0 repetition count test]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_RUNSLIMIT1</name>
+                    <addressOffset>0x003c</addressOffset>
+                    <resetValue>0x1269b3</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>min</name>
+                            <msb>10</msb>
+                            <bitRange>[10:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 1]]></description>
+                        </field>
+                        <field>
+                            <name>max</name>
+                            <msb>21</msb>
+                            <bitRange>[21:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 1]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_RUNSLIMIT2</name>
+                    <addressOffset>0x0040</addressOffset>
+                    <resetValue>0xa10bd</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>min</name>
+                            <msb>10</msb>
+                            <bitRange>[10:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 2]]></description>
+                        </field>
+                        <field>
+                            <name>max</name>
+                            <msb>21</msb>
+                            <bitRange>[21:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 2]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_RUNSLIMIT3</name>
+                    <addressOffset>0x0044</addressOffset>
+                    <resetValue>0x5984d</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>min</name>
+                            <msb>10</msb>
+                            <bitRange>[10:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 3]]></description>
+                        </field>
+                        <field>
+                            <name>max</name>
+                            <msb>21</msb>
+                            <bitRange>[21:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 3]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_RUNSLIMIT4</name>
+                    <addressOffset>0x0048</addressOffset>
+                    <resetValue>0x3281a</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>min</name>
+                            <msb>10</msb>
+                            <bitRange>[10:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 4]]></description>
+                        </field>
+                        <field>
+                            <name>max</name>
+                            <msb>21</msb>
+                            <bitRange>[21:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 4]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RO_RUNSLIMIT5</name>
+                    <addressOffset>0x004c</addressOffset>
+                    <resetValue>0x1d805</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>min</name>
+                            <msb>10</msb>
+                            <bitRange>[10:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 5]]></description>
+                        </field>
+                        <field>
+                            <name>max</name>
+                            <msb>21</msb>
+                            <bitRange>[21:11]</bitRange>
+                            <lsb>11</lsb>
+                            <description><![CDATA[Minimum runs limit for runs of length 5]]></description>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>RO_RUN0_CTRL</name>
-                    <addressOffset>0x003c</addressOffset>
+                    <addressOffset>0x0050</addressOffset>
                     <resetValue>0x400</resetValue>
                     <size>32</size>
                     <fields>
@@ -4511,7 +4628,7 @@ undefined behavior occurs]]></description>
                     <name>RO_RUN0_FRESH</name>
                     <description><![CDATA[The current data corresponding to a runlength of (bitposition +1) has been
 updated at least once since the last readout of any register]]></description>
-                    <addressOffset>0x0040</addressOffset>
+                    <addressOffset>0x0054</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4526,7 +4643,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN0_COUNT1</name>
                     <description><![CDATA[Count of sequence length 1 runs seen in the past window]]></description>
-                    <addressOffset>0x0044</addressOffset>
+                    <addressOffset>0x0058</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4541,7 +4658,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN0_COUNT2</name>
                     <description><![CDATA[Count of sequence length 2 runs seen in the past window]]></description>
-                    <addressOffset>0x0048</addressOffset>
+                    <addressOffset>0x005c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4556,7 +4673,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN0_COUNT3</name>
                     <description><![CDATA[Count of sequence length 3 runs seen in the past window]]></description>
-                    <addressOffset>0x004c</addressOffset>
+                    <addressOffset>0x0060</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4571,7 +4688,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN0_COUNT4</name>
                     <description><![CDATA[Count of sequence length 4 runs seen in the past window]]></description>
-                    <addressOffset>0x0050</addressOffset>
+                    <addressOffset>0x0064</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4586,7 +4703,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN0_COUNT5</name>
                     <description><![CDATA[Count of sequence length 5 runs seen in the past window]]></description>
-                    <addressOffset>0x0054</addressOffset>
+                    <addressOffset>0x0068</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4600,7 +4717,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>RO_RUN1_CTRL</name>
-                    <addressOffset>0x0058</addressOffset>
+                    <addressOffset>0x006c</addressOffset>
                     <resetValue>0x400</resetValue>
                     <size>32</size>
                     <fields>
@@ -4618,7 +4735,7 @@ undefined behavior occurs]]></description>
                     <name>RO_RUN1_FRESH</name>
                     <description><![CDATA[The current data corresponding to a runlength of (bitposition +1) has been
 updated at least once since the last readout of any register]]></description>
-                    <addressOffset>0x005c</addressOffset>
+                    <addressOffset>0x0070</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4633,7 +4750,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_COUNT1</name>
                     <description><![CDATA[Count of sequence length 1 runs seen in the past window]]></description>
-                    <addressOffset>0x0060</addressOffset>
+                    <addressOffset>0x0074</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4648,7 +4765,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_COUNT2</name>
                     <description><![CDATA[Count of sequence length 2 runs seen in the past window]]></description>
-                    <addressOffset>0x0064</addressOffset>
+                    <addressOffset>0x0078</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4663,7 +4780,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_COUNT3</name>
                     <description><![CDATA[Count of sequence length 3 runs seen in the past window]]></description>
-                    <addressOffset>0x0068</addressOffset>
+                    <addressOffset>0x007c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4678,7 +4795,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_COUNT4</name>
                     <description><![CDATA[Count of sequence length 4 runs seen in the past window]]></description>
-                    <addressOffset>0x006c</addressOffset>
+                    <addressOffset>0x0080</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4693,7 +4810,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_COUNT5</name>
                     <description><![CDATA[Count of sequence length 5 runs seen in the past window]]></description>
-                    <addressOffset>0x0070</addressOffset>
+                    <addressOffset>0x0084</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4707,7 +4824,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>RO_RUN2_CTRL</name>
-                    <addressOffset>0x0074</addressOffset>
+                    <addressOffset>0x0088</addressOffset>
                     <resetValue>0x400</resetValue>
                     <size>32</size>
                     <fields>
@@ -4725,7 +4842,7 @@ undefined behavior occurs]]></description>
                     <name>RO_RUN2_FRESH</name>
                     <description><![CDATA[The current data corresponding to a runlength of (bitposition +1) has been
 updated at least once since the last readout of any register]]></description>
-                    <addressOffset>0x0078</addressOffset>
+                    <addressOffset>0x008c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4740,7 +4857,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_COUNT1</name>
                     <description><![CDATA[Count of sequence length 1 runs seen in the past window]]></description>
-                    <addressOffset>0x007c</addressOffset>
+                    <addressOffset>0x0090</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4755,7 +4872,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_COUNT2</name>
                     <description><![CDATA[Count of sequence length 2 runs seen in the past window]]></description>
-                    <addressOffset>0x0080</addressOffset>
+                    <addressOffset>0x0094</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4770,7 +4887,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_COUNT3</name>
                     <description><![CDATA[Count of sequence length 3 runs seen in the past window]]></description>
-                    <addressOffset>0x0084</addressOffset>
+                    <addressOffset>0x0098</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4785,7 +4902,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_COUNT4</name>
                     <description><![CDATA[Count of sequence length 4 runs seen in the past window]]></description>
-                    <addressOffset>0x0088</addressOffset>
+                    <addressOffset>0x009c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4800,7 +4917,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_COUNT5</name>
                     <description><![CDATA[Count of sequence length 5 runs seen in the past window]]></description>
-                    <addressOffset>0x008c</addressOffset>
+                    <addressOffset>0x00a0</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4814,7 +4931,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>RO_RUN3_CTRL</name>
-                    <addressOffset>0x0090</addressOffset>
+                    <addressOffset>0x00a4</addressOffset>
                     <resetValue>0x400</resetValue>
                     <size>32</size>
                     <fields>
@@ -4832,7 +4949,7 @@ undefined behavior occurs]]></description>
                     <name>RO_RUN3_FRESH</name>
                     <description><![CDATA[The current data corresponding to a runlength of (bitposition +1) has been
 updated at least once since the last readout of any register]]></description>
-                    <addressOffset>0x0094</addressOffset>
+                    <addressOffset>0x00a8</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4847,7 +4964,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_COUNT1</name>
                     <description><![CDATA[Count of sequence length 1 runs seen in the past window]]></description>
-                    <addressOffset>0x0098</addressOffset>
+                    <addressOffset>0x00ac</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4862,7 +4979,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_COUNT2</name>
                     <description><![CDATA[Count of sequence length 2 runs seen in the past window]]></description>
-                    <addressOffset>0x009c</addressOffset>
+                    <addressOffset>0x00b0</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4877,7 +4994,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_COUNT3</name>
                     <description><![CDATA[Count of sequence length 3 runs seen in the past window]]></description>
-                    <addressOffset>0x00a0</addressOffset>
+                    <addressOffset>0x00b4</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4892,7 +5009,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_COUNT4</name>
                     <description><![CDATA[Count of sequence length 4 runs seen in the past window]]></description>
-                    <addressOffset>0x00a4</addressOffset>
+                    <addressOffset>0x00b8</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4907,7 +5024,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_COUNT5</name>
                     <description><![CDATA[Count of sequence length 5 runs seen in the past window]]></description>
-                    <addressOffset>0x00a8</addressOffset>
+                    <addressOffset>0x00bc</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4921,7 +5038,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION0_CTRL</name>
-                    <addressOffset>0x00ac</addressOffset>
+                    <addressOffset>0x00c0</addressOffset>
                     <resetValue>0x190140</resetValue>
                     <size>32</size>
                     <fields>
@@ -4950,7 +5067,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION0_STAT</name>
-                    <addressOffset>0x00b0</addressOffset>
+                    <addressOffset>0x00c4</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4972,7 +5089,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION0_LAST_ERR</name>
-                    <addressOffset>0x00b4</addressOffset>
+                    <addressOffset>0x00c8</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4994,7 +5111,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION1_CTRL</name>
-                    <addressOffset>0x00b8</addressOffset>
+                    <addressOffset>0x00cc</addressOffset>
                     <resetValue>0x190140</resetValue>
                     <size>32</size>
                     <fields>
@@ -5023,7 +5140,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION1_STAT</name>
-                    <addressOffset>0x00bc</addressOffset>
+                    <addressOffset>0x00d0</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5045,7 +5162,7 @@ updated at least once since the last readout of any register]]></description>
                 </register>
                 <register>
                     <name>AV_EXCURSION1_LAST_ERR</name>
-                    <addressOffset>0x00c0</addressOffset>
+                    <addressOffset>0x00d4</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5066,9 +5183,38 @@ updated at least once since the last readout of any register]]></description>
                     </fields>
                 </register>
                 <register>
+                    <name>READY</name>
+                    <addressOffset>0x00d8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>av_excursion</name>
+                            <msb>1</msb>
+                            <bitRange>[1:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[ready bits from the excursion test]]></description>
+                        </field>
+                        <field>
+                            <name>av_adaprop</name>
+                            <msb>3</msb>
+                            <bitRange>[3:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[ready bits from the adaptive proportion test]]></description>
+                        </field>
+                        <field>
+                            <name>ro_adaprop</name>
+                            <msb>7</msb>
+                            <bitRange>[7:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[ready bits from the adaptive proportion test]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[Triggered by a failure in the avalanche generator core 1 on-line excursion test]]></description>
-                    <addressOffset>0x00c4</addressOffset>
+                    <addressOffset>0x00dc</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5112,7 +5258,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[Triggered by a failure in the avalanche generator core 1 on-line excursion test]]></description>
-                    <addressOffset>0x00c8</addressOffset>
+                    <addressOffset>0x00e0</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5156,7 +5302,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[Triggered by a failure in the avalanche generator core 1 on-line excursion test]]></description>
-                    <addressOffset>0x00cc</addressOffset>
+                    <addressOffset>0x00e4</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -5200,7 +5346,7 @@ updated at least once since the last readout of any register]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xd0</size>
+                <size>0xe8</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>

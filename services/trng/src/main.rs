@@ -20,7 +20,7 @@ struct ScalarCallback {
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
-    use crate::api::{ExcursionTest, MiniRunsTest, NistTests, HealthTests, TrngErrors};
+    use crate::api::{ExcursionTest, MiniRunsTest, NistTests, HealthTests, TrngErrors, TrngBuf};
     use susres::{RegManager, RegOrField, SuspendResume};
     use num_traits::*;
 
@@ -29,10 +29,13 @@ mod implementation {
         susres_manager: RegManager::<{utra::trng_server::TRNG_SERVER_NUMREGS}>, // probably can be reduced to save space?
         conn: xous::CID,
         errors: TrngErrors,
+        err_stat: HealthTests,
     }
 
     fn trng_handler(_irq_no: usize, arg: *mut usize) {
         let trng = unsafe { &mut *(arg as *mut Trng) };
+        // cache a copy of the stats in the interrupt handler, so we can diagnose later
+        trng.err_stat = trng.get_tests();
 
         let pending = trng.csr.r(utra::trng_server::EV_PENDING);
         if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)) != 0 {
@@ -75,14 +78,15 @@ mod implementation {
                 trng.errors.kernel_underruns = Some(trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16);
             }
         }
-        // reset any error flags
+        // reset any error flags. try to do this a bit away from the pending clear, so it has time to take effect
         trng.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
-        // clear the pending interrupt(s)
-        trng.csr.wo(utra::trng_server::EV_PENDING, pending);
 
         // notify the main loop of the error condition
         xous::try_send_message(trng.conn,
             xous::Message::new_scalar(crate::api::Opcode::ErrorNotification.to_usize().unwrap(), 0, 0, 0, 0)).map(|_|()).unwrap();
+
+        // clear the pending interrupt(s)
+        trng.csr.wo(utra::trng_server::EV_PENDING, pending);
     }
 
     impl Trng {
@@ -107,7 +111,8 @@ mod implementation {
                     ro_adaptive_errs: None,
                     kernel_underruns: None,
                     server_underruns: None,
-                }
+                },
+                err_stat: HealthTests::default(),
             };
 
             ///// configure power settings and which generator to use
@@ -203,8 +208,23 @@ mod implementation {
         pub fn get_errors(&self) -> TrngErrors {
             self.errors
         }
+        pub fn get_err_stats(&self) -> HealthTests {
+            self.err_stat
+        }
 
         pub fn get_tests(&self) -> HealthTests {
+            // the fresh bit gets reset on the first read of the register. Ensure these reads happen first before the structure is initialized.
+            let av_nist_fresh0 = if self.csr.rf(utra::trng_server::NIST_AV_STAT0_FRESH) == 0 {false} else {true};
+            let av_nist_fresh1 = if self.csr.rf(utra::trng_server::NIST_AV_STAT1_FRESH) == 0 {false} else {true};
+            let ro_mr_fresh0 = if self.csr.rf(utra::trng_server::RO_RUN0_FRESH_RO_RUN0_FRESH) == 0 {false} else {true};
+            let ro_mr_fresh1 = if self.csr.rf(utra::trng_server::RO_RUN1_FRESH_RO_RUN1_FRESH) == 0 {false} else {true};
+            let ro_mr_fresh2 = if self.csr.rf(utra::trng_server::RO_RUN2_FRESH_RO_RUN2_FRESH) == 0 {false} else {true};
+            let ro_mr_fresh3 = if self.csr.rf(utra::trng_server::RO_RUN3_FRESH_RO_RUN3_FRESH) == 0 {false} else {true};
+            let ro_nist_fresh0 = if self.csr.rf(utra::trng_server::NIST_RO_STAT0_FRESH) == 0 {false} else {true};
+            let ro_nist_fresh1 = if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true};
+            let ro_nist_fresh2 = if self.csr.rf(utra::trng_server::NIST_RO_STAT2_FRESH) == 0 {false} else {true};
+            let ro_nist_fresh3 = if self.csr.rf(utra::trng_server::NIST_RO_STAT3_FRESH) == 0 {false} else {true};
+            // now initialize the return structure
             HealthTests {
                 av_excursion: [
                     ExcursionTest {
@@ -218,18 +238,19 @@ mod implementation {
                 ],
                 av_nist: [
                     NistTests {
+                        fresh: av_nist_fresh0,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_AV_STAT0_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_AV_STAT0_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_AV_STAT0_FRESH) == 0 {false} else {true},
                     },
                     NistTests {
+                        fresh: av_nist_fresh1,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_AV_STAT1_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_AV_STAT1_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_AV_STAT1_FRESH) == 0 {false} else {true},
                     },
                 ],
                 ro_miniruns: [
                     MiniRunsTest {
+                        fresh: ro_mr_fresh0,
                         run_count: [
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT1) as u16,
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT2) as u16,
@@ -237,9 +258,9 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT4) as u16,
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT5) as u16,
                         ],
-                        fresh: if self.csr.rf(utra::trng_server::RO_RUN0_FRESH_RO_RUN0_FRESH) == 0 {false} else {true},
                     },
                     MiniRunsTest {
+                        fresh: ro_mr_fresh1,
                         run_count: [
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT1) as u16,
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT2) as u16,
@@ -247,9 +268,9 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT4) as u16,
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT5) as u16,
                         ],
-                        fresh: if self.csr.rf(utra::trng_server::RO_RUN1_FRESH_RO_RUN1_FRESH) == 0 {false} else {true},
                     },
                     MiniRunsTest {
+                        fresh: ro_mr_fresh2,
                         run_count: [
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT1) as u16,
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT2) as u16,
@@ -257,9 +278,9 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT4) as u16,
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT5) as u16,
                         ],
-                        fresh: if self.csr.rf(utra::trng_server::RO_RUN2_FRESH_RO_RUN2_FRESH) == 0 {false} else {true},
                     },
                     MiniRunsTest {
+                        fresh: ro_mr_fresh3,
                         run_count: [
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT1) as u16,
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT2) as u16,
@@ -267,37 +288,46 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT4) as u16,
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT5) as u16,
                         ],
-                        fresh: if self.csr.rf(utra::trng_server::RO_RUN3_FRESH_RO_RUN3_FRESH) == 0 {false} else {true},
                     },
                 ],
                 ro_nist: [
                     NistTests {
+                        fresh: ro_nist_fresh0,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT0_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT0_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT0_FRESH) == 0 {false} else {true},
                     },
                     NistTests {
+                        fresh: ro_nist_fresh1,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
                     },
                     NistTests {
+                        fresh: ro_nist_fresh2,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
                     },
                     NistTests {
+                        fresh: ro_nist_fresh3,
                         adaptive_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_ADAP_B) as u16,
                         repcount_b: self.csr.rf(utra::trng_server::NIST_RO_STAT1_REP_B) as u16,
-                        fresh: if self.csr.rf(utra::trng_server::NIST_RO_STAT1_FRESH) == 0 {false} else {true},
                     },
                 ]
             }
         }
 
-        pub fn get_data_eager(&self) -> u32 {
+        pub fn get_data_eager(&mut self) -> u32 {
+            let mut timeout = 0;
             while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                if timeout > 100 {
+                    log::debug!("TRNG ran out of data, blocked on READY: 0x{:x}", self.csr.r(utra::trng_server::READY));
+                    log::debug!("ROstats: 0x{:x} 0x{:x} 0x{:x} 0x{:x}",
+                    self.csr.r(utra::trng_server::NIST_RO_STAT0), self.csr.r(utra::trng_server::NIST_RO_STAT1),
+                    self.csr.r(utra::trng_server::NIST_RO_STAT2), self.csr.r(utra::trng_server::NIST_RO_STAT3));
+                    self.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
+                    timeout = 0;
+                }
                 xous::yield_slice();
+                timeout += 1;
             }
             self.csr.rf(utra::trng_server::DATA_DATA)
         }
@@ -309,20 +339,18 @@ mod implementation {
             }
         }
 
-        pub fn get_trng(&self, count: usize) -> [u32; 2] {
-            // TODO: use SHA hardware unit to robustify the TRNG output against potential hardware failures
-            // TODO: health monitoring of raw TRNG output
+        pub fn get_buf(&mut self, len: u16) -> TrngBuf {
+            let mut tb = TrngBuf {data: [0; 1024], len};
+            for i in 0..len as usize {
+                tb.data[i] = self.get_data_eager();
+            }
+            tb
+        }
+
+        pub fn get_trng(&mut self, count: usize) -> [u32; 2] {
             let mut ret: [u32; 2] = [0, 0];
 
-            /*
-               in the final implementation the algorithm should be:
-                 1) check fullness of software-whitened pool
-                 2) if software pool is full enough, return values from there
-                 3) if pool is low, activate hardware TRNG and refill the pool (uses SHA unit)
-                 4) during pool-filling, perform statistics on the hardware TRNG output to check health
-                 5) confirm health is OK
-            */
-
+            // eventually this will come from a hardware 'urandom' style interface
             // for now, we just take data directly from the hardware-managed raw TRNG pool
             ret[0] = self.get_data_eager();
             // we don't just draw down TRNGs if not requested, because they are a finite resource
@@ -347,16 +375,16 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use log::info;
-
     pub struct Trng {
         seed: u32,
+        msgcount: u16, // re-print the message every time we rollover
     }
 
     impl Trng {
         pub fn new() -> Trng {
             Trng {
                 seed: 0x1afe_cafe,
+                msgcount: 0,
             }
         }
 
@@ -370,8 +398,24 @@ mod implementation {
         #[allow(dead_code)]
         pub fn wait_full(&self) { }
 
+        pub fn get_buf(&self, len: u16) -> TrngBuf {
+            if msgcount < 10 {
+                log::info!("hosted mode TRNG is *not* random, it is an LFSR");
+            }
+            self.msgcount += 1;
+            let mut tb = TrngBuf {data: [0; 1024], len};
+            for i in 0..len as usize {
+                self.seed = self.move_lfsr(self.seed);
+                tb.data[i] = self.seed;
+            }
+            tb
+        }
+
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
-            info!("hosted mode TRNG is *not* random, it is an LFSR");
+            if msgcount < 10 {
+                log::info!("hosted mode TRNG is *not* random, it is an LFSR");
+            }
+            self.msgcount += 1;
             let mut ret: [u32; 2] = [0; 2];
             self.seed = self.move_lfsr(self.seed);
             ret[0] = self.seed;
@@ -566,7 +610,7 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -613,6 +657,7 @@ fn xmain() -> ! {
             },
             Some(api::Opcode::ErrorNotification) => {
                 log::error!("Got an error condition in the TRNG. Syndrome: {:?}", trng.get_errors());
+                log::error!("Stats: {:?}", trng.get_err_stats());
                 send_event(&error_cb_conns);
             },
             Some(api::Opcode::HealthStats) => {
@@ -622,6 +667,11 @@ fn xmain() -> ! {
             Some(api::Opcode::ErrorStats) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 buffer.replace(trng.get_errors()).unwrap();
+            },
+            Some(api::Opcode::FillTrng) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let len = buffer.as_flat::<TrngBuf, _>().unwrap().len;
+                buffer.replace(trng.get_buf(len)).unwrap();
             },
             Some(api::Opcode::Quit) => {
                 break

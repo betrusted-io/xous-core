@@ -41,6 +41,23 @@ impl Trng {
             panic!("unexpected return value: {:#?}", response);
         }
     }
+    pub fn fill_buf(&self, data: &mut [u32]) -> Result<(), xous::Error> {
+        let mut tb = api::TrngBuf { data: [0; 1024], len: 0 };
+        if data.len() > tb.data.len() {
+            return Err(xous::Error::OutOfMemory);
+        }
+        tb.len = data.len() as u16;
+        let mut buf = Buffer::into_buf(tb).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::FillTrng.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let rtb: api::TrngBuf = buf.to_original().unwrap();
+        if rtb.len as usize != data.len() {
+            return Err(xous::Error::InternalError)
+        }
+        for (&src, dst) in rtb.data.iter().zip(data.iter_mut()) {
+            *dst = src;
+        }
+        Ok(())
+    }
     pub fn hook_error_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
         if self.error_sid.is_none() {
             let sid = xous::create_server().unwrap();

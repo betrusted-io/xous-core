@@ -36,10 +36,19 @@ pub struct TrngErrors {
     pub server_underruns: Option<u16>,
 }
 
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct TrngBuf {
+    pub data: [u32; 1024],
+    pub len: u16,
+}
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Get one or two 32-bit words of TRNG data
     GetTrng,
+
+    /// Fill a buffer with random data
+    FillTrng,
 
     /// Suspend/resume callback
     SuspendResume,
