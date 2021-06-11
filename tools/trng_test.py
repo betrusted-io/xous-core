@@ -34,9 +34,16 @@ class PrecursorUsb:
         _dummy_s = '\x00'.encode('utf-8')
         data = array.array('B', _dummy_s * 4)
 
-        numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
-        wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
-        data_or_wLength=data, timeout=500)
+        for attempt in range(10):
+            try:
+                numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
+                wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
+                data_or_wLength=data, timeout=500)
+            except Exception as e:
+                self.dev.reset()
+                time.sleep(2)
+            else:
+                break
 
         read_data = int.from_bytes(data.tobytes(), byteorder='little', signed=False)
         if display == True:
@@ -48,9 +55,16 @@ class PrecursorUsb:
             _dummy_s = '\x00'.encode('utf-8')
             data = array.array('B', _dummy_s * 4)
 
-            numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
-            wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
-            data_or_wLength=data, timeout=500)
+            for attempt in range(10):
+                try:
+                    numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
+                    wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
+                    data_or_wLength=data, timeout=500)
+                except Exception as e:
+                    self.dev.reset()
+                    time.sleep(2)
+                else:
+                    break
 
             read_data = int.from_bytes(data.tobytes(), byteorder='little', signed=False)
             print("before poke: 0x{:08x}".format(read_data))
