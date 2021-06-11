@@ -119,7 +119,7 @@ fn try_main() -> Result<(), DynError> {
             false,
             env::args().nth(2),
             &hw_pkgs,
-            Some(&["--features", "ringosctest", "--features", "avalanchetest"]),
+            Some(&["--features", "urandomtest"]),
         )?,
         Some("ro-test") => build_hw_image(
             false,
@@ -155,7 +155,7 @@ debug                   runs a debug build using a hosted environment
 benchmark [soc.svd]     builds a benchmarking image for real hardware
 minimal [soc.svd]       builds a minimal image for API testing
 cbtest                  builds an image for callback testing
-trng-test [soc.svd]     builds an image for TRNG testing (both avalanche and ring oscillator on)
+trng-test [soc.svd]     builds an image for TRNG testing - urandom source seeded by TRNG+AV
 ro-test [soc.svd]       builds an image for ring oscillator only TRNG testing
 av-test [soc.svd]       builds an image for avalanche generater only TRNG testing
 sr-test [soc.svd]       builds the suspend/resume testing image
