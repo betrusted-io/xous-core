@@ -223,7 +223,7 @@ mod implementation {
             trng
         }
         // for the test procedure
-        #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+        #[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
         pub fn get_trng_csr(&self) -> *mut u32 {
             self.csr.base
         }
@@ -588,8 +588,8 @@ impl Tester {
             }
             self.server_csr.rf(utra::trng_server::DATA_DATA)
         } else {
-            while self.csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {}
-            self.csr.rf(utra::trng_server::URANDOM_URANDOM)
+            while self.server_csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {}
+            self.server_csr.rf(utra::trng_server::URANDOM_URANDOM)
         }
     }
     #[allow(dead_code)]
@@ -620,6 +620,12 @@ fn tester_thread(csr: usize) {
     // confirm that the config flags work as embedded in get_data_eager
     if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
         log::info!("TRNG_TESTER: using raw data sources");
+        if cfg!(feature = "avalanchetest") {
+            log::info!("TRNG_TESTER: avalanche enabled");
+        }
+        if cfg!(feature = "ringosctest") {
+            log::info!("TRNG_TESTER: ring oscillator enabled");
+        }
     } else {
         log::info!("TRNG_TESTER: using urandom data sources");
     }
