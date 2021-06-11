@@ -1091,12 +1091,13 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     } else {
         // resume path
         use utralib::generated::*;
-        // TRNG virtual memory mapping already set up, but the hardware needs
-        // to have its pipeline flushed, as the first result is always 0.
+        // TRNG virtual memory mapping already set up, but we pump values out just to make sure
+        // the pipeline is fresh. Simulations show this isn't necessary, but I feel paranoid;
+        // I worry a subtle bug in the reset logic could leave deterministic values in the pipeline.
         let trng_csr = CSR::new(utra::trng_kernel::HW_TRNG_KERNEL_BASE as *mut u32);
-        for _ in 0..4 { // only one is strictly necessary but more is no problem
-            while trng_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
-            trng_csr.rf(utra::trng_kernel::DATA_DATA);
+        for _ in 0..4 {
+            while trng_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+            trng_csr.rf(utra::trng_kernel::URANDOM_URANDOM);
         }
 
         // setup the `susres` register for a resume

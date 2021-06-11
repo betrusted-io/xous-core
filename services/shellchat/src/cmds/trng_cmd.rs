@@ -58,13 +58,14 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                     ).unwrap();
                 }
                 "pump" => {
-                    for i in 0..4 {
+                    const ROUNDS: usize = 16;
+                    for i in 0..ROUNDS {
                         log::debug!("pump round {}", i);
                         let mut buf: [u32; 1024] = [0; 1024];
                         env.trng.fill_buf(&mut buf).unwrap();
                         log::debug!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1023]);
                     }
-                    write!(ret, "Pumped 4x1k values out of the engine").unwrap();
+                    write!(ret, "Pumped {}x1k values out of the engine", ROUNDS).unwrap();
                 }
                 "errs" => {
                     write!(ret, "TRNG error stats: {:?}", env.trng.get_error_stats().unwrap()).unwrap();

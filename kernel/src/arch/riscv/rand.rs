@@ -37,17 +37,33 @@ pub fn init() {
     });
 
     let trng_kernel_csr = CSR::new(TRNG_KERNEL.base as *mut u32);
-    while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
-    // discard the first entry, as it is always 0x0000_0000
-    // this is because the read register is a pipeline stage behind the FIFO
-    // once the pipeline has been filled, there is no need to prime it again.
-    trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA);
+    if false { // raw random path - left in for debugging urandom, can strip out later
+        while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
+        // discard the first entry, as it is always 0x0000_0000
+        // this is because the read register is a pipeline stage behind the FIFO
+        // once the pipeline has been filled, there is no need to prime it again.
+        trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA);
+    } else {  // urandom path (recommended)
+        // simulations show this isn't strictly necessary, but I prefer to have it
+        // just in case a subtle bug in the reset logic leaves something deterministic
+        // in the connecting logic: the simulation coverage stops at the edge of the TRNG block.
+        for _ in 0..4 {
+            // wait until the urandom port is initialized
+            while trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+            // pull a dummy piece of data
+            trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM);
+        }
+    }
+
 }
 
 pub fn get_u32() -> u32 {
     let trng_kernel_csr = CSR::new(TRNG_KERNEL.base as *mut u32);
-
-    while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
-
-    trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA)
+    if false { // raw random path
+        while trng_kernel_csr.rf(utra::trng_kernel::STATUS_AVAIL) == 0 {}
+        trng_kernel_csr.rf(utra::trng_kernel::DATA_DATA)
+    } else {  // urandom path (recommended)
+        while trng_kernel_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
+        trng_kernel_csr.rf(utra::trng_kernel::URANDOM_URANDOM)
+    }
 }

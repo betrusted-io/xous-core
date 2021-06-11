@@ -24,4 +24,5 @@ utralib = { path = "../../utralib"}
 debugprint = []
 avalanchetest = []
 ringosctest = []
+urandomtest = []
 default = [] # "debugprint"

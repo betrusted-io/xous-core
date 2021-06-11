@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-06-08 20:07:03]]></description>
+    <description><![CDATA[Litex SoC 2021-06-11 15:52:54]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -671,6 +671,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXFULL</name>
+                    <description><![CDATA[TX FIFO Full.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -685,6 +686,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXEMPTY</name>
+                    <description><![CDATA[RX FIFO Empty.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -771,6 +773,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -785,6 +788,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -829,6 +833,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXFULL</name>
+                    <description><![CDATA[TX FIFO Full.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -843,6 +848,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXEMPTY</name>
+                    <description><![CDATA[RX FIFO Empty.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -929,6 +935,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -943,6 +950,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -987,6 +995,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXFULL</name>
+                    <description><![CDATA[TX FIFO Full.]]></description>
                     <addressOffset>0x0004</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1001,6 +1010,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXEMPTY</name>
+                    <description><![CDATA[RX FIFO Empty.]]></description>
                     <addressOffset>0x0008</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1087,6 +1097,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>TXEMPTY</name>
+                    <description><![CDATA[TX FIFO Empty.]]></description>
                     <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1101,6 +1112,7 @@ register to disable individual events.]]></description>
                 </register>
                 <register>
                     <name>RXFULL</name>
+                    <description><![CDATA[RX FIFO Full.]]></description>
                     <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
@@ -1210,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``a97001d2``, so this value is 2842690002, which should be enough to check out
+``92629e91``, so this value is 2455936657, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xa97001d2</resetValue>
+                    <resetValue>0x92629e91</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1230,7 +1242,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x10</resetValue>
+                    <resetValue>0x16</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3439,7 +3451,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x67ec0023</resetValue>
+                    <resetValue>0x24a0246f</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3454,7 +3466,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x64b8f094</resetValue>
+                    <resetValue>0x43f81cb4</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3938,14 +3950,49 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Latest random data from the FIFO; only valid if ``avail`` bit is set]]></description>
+                            <description><![CDATA[(DEPRECATED - use `urandom`) Latest random data from the FIFO; only valid if
+``avail`` bit is set. This interface is preserved primarily for test programs to
+access                raw TRNG data, but normal kernel code should never use
+this port, due to a race condition with the automatic reseeding algorithm for
+urandom.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>URANDOM</name>
+                    <description><![CDATA[Unlimited random numbers, output from the ChaCha conditioner. Generally, you
+want to use this.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>urandom</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>URANDOM_VALID</name>
+                    <description><![CDATA[Set when `urandom` is valid. Always check before taking `urandom`]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>urandom_valid</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
                         </field>
                     </fields>
                 </register>
                 <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[Triggered whenever an underrun condition first occurs on the kernel interface]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x0010</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3968,7 +4015,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[Triggered whenever an underrun condition first occurs on the kernel interface]]></description>
-                    <addressOffset>0x000c</addressOffset>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -3991,7 +4038,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[Triggered whenever an underrun condition first occurs on the kernel interface]]></description>
-                    <addressOffset>0x0010</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -4014,7 +4061,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x14</size>
+                <size>0x1c</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -4082,7 +4129,11 @@ when cleared, TRNGs are always on]]></description>
                             <msb>31</msb>
                             <bitRange>[31:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Latest random data from the FIFO; only valid if available bit is set]]></description>
+                            <description><![CDATA[Latest random data from the FIFO; only valid if available bit is set Unlike the
+kernel's raw data port, this one is safe to use as there is no race condition
+with the reseeding algorithm.                That being said, it is preferred to
+use `urandom` because the Conditioner protects against unanticipated dropouts in
+the raw TRNG stream.]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4120,6 +4171,13 @@ when cleared, TRNGs are always on]]></description>
                             <lsb>21</lsb>
                             <description><![CDATA[Both kernel and server FIFOs have been topped off]]></description>
                         </field>
+                        <field>
+                            <name>chacha_ready</name>
+                            <msb>22</msb>
+                            <bitRange>[22:22]</bitRange>
+                            <lsb>22</lsb>
+                            <description><![CDATA[Chacha conditioner is seeded and ready]]></description>
+                        </field>
                     </fields>
                 </register>
                 <register>
@@ -4151,6 +4209,14 @@ decrease quality. Default is 32.]]></description>
                             <description><![CDATA[When set, puts the generator into test mode -- full-size, raw ADC samples are
 directly placed into the FIFO at full rate, creating a 'virtual oscilloscope'
 snapshot of the avalanche generator waveform.]]></description>
+                        </field>
+                        <field>
+                            <name>required</name>
+                            <msb>29</msb>
+                            <bitRange>[29:29]</bitRange>
+                            <lsb>29</lsb>
+                            <description><![CDATA[Require avalanche generator to work in order for boot (used by the synthetic
+test bench as this self-test 'runs long' compared to the other operations)]]></description>
                         </field>
                     </fields>
                 </register>
@@ -4501,7 +4567,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUNSLIMIT1</name>
                     <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x1269b3</resetValue>
+                    <resetValue>0x1241b8</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4523,7 +4589,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUNSLIMIT2</name>
                     <addressOffset>0x0040</addressOffset>
-                    <resetValue>0xa10bd</resetValue>
+                    <resetValue>0x9f0c1</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4545,7 +4611,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUNSLIMIT3</name>
                     <addressOffset>0x0044</addressOffset>
-                    <resetValue>0x5984d</resetValue>
+                    <resetValue>0x57850</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4567,7 +4633,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUNSLIMIT4</name>
                     <addressOffset>0x0048</addressOffset>
-                    <resetValue>0x3281a</resetValue>
+                    <resetValue>0x3181d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4589,7 +4655,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUNSLIMIT5</name>
                     <addressOffset>0x004c</addressOffset>
-                    <resetValue>0x1d805</resetValue>
+                    <resetValue>0x1c807</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4611,7 +4677,7 @@ generators]]></description>
                 <register>
                     <name>RO_RUN0_CTRL</name>
                     <addressOffset>0x0050</addressOffset>
-                    <resetValue>0x400</resetValue>
+                    <resetValue>0x3ff</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4619,7 +4685,7 @@ generators]]></description>
                             <msb>10</msb>
                             <bitRange>[10:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Number of samples over which to measure. Must be less than 2048, or else
+                            <description><![CDATA[Number of samples over which to measure. Must be less than 2047, or else
 undefined behavior occurs]]></description>
                         </field>
                     </fields>
@@ -4718,7 +4784,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN1_CTRL</name>
                     <addressOffset>0x006c</addressOffset>
-                    <resetValue>0x400</resetValue>
+                    <resetValue>0x3ff</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4726,7 +4792,7 @@ updated at least once since the last readout of any register]]></description>
                             <msb>10</msb>
                             <bitRange>[10:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Number of samples over which to measure. Must be less than 2048, or else
+                            <description><![CDATA[Number of samples over which to measure. Must be less than 2047, or else
 undefined behavior occurs]]></description>
                         </field>
                     </fields>
@@ -4825,7 +4891,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN2_CTRL</name>
                     <addressOffset>0x0088</addressOffset>
-                    <resetValue>0x400</resetValue>
+                    <resetValue>0x3ff</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4833,7 +4899,7 @@ updated at least once since the last readout of any register]]></description>
                             <msb>10</msb>
                             <bitRange>[10:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Number of samples over which to measure. Must be less than 2048, or else
+                            <description><![CDATA[Number of samples over which to measure. Must be less than 2047, or else
 undefined behavior occurs]]></description>
                         </field>
                     </fields>
@@ -4932,7 +4998,7 @@ updated at least once since the last readout of any register]]></description>
                 <register>
                     <name>RO_RUN3_CTRL</name>
                     <addressOffset>0x00a4</addressOffset>
-                    <resetValue>0x400</resetValue>
+                    <resetValue>0x3ff</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4940,7 +5006,7 @@ updated at least once since the last readout of any register]]></description>
                             <msb>10</msb>
                             <bitRange>[10:0]</bitRange>
                             <lsb>0</lsb>
-                            <description><![CDATA[Number of samples over which to measure. Must be less than 2048, or else
+                            <description><![CDATA[Number of samples over which to measure. Must be less than 2047, or else
 undefined behavior occurs]]></description>
                         </field>
                     </fields>
@@ -5343,10 +5409,104 @@ updated at least once since the last readout of any register]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>CHACHA</name>
+                    <addressOffset>0x00e8</addressOffset>
+                    <resetValue>0x100c8002</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>reseed_interval</name>
+                            <msb>11</msb>
+                            <bitRange>[11:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[How many ChaCha blocks to generate before automatically rotating the key pool]]></description>
+                        </field>
+                        <field>
+                            <name>selfmix_interval</name>
+                            <msb>27</msb>
+                            <bitRange>[27:12]</bitRange>
+                            <lsb>12</lsb>
+                            <description><![CDATA[How many sysclk cycles in between automatic round advancement (adjust to reduce
+standby power)]]></description>
+                        </field>
+                        <field>
+                            <name>selfmix_ena</name>
+                            <msb>28</msb>
+                            <bitRange>[28:28]</bitRange>
+                            <lsb>28</lsb>
+                            <description><![CDATA[Enable self mixing feature]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>SEED</name>
+                    <description><![CDATA[Extra data to be rotated into the seed pool. This is supplemental to the
+automatically seeded TRNG data. Data is committed to the pool immediately upon
+write.]]></description>
+                    <addressOffset>0x00ec</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>seed</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>URANDOM</name>
+                    <description><![CDATA[Unlimited random numbers, output from the ChaCha conditioner. Generally, you
+want to use this.]]></description>
+                    <addressOffset>0x00f0</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>urandom</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>URANDOM_VALID</name>
+                    <description><![CDATA[Set when `urandom` is valid. Always check before taking `urandom`]]></description>
+                    <addressOffset>0x00f4</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>urandom_valid</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TEST</name>
+                    <addressOffset>0x00f8</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>simultaneous</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Force a simultaneous advance of kernel/user urandom. Used to exercise a corner
+case in testing. Not harmful in production, just wasteful.]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xe8</size>
+                <size>0xfc</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>

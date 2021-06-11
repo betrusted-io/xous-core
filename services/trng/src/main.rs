@@ -173,6 +173,14 @@ mod implementation {
             );
             trng.susres_manager.push(RegOrField::Reg(utra::trng_server::RO_CONFIG), None);
 
+            // slightly reduce the frequency of these to reduce power
+            trng.csr.wo(utra::trng_server::CHACHA,
+                trng.csr.ms(utra::trng_server::CHACHA_RESEED_INTERVAL, 2)
+                | trng.csr.ms(utra::trng_server::CHACHA_SELFMIX_INTERVAL, 1000)
+                | trng.csr.ms(utra::trng_server::CHACHA_SELFMIX_ENA, 1)
+            );
+            trng.susres_manager.push(RegOrField::Reg(utra::trng_server::CHACHA), None);
+
             // handle error interrupts
             xous::claim_interrupt(
                 utra::trng_server::TRNG_SERVER_IRQ,
@@ -196,6 +204,21 @@ mod implementation {
             trng.susres_manager.push(RegOrField::Reg(utra::trng_server::EV_ENABLE), None);
 
             log::debug!("hardware initialized");
+
+            if trng.csr.rf(utra::trng_server::STATUS_CHACHA_READY) == 0 {
+                log::trace!("chacha not ready");
+            } else {
+                log::trace!("chacha ready");
+                if trng.csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {
+                    log::trace!("chacha not valid");
+                }
+            }
+            log::trace!("chacha rands: 0x{:08x} 0x{:08x} 0x{:08x} 0x{:08x}",
+                trng.csr.rf(utra::trng_server::URANDOM_URANDOM),
+                trng.csr.rf(utra::trng_server::URANDOM_URANDOM),
+                trng.csr.rf(utra::trng_server::URANDOM_URANDOM),
+                trng.csr.rf(utra::trng_server::URANDOM_URANDOM),
+            );
 
             trng
         }
@@ -317,19 +340,27 @@ mod implementation {
 
         pub fn get_data_eager(&mut self) -> u32 {
             let mut timeout = 0;
-            while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
-                if timeout > 100 {
-                    log::debug!("TRNG ran out of data, blocked on READY: 0x{:x}", self.csr.r(utra::trng_server::READY));
-                    log::debug!("ROstats: 0x{:x} 0x{:x} 0x{:x} 0x{:x}",
-                    self.csr.r(utra::trng_server::NIST_RO_STAT0), self.csr.r(utra::trng_server::NIST_RO_STAT1),
-                    self.csr.r(utra::trng_server::NIST_RO_STAT2), self.csr.r(utra::trng_server::NIST_RO_STAT3));
-                    self.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
-                    timeout = 0;
+            if false { // raw random
+                while self.csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                    if timeout > 100 {
+                        log::debug!("TRNG ran out of data, blocked on READY: 0x{:x}", self.csr.r(utra::trng_server::READY));
+                        log::debug!("ROstats: 0x{:x} 0x{:x} 0x{:x} 0x{:x}",
+                        self.csr.r(utra::trng_server::NIST_RO_STAT0), self.csr.r(utra::trng_server::NIST_RO_STAT1),
+                        self.csr.r(utra::trng_server::NIST_RO_STAT2), self.csr.r(utra::trng_server::NIST_RO_STAT3));
+                        self.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
+                        timeout = 0;
+                    }
+                    xous::yield_slice();
+                    timeout += 1;
                 }
-                xous::yield_slice();
-                timeout += 1;
+                self.csr.rf(utra::trng_server::DATA_DATA)
+            } else { // urandom
+                // in practice, urandom generates data fast enough that we could skip this check
+                // you would need a fully unrolled read loop to exceed the generation rate
+                // but, better safe than sorry!
+                while self.csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {}
+                self.csr.rf(utra::trng_server::URANDOM_URANDOM)
             }
-            self.csr.rf(utra::trng_server::DATA_DATA)
         }
 
         #[allow(dead_code)]
@@ -445,14 +476,14 @@ mod implementation {
     }
 }
 
-#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+#[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
 pub const TRNG_BUFF_LEN: usize = 512*1024;
-#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+#[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
 pub enum WhichMessible {
     One,
     Two,
 }
-#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+#[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
 struct Tester {
     server_csr: utralib::CSR<u32>,
     messible_csr: utralib::CSR<u32>,
@@ -461,7 +492,7 @@ struct Tester {
     buffer_b: xous::MemoryRange,
     ticktimer: ticktimer_server::Ticktimer,
 }
-#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+#[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
 impl Tester {
     pub fn new(server_csr: *mut u32) -> Tester {
         use utralib::generated::*;
@@ -551,10 +582,15 @@ impl Tester {
 
     pub fn get_data_eager(&self) -> u32 {
         use utralib::generated::*;
-        while self.server_csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
-            xous::yield_slice();
+        if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
+            while self.server_csr.rf(utra::trng_server::STATUS_AVAIL) == 0 {
+                xous::yield_slice();
+            }
+            self.server_csr.rf(utra::trng_server::DATA_DATA)
+        } else {
+            while self.csr.rf(utra::trng_server::URANDOM_VALID_URANDOM_VALID) == 0 {}
+            self.csr.rf(utra::trng_server::URANDOM_URANDOM)
         }
-        self.server_csr.rf(utra::trng_server::DATA_DATA)
     }
     #[allow(dead_code)]
     pub fn wait_full(&self) {
@@ -564,7 +600,7 @@ impl Tester {
         }
     }
 }
-#[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+#[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
 fn tester_thread(csr: usize) {
     let mut trng = Tester::new(csr as *mut u32);
 
@@ -581,6 +617,12 @@ fn tester_thread(csr: usize) {
         unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
     }
     log::info!("TRNG_TESTER: starting service");
+    // confirm that the config flags work as embedded in get_data_eager
+    if cfg!(feature = "avalanchetest") || cfg!(feature = "ringosctest") {
+        log::info!("TRNG_TESTER: using raw data sources");
+    } else {
+        log::info!("TRNG_TESTER: using urandom data sources");
+    }
     let mut phase = 1;
     trng.messible_send(WhichMessible::One, phase); // indicate buffer A is ready to go
 
@@ -610,7 +652,7 @@ fn xmain() -> ! {
     use crate::implementation::Trng;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -625,7 +667,10 @@ fn xmain() -> ! {
     #[cfg(feature = "ringosctest")]
     log::info!("TRNG built with ring oscillator test enabled");
 
-    #[cfg(any(feature = "avalanchetest", feature="ringosctest"))]
+    #[cfg(feature = "urandomtest")]
+    log::info!("TRNG built with urandom test enabled");
+
+    #[cfg(any(feature = "avalanchetest", feature="ringosctest", feature="urandomtest"))]
     xous::create_thread_1(tester_thread, trng.get_trng_csr() as usize).expect("couldn't create test thread");
 
     // pump the TRNG hardware to clear the first number out, sometimes it is 0 due to clock-sync issues on the fifo
