@@ -497,7 +497,7 @@ impl Tester {
     pub fn new(server_csr: *mut u32) -> Tester {
         use utralib::generated::*;
         let buff_a = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4020_0000), // fix this at a known physical address
+            xous::MemoryAddress::new(0x4080_0000), // fix this at a known physical address
             None,
             crate::TRNG_BUFF_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -505,7 +505,7 @@ impl Tester {
         .expect("couldn't map TRNG comms buffer A");
 
         let buff_b = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4030_0000), // fix this at a known physical address
+            xous::MemoryAddress::new(0x4090_0000), // fix this at a known physical address
             None,
             crate::TRNG_BUFF_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -559,14 +559,14 @@ impl Tester {
             WhichMessible::One => {
                 while self.messible_csr.rf(utra::messible::STATUS_HAVE) == 0 {
                     //xous::yield_slice();
-                    self.ticktimer.sleep_ms(50).unwrap();
+                    self.ticktimer.sleep_ms(10).unwrap();
                 }
                 self.messible_csr.rf(utra::messible::OUT_OUT) as u8
             },
             WhichMessible::Two => {
                 while self.messible2_csr.rf(utra::messible2::STATUS_HAVE) == 0 {
                     //xous::yield_slice();
-                    self.ticktimer.sleep_ms(50).unwrap();
+                    self.ticktimer.sleep_ms(10).unwrap();
                 }
                 self.messible2_csr.rf(utra::messible2::OUT_OUT) as u8
             },
@@ -634,22 +634,21 @@ fn tester_thread(csr: usize) {
 
     loop {
         trng.messible_wait_get(WhichMessible::Two);
-        phase += 1;
-        if phase % 2 == 1 {
+        if phase % 2 == 0 {
             log::info!("TRNG_TESTER: filling A");
             for i in 0..TRNG_BUFF_LEN / 4 {
                 //buff_a[i] = trng.get_data_eager();
                 unsafe { buff_a.add(i).write_volatile(trng.get_data_eager()) };
             }
-            trng.messible_send(WhichMessible::One, phase);
         } else {
             log::info!("TRNG_TESTER: filling B");
             for i in 0..TRNG_BUFF_LEN / 4 {
                 //buff_b[i] = trng.get_data_eager();
                 unsafe { buff_b.add(i).write_volatile(trng.get_data_eager()) };
             }
-            trng.messible_send(WhichMessible::One, phase);
         }
+        phase += 1;
+        trng.messible_send(WhichMessible::One, phase);
     }
 }
 
