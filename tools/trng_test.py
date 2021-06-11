@@ -282,7 +282,7 @@ def main():
             remote_phase = pc_usb.peek(messible_out)
             if remote_phase > phase:
                 break
-            time.sleep(0.10)
+            time.sleep(0.5)
             if time.time() > (start_time + TIMEOUT):
                 sys.stderr.write("timeout\n")
                 break
