@@ -5,7 +5,7 @@ use api::*;
 
 use graphics_server::api::{TextOp, TextView};
 
-use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle};
+use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
 
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, CID, Message};
@@ -158,6 +158,32 @@ impl Gam {
                 log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
                 Err(xous::Error::InternalError)
             }
+        }
+    }
+
+    pub fn claim_token(&self, name: &str) -> Result<Option<[u32; 4]>, xous::Error> {
+        let tokenclaim = TokenClaim {
+            token: None,
+            name: String::<128>::from_str(name),
+        };
+        let mut buf = Buffer::into_buf(tokenclaim).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::ClaimToken.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let returned_claim = buf.to_original::<TokenClaim, _>().unwrap();
+
+        Ok(returned_claim.token)
+    }
+    pub fn allow_less_trusted_code(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::AllowLessTrustedCode.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't run allow trusted code check");
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
         }
     }
 }

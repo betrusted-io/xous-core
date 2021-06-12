@@ -15,7 +15,14 @@ mod soft;
 mod vex;
 
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};
+
+#[cfg(target_os = "none")]
 pub use vex::{Aes128, Aes256};
+
+#[cfg(not(target_os = "none"))]
+pub use soft::Aes128Soft as Aes128;
+#[cfg(not(target_os = "none"))]
+pub use soft::Aes256Soft as Aes256;
 
 #[cfg(feature = "ctr")]
 pub use soft::{Aes128Ctr, Aes192Ctr, Aes256Ctr};

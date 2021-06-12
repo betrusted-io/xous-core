@@ -29,6 +29,7 @@ macro_rules! define_aes_impl {
     (
         $name:ident,
         $key_size:ty,
+        $key_bits:expr,
         $fixslice_keys:ty,
         $fixslice_key_schedule:path,
         $fixslice_decrypt:path,
@@ -39,6 +40,11 @@ macro_rules! define_aes_impl {
         #[derive(Clone)]
         pub struct $name {
             keys: $fixslice_keys,
+        }
+        impl $name {
+            pub fn key_size(&self) -> usize {
+                $key_bits as usize
+            }
         }
 
         impl NewBlockCipher for $name {
@@ -97,6 +103,7 @@ macro_rules! define_aes_impl {
 define_aes_impl!(
     Aes128Soft,
     U16,
+    128,
     FixsliceKeys128,
     fixslice::aes128_key_schedule,
     fixslice::aes128_decrypt,
@@ -107,6 +114,7 @@ define_aes_impl!(
 define_aes_impl!(
     Aes192,
     U24,
+    192,
     FixsliceKeys192,
     fixslice::aes192_key_schedule,
     fixslice::aes192_decrypt,
@@ -117,6 +125,7 @@ define_aes_impl!(
 define_aes_impl!(
     Aes256Soft,
     U32,
+    256,
     FixsliceKeys256,
     fixslice::aes256_key_schedule,
     fixslice::aes256_decrypt,

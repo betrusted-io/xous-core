@@ -86,6 +86,8 @@ pub(crate) enum Opcode {
 
     /// SuspendResume callback
     SuspendResume,
+
+    Quit,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -100,4 +102,10 @@ pub enum ClipObjectType {
 pub struct ClipObject {
     pub clip: Rectangle,
     pub obj: ClipObjectType,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct TokenClaim {
+    pub token: Option<[u32; 4]>,
+    pub name: xous_ipc::String::<128>,
 }

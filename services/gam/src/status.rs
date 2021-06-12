@@ -81,7 +81,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     // build uptime text view: left half of status bar
     let mut uptime_tv = TextView::new(status_gid,
          TextBounds::BoundingBox(Rectangle::new(Point::new(0,0),
-                 Point::new(screensize.x / 2, screensize.y - 1))));
+                 Point::new(screensize.x / 2, screensize.y / 2 - 1))));
     uptime_tv.untrusted = false;
     uptime_tv.style = blitstr::GlyphStyle::Small;
     uptime_tv.draw_border = false;
@@ -93,7 +93,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     // build battstats text view: right half of status bar
     let mut battstats_tv = TextView::new(status_gid,
         TextBounds::BoundingBox(Rectangle::new(Point::new(screensize.x / 2, 0),
-               Point::new(screensize.x, screensize.y - 1))));
+               Point::new(screensize.x, screensize.y / 2 - 1))));
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
@@ -132,6 +132,20 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let mut charger_pump_modulus = 0;
     let llio = llio::Llio::new(&xns).unwrap();
 
+    let mut debug_unlocked = llio.debug_usb_unlocked().unwrap();
+    // build security status textview
+    let mut security_tv = TextView::new(status_gid,
+        TextBounds::BoundingBox(Rectangle::new(Point::new(0,screensize.y / 2),
+                Point::new(screensize.x, screensize.y - 1))));
+    security_tv.style = blitstr::GlyphStyle::Small;
+    security_tv.draw_border = false;
+    security_tv.margin = Point::new(0, 0);
+    security_tv.token = gam.claim_token("status").expect("couldn't request token"); // this is a shared magic word to identify this process
+    security_tv.clear_area = true;
+    security_tv.invert = true;
+    write!(&mut security_tv, " USB unlocked").unwrap();
+    gam.post_textview(&mut security_tv).unwrap();
+
     let secs_interval;
     let batt_interval;
     if cfg!(feature = "slowstatus") {
@@ -161,6 +175,15 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 }
             }),
             Some(StatusOpcode::Pump) => {
+                if debug_unlocked != llio.debug_usb_unlocked().unwrap() {
+                    debug_unlocked = llio.debug_usb_unlocked().unwrap();
+                    security_tv.clear_str();
+                    if debug_unlocked {
+                        write!(&mut security_tv, " USB unlocked").unwrap();
+                    } else {
+                        write!(&mut security_tv, " USB secured").unwrap();
+                    }
+                }
                 let elapsed_time = ticktimer.elapsed_ms();
                 let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
                 if (now_seconds / secs_interval) != (last_seconds / secs_interval) {
@@ -234,6 +257,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     log::trace!("|status: requesting draw of '{}'", uptime_tv);
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");
                     gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
+                    gam.post_textview(&mut security_tv).unwrap();
                     gam.redraw().expect("|status: couldn't redraw");
                     stats_phase = (stats_phase + 1) % 8;
                 }

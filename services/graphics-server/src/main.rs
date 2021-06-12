@@ -288,8 +288,12 @@ fn xmain() -> ! {
                 } else {
                     0
                 };
-                let fillcolor = if tv.clear_area {
-                    Some(PixelColor::Light)
+                let fillcolor = if tv.clear_area || tv.invert {
+                    if tv.invert {
+                        Some(PixelColor::Dark)
+                    } else {
+                        Some(PixelColor::Light)
+                    }
                 } else {
                     None
                 };
@@ -318,13 +322,14 @@ fn xmain() -> ! {
                 let mut ref_cursor = blitstr::Cursor::from_top_left_of(cr.into());
                 if debugtv { log::trace!("(TV): paint_str with {:?} | {:?} | {:?} | {:?} len: {}", cr, ref_cursor, tv.style, tv.text, tv.text.as_str().unwrap().len()); }
                 log::debug!("{}", tv);
+                let do_xor = tv.invert;
                 blitstr::paint_str(
                     display.native_buffer(),
                     cr.into(),
                     &mut ref_cursor,
                     tv.style.into(),
                     tv.text.as_str().unwrap(),
-                    false,
+                    do_xor,
                     tv.insertion,
                     tv.ellipsis,
                     paintfn
@@ -386,7 +391,8 @@ fn xmain() -> ! {
                 display.update();
                 display.redraw();
             }),
-            None => {log::error!("received opcode scalar that is not handled"); break}
+            Some(Opcode::Quit) => break,
+            None => {log::error!("received opcode scalar that is not handled");}
         }
         display.update();
     }

@@ -2,7 +2,7 @@
 
 // pub mod size;
 pub mod api;
-pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle, ClipObject, ClipObjectType};
+pub use api::{Circle, DrawStyle, Line, PixelColor, Point, Rectangle, TextView, TextBounds, Gid, TextOp, RoundedRectangle, ClipObject, ClipObjectType, TokenClaim};
 use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 pub mod op;

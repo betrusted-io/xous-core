@@ -686,6 +686,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "susres",
+ "trng",
  "utralib",
  "xous",
  "xous-ipc",

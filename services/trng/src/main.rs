@@ -406,13 +406,15 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
+    use crate::api::{TrngBuf, HealthTests, TrngErrors};
+
     pub struct Trng {
         seed: u32,
         msgcount: u16, // re-print the message every time we rollover
     }
 
     impl Trng {
-        pub fn new() -> Trng {
+        pub fn new(_xns: &xous_names::XousNames) -> Trng {
             Trng {
                 seed: 0x1afe_cafe,
                 msgcount: 0,
@@ -429,8 +431,8 @@ mod implementation {
         #[allow(dead_code)]
         pub fn wait_full(&self) { }
 
-        pub fn get_buf(&self, len: u16) -> TrngBuf {
-            if msgcount < 10 {
+        pub fn get_buf(&mut self, len: u16) -> TrngBuf {
+            if self.msgcount < 10 {
                 log::info!("hosted mode TRNG is *not* random, it is an LFSR");
             }
             self.msgcount += 1;
@@ -443,7 +445,7 @@ mod implementation {
         }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
-            if msgcount < 10 {
+            if self.msgcount < 10 {
                 log::info!("hosted mode TRNG is *not* random, it is an LFSR");
             }
             self.msgcount += 1;
@@ -469,9 +471,14 @@ mod implementation {
                 av_adaptive_errs: None,
                 ro_repcount_errs: None,
                 ro_adaptive_errs: None,
-                kernel_underruns: None,
-                server_underruns: None,
+                kernel_underruns: 0,
+                server_underruns: 0,
+                nist_errs: 0,
+                pending_mask: 0,
             }
+        }
+        pub fn get_err_stats(&self) -> HealthTests {
+            HealthTests::default()
         }
     }
 }

@@ -65,6 +65,14 @@ pub(crate) enum Opcode {
     // Request blank screen for ship mode
     ShipModeBlankRequest,
 
+    /// claims an authentication token out of a fixed name space
+    ///  this is first-come, first-serve basis. Once the system is initialized, no more tokens can be handed out.
+    ClaimToken,
+
+    /// system-level API that can be called by the Xous process launcher to check if we're at a state where less trusted code could be run
+    /// it basically checks that all tokens have been claimed by trusted OS procesess, thus blocking any further token creation
+    AllowLessTrustedCode,
+
     /////// planned
 
     // hides a canvas with a given GID
@@ -72,6 +80,8 @@ pub(crate) enum Opcode {
 
     // indicates if the current UI layout requires an input field
     //HasInput(bool),
+
+    Quit,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
