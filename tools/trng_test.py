@@ -26,6 +26,7 @@ class PrecursorUsb:
         self.registers = {}
         self.regions = {}
         self.gitrev = ''
+        self.vexdbg_addr = None
 
     def register(self, name):
         return int(self.registers[name], 0)
@@ -111,9 +112,13 @@ class PrecursorUsb:
             data = array.array('B', _dummy_s * bufsize)
             for attempt in range(10):
                 try:
+                    if self.vexdbg_addr != None:
+                        self.poke(self.vexdbg_addr, 0x00020000)
                     numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
                         wValue=(cur_addr & 0xffff), wIndex=((cur_addr >> 16) & 0xffff),
                         data_or_wLength=data, timeout=50000)
+                    if self.vexdbg_addr != None:
+                        self.poke(self.vexdbg_addr, 0x02000000)
                 except Exception as e:
                     self.dev.reset()
                     time.sleep(2)
@@ -262,6 +267,7 @@ def main():
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
+    pc_usb.vexdbg_addr = vexdbg_addr
     #pc_usb.ping_wdt()
     #print("Halting CPU.")
     #pc_usb.poke(vexdbg_addr, 0x00020000)
@@ -292,16 +298,12 @@ def main():
 
         if (phase % 2) == 1:
             #sys.stderr.write("phase {} fetching RAM_A\n".format(phase))
-            pc_usb.poke(vexdbg_addr, 0x00020000)
             page = pc_usb.burst_read(RAM_A, BURST_LEN)
-            pc_usb.poke(vexdbg_addr, 0x02000000)
             sys.stdout.buffer.write(page)
             #sys.stderr.write("got page A {}\n".format(len(page)))
         else:
             #sys.stderr.write("phase {} fetching RAM_B\n".format(phase))
-            pc_usb.poke(vexdbg_addr, 0x00020000)
             page = pc_usb.burst_read(RAM_B, BURST_LEN)
-            pc_usb.poke(vexdbg_addr, 0x02000000)
             sys.stdout.buffer.write(page)
             #sys.stderr.write("got page B {}\n".format(len(page)))
 
