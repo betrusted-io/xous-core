@@ -32,8 +32,10 @@ pub struct TrngErrors {
     pub av_adaptive_errs: Option<u8>,
     pub ro_repcount_errs: Option<u8>,
     pub ro_adaptive_errs: Option<u8>,
-    pub kernel_underruns: Option<u16>,
-    pub server_underruns: Option<u16>,
+    pub nist_errs: u32,
+    pub server_underruns: u16,
+    pub kernel_underruns: u16,
+    pub pending_mask: u32,
 }
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

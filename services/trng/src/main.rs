@@ -38,6 +38,7 @@ mod implementation {
         trng.err_stat = trng.get_tests();
 
         let pending = trng.csr.r(utra::trng_server::EV_PENDING);
+        trng.errors.pending_mask = pending;
         if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_EXCURSION0, 1)) != 0 {
             trng.errors.excursion_errs[0] = Some(ExcursionTest {
                 min: trng.csr.rf(utra::trng_server::AV_EXCURSION0_LAST_ERR_MIN) as u16,
@@ -70,14 +71,11 @@ mod implementation {
                 trng.errors.ro_adaptive_errs = Some(ro_adaptive as u8);
             }
         }
-        if (pending & trng.csr.ms(utra::trng_server::EV_PENDING_ERROR, 1)) != 0 {
-            if trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) != 0 {
-                trng.errors.server_underruns = Some(trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) as u16);
-            }
-            if trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) != 0 {
-                trng.errors.kernel_underruns = Some(trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16);
-            }
-        }
+        // record error summaries and errors from non-health sources
+        trng.errors.nist_errs = trng.csr.r(utra::trng_server::NIST_ERRORS);
+        trng.errors.server_underruns = trng.csr.rf(utra::trng_server::UNDERRUNS_SERVER_UNDERRUN) as u16;
+        trng.errors.kernel_underruns = trng.csr.rf(utra::trng_server::UNDERRUNS_KERNEL_UNDERRUN) as u16;
+
         // reset any error flags. try to do this a bit away from the pending clear, so it has time to take effect
         trng.csr.rmwf(utra::trng_server::CONTROL_CLR_ERR, 1);
 
@@ -109,8 +107,10 @@ mod implementation {
                     av_adaptive_errs: None,
                     ro_repcount_errs: None,
                     ro_adaptive_errs: None,
-                    kernel_underruns: None,
-                    server_underruns: None,
+                    kernel_underruns: 0,
+                    server_underruns: 0,
+                    nist_errs: 0,
+                    pending_mask: 0,
                 },
                 err_stat: HealthTests::default(),
             };
@@ -706,7 +706,7 @@ fn xmain() -> ! {
                 do_hook(hookdata, &mut error_cb_conns);
             },
             Some(api::Opcode::ErrorNotification) => {
-                log::error!("Got an error condition in the TRNG. Syndrome: {:?}", trng.get_errors());
+                log::error!("Got a notification interrupt from the TRNG. Syndrome: {:?}", trng.get_errors());
                 log::error!("Stats: {:?}", trng.get_err_stats());
                 send_event(&error_cb_conns);
             },
