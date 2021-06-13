@@ -24,6 +24,14 @@ use xous_ipc::{Buffer, String};
 use api::Opcode;
 use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 
+pub trait LayoutApi {
+    type Layout;
+
+    fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Self::Layout, xous::Error>;
+    fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error>;
+    fn resize(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Point, xous::Error>;
+}
+
 #[derive(Debug)]
 // GIDs of canvases that are used the "Chat" layout.
 struct ChatLayout {
@@ -38,8 +46,9 @@ struct ChatLayout {
     min_input_height: i16,
     gfx: graphics_server::Gfx,
 }
-impl ChatLayout {
-    pub fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<ChatLayout, xous::Error> {
+impl LayoutApi for ChatLayout {
+    type Layout = ChatLayout;
+    fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<ChatLayout, xous::Error> {
         let gfx = graphics_server::Gfx::new(&xns).unwrap();
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
@@ -84,7 +93,7 @@ impl ChatLayout {
             gfx,
         })
     }
-    pub fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
+    fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let content_canvas = canvases.get(&self.content).expect("couldn't find content canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
@@ -107,7 +116,7 @@ impl ChatLayout {
         self.gfx.draw_rectangle(rect).expect("can't clear canvas");
         Ok(())
     }
-    pub fn resize_input(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Point, xous::Error> {
+    fn resize(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Point, xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let predictive_canvas = canvases.get(&self.predictive).expect("couldn't find predictive canvas");
         let status_canvas = canvases.get(&self.status).expect("couldn't find status canvas");
@@ -141,40 +150,65 @@ impl ChatLayout {
     }
 }
 
-// remember GIDs of the canvases for modal pop-up boxes
-struct ModalCanvases {
-    pub password: Gid,
+// remember GIDs of the canvases for menus
+struct MenuLayout {
     pub menu: Gid,
-    pub alert: Gid,
+    gfx: graphics_server::Gfx,
+    menu_y_pad: i16,
+    menu_x_pad: i16,
+    menu_min_height: i16,
 }
-impl ModalCanvases {
-    fn init(trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<ModalCanvases, xous::Error> {
-        let password_canvas = Canvas::new(
-            Rectangle::new_coords(-1, -1, -1, -1),
-            255, &trng, None
-        ).expect("couldn't create password canvas");
-        canvases.insert(password_canvas.gid(), password_canvas).expect("can't store password canvas");
+impl LayoutApi for MenuLayout {
+    type Layout = MenuLayout;
+    fn init(xns: &xous_names::XousNames, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<MenuLayout, xous::Error> {
+        let gfx = graphics_server::Gfx::new(&xns).unwrap();
+        let screensize = gfx.screen_size().expect("Couldn't get screen size");
+        // get the height of various text regions to compute the layout
+        let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
 
+        const MENU_Y_PAD: i16 = 100;
+        const MENU_X_PAD: i16 = 35;
+        // build for an initial size of 1 entry
         let menu_canvas = Canvas::new(
-            Rectangle::new_coords(-1, -1, -1, -1),
+            Rectangle::new_coords(MENU_X_PAD, MENU_Y_PAD, screensize.x - MENU_X_PAD, MENU_Y_PAD + small_height),
             255, &trng, None
         ).expect("couldn't create menu canvas");
         canvases.insert(menu_canvas.gid(), menu_canvas).expect("can't store menu canvas");
 
-        let alert_canvas = Canvas::new(
-            Rectangle::new_coords(-1, -1, -1, -1),
-            255, &trng, None
-        ).expect("couldn't create alert canvas");
-        canvases.insert(alert_canvas.gid(), alert_canvas).expect("can't store alert canvas");
-
-        Ok(ModalCanvases {
-            password: password_canvas.gid(),
+        Ok(MenuLayout {
             menu: menu_canvas.gid(),
-            alert: alert_canvas.gid(),
+            gfx,
+            menu_y_pad: MENU_Y_PAD,
+            menu_x_pad: MENU_X_PAD,
+            menu_min_height: small_height,
         })
     }
-}
+    fn clear(&self, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
+        let menu_canvas = canvases.get(&self.menu).expect("couldn't find menu canvas");
 
+        let mut rect = menu_canvas.clip_rect();
+        rect.style = DrawStyle {fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0,};
+        self.gfx.draw_rectangle(rect)
+    }
+    fn resize(&mut self, new_height: i16, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<Point, xous::Error> {
+        let mut menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
+        let screensize = self.gfx.screen_size().expect("Couldn't get screen size");
+
+        let mut height: i16 = if new_height < self.menu_min_height {
+            self.menu_min_height
+        } else {
+            new_height
+        };
+        if new_height > screensize.y - self.menu_y_pad {
+            height = screensize.y - self.menu_y_pad;
+        }
+        let mut menu_clip_rect = Rectangle::new_coords(self.menu_x_pad, self.menu_y_pad, screensize.x - self.menu_x_pad, height);
+        menu_clip_rect.style = DrawStyle {fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0,};
+        menu_canvas.set_clip(menu_clip_rect);
+        self.gfx.draw_rectangle(menu_clip_rect).expect("can't clear menu");
+        Ok(menu_clip_rect.br)
+    }
+}
 
 /*
     Authentication tokens to the GAM are created on a first-come, first-serve basis,
@@ -288,7 +322,7 @@ fn xmain() -> ! {
 
     // a map of canvases accessable by Gid
     let mut canvases: FnvIndexMap<Gid, Canvas, 32> = FnvIndexMap::new();
-    // let modallayout = ModalCanvases::init(trng, &mut canvases).expect("can't add modal layouts");
+    let mut menulayout = MenuLayout::init(&xns, &trng, &mut canvases).expect("couldn't create menu layout");
     let mut chatlayout = ChatLayout::init(&xns, &trng, &mut canvases).expect("couldn't create chat layout");
     chatlayout.clear(&mut canvases).expect("couldn't clear initial chatlayout");
 
@@ -452,7 +486,7 @@ fn xmain() -> ! {
                 // ASSUME:
                 // very few canvases allow dynamic resizing, so we special case these
                 if cb.canvas == chatlayout.input {
-                    let newheight = chatlayout.resize_input(cb.requested.y, &mut canvases).expect("SetCanvasBoundsRequest couldn't recompute input canvas height");
+                    let newheight = chatlayout.resize(cb.requested.y, &mut canvases).expect("SetCanvasBoundsRequest couldn't recompute input canvas height");
                     cb.granted = Some(newheight);
                     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
