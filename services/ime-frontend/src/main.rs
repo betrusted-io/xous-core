@@ -3,7 +3,7 @@
 
 
 use gam::api::SetCanvasBoundsRequest;
-use ime_plugin_api::{ImefOpcode, ImefCallback};
+use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
 
 use log::{error, info};
 
@@ -29,6 +29,8 @@ struct InputTracker {
     input_canvas: Option<Gid>,
     /// prediction display area, as given by the GAM
     pred_canvas: Option<Gid>,
+    /// gam token, so the GAM can find the application that requested us
+    gam_token: Option<[u32; 4]>,
 
     /// our current prediction engine
     predictor: Option<PredictionPlugin>,
@@ -65,6 +67,7 @@ impl InputTracker {
             pred_canvas: None,
             predictor: None,
             pred_triggers: None,
+            gam_token: None,
             can_unpick: false,
             pred_phrase: String::<4000>::new(),
             last_trigger_char: Some(0),
@@ -76,6 +79,9 @@ impl InputTracker {
             pred_options: [None; MAX_PREDICTION_OPTIONS],
         }
     }
+    pub fn set_gam_token(&mut self, token: [u32; 4]) {
+        self.gam_token = Some(token);
+    }
     pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
         self.predictor = Some(predictor);
         self.pred_triggers = Some(predictor.get_prediction_triggers()
@@ -84,9 +90,11 @@ impl InputTracker {
     pub fn set_input_canvas(&mut self, input: Gid) {
         self.input_canvas = Some(input);
     }
+    pub fn clear_input_canvas(&mut self) { self.input_canvas = None }
     pub fn set_pred_canvas(&mut self, pred: Gid) {
         self.pred_canvas = Some(pred);
     }
+    pub fn clear_pred_canvas(&mut self) { self.pred_canvas = None }
     pub fn is_init(&self) -> bool {
         self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
     }
@@ -356,9 +364,9 @@ impl InputTracker {
                         self.insertion = 0;
                         if self.was_grown {
                             let mut req = SetCanvasBoundsRequest {
-                                canvas: ic,
                                 requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
                                 granted: None,
+                                token: self.gam_token.unwrap(),
                             };
                             if debug1{info!("attempting resize to {:?}", req.requested);}
                             self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
@@ -462,9 +470,9 @@ impl InputTracker {
                         31 // a default value to grow in case we don't have a valid last height
                     };
                     let mut req = SetCanvasBoundsRequest {
-                        canvas: ic,
                         requested: Point::new(0, ic_bounds.y + delta as i16),
                         granted: None,
+                        token: self.gam_token.unwrap(),
                     };
                     if debug1{info!("attempting resize to {:?}", req.requested);}
                     self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
@@ -606,8 +614,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // only one connection allowed: GAM
-    // however, currently have to refactor out the shellchat connection. revert this to 1 when that's done!!
-    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(2)).expect("can't register server");
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
 
     // hook the keyboard event server and have it forward keys to our local main loop
@@ -624,28 +631,30 @@ fn xmain() -> ! {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(ImefOpcode::SetInputCanvas) => {
-                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
-                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
-                    if debug1 || dbgcanvas {info!("got input canvas {:?}", g);}
-                    tracker.set_input_canvas(g);
-                });
-            }
-            Some(ImefOpcode::SetPredictionCanvas) => {
-                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
-                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
-                    if debug1 || dbgcanvas {info!("got prediction canvas {:?}", g);}
-                    tracker.set_pred_canvas(g);
-                });
-            }
-            Some(ImefOpcode::SetPredictionServer) => {
+            Some(ImefOpcode::ConnectBackend) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<String::<64>, _>().unwrap();
-                log::trace!("got prediction server: {}", s.as_str());
-                match xns.request_connection(s.as_str()) {
-                    Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
-                    _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str()),
+                let descriptor = buffer.to_original::<ImefDescriptor, _>().unwrap();
+
+                if let Some(input) = descriptor.input_canvas {
+                    if debug1 || dbgcanvas {info!("got input canvas {:?}", input);}
+                    tracker.set_input_canvas(input);
+                } else {
+                    tracker.clear_input_canvas();
                 }
+                if let Some(pred) = descriptor.prediction_canvas {
+                    if debug1 || dbgcanvas {info!("got prediction canvas {:?}", pred);}
+                    tracker.set_pred_canvas(pred);
+                } else {
+                    tracker.clear_pred_canvas();
+                }
+                if let Some(s) = descriptor.predictor {
+                    log::trace!("got prediction server: {}", s.as_str().unwrap());
+                    match xns.request_connection(s.as_str().unwrap()) {
+                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
+                        _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str().unwrap()),
+                    }
+                }
+                tracker.set_gam_token(descriptor.token);
             }
             Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);

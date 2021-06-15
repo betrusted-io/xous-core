@@ -5,7 +5,7 @@ use log::info;
 
 use core::fmt::Write;
 
-use ime_plugin_api::{ImeFrontEndApi, ImeFrontEnd};
+use gam::UxRegistration;
 use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, GlyphStyle, PixelColor};
 use xous::MessageEnvelope;
 use xous_ipc::{String, Buffer};
@@ -46,14 +46,26 @@ struct Repl {
 
     // command environment
     env: CmdEnv,
+
+    // our security token for making changes to our record on the GAM
+    token: [u32; 4],
 }
 impl Repl{
-    fn new(xns: &xous_names::XousNames, my_server_name: &str) -> Self {
+    fn new(xns: &xous_names::XousNames, sid: xous::SID) -> Self {
         let gam = gam::Gam::new(xns).expect("can't connect to GAM");
-        let content = gam.request_content_canvas(
-            my_server_name,
-            ShellOpcode::Redraw.to_usize().unwrap()
-        ).expect("couldn't get content canvas");
+
+        let token = gam.register_ux(UxRegistration {
+            app_name: String::<128>::from_str(APP_NAME_SHELLCHAT),
+            ux_type: gam::UxType::Chat,
+            predictor: Some(String::<64>::from_str(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL)),
+            listener: sid.to_array(), // note disclosure of our SID to the GAM -- the secret is now shared with the GAM!
+            redraw_id: ShellOpcode::Redraw.to_u32().unwrap(),
+            gotinput_id: Some(ShellOpcode::Line.to_u32().unwrap()),
+            audioframe_id: None,
+            rawkeys_id: None,
+        }).expect("couldn't register Ux context for shellchat");
+
+        let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
         Repl {
             input: None,
@@ -68,6 +80,7 @@ impl Repl{
             bubble_radius: 4,
             bubble_space: 4,
             env: CmdEnv::new(xns),
+            token: token.unwrap(),
         }
     }
 
@@ -220,7 +233,7 @@ impl Repl{
     }
 }
 
-////////////////// local message passing from callback
+////////////////// local message passing from Ux Callback
 use num_traits::{ToPrimitive, FromPrimitive};
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -232,17 +245,11 @@ enum ShellOpcode {
     /// exit the application
     Quit,
 }
-
-static mut CB_TO_MAIN_CONN: Option<xous::CID> = None;
-fn imef_cb(s: String::<4000>) {
-    if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
-        let buf = xous_ipc::Buffer::into_buf(s).or(Err(xous::Error::InternalError)).unwrap();
-        buf.lend(cb_to_main_conn, ShellOpcode::Line.to_u32().unwrap()).unwrap();
-    }
-}
 //////////////////
 
-pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
+// nothing prevents the two from being the same, other than naming conventions
+pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_"; // used internally by xous-names
+pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 
 #[xous::xous_main]
 fn xmain() -> ! {
@@ -255,12 +262,7 @@ fn xmain() -> ! {
     let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", shch_sid);
 
-    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(shch_sid).unwrap())};
-    // decrement imef allowlist count when this is refactored!
-    let mut imef = ImeFrontEnd::new(&xns).expect("can't connect to IMEF");
-    imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
-
-    let mut repl = Repl::new(&xns, SERVER_NAME_SHELLCHAT);
+    let mut repl = Repl::new(&xns, shch_sid);
     let mut update_repl = false;
     let mut was_callback = false;
 
@@ -300,11 +302,6 @@ fn xmain() -> ! {
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");
-    unsafe{
-        if let Some(cb) = CB_TO_MAIN_CONN {
-            xous::disconnect(cb).unwrap();
-        }
-    }
     xns.unregister_server(shch_sid).unwrap();
     xous::destroy_server(shch_sid).unwrap();
     log::trace!("quitting");

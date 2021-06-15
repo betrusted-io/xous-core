@@ -1,7 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 pub mod api;
-use api::*;
+pub use api::*;
 
 use graphics_server::api::{TextOp, TextView};
 
@@ -12,8 +12,7 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
-use ime_plugin_api::{ImefCallback, ImefOpcode};
-static mut INPUT_CB: Option<fn(String::<4000>)> = None;
+use ime_plugin_api::ImefCallback;
 
 #[derive(Debug)]
 pub struct Gam {
@@ -143,21 +142,17 @@ impl Gam {
         Ok(())
     }
 
-    pub fn request_content_canvas(&self, requestor_name: &str, redraw_id: usize) -> Result<Gid, xous::Error> {
-        let mut server = String::<256>::new();
-        use core::fmt::Write;
-        write!(server, "{}", requestor_name).expect("GAM_API: couldn't write request_content_canvas server name");
-        let req = ContentCanvasRequest {
-            canvas: Gid::new([0,0,0,0]),
-            servername: server,
-            redraw_scalar_id: redraw_id,
-        };
-        let mut buf = Buffer::into_buf(req).or(Err(xous::Error::InternalError))?;
+    pub fn request_content_canvas(&self, token: [u32; 4]) -> Result<Gid, xous::Error> {
+        let mut buf = Buffer::into_buf(token).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RequestContentCanvas.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::ContentCanvasReturn(ret) => {
-                Ok(ret.canvas)
+                if let Some(gid) = ret {
+                    Ok(gid)
+                } else {
+                    Err(xous::Error::InternalError)
+                }
             }
             _ => {
                 log::error!("GAM_API: request_content_canvas got a return value from the server that isn't expected or handled");
@@ -191,22 +186,28 @@ impl Gam {
             Err(xous::Error::InternalError)
         }
     }
-    pub fn register_input_focus_listener(&self, cb: fn(String::<4000>)) -> Result<(), xous::Error> {
-        if unsafe{INPUT_CB}.is_some() {
-            return Err(xous::Error::MemoryInUse) // can't hook it twice
+
+    pub fn register_ux(&self, registration: UxRegistration) -> Result<Option<[u32; 4]>, xous::Error> {
+        let mut buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::RegisterUx.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::UxToken(token) => {
+                Ok(token)
+            }
+            _ => {
+                Err(xous::Error::InternalError)
+            }
         }
-        unsafe{INPUT_CB = Some(cb)};
-        if self.callback_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.callback_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            xous::send_message(self.cid,
-                Message::new_scalar(Opcode::RegisterInputFocus.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
-        }
-        Ok(())
+    }
+
+    pub fn set_audio_opcode(&self, opcode: u32, token: [u32; 4]) -> Result<(), xous::Error> {
+        let audio_op = SetAudioOpcode {
+            token,
+            opcode,
+        };
+        let buf = Buffer::into_buf(audio_op).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::SetAudioOpcode.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_| ())
     }
 }
 
@@ -227,29 +228,6 @@ impl Drop for Gam {
         }
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
-        }
-    }
-}
-
-/// handles callback messages from server, in the library user's process space.
-fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(ImefCallback::GotInputLine) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
-                unsafe {
-                    if let Some(cb) = INPUT_CB {
-                        cb(inputline)
-                    }
-                }
-            },
-            Some(ImefCallback::Drop) => {
-                break; // this exits the loop and kills the thread
-            }
-            None => (),
         }
     }
 }

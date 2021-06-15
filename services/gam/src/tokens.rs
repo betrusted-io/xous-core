@@ -10,7 +10,11 @@ use xous_ipc::String;
     registration of interprocess comms between trusted elements, only relying on ephemeral,
     dynamically generated 128-bit tokens.
 */
+
+// if you add more UxContexts, and you want them authorized by the GAM, add their names here.
 const TOKEN_SLOTS: usize = 3;
+const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = ["shellchat", "menu", "status"];
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct NamedToken {
     token: [u32; 4],
@@ -18,14 +22,12 @@ pub(crate) struct NamedToken {
 }
 pub(crate) struct TokenManager {
     tokens: [Option<NamedToken>; TOKEN_SLOTS],
-    slot_names: [&'static str; TOKEN_SLOTS],
     trng: trng::Trng,
 }
 impl<'a> TokenManager {
     pub(crate) fn new(xns: &xous_names::XousNames) -> TokenManager {
         TokenManager {
             tokens: [None; TOKEN_SLOTS],
-            slot_names: ["status", "menu", "passwords"],
             trng: trng::Trng::new(&xns).unwrap(),
         }
     }
@@ -42,7 +44,7 @@ impl<'a> TokenManager {
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
         // first check if the name is valid
         let mut valid = false;
-        for &valid_name in self.slot_names.iter() {
+        for &valid_name in EXPECTED_BOOT_CONTEXTS.iter() {
             if name.eq(valid_name) {
                 valid = true;
             }
@@ -87,5 +89,15 @@ impl<'a> TokenManager {
             }
         }
         false
+    }
+    pub(crate) fn find_token(&self, name: &str) -> Option<[u32; 4]> {
+        for maybe_token in self.tokens.iter() {
+            if let Some(token) = maybe_token {
+                if token.name == String::<128>::from_str(name) {
+                    return Some(token.token)
+                }
+            }
+        }
+        None
     }
 }

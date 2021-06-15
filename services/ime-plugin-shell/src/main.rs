@@ -18,7 +18,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     // one connection only, should be the GAM
-    let ime_sh_sid = xns.register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL, Some(1)).expect("can't register server");
+    let ime_sh_sid = xns.register_name(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
     let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.

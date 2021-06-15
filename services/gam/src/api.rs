@@ -19,20 +19,43 @@ pub struct GamObject {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SetCanvasBoundsRequest {
-    pub canvas: Gid,
+    pub token: [u32; 4],
     pub requested: Point,
     pub granted: Option<Point>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub struct ContentCanvasRequest {
-    // return value of the canvas Gid
-    pub canvas: Gid,
-    // name of the server requesting the content canvas
-    pub servername: String<256>,
-    // redraw message scalar ID - to be sent back to the requestor in case a redraw is required
-    pub redraw_scalar_id: usize,
+pub struct SetAudioOpcode {
+    pub token: [u32; 4],
+    pub opcode: u32,
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub enum UxType {
+    Chat,
+    Menu,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct UxRegistration {
+    // request specification
+    pub app_name: String::<128>,  // the putative name of our application - GAM may modify this if a spoof attempt is detected
+    pub ux_type: UxType,
+    pub predictor: Option<String::<64>>, // optional specification for an IME prediction engine to use. This can be updated later on, or None and a default engine will be provided.
+
+    // Callbacks:
+    /// SID ofserver for callbacks from the GAM. Note this is a disclosure of the SID, which is normally a secret in the kernel services.
+    /// however, for apps, we allow disclosure of this to the kernel services, because we trust them.
+    pub listener: [u32; 4],
+    /// opcode ID for redraw messages. This is mandatory.
+    pub redraw_id: u32,
+    /// optional opcode ID for inputs. If presented, input Strings are sent to this Ux
+    pub gotinput_id: Option<u32>,
+    /// optional opcode ID for audio frames. If presented, audio callbacks requests for more play/rec data will be sent directly to this opcode
+    pub audioframe_id: Option<u32>,
+    /// optional opcode ID for raw keystrokes. They are passed on to the caller in real-time.
+    pub rawkeys_id: Option<u32>,
+}
+
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
@@ -55,18 +78,17 @@ pub(crate) enum Opcode {
     // forces a redraw (which also does defacement, etc.)
     Redraw,
 
-    // returns a GID to the "content" Canvas; currently, anyone can request it and draw to it, but maybe that policy should be stricter.
-    // the Gid argument is the rkyv return value.
-    //RequestContentCanvas, //(ContentCanvasRequest),
-
-    // registers the requester as an input focus object. keyboard input is passed to the graphical element with the current focus.
-    //RegisterInputFocus,
+    // returns a GID to the "content" Canvas of the token holder
+    RequestContentCanvas,
 
     // registers a Ux of a requested type
-    // takes in the LayoutType, default PredictorType, a SID for UxEvents, a human-readable identifier; returns a content canvas GID
+    // takes in the LayoutType, default PredictorType, a SID for UxEvents, a human-readable identifier token; returns a content canvas GID
     // also takes a bunch of optional ID codes for the various callbacks
     // internally assigns a trust level, based on a first-come first-serve basis for known services, and then a much lower trust for rando ones
     RegisterUx,
+
+    // updates the audio connection ID post-registration
+    SetAudioOpcode,
 
     // Requests setting the UI to the power down screen
     PowerDownRequest,
@@ -74,13 +96,15 @@ pub(crate) enum Opcode {
     // Request blank screen for ship mode
     ShipModeBlankRequest,
 
-    /// claims an authentication token out of a fixed name space
-    ///  this is first-come, first-serve basis. Once the system is initialized, no more tokens can be handed out.
+    // used to claim a GAM registration token (should be used only by status.rs)
     ClaimToken,
 
     /// system-level API that can be called by the Xous process launcher to check if we're at a state where less trusted code could be run
     /// it basically checks that all tokens have been claimed by trusted OS procesess, thus blocking any further token creation
     TrustedInitDone,
+
+    /// this is used internally to route input lines from the IMEF
+    InputLine,
 
     /////// planned
 
@@ -95,8 +119,9 @@ pub(crate) enum Opcode {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) enum Return {
+    UxToken(Option<[u32; 4]>),
     RenderReturn(TextView),
     SetCanvasBoundsReturn(SetCanvasBoundsRequest),
-    ContentCanvasReturn(ContentCanvasRequest),
+    ContentCanvasReturn(Option<Gid>),
     Failure,
 }

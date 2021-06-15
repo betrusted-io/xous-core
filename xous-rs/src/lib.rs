@@ -20,8 +20,6 @@ pub mod string;
 pub mod stringbuffer;
 pub mod syscall;
 
-pub mod names;
-
 pub use arch::{ProcessArgs, ProcessInit, ProcessKey, ThreadInit};
 pub use definitions::*;
 pub use messages::*;
