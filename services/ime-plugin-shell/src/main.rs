@@ -17,7 +17,8 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let ime_sh_sid = xns.register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL).expect("can't register server");
+    // one connection only, should be the GAM
+    let ime_sh_sid = xns.register_name(xous::names::SERVER_NAME_IME_PLUGIN_SHELL, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
     let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.

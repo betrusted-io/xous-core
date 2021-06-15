@@ -11,6 +11,10 @@ pub(crate) enum Opcode {
     Lookup,
     /// Create an authenticated connection to the target server.
     AuthenticatedLookup,
+    /// unregister a server, given its cryptographically unique SID.
+    Unregister,
+    /// indicates if all inherentely trusted slots have been occupied. Should not run untrusted code until this is the case.
+    TrustedInitDone,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -23,6 +27,12 @@ pub(crate) enum Return {
     SID([u32; 4]),
     /// A connection was successfully made with the given CID
     CID(xous::CID),
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct Registration {
+    pub name: xous_ipc::String::<64>,
+    pub conn_limit: Option<u32>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

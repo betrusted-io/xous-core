@@ -12,7 +12,6 @@ use num_traits::{ToPrimitive, FromPrimitive};
 pub struct Rtc {
     conn: CID,
     callback_sid: Option<xous::SID>,
-    llio: llio::Llio,
 }
 static mut RTC_CB: Option<fn(DateTime)> = None;
 impl Rtc {
@@ -22,7 +21,6 @@ impl Rtc {
         Ok(Rtc {
           conn,
           callback_sid: None,
-          llio: llio::Llio::new(&xns).expect("Can't connect to LLIO on behalf of RTC library"),
         })
     }
 
@@ -61,10 +59,6 @@ impl Rtc {
             sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
         )).unwrap();
         Ok(())
-    }
-    // this simply forwards the hook on to the LLIO library, which actually owns the Event peripheral where the interrupt is generated
-    pub fn hook_rtc_alarm_callback(&mut self, id: u32, cid: CID) -> Result<(), xous::Error> {
-        self.llio.hook_rtc_alarm_callback(id, cid)
     }
 
     pub fn request_datetime(&self) -> Result<(), xous::Error> {

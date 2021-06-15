@@ -463,7 +463,7 @@ static SHOULD_RESUME: AtomicBool = AtomicBool::new(false);
 static RESUME_EXEC: AtomicBool = AtomicBool::new(false);
 pub fn execution_gate() {
     let xns = xous_names::XousNames::new().unwrap();
-    let execgate_sid = xns.register_name(api::SERVER_NAME_EXEC_GATE).expect("can't register execution gate");
+    let execgate_sid = xns.register_name(api::SERVER_NAME_EXEC_GATE, None).expect("can't register execution gate");
     log::trace!("execution_gate registered with NS -- {:?}", execgate_sid);
 
     loop {
@@ -509,7 +509,8 @@ fn xmain() -> ! {
     xous::create_thread_0(execution_gate).unwrap();
 
     let xns = xous_names::XousNames::new().unwrap();
-    let susres_sid = xns.register_name(api::SERVER_NAME_SUSRES).expect("can't register server");
+    // unlimited connections allowed
+    let susres_sid = xns.register_name(api::SERVER_NAME_SUSRES, None).expect("can't register server");
     log::trace!("main loop registered with NS -- {:?}", susres_sid);
 
     // make a connection for the timeout thread to wake us up

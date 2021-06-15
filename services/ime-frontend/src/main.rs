@@ -605,7 +605,9 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT).expect("can't register server");
+    // only one connection allowed: GAM
+    // however, currently have to refactor out the shellchat connection. revert this to 1 when that's done!!
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
 
     // hook the keyboard event server and have it forward keys to our local main loop

@@ -668,7 +668,8 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG).expect("can't register server");
+    // unlimited connections allowed, anyone including less-trusted processes can get a random number
+    let trng_sid = xns.register_name(api::SERVER_NAME_TRNG, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", trng_sid);
 
     let mut trng = Trng::new(&xns);

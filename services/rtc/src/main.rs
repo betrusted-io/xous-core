@@ -526,7 +526,11 @@ fn xmain() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC).expect("can't register server");
+    // expected connections:
+    // - GAM
+    // - shellchat/rtc
+    // - shellchat/sleep x2
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", rtc_sid);
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 

@@ -71,7 +71,7 @@ pub(crate) enum Opcode {
 
     /// system-level API that can be called by the Xous process launcher to check if we're at a state where less trusted code could be run
     /// it basically checks that all tokens have been claimed by trusted OS procesess, thus blocking any further token creation
-    AllowLessTrustedCode,
+    TrustedInitDone,
 
     /////// planned
 
