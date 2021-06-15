@@ -12,9 +12,13 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
+use ime_plugin_api::{ImefCallback, ImefOpcode};
+static mut INPUT_CB: Option<fn(String::<4000>)> = None;
+
 #[derive(Debug)]
 pub struct Gam {
     conn: CID,
+    callback_sid: Option<xous::SID>,
 }
 impl Gam {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -22,6 +26,7 @@ impl Gam {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_GAM).expect("Can't connect to GAM");
         Ok(Gam {
           conn,
+          callback_sid: None,
         })
     }
 
@@ -186,15 +191,65 @@ impl Gam {
             Err(xous::Error::InternalError)
         }
     }
+    pub fn register_input_focus_listener(&self, cb: fn(String::<4000>)) -> Result<(), xous::Error> {
+        if unsafe{INPUT_CB}.is_some() {
+            return Err(xous::Error::MemoryInUse) // can't hook it twice
+        }
+        unsafe{INPUT_CB = Some(cb)};
+        if self.callback_sid.is_none() {
+            let sid = xous::create_server().unwrap();
+            self.callback_sid = Some(sid);
+            let sid_tuple = sid.to_u32();
+            xous::create_thread_4(callback_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
+            xous::send_message(self.cid,
+                Message::new_scalar(Opcode::RegisterInputFocus.to_usize().unwrap(),
+                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
+            )).unwrap();
+        }
+        Ok(())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Gam {
     fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        if let Some(sid) = self.callback_sid.take() {
+            // no need to tell the pstream server we're quitting: the next time a callback processes,
+            // it will automatically remove my entry as it will receive a ServerNotFound error.
+
+            // tell my handler thread to quit
+            let cid = xous::connect(sid).unwrap();
+            xous::send_message(cid,
+                Message::new_blocking_scalar(ImefCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+            xous::destroy_server(sid).unwrap();
+        }
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
+        }
+    }
+}
+
+/// handles callback messages from server, in the library user's process space.
+fn callback_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
+    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
+    loop {
+        let msg = xous::receive_message(sid).unwrap();
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ImefCallback::GotInputLine) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
+                unsafe {
+                    if let Some(cb) = INPUT_CB {
+                        cb(inputline)
+                    }
+                }
+            },
+            Some(ImefCallback::Drop) => {
+                break; // this exits the loop and kills the thread
+            }
+            None => (),
         }
     }
 }

@@ -57,7 +57,16 @@ pub(crate) enum Opcode {
 
     // returns a GID to the "content" Canvas; currently, anyone can request it and draw to it, but maybe that policy should be stricter.
     // the Gid argument is the rkyv return value.
-    RequestContentCanvas, //(ContentCanvasRequest),
+    //RequestContentCanvas, //(ContentCanvasRequest),
+
+    // registers the requester as an input focus object. keyboard input is passed to the graphical element with the current focus.
+    //RegisterInputFocus,
+
+    // registers a Ux of a requested type
+    // takes in the LayoutType, default PredictorType, a SID for UxEvents, a human-readable identifier; returns a content canvas GID
+    // also takes a bunch of optional ID codes for the various callbacks
+    // internally assigns a trust level, based on a first-come first-serve basis for known services, and then a much lower trust for rando ones
+    RegisterUx,
 
     // Requests setting the UI to the power down screen
     PowerDownRequest,
