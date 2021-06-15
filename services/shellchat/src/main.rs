@@ -242,17 +242,6 @@ fn imef_cb(s: String::<4000>) {
 }
 //////////////////
 
-fn test_thread() {
-    let xns = xous_names::XousNames::new().unwrap();
-    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    ticktimer.sleep_ms(5000).unwrap();
-    let rtc = rtc::Rtc::new(&xns).unwrap();
-    loop {
-        rtc.request_datetime().unwrap();
-        ticktimer.sleep_ms(2000).unwrap();
-    }
-}
-
 pub(crate) const SERVER_NAME_SHELLCHAT: &str = "_Shell chat application_";
 
 #[xous::xous_main]
@@ -262,20 +251,18 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT).expect("can't register server");
+    // unlimited connections allowed, this is a user app and it's up to the app to decide its policy
+    let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", shch_sid);
 
     unsafe{CB_TO_MAIN_CONN = Some(xous::connect(shch_sid).unwrap())};
+    // decrement imef allowlist count when this is refactored!
     let mut imef = ImeFrontEnd::new(&xns).expect("can't connect to IMEF");
     imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
 
     let mut repl = Repl::new(&xns, SERVER_NAME_SHELLCHAT);
     let mut update_repl = false;
     let mut was_callback = false;
-
-    if false {
-        xous::create_thread_0(test_thread).unwrap();
-    }
 
     log::trace!("starting main loop");
     loop {

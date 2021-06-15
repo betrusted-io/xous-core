@@ -63,7 +63,8 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
 
     log::trace!("|status: registering GAM|status thread");
     let xns = xous_names::XousNames::new().unwrap();
-    let status_sid = xns.register_name(SERVER_NAME_STATUS).expect("|status: can't register server");
+    // should be only one connection here, from the status main loop
+    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).expect("|status: can't register server");
     // create a connection for callback hooks
     unsafe{CB_TO_MAIN_CONN = Some(xous::connect(status_sid).unwrap())};
     let pump_conn = xous::connect(status_sid).unwrap();

@@ -63,7 +63,9 @@ fn xmain() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(api::SERVER_NAME_GFX).expect("can't register server");
+    // these connections should be established:
+    // - GAM
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
     log::trace!("Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.

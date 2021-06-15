@@ -177,9 +177,9 @@ impl Gam {
 
         Ok(returned_claim.token)
     }
-    pub fn allow_less_trusted_code(&self) -> Result<bool, xous::Error> {
+    pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
         let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::AllowLessTrustedCode.to_usize().unwrap(), 0, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::TrustedInitDone.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't run allow trusted code check");
         if let xous::Result::Scalar1(result) = response {
             if result == 1 {

@@ -618,11 +618,18 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO).expect("can't register server");
+    // connections expected:
+    // - codec
+    // - GAM
+    // - keyboard
+    // - shellchat/sleep
+    // - shellchat/environment
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C).expect("can't register I2C thread");
+    // each connection to llio also creates an i2c connection, so it has the same expectation list
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(5)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");

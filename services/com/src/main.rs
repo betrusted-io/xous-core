@@ -280,7 +280,8 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let com_sid = xns.register_name(api::SERVER_NAME_COM).expect("can't register server");
+    // unlimited connections allowed -- any server is currently allowed to talk to COM. This might need to be revisited.
+    let com_sid = xns.register_name(api::SERVER_NAME_COM, None).expect("can't register server");
     trace!("registered with NS -- {:?}", com_sid);
 
     // Create a new com object
