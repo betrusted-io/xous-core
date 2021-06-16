@@ -210,6 +210,16 @@ impl Gam {
         let buf = Buffer::into_buf(audio_op).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::SetAudioOpcode.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_| ())
     }
+
+    pub fn set_vibe(&self, enable: bool) -> Result<(), xous::Error> {
+        let ena =
+            if enable { 1 }
+            else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Vibe.to_usize().unwrap(),
+            ena, 0, 0, 0,)
+        ).map(|_| ())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

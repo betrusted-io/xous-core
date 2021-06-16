@@ -210,6 +210,7 @@ pub trait ImeFrontEndApi {
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
     fn redraw(&self) -> Result<(), xous::Error>;
+    fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
@@ -254,6 +255,17 @@ impl ImeFrontEndApi for ImeFrontEnd {
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
         buf.lend(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_| ())
+    }
+
+    fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error> {
+        log::trace!("sending keys: {:?}", keys);
+        xous::send_message(self.cid,
+            xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
+            keys[0] as u32 as usize,
+            keys[1] as u32 as usize,
+            keys[2] as u32 as usize,
+            keys[3] as u32 as usize,
+        )).map(|_|())
     }
 
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error> {

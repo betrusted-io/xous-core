@@ -5,12 +5,10 @@ use core::fmt::Write;
 
 #[derive(Debug)]
 pub struct Vibe {
-    kbd: keyboard::Keyboard,
 }
 impl Vibe {
-    pub fn new(xns: &xous_names::XousNames) -> Self {
+    pub fn new() -> Self {
         Vibe {
-            kbd: keyboard::Keyboard::new(&xns).unwrap(),
         }
     }
 }
@@ -27,11 +25,11 @@ impl<'a> ShellCmdApi<'a> for Vibe {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "on" => {
-                    self.kbd.set_vibe(true).unwrap();
+                    env.gam.set_vibe(true).unwrap();
                     write!(ret, "Keyboard vibrate on").unwrap();
                 }
                 "off" => {
-                    self.kbd.set_vibe(false).unwrap();
+                    env.gam.set_vibe(false).unwrap();
                     write!(ret, "Keyboard vibrate off").unwrap();
                 }
                 "long" => {

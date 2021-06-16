@@ -31,7 +31,6 @@ use enum_dispatch::enum_dispatch;
 
 //// todo:
 // - create menu server
-// - move vibe call to the GAM, reduce keyboard connections to 1
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
 
 #[enum_dispatch]
@@ -64,6 +63,8 @@ pub(crate) struct UxContext {
     pub gam_token: [u32; 4],
     /// sets a trust level, 255 is the highest (status bar); 254 is a boot-validated context. Less trusted content canvases default to 127.
     pub trust_level: u8,
+    /// set to true if keyboard vibrate is turned on
+    pub vibe: bool,
 
     /// CID to send ContextEvents
     pub listener: xous::CID,
@@ -85,13 +86,24 @@ struct ContextManager {
     tm: TokenManager,
     contexts: [Option<UxContext>; MAX_UX_CONTEXTS],
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
+    imef: ime_plugin_api::ImeFrontEnd,
+    kbd: keyboard::Keyboard,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
+        // hook the keyboard event server and have it forward keys to our local main loop
+        let kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
+        kbd.register_listener(api::SERVER_NAME_GAM, Some(Opcode::KeyboardEvent as u32), None).expect("couldn't register for keyboard events");
+
+        info!("acquiring connection to IMEF...");
+        let mut imef = ime_plugin_api::ImeFrontEnd::new(&xns).expect("Couldn't connect to IME front end");
+        imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
         ContextManager {
             tm: TokenManager::new(&xns),
             contexts: [None; MAX_UX_CONTEXTS],
             focused_context: None,
+            imef,
+            kbd,
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -128,6 +140,7 @@ impl ContextManager {
                         gotinput_id: registration.gotinput_id,
                         audioframe_id: registration.audioframe_id,
                         rawkeys_id: None,
+                        vibe: false,
                     };
                     for maybe_context in self.contexts.iter_mut() {
                         if maybe_context.is_none() {
@@ -151,6 +164,7 @@ impl ContextManager {
                         gotinput_id: None,
                         audioframe_id: None,
                         rawkeys_id: registration.rawkeys_id,
+                        vibe: false,
                     };
                     for maybe_context in self.contexts.iter_mut() {
                         if maybe_context.is_none() {
@@ -203,7 +217,6 @@ impl ContextManager {
     }
     pub(crate) fn activate(&mut self,
             gfx: &graphics_server::Gfx,
-            imef: &mut ime_plugin_api::ImeFrontEnd,
             canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
             token: [u32; 4],
             clear: bool,
@@ -217,13 +230,17 @@ impl ContextManager {
                         predictor: context.predictor,
                         token: context.gam_token,
                     };
-                    imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
+                    self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     if clear {
                         context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                     }
                     // now update the IMEF area, since we're initialized
                     // note: we may need to skip this call if the context does not utilize a predictor...
-                    imef.redraw().unwrap();
+                    self.imef.redraw().unwrap();
+
+                    // revert the keyboard vibe state
+                    self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
+
                     self.focused_context = Some(context.app_token);
                 }
             }
@@ -251,15 +268,6 @@ impl ContextManager {
     pub(crate) fn focused_app(&self) -> Option<[u32; 4]> {
         self.focused_context
     }
-    pub(crate) fn set_audio_op(&mut self, audio_op: SetAudioOpcode) {
-        for maybe_context in self.contexts.iter_mut() {
-            if let Some(context) = maybe_context {
-                if context.app_token == audio_op.token {
-                    (*context).audioframe_id = Some(audio_op.opcode);
-                }
-            }
-        }
-    }
     pub(crate) fn forward_input(&self, input: String::<4000>) -> Result<(), xous::Error> {
         if let Some(token) = self.focused_app() {
             for maybe_context in self.contexts.iter() {
@@ -276,6 +284,32 @@ impl ContextManager {
             return Err(xous::Error::UseBeforeInit)
         }
         Err(xous::Error::ServerNotFound)
+    }
+    pub(crate) fn key_event(&self, keys: [char; 4]) {
+        self.imef.send_keyevent(keys).expect("couldn't send keys to the IMEF");
+    }
+    fn focused_context(&'_ mut self) -> Option<&'_ mut UxContext> {
+        if let Some(focus) = self.focused_app() {
+            for maybe_context in self.contexts.iter_mut() {
+                if let Some(context) = maybe_context {
+                    if context.app_token == focus {
+                        return Some(context)
+                    }
+                }
+            }
+        }
+        None
+    }
+    pub(crate) fn set_audio_op(&mut self, audio_op: SetAudioOpcode) {
+        if let Some(context) = self.focused_context() {
+            (*context).audioframe_id = Some(audio_op.opcode);
+        }
+    }
+    pub(crate) fn vibe(&mut self, set_vibe: bool) {
+        self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
+        if let Some(context) = self.focused_context() {
+            (*context).vibe = set_vibe;
+        }
     }
 }
 
@@ -322,12 +356,7 @@ fn xmain() -> ! {
     canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
     canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // connect to the IME front end, and set its canvas
-    info!("acquiring connection to IMEF...");
-    let mut imef = ime_plugin_api::ImeFrontEnd::new(&xns).expect("Couldn't connect to IME front end");
-    imef.hook_listener_callback(imef_cb).expect("couldn't request events from IMEF");
-
-    // make a thread to manage the status bar -- this needs to start after the IMEF is initialized
+    // make a thread to manage the status bar -- this needs to start late, after the IMEF and most other things are initialized
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     let status_gid = status_canvas.gid().gid();
     log::trace!("starting status thread with gid {:?}", status_gid);
@@ -576,13 +605,42 @@ fn xmain() -> ! {
                 context_mgr.forward_input(inputline).expect("couldn't forward input line to focused app");
                 log::debug!("returned from forward_input");
             },
+            Some(Opcode::KeyboardEvent) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k2 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k3 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k4 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                ];
+                context_mgr.key_event(keys);
+            }),
+            Some(Opcode::Vibe) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
+                if ena != 0 { context_mgr.vibe(true) }
+                else { context_mgr.vibe(false) }
+            }),
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }
         // if we don't have a focused app, try and find the default boot app and bring it to focus.
         if context_mgr.focused_app().is_none() {
             if let Some(shellchat_token) = context_mgr.find_app_token_by_name(BOOT_APP_NAME) {
-                context_mgr.activate(&gfx, &mut imef, &mut canvases, shellchat_token, true);
+                context_mgr.activate(&gfx, &mut canvases, shellchat_token, true);
             }
         }
     }

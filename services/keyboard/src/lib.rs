@@ -1,21 +1,16 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::*;
 
 pub mod api;
 
-use api::{Opcode, Callback, KeyRawStates};
-use xous::{send_message, Message, msg_scalar_unpack};
-use xous_ipc::Buffer;
-
-static mut KBD_EVENT_CB: Option<fn([char; 4])> = None;
-static mut KBD_RAW_CB: Option<fn(KeyRawStates)> = None;
+use api::{Opcode, KeyboardRegistration};
+use xous::{send_message, Message};
+use xous_ipc::{Buffer, String};
 
 #[derive(Debug)]
 pub struct Keyboard {
     conn: xous::CID,
-    event_cb_sid: Option<xous::SID>,
-    raw_cb_sid: Option<xous::SID>,
 }
 impl Keyboard {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
@@ -23,45 +18,24 @@ impl Keyboard {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KBD).expect("Can't connect to KBD");
         Ok(Keyboard {
             conn,
-            event_cb_sid: None,
-            raw_cb_sid: None,
           })
     }
 
-    pub fn hook_keyboard_events(&mut self, cb: fn([char; 4])) -> Result<(), xous::Error> {
-        if unsafe{KBD_EVENT_CB}.is_some() {
-            return Err(xous::Error::MemoryInUse) // can't hook it twice
-        }
-        unsafe{KBD_EVENT_CB = Some(cb)};
-        if self.event_cb_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.event_cb_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(event_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterListener.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
-        }
-        Ok(())
-    }
+    pub fn register_listener(&self,
+        // the public name of the destination server. The calling server must guarantee it has sufficient connection priveleges with xous-names to accept the keyboard's incoming connection.
+        server_name: &str,
+        // if Some(u32), the enum Opcode ID of the command for the incoming scancodes (adjusted already for keyup/down, repeat, shift, etc.)
+        listener_id: Option<u32>,
+        // if Some(u32), the enum Opcode ID of the command for incoming raw scancodes (just raw row/col locations and up/down)
+        raw_listener_id: Option<u32>) -> Result<(), xous::Error> {
 
-    pub fn hook_raw_events(&mut self, cb: fn(KeyRawStates)) -> Result<(), xous::Error> {
-        if unsafe{KBD_RAW_CB}.is_some() {
-            return Err(xous::Error::MemoryInUse) // can't hook it twice
-        }
-        unsafe{KBD_RAW_CB = Some(cb)};
-        if self.raw_cb_sid.is_none() {
-            let sid = xous::create_server().unwrap();
-            self.raw_cb_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(raw_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            send_message(self.conn,
-                Message::new_scalar(Opcode::RegisterRawListener.to_usize().unwrap(),
-                sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize
-            )).unwrap();
-        }
-        Ok(())
+        let registration = KeyboardRegistration {
+            server_name: String::<64>::from_str(server_name),
+            listener_op_id: listener_id,
+            rawlistener_op_id: raw_listener_id,
+        };
+        let buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::RegisterListener.to_u32().unwrap()).map(|_| ())
     }
 
     pub fn set_vibe(&self, enable: bool) -> Result<(), xous::Error> {
@@ -87,104 +61,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Keyboard {
     fn drop(&mut self) {
-        // if we have callbacks, destroy the callback server
-        if let Some(sid) = self.event_cb_sid.take() {
-            // no need to tell the upstream server we're quitting: the next time a callback processes,
-            // it will automatically remove my entry as it will receive a ServerNotFound error.
-
-            // tell my handler thread to quit
-            let cid = xous::connect(sid).unwrap();
-            send_message(cid,
-                Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap();}
-        }
-
-        if let Some(sid) = self.raw_cb_sid.take() {
-            // no need to tell the upstream server we're quitting: the next time a callback processes,
-            // it will automatically remove my entry as it will receive a ServerNotFound error.
-
-            // tell my handler thread to quit
-            let cid = xous::connect(sid).unwrap();
-            send_message(cid,
-                Message::new_scalar(api::Callback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap();}
-        }
-
         // now de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
     }
-}
-
-
-/// handles callback messages from the keyboard server, in the library user's process space.
-fn event_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Callback::KeyEvent) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                unsafe {
-                    if let Some(cb) = KBD_EVENT_CB {
-                        cb(keys)
-                    }
-                }
-            }),
-            Some(Callback::Drop) => {
-                break; // this exits the loop and kills the thread
-            },
-            Some(Callback::KeyRawEvent) => panic!("wrong callback type issued: want KeyEvent, got KeyRawEvent!"),
-            None => (),
-        }
-    }
-    xous::destroy_server(sid).unwrap();
-}
-
-
-/// handles callback messages from the keyboard server, in the library user's process space.
-fn raw_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Callback::KeyEvent) => panic!("wrong callback type issued: want KeyRawEvent, got KeyEvent!"),
-            Some(Callback::Drop) => {
-                break; // this exits the loop and kills the thread
-            },
-            Some(Callback::KeyRawEvent) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let krs = buffer.to_original::<KeyRawStates, _>().unwrap();
-                unsafe {
-                    if let Some(cb) = KBD_RAW_CB {
-                        cb(krs)
-                    }
-                }
-            },
-            None => (),
-        }
-    }
-    xous::destroy_server(sid).unwrap();
 }

@@ -8,9 +8,9 @@ use heapless::Vec;
 
 use log::info;
 
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::*;
 use xous_ipc::Buffer;
-use api::{Opcode, KeyRawStates};
+use api::{Opcode, KeyRawStates, KeyboardRegistration};
 use xous::{CID, msg_scalar_unpack};
 
 /// Compute the dvorak key mapping of row/col to key tuples
@@ -800,11 +800,14 @@ mod implementation {
     }
 }
 
-fn send_rawstates(cb_conns: &mut [Option<CID>; 16], krs: &KeyRawStates) {
+// for now we restrict to 1: we delegate authentication to the primary listener, that is, the GAM.
+const MAX_LISTENERS: usize = 1;
+
+fn send_rawstates(cb_conns: &mut [Option<(CID, u32)>; MAX_LISTENERS], krs: &KeyRawStates) {
     for maybe_conn in cb_conns.iter_mut() {
-        if let Some(conn) = maybe_conn {
+        if let Some((conn, opcode)) = maybe_conn {
             let buf = Buffer::into_buf(*krs).unwrap();
-            match buf.lend(*conn, Callback::KeyRawEvent.to_u32().unwrap()) {
+            match buf.lend(*conn, *opcode) {
                 Err(xous::Error::ServerNotFound) => {
                     *maybe_conn = None
                 },
@@ -825,12 +828,11 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // connections expected:
     //  - GAM
-    //  - shellchat (for vibe demo)
     //  - graphics (if building for hosted mode)
     #[cfg(target_os = "none")]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(1)).expect("can't register server");
     #[cfg(not(target_os = "none"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(3)).expect("can't register server");
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
@@ -840,8 +842,11 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
-    let mut normal_conns: [Option<CID>; 16] = [None; 16];
-    let mut raw_conns: [Option<CID>; 16] = [None; 16];
+    // reduce connection count to 1, but leave the option to add more later
+    // for now, we only expect to ever foward events to the GAM, which is capable of doing authentication
+    // on our behalf.
+    let mut normal_conns: [Option<(CID, u32)>; MAX_LISTENERS] = [None; {MAX_LISTENERS}];
+    let mut raw_conns: [Option<(CID, u32)>; MAX_LISTENERS] = [None; {MAX_LISTENERS}];
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns).unwrap();
@@ -860,36 +865,45 @@ fn xmain() -> ! {
                 if ena != 0 { vibe = true }
                 else { vibe = false }
             }),
-            Some(Opcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
-                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                let cid = Some(xous::connect(sid).unwrap());
-                let mut found = false;
-                for entry in normal_conns.iter_mut() {
-                    if *entry == None {
-                        *entry = cid;
-                        found = true;
-                        break;
+            Some(Opcode::RegisterListener) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let registration = buffer.to_original::<KeyboardRegistration, _>().unwrap();
+                let cid = match xns.request_connection_blocking(registration.server_name.as_str().unwrap()) {
+                    Ok(id) => id,
+                    _ =>  {
+                        log::error!("register listener could not connect to {}, ignoring", registration.server_name);
+                        // TODO: maybe convert this to something that returns an error code.
+                        // or maybe not? nobody /should/ be trying to eavesdrop on the keyboard server, after all, right? amiright?
+                        continue;
+                    }
+                };
+                if let Some(op) = registration.listener_op_id {
+                    let mut found = false;
+                    for entry in normal_conns.iter_mut() {
+                        if *entry == None {
+                            *entry = Some((cid, op));
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        log::error!("RegisterListener ran out of space registering scancode callback");
                     }
                 }
-                if !found {
-                    log::error!("RegisterListener ran out of space registering callback");
-                }
-            }),
-            Some(Opcode::RegisterRawListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
-                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                let cid = Some(xous::connect(sid).unwrap());
-                let mut found = false;
-                for entry in raw_conns.iter_mut() {
-                    if *entry == None {
-                        *entry = cid;
-                        found = true;
-                        break;
+                if let Some(op) = registration.rawlistener_op_id {
+                    let mut found = false;
+                    for entry in raw_conns.iter_mut() {
+                        if *entry == None {
+                            *entry = Some((cid, op));
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        log::error!("RegisterListener ran out of space registering rawcode callback");
                     }
                 }
-                if !found {
-                    log::error!("RegisterListener ran out of space registering callback");
-                }
-            }),
+            },
             Some(Opcode::SelectKeyMap) => msg_scalar_unpack!(msg, km, _, _, _, {
                 kbd.set_map(KeyMap::from(km))
             }),
@@ -907,9 +921,9 @@ fn xmain() -> ! {
                 };
                 info!("injecting emulation key press '{}'", key);
                 for maybe_conn in normal_conns.iter_mut() {
-                    if let Some(conn) = maybe_conn {
+                    if let Some((conn, opcode)) = maybe_conn {
                         match xous::send_message(*conn,
-                            xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
+                            xous::Message::new_scalar(*opcode as usize,
                             key as u32 as usize,
                             '\u{0000}' as u32 as usize,
                             '\u{0000}' as u32 as usize,
@@ -985,9 +999,9 @@ fn xmain() -> ! {
                     }
 
                     for maybe_conn in normal_conns.iter_mut() {
-                        if let Some(conn) = maybe_conn {
+                        if let Some((conn, opcode)) = maybe_conn {
                             match xous::send_message(*conn,
-                                xous::Message::new_scalar(api::Callback::KeyEvent.to_usize().unwrap(),
+                                xous::Message::new_scalar(*opcode as usize,
                                 keys[0] as u32 as usize,
                                 keys[1] as u32 as usize,
                                 keys[2] as u32 as usize,

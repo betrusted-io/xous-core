@@ -110,7 +110,7 @@ fn try_main() -> Result<(), DynError> {
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
-        Some("run") => run(false, &benchmark_pkgs)?,
+        Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
         Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, None)?,
         Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, None)?,

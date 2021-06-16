@@ -142,7 +142,7 @@ impl CmdEnv {
             sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
-            vibe_cmd: Vibe::new(&xns),
+            vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
             audio_cmd: Audio::new(&xns),
             sha_cmd: sha,

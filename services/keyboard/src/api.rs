@@ -162,11 +162,8 @@ pub(crate) enum Opcode {
     /// set which keyboard mapping is present
     SelectKeyMap, //(KeyMap),
 
-    /// request interpreted ScanCodes to be sent
-    RegisterListener, //(String::<64>),
-
-    /// request raw keyup/keydown events to be sent
-    RegisterRawListener, //(String::<64>),
+    /// request for ScanCodes
+    RegisterListener,
 
     /// set repeat delay, rate; both in ms
     SetRepeat, //(u32, u32),
@@ -187,10 +184,12 @@ pub(crate) enum Opcode {
     SuspendResume,
 }
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum Callback {
-    KeyEvent,
-    KeyRawEvent,
-    Drop,
+// this structure is used to register a keyboard listener. Currently, we only accept
+// one trusted listener (enforced by name server and structurally in the code),
+// which is the GAM.
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub(crate) struct KeyboardRegistration {
+    pub server_name: xous_ipc::String::<64>,
+    pub listener_op_id: Option<u32>,
+    pub rawlistener_op_id: Option<u32>,
 }
-

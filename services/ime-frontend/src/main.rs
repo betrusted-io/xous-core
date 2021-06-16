@@ -582,27 +582,6 @@ impl InputTracker {
     }
 }
 
-// we have to store this connection state somewhere, either in the lib side or the local side
-// it's unsafe to access because in theory, someone could change the value between when we
-// unwrap it and when we use it. However, we guarantee this not to happen through the construction
-// of the program itself. Later on (maybe in v0.9) once we get Boxed closures, it would be good to
-// re-implement this callback as a Boxed closure instead of a function, but for Xous 0.8 this is the best
-// we can do.
-static mut CB_TO_MAIN_CONN: Option<CID> = None;
-fn handle_keyevents(keys: [char; 4]) {
-    log::trace!("got key event callback");
-    if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
-        log::trace!("sending keys: {:?}", keys);
-        xous::send_message(cb_to_main_conn,
-            xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
-            keys[0] as u32 as usize,
-            keys[1] as u32 as usize,
-            keys[2] as u32 as usize,
-            keys[3] as u32 as usize,
-        )).unwrap();
-    }
-}
-
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;
@@ -616,11 +595,6 @@ fn xmain() -> ! {
     // only one connection allowed: GAM
     let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
-
-    // hook the keyboard event server and have it forward keys to our local main loop
-    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(imef_sid).unwrap())};
-    let mut kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
-    kbd.hook_keyboard_events(handle_keyevents).unwrap();
 
     let mut tracker = InputTracker::new(&xns);
 
@@ -743,11 +717,6 @@ fn xmain() -> ! {
         }
     }
     log::trace!("main loop exit, destroying servers");
-    unsafe{
-        if let Some(cb) = CB_TO_MAIN_CONN {
-            xous::disconnect(cb).unwrap();
-        }
-    }
     xns.unregister_server(imef_sid).unwrap();
     xous::destroy_server(imef_sid).unwrap();
     log::trace!("quitting");

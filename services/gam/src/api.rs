@@ -106,6 +106,12 @@ pub(crate) enum Opcode {
     /// this is used internally to route input lines from the IMEF
     InputLine,
 
+    /// passed to the keyboard server to notify me of a keyboard event
+    KeyboardEvent,
+
+    /// used to turn keyboard vibrate on and off
+    Vibe,
+
     /////// planned
 
     // hides a canvas with a given GID
