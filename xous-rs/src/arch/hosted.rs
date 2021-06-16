@@ -687,6 +687,8 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                         eprintln!("Server shut down: {}", e);
                         std::process::exit(0);
                     }
+                    data.shrink_to_fit();
+                    assert_eq!(data.len(), data.capacity());
                     let len = data.len();
                     let addr = data.as_mut_ptr();
                     memory_message.buf.addr = crate::MemoryAddress::new(addr as _).unwrap();
