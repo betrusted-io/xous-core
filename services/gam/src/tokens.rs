@@ -42,6 +42,7 @@ impl<'a> TokenManager {
         allow
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
+        log::trace!("claiming token {}", name);
         // first check if the name is valid
         let mut valid = false;
         for &valid_name in EXPECTED_BOOT_CONTEXTS.iter() {
@@ -65,19 +66,23 @@ impl<'a> TokenManager {
         if registered { return None }
         // now do the registration
         let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(),];
+        log::trace!("registering {} to {:x?}", name, token);
         for maybe_token in self.tokens.iter_mut() {
             if maybe_token.is_none() {
                 *maybe_token = Some(NamedToken {
                     token,
                     name: String::<128>::from_str(name),
                 });
+                log::trace!("token table after registration is {:x?}", self.tokens);
+                return Some(token)
             }
-            return Some(token)
         }
         // somehow, we didn't have space -- but with all the previous checks, we really should have
         None
     }
     pub(crate) fn is_token_valid(&self, token: [u32; 4]) -> bool {
+        log::trace!("checking for validity of token {:x?}", token);
+        log::trace!("token table is {:x?}", self.tokens);
         for maybe_token in self.tokens.iter() {
             match maybe_token {
                 Some(found_token) => {

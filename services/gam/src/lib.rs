@@ -94,6 +94,7 @@ impl Gam {
             canvas: gid,
             obj: GamObjectType::Rect(rect),
         };
+        log::trace!("draw_rectangle: {:?}, conn: {}", go, self.conn);
         let buf = Buffer::into_buf(go).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::RenderObject.to_u32().unwrap()).map(|_|())
     }
@@ -122,7 +123,7 @@ impl Gam {
                 .expect("GAM_API: can't get canvas bounds from GAM");
             if let xous::Result::Scalar2(tl, br) = response {
             // note that the result should always be normalized so the rectangle's "tl" should be (0,0)
-            log::trace!("GAM_API: tl:{}, br:{}", tl, br);
+            log::trace!("GAM_API: tl:{:?}, br:{:?}", Point::from(tl), Point::from(br));
             assert!(tl == 0, "GAM_API: api call returned non-zero top left for canvas bounds");
             Ok(br.into())
         } else {

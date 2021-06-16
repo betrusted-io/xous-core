@@ -66,7 +66,9 @@ impl Repl{
         }).expect("couldn't register Ux context for shellchat");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
+        log::trace!("content canvas {:?}", content);
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
+        log::trace!("size {:?}", screensize);
         Repl {
             input: None,
             msg: None,
@@ -183,11 +185,13 @@ impl Repl{
         )).expect("can't clear content area");
     }
     fn redraw(&mut self) -> Result<(), xous::Error> {
+        log::trace!("going into redraw");
         self.clear_area();
 
         // this defines the bottom border of the text bubbles as they stack up wards
         let mut bubble_baseline = self.screensize.y - self.margin.y;
 
+        log::trace!("drawing chat history");
         // iterator returns from oldest to newest
         // .rev() iterator is from newest to oldest
         for h in self.history.iter().rev() {
@@ -215,6 +219,7 @@ impl Repl{
             bubble_tv.margin = self.bubble_margin;
             bubble_tv.ellipsis = false; bubble_tv.insertion = None;
             write!(bubble_tv.text, "{}", h.text.as_str().expect("couldn't convert history text")).expect("couldn't write history text to TextView");
+            log::trace!("posting {}", bubble_tv.text);
             self.gam.post_textview(&mut bubble_tv).expect("couldn't render bubble textview");
 
             if let Some(bounds) = bubble_tv.bounds_computed {
@@ -254,7 +259,7 @@ pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Trace);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

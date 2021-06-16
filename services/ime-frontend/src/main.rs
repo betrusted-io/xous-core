@@ -700,12 +700,11 @@ fn xmain() -> ! {
                         log::trace!("tracking keys: {:?}", keys);
                         if let Some(line) = tracker.update(keys).expect("couldn't update input tracker with latest key presses") {
                             if dbglistener{info!("sending listeners {:?}", line);}
-                            let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
-
                             for maybe_conn in listeners.iter_mut() {
                                 if let Some(conn) = maybe_conn {
                                     if dbglistener{info!("sending to conn {:?}", conn);}
-                                    match buf.lend(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
+                                    let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
+                                    match buf.send(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
                                         Err(xous::Error::ServerNotFound) => {
                                             *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
                                         },
@@ -739,7 +738,8 @@ fn xmain() -> ! {
                     // ignore keyboard events until we've fully initialized
                 }
             }
-            None => {log::error!("couldn't convert opcode"); break}
+            Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}
+            None => {log::error!("couldn't convert opcode");}
         }
     }
     log::trace!("main loop exit, destroying servers");

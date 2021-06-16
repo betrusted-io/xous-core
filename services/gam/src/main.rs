@@ -28,10 +28,9 @@ use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use core::{sync::atomic::{AtomicU32, Ordering}};
 
 //// todo:
-// - create the UxRegistration struct
-// - convert shellchat to register a Ux
 // - move vibe call to the GAM, reduce keyboard connections to 1
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
+// - create menu server
 // - macro-ize the unwrapping of the UxLayout enum
 
 #[derive(Debug, Copy, Clone)]
@@ -286,7 +285,7 @@ impl ContextManager {
                     if token == context.app_token {
                         if let Some(input_op) = context.gotinput_id {
                             let buf = Buffer::into_buf(input).or(Err(xous::Error::InternalError)).unwrap();
-                            return buf.lend(context.listener, input_op).map(|_| ())
+                            return buf.send(context.listener, input_op).map(|_| ())
                         }
                     }
                 }
@@ -311,7 +310,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -485,7 +484,7 @@ fn xmain() -> ! {
             Some(Opcode::SetCanvasBounds) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut cb = buffer.to_original::<SetCanvasBoundsRequest, _>().unwrap();
-                log::trace!("SetCanvasBoundsRequest {:?}", cb);
+                log::debug!("SetCanvasBoundsRequest {:?}", cb);
 
                 let granted = context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &&status_canvas, &mut canvases);
                 if granted.is_some() {
@@ -495,20 +494,22 @@ fn xmain() -> ! {
                 }
                 cb.granted = granted;
                 let ret = api::Return::SetCanvasBoundsReturn(cb);
+                log::debug!("returning {:?}", cb);
                 buffer.replace(ret).unwrap();
             }
             Some(Opcode::RequestContentCanvas) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let req = buffer.to_original::<[u32; 4], _>().unwrap();
-                log::trace!("RequestContentCanvas {:?}", req);
+                log::debug!("RequestContentCanvas {:?}", req);
 
                 let ret = api::Return::ContentCanvasReturn(context_mgr.get_content_canvas(req));
+                log::debug!("returning {:?}", ret);
                 buffer.replace(ret).unwrap();
             }
             Some(Opcode::RenderObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<GamObject, _>().unwrap();
-                log::trace!("renderobject {:?}", obj);
+                log::debug!("renderobject {:?}", obj);
                 if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                     // first, figure out if we should even be drawing to this canvas.
                     if canvas.is_drawable() {
@@ -589,7 +590,9 @@ fn xmain() -> ! {
                 // receive the keyboard input and pass it on to the context with focus
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let inputline = buffer.to_original::<String::<4000>, _>().unwrap();
+                log::debug!("received input line, forwarding on... {}", inputline);
                 context_mgr.forward_input(inputline).expect("couldn't forward input line to focused app");
+                log::debug!("returned from forward_input");
             },
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}

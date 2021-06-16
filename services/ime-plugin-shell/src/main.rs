@@ -123,7 +123,10 @@ fn xmain() -> ! {
             Some(Opcode::GetPredictionTriggers) => {
                 xous::return_scalar(msg.sender, mytriggers.into()).expect("couldn't return GetPredictionTriggers");
             }
-            None => {error!("unknown Opcode"); break}
+            Some(Opcode::Quit) => {
+                error!("received quit, goodbye!"); break;
+            }
+            None => {error!("unknown Opcode");}
         }
     }
     log::trace!("main loop exit, destroying servers");

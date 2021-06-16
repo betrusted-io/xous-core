@@ -59,6 +59,8 @@ pub enum Opcode {
     /// return the prediction triggers used by this IME. These are characters that can indicate that a
     /// whole predictive unit has been entered.
     GetPredictionTriggers,
+
+    Quit,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -188,8 +190,7 @@ pub enum ImefOpcode {
     /// force a redraw of the UI
     Redraw,
 
-    // this is the event opcode used by listeners
-    //GotInputLine, //(String<4000>),
+    Quit,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ImefCallback {
