@@ -44,10 +44,9 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
     PREVIOUS_PAIR = Some((pid, tid));
 }
 
-// #[allow(dead_code)]
-// pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
-//     PREVIOUS_PAIR.take()
-// }
+pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
+    PREVIOUS_PAIR.take()
+}
 
 /// Trap entry point rust (_start_trap_rust)
 ///
@@ -104,7 +103,15 @@ pub extern "C" fn trap_handler(
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
             let thread = p.current_thread();
-            unsafe { _xous_syscall_return_result(&response, thread) };
+            // If we're resuming a process that was previously sleeping, restore the
+            // thread context. Otherwise, keep the thread context the same and pass
+            // the return values in 8 argument registers.
+            if response == xous_kernel::Result::ResumeProcess {
+                crate::arch::syscall::resume(current_pid().get() == 1, thread);
+            } else {
+                // println!("Returning to address {:08x}", thread.sepc);
+                unsafe { _xous_syscall_return_result(&response, thread) };
+            }
         });
     }
 

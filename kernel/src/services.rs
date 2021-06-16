@@ -559,6 +559,23 @@ impl SystemServices {
         Ok(())
     }
 
+    pub fn runnable(&self, pid: PID, tid: Option<TID>) -> Result<bool, xous_kernel::Error> {
+        let process = self.get_process(pid)?;
+        if let Some(tid) = tid {
+            Ok(match process.state {
+                ProcessState::Running(x) if x & (1 << tid) == 0 => true,
+                ProcessState::Ready(x) if x & (1 << tid) == 0 => true,
+                ProcessState::Sleeping => true,
+                _ => false,
+            })
+        } else {
+            Ok(match process.state {
+                ProcessState::Running(_) | ProcessState::Ready(_) | ProcessState::Sleeping => true,
+                _ => false,
+            })
+        }
+    }
+
     /// Mark the specified context as ready to run. If the thread is Sleeping, mark
     /// it as Ready.
     pub fn ready_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
@@ -572,6 +589,7 @@ impl SystemServices {
             }
             ProcessState::Ready(x) if x & (1 << tid) == 0 => ProcessState::Ready(x | (1 << tid)),
             ProcessState::Sleeping => ProcessState::Ready(1 << tid),
+            ProcessState::Debug(x) if x & (1 << tid) == 0 => ProcessState::Debug(x | (1 << tid)),
             other => panic!(
                 "PID {} was not in a state to wake thread {}: {:?}",
                 pid, tid, other
@@ -1952,6 +1970,54 @@ impl SystemServices {
         self.switch_to_thread(parent_pid, None).unwrap();
 
         Ok(parent_pid)
+    }
+
+    pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+        let (process_state, parent_pid) = {
+            let process = self.get_process_mut(pid)?;
+            (process.state, process.ppid)
+        };
+        let new_process_state = match process_state {
+            ProcessState::Allocated => ProcessState::Allocated,
+            ProcessState::Free => ProcessState::Free,
+            ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
+            ProcessState::Ready(tids) => ProcessState::Debug(tids),
+            ProcessState::Sleeping => ProcessState::Debug(0),
+            ProcessState::Debug(tids) => ProcessState::Debug(tids),
+            ProcessState::Running(tids) => {
+                // Switch to the parent process when we return.
+                let current_tid = arch::process::current_tid();
+
+                let parent_process = self.get_process_mut(parent_pid).unwrap();
+                parent_process.activate().unwrap();
+                let mut p = crate::arch::process::Process::current();
+                // FIXME: What happens if this fails? We're currently in the new process
+                // but without a context to switch to.
+                p.set_thread(parent_process.previous_thread).unwrap();
+                parent_process.current_thread = parent_process.previous_thread;
+
+                // Ensure we don't switch back to the same process.
+                unsafe { crate::arch::irq::take_isr_return_pair() };
+                ProcessState::Ready(tids | 1 << current_tid)
+            }
+        };
+        self.get_process_mut(pid).unwrap().state = new_process_state;
+        Ok(())
+    }
+
+    pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
+        let process = self.get_process_mut(pid)?;
+        process.state = match process.state {
+            ProcessState::Allocated => ProcessState::Allocated,
+            ProcessState::Free => ProcessState::Free,
+            ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
+            ProcessState::Ready(tids) => ProcessState::Ready(tids),
+            ProcessState::Sleeping => ProcessState::Sleeping,
+            ProcessState::Debug(0) => ProcessState::Sleeping,
+            ProcessState::Debug(tids) => ProcessState::Ready(tids),
+            ProcessState::Running(tids) => ProcessState::Running(tids),
+        };
+        Ok(())
     }
 
     /// Calls the provided function with the current inner process state.

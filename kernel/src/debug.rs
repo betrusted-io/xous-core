@@ -305,7 +305,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
 
     #[cfg(feature = "gdbserver")]
     unsafe {
-        use crate::debug::gdb_server::{GDB_STATE, XousDebugState};
+        use crate::debug::gdb_server::{XousDebugState, GDB_STATE};
         use gdbstub::state_machine::GdbStubStateMachine;
         use gdbstub::{DisconnectReason, GdbStubError};
         if let Some(XousDebugState {
@@ -438,6 +438,22 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                 Err(e) => println!("Unable to start GDB server: {}", e),
             }
         }
+        b's' => {
+            println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>> Suspenidng PID 3");
+            crate::services::SystemServices::with_mut(|system_services| {
+                system_services
+                    .suspend_process(xous_kernel::PID::new(3).unwrap())
+                    .unwrap();
+            });
+        }
+        b'c' => {
+            println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>> Continuing (Resuming) PID 3");
+            crate::services::SystemServices::with_mut(|system_services| {
+                system_services
+                    .continue_process(xous_kernel::PID::new(3).unwrap())
+                    .unwrap();
+            });
+        }
         b'h' => {
             println!("Xous Kernel Debug");
             println!("key | command");
@@ -447,6 +463,8 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes and threads");
             println!(" r  | report RAM usage of all processes");
+            println!(" s  | Suspend PID 3");
+            println!(" c  | Continue PID 3");
         }
         _ => {}
     }
