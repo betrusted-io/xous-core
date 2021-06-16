@@ -41,6 +41,7 @@ pub struct Llio {
 }
 impl Llio {
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_LLIO).expect("Can't connect to LLIO");
         let i2c_conn = xns.request_connection_blocking(api::SERVER_NAME_I2C).expect("Can't connect to I2C");
         Ok(Llio {
@@ -436,6 +437,33 @@ impl Llio {
             Message::new_blocking_scalar(Opcode::PowerAudio.to_usize().unwrap(), arg, 0, 0, 0)
         ).map(|_| ())
     }
+    // -149mA @ 4152mV crypto on // -143mA @ 4149mV crypto off
+    pub fn crypto_on(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PowerCrypto.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    // setting this to true turns off WFI capabilities, forcing power always on
+    pub fn wfi_override(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::WfiOverride.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn crypto_power_status(&self) -> Result<(bool, bool, bool), xous::Error> { // sha, engine, override status
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PowerCryptoStatus.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(val) = response {
+            let sha =  if (val & 1) == 0 { false } else { true };
+            let engine =  if (val & 2) == 0 { false } else { true };
+            let force =  if (val & 4) == 0 { false } else { true };
+            Ok((sha, engine, force))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
     pub fn soc_gitrev(&self) -> Result<(u8, u8, u8, u8, u32), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::InfoGit.to_usize().unwrap(), 0, 0, 0, 0))?;
@@ -466,6 +494,35 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
+    pub fn gpio_data_direction(&self, dir: u8) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::GpioDataDrive.to_usize().unwrap(), dir as usize, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn gpio_debug_powerdown(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DebugPowerdown.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn gpio_debug_wakeup(&self, ena: bool) -> Result<(), xous::Error> {
+        let arg = if ena { 1 } else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::DebugWakeup.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn activity_instantaneous(&self) -> Result<(u32, u32), xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetActivity.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(active, total) = response {
+            Ok(
+                (active as u32, total as u32)
+            )
+        } else {
+            log::error!("LLIO: unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
+        }
+    }
 }
 
 
@@ -475,6 +532,8 @@ fn drop_conn(sid: xous::SID) {
         Message::new_scalar(EventCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
     unsafe{xous::disconnect(cid).unwrap();}
 }
+use core::sync::atomic::AtomicU32;
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Llio {
     fn drop(&mut self) {
         if let Some(sid) = self.i2c_sid.take() {
@@ -492,7 +551,9 @@ impl Drop for Llio {
         if let Some(sid) = self.gpio_sid.take() {
             drop_conn(sid);
         }
-        unsafe{xous::disconnect(self.conn).unwrap();}
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
     }
 }
 

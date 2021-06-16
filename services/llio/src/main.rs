@@ -42,6 +42,7 @@ mod implementation {
         power_susres: RegManager::<{utra::power::POWER_NUMREGS}>,
         xadc_csr: utralib::CSR<u32>,  // be careful with this as XADC is shared with TRNG
         ticktimer: ticktimer_server::Ticktimer,
+        activity_period: u32, // 12mhz clock cycles over which to sample activity
         destruct_armed: bool,
     }
 
@@ -81,12 +82,23 @@ mod implementation {
     }
     fn handle_power_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        if let Some(conn) = xl.handler_conn {
-            xous::try_send_message(conn,
-                xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
-                    0, 0, 0, 0)).map(|_|()).unwrap();
-        } else {
-            log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
+        if xl.power_csr.rf(utra::power::EV_PENDING_USB_ATTACH) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventUsbHappened.to_usize().unwrap(),
+                        0, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: USB interrupt, but no connection for notification!")
+            }
+        } else if xl.power_csr.rf(utra::power::EV_PENDING_ACTIVITY_UPDATE) != 0 {
+            if let Some(conn) = xl.handler_conn {
+                let activity = xl.power_csr.rf(utra::power::ACTIVITY_RATE_COUNTS_AWAKE);
+                xous::try_send_message(conn,
+                    xous::Message::new_scalar(Opcode::EventActivityHappened.to_usize().unwrap(),
+                        activity as usize, 0, 0, 0)).map(|_|()).unwrap();
+            } else {
+                log::error!("|handle_event_irq: activity interrupt, but no connection for notification!")
+            }
         }
         xl.power_csr
             .wo(utra::power::EV_PENDING, xl.power_csr.r(utra::power::EV_PENDING));
@@ -167,6 +179,7 @@ mod implementation {
                 power_susres: RegManager::new(power_csr.as_mut_ptr() as *mut u32),
                 xadc_csr: CSR::new(xadc_csr.as_mut_ptr() as *mut u32),
                 ticktimer,
+                activity_period: 24_000_000, // 2 second interval initially
                 destruct_armed: false,
             };
 
@@ -202,8 +215,15 @@ mod implementation {
             xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
             xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
 
+            xl.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0); // save power on crypto block
             xl.power_susres.push(RegOrField::Reg(utra::power::POWER), None);
             xl.power_susres.push(RegOrField::Reg(utra::power::VIBE), None);
+
+            xl.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, xl.activity_period); // 2 second sampling intervals
+            xl.power_susres.push(RegOrField::Reg(utra::power::SAMPLING_PERIOD), None);
+            xl.power_csr.wfo(utra::power::EV_PENDING_ACTIVITY_UPDATE, 1);
+            xl.power_csr.rmwf(utra::power::EV_ENABLE_ACTIVITY_UPDATE, 1);
+
             xl.power_susres.push_fixed_value(RegOrField::Reg(utra::power::EV_PENDING), 0xFFFF_FFFF);
             xl.power_susres.push(RegOrField::Reg(utra::power::EV_ENABLE), None);
 
@@ -223,6 +243,14 @@ mod implementation {
             self.power_susres.resume();
             self.event_susres.resume();
             self.gpio_susres.resume();
+        }
+        #[allow(dead_code)]
+        pub fn activity_set_period(&mut self, period: u32) {
+            self.activity_period =  period;
+            self.power_csr.wfo(utra::power::SAMPLING_PERIOD_SAMPLE_PERIOD, period);
+        }
+        pub fn activity_get_period(&mut self) -> u32 {
+            self.activity_period
         }
 
         pub fn gpio_dout(&mut self, d: u32) {
@@ -281,6 +309,42 @@ mod implementation {
             } else {
                 self.power_csr.rmwf(utra::power::POWER_AUDIO, 0);
             }
+        }
+        pub fn power_crypto(&mut self, power_on: bool) {
+            if power_on {
+                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_CRYPTO_ON, 0);
+            }
+        }
+        // apparently "override" is a reserved keyword in Rust???
+        pub fn wfi_override(&mut self, override_: bool) {
+            if override_ {
+                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+            } else {
+                self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+            }
+        }
+        pub fn debug_powerdown(&mut self, ena: bool) {
+            if ena {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 1);
+            } else {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WFI, 0);
+            }
+        }
+        pub fn debug_wakeup(&mut self, ena: bool) {
+            if ena {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 1);
+            } else {
+                self.power_csr.rmwf(utra::gpio::DEBUG_WAKEUP, 0);
+            }
+        }
+        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
+            let sha = if self.power_csr.rf(utra::power::CLK_STATUS_SHA_ON) == 0 {false} else {true};
+            let engine = if self.power_csr.rf(utra::power::CLK_STATUS_ENGINE_ON) == 0 {false} else {true};
+            let force = if self.power_csr.rf(utra::power::CLK_STATUS_BTPOWER_ON) == 0 {false} else {true};
+            let overall = if self.power_csr.rf(utra::power::CLK_STATUS_CRYPTO_ON) == 0 {false} else {true};
+            (overall, sha, engine, force)
         }
         pub fn power_self(&mut self, power_on: bool) {
             if power_on {
@@ -421,6 +485,10 @@ mod implementation {
         pub fn get_info_platform(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn get_info_target(&self, ) ->  (usize, usize) { (0, 0) }
         pub fn power_audio(&self, _power_on: bool) {}
+        pub fn power_crypto(&self, _power_on: bool) {}
+        pub fn power_crypto_status(&self) -> (bool, bool, bool, bool) {
+            (true, true, true, true)
+        }
         pub fn power_self(&self, _power_on: bool) {}
         pub fn power_boost_mode(&self, _power_on: bool) {}
         pub fn ec_snoop_allow(&self, _power_on: bool) {}
@@ -465,6 +533,15 @@ mod implementation {
         pub fn com_int_ena(self, _ena: bool) {
         }
         pub fn usb_int_ena(self, _ena: bool) {
+        }
+        pub fn debug_powerdown(&mut self, _ena: bool) {
+        }
+        pub fn debug_wakeup(&mut self, _ena: bool) {
+        }
+        pub fn activity_get_period(&mut self) -> u32 {
+            12_000_000
+        }
+        pub fn wfi_override(&mut self, _override_: bool) {
         }
     }
 }
@@ -557,6 +634,7 @@ fn xmain() -> ! {
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut latest_activity = 0;
 
     let mut usb_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut com_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
@@ -597,6 +675,14 @@ fn xmain() -> ! {
             Some(Opcode::GpioIntEna) => msg_scalar_unpack!(msg, d, _, _, _, {
                 llio.gpio_int_ena(d as u32);
             }),
+            Some(Opcode::DebugPowerdown) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                let ena = if arg == 0 {false} else {true};
+                llio.debug_powerdown(ena);
+            }),
+            Some(Opcode::DebugWakeup) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                let ena = if arg == 0 {false} else {true};
+                llio.debug_wakeup(ena);
+            }),
             Some(Opcode::UartMux) => msg_scalar_unpack!(msg, mux, _, _, _, {
                 llio.set_uart_mux(mux.into());
             }),
@@ -623,6 +709,30 @@ fn xmain() -> ! {
                     llio.power_audio(true);
                 }
                 xous::return_scalar(msg.sender, 0).expect("couldn't confirm audio power was set");
+            }),
+            Some(Opcode::PowerCrypto) => msg_blocking_scalar_unpack!(msg, power_on, _, _, _, {
+                if power_on == 0 {
+                    llio.power_crypto(false);
+                } else {
+                    llio.power_crypto(true);
+                }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm crypto power was set");
+            }),
+            Some(Opcode::WfiOverride) => msg_blocking_scalar_unpack!(msg, override_, _, _, _, {
+                if override_ == 0 {
+                    llio.wfi_override(false);
+                } else {
+                    llio.wfi_override(true);
+                }
+                xous::return_scalar(msg.sender, 0).expect("couldn't confirm wfi override was updated");
+            }),
+            Some(Opcode::PowerCryptoStatus) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let (_, sha, engine, force) = llio.power_crypto_status();
+                let mut ret = 0;
+                if sha { ret |= 1 };
+                if engine { ret |= 2 };
+                if force { ret |= 4 };
+                xous::return_scalar(msg.sender, ret).expect("couldn't return crypto unit power status");
             }),
             Some(Opcode::PowerSelf) => msg_scalar_unpack!(msg, power_on, _, _, _, {
                 if power_on == 0 {
@@ -736,6 +846,15 @@ fn xmain() -> ! {
             },
             Some(Opcode::GpioIntHappened) => msg_scalar_unpack!(msg, channel, _, _, _, {
                 send_event(&gpio_cb_conns, channel as usize);
+            }),
+            Some(Opcode::EventActivityHappened) => msg_scalar_unpack!(msg, activity, _, _, _, {
+                log::debug!("activity: {}", activity);
+                latest_activity = activity as u32;
+            }),
+            Some(Opcode::GetActivity) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let period = llio.activity_get_period() as u32;
+                log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
+                xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
             }),
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");

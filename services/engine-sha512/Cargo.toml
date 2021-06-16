@@ -1,0 +1,32 @@
+[package]
+name = "engine-sha512"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Sha512 hardware accelerator engine"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+susres = {path = "../susres"}
+trng = { path = "../trng" }
+
+xous-ipc = { path = "../../xous-ipc" }
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
+# Rust-standard digest API dependencies
+digest = "0.9"
+block-buffer = "0.9"
+opaque-debug = "0.3" # prevents internal hash state leakage from debug structures
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+event_wait = [] # in theory, event_wait should be more efficient, but at the moment it just hangs so there are bugs
+default = []
