@@ -27,3 +27,12 @@ pub fn test_memory(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
     let result = buf.as_flat::<TestStruct, _>().unwrap();
     Ok(result.challenge[0])
 }
+
+pub fn test_memory_send(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
+    let mut reg = TestStruct::new();
+    reg.challenge[0] = testvar;
+
+    let mut buf = Buffer::into_buf(reg).or(Err(xous::Error::InternalError))?;
+    buf.send(cid, Opcode::TestMemorySend.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+    Ok(testvar+2)
+}

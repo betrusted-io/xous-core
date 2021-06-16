@@ -17,4 +17,5 @@ pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";
 pub enum Opcode {
     TestScalar, //(u32),
     TestMemory, //(TestStruct),
+    TestMemorySend,
 }
