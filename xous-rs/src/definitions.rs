@@ -584,6 +584,16 @@ impl Drop for MessageEnvelope {
                     .expect("couldn't return memory")
             }
             Message::Move(msg) => {
+                // Reconstitute the vec and drop it right away to ensure it's freed.
+                #[cfg(any(unix, windows))]
+                let _v = unsafe {
+                    std::vec::Vec::from_raw_parts(
+                        msg.buf.as_mut_ptr(),
+                        msg.buf.len(),
+                        msg.buf.len(),
+                    )
+                };
+                #[cfg(not(any(unix, windows)))]
                 crate::syscall::unmap_memory(msg.buf).expect("couldn't free memory message")
             }
             _ => (),
