@@ -27,46 +27,28 @@ use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 use core::{sync::atomic::{AtomicU32, Ordering}};
 
+use enum_dispatch::enum_dispatch;
+
 //// todo:
+// - create menu server
 // - move vibe call to the GAM, reduce keyboard connections to 1
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
-// - create menu server
-// - macro-ize the unwrapping of the UxLayout enum
 
+#[enum_dispatch]
+pub(crate) trait LayoutApi {
+    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error>;
+    // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
+    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error>;
+    fn get_input_canvas(&self) -> Option<Gid> { None }
+    fn get_prediction_canvas(&self) -> Option<Gid> { None }
+    fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
+}
+
+#[enum_dispatch(LayoutApi)]
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum UxLayout {
-    Chat(ChatLayout),
-    Menu(MenuLayout),
-}
-pub(crate) fn uxlayout_get_content_canvas(ul: UxLayout) -> Gid {
-    match ul {
-        UxLayout::Chat(layout) => layout.get_content_canvas(),
-        UxLayout::Menu(layout) => layout.get_content_canvas(),
-    }
-}
-pub(crate) fn uxlayout_resize_height(ul: &mut UxLayout, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Result<Point, xous::Error> {
-    match ul {
-        UxLayout::Chat(layout) => layout.resize_height(gfx, new_height, status_canvas, canvases),
-        UxLayout::Menu(layout) => layout.resize_height(gfx, new_height, status_canvas, canvases),
-    }
-}
-pub(crate) fn uxlayout_clear(ul: UxLayout, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error> {
-    match ul {
-        UxLayout::Chat(layout) => layout.clear(gfx, canvases),
-        UxLayout::Menu(layout) => layout.clear(gfx, canvases),
-    }
-}
-pub(crate) fn uxlayout_get_input_canvas(ul: UxLayout) -> Option<Gid> {
-    match ul {
-        UxLayout::Chat(layout) => layout.get_input_canvas(),
-        UxLayout::Menu(layout) => layout.get_input_canvas(),
-    }
-}
-pub(crate) fn uxlayout_get_prediction_canvas(ul: UxLayout) -> Option<Gid> {
-    match ul {
-        UxLayout::Chat(layout) => layout.get_prediction_canvas(),
-        UxLayout::Menu(layout) => layout.get_prediction_canvas(),
-    }
+    ChatLayout,
+    MenuLayout,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -136,7 +118,7 @@ impl ContextManager {
                     let chatlayout = ChatLayout::init(&gfx, &trng,
                         BOOT_CONTEXT_TRUSTLEVEL, &status_canvas, canvases).expect("couldn't create chat layout");
                     let ux_context = UxContext {
-                        layout: UxLayout::Chat(chatlayout),
+                        layout: UxLayout::ChatLayout(chatlayout),
                         predictor: registration.predictor,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
@@ -159,7 +141,7 @@ impl ContextManager {
                     let menulayout = MenuLayout::init(&gfx, &trng,
                         BOOT_CONTEXT_TRUSTLEVEL, &status_canvas, canvases).expect("couldn't create menu layout");
                     let ux_context = UxContext {
-                        layout: UxLayout::Menu(menulayout),
+                        layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
@@ -196,7 +178,7 @@ impl ContextManager {
         for maybe_context in self.contexts.iter() {
             if let Some(context) = maybe_context {
                 if context.app_token == token {
-                    return Some(uxlayout_get_content_canvas(context.layout));
+                    return Some(context.layout.get_content_canvas());
                 }
             }
         }
@@ -212,7 +194,7 @@ impl ContextManager {
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
                 if context.gam_token == gam_token {
-                    let result = uxlayout_resize_height(&mut context.layout, gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+                    let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
                     return Some(result)
                 }
             }
@@ -230,14 +212,14 @@ impl ContextManager {
             if let Some(context) = maybe_context {
                 if context.app_token == token {
                     let descriptor = ImefDescriptor {
-                        input_canvas: uxlayout_get_input_canvas(context.layout),
-                        prediction_canvas: uxlayout_get_prediction_canvas(context.layout),
+                        input_canvas: context.layout.get_input_canvas(),
+                        prediction_canvas: context.layout.get_prediction_canvas(),
                         predictor: context.predictor,
                         token: context.gam_token,
                     };
                     imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
                     if clear {
-                        uxlayout_clear(context.layout, gfx, canvases).expect("can't clear on context activation");
+                        context.layout.clear(gfx, canvases).expect("can't clear on context activation");
                     }
                     // now update the IMEF area, since we're initialized
                     // note: we may need to skip this call if the context does not utilize a predictor...

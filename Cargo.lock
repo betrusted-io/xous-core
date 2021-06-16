@@ -549,6 +549,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd53b3fde38a39a06b2e66dc282f3e86191e53bd04cc499929c15742beae3df8"
+dependencies = [
+ "once_cell",
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -602,11 +614,11 @@ dependencies = [
 name = "gam"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "blitstr-ref",
  "chrono",
  "com",
  "content-plugin-api",
+ "enum_dispatch",
  "graphics-server",
  "heapless 0.7.0",
  "ime-plugin-api",

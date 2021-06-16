@@ -5,19 +5,7 @@ use blitstr_ref as blitstr;
 use blitstr::GlyphStyle;
 use graphics_server::*;
 
-pub(crate) trait LayoutApi {
-    type Layout;
-
-    fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng,
-        base_trust: u8, status_canvas: &Canvas,
-        canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Self::Layout, xous::Error>;
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error>;
-    // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error>;
-    fn get_input_canvas(&self) -> Option<Gid> { None }
-    fn get_prediction_canvas(&self) -> Option<Gid> { None }
-    fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
-}
+use crate::LayoutApi;
 
 #[derive(Debug, Copy, Clone)]
 // GIDs of canvases that are used the "Chat" layout.
@@ -34,10 +22,9 @@ pub(crate) struct ChatLayout {
     small_height: i16,
     regular_height: i16,
 }
-impl LayoutApi for ChatLayout {
-    type Layout = ChatLayout;
+impl ChatLayout {
     // pass in the status canvas so we can size around it, but we can't draw on it
-    fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8,
+    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8,
         status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<ChatLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
@@ -77,6 +64,8 @@ impl LayoutApi for ChatLayout {
             regular_height,
         })
     }
+}
+impl LayoutApi for ChatLayout {
     fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error> {
         let input_canvas = canvases.get(&self.input).expect("couldn't find input canvas");
         let content_canvas = canvases.get(&self.content).expect("couldn't find content canvas");
@@ -147,9 +136,8 @@ pub(crate) struct MenuLayout {
     screensize: Point,
     small_height: i16,
 }
-impl LayoutApi for MenuLayout {
-    type Layout = MenuLayout;
-    fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, _status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<MenuLayout, xous::Error> {
+impl MenuLayout {
+    pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, _status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<MenuLayout, xous::Error> {
         let screensize = gfx.screen_size().expect("Couldn't get screen size");
         // get the height of various text regions to compute the layout
         let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
@@ -172,6 +160,8 @@ impl LayoutApi for MenuLayout {
             small_height,
         })
     }
+}
+impl LayoutApi for MenuLayout {
     fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error> {
         let menu_canvas = canvases.get(&self.menu).expect("couldn't find menu canvas");
 
