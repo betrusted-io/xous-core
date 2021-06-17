@@ -162,7 +162,6 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     info!("|status: starting main loop");
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
-        //let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {

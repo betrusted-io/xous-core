@@ -7,6 +7,8 @@ mod status;
 use status::*;
 mod canvas;
 use canvas::*;
+mod menu;
+use menu::*;
 
 mod tokens;
 use tokens::*;
@@ -33,6 +35,14 @@ use enum_dispatch::enum_dispatch;
 // - create menu server
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
 
+#[derive(PartialEq, Eq)]
+pub(crate) enum LayoutBehavior {
+    /// a layout that can render over others, takes focus, and only dismissed if explicitly dismissed
+    Alert,
+    /// a layout that assumes it has the full screen and is the primary content when visible
+    App,
+}
+
 #[enum_dispatch]
 pub(crate) trait LayoutApi {
     fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error>;
@@ -41,6 +51,11 @@ pub(crate) trait LayoutApi {
     fn get_input_canvas(&self) -> Option<Gid> { None }
     fn get_prediction_canvas(&self) -> Option<Gid> { None }
     fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
+    // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen clipping rectangle
+    // when false, the context is moved "offscreen" by moving the canvases outside the screen clipping rectangle
+    // note that this visibility state is an independent variable from the trust level draw-ability
+    fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>);
+    fn behavior(&self) -> LayoutBehavior;
 }
 
 #[enum_dispatch(LayoutApi)]
@@ -80,13 +95,23 @@ pub(crate) struct UxContext {
 const MAX_UX_CONTEXTS: usize = 4;
 pub(crate) const MAX_CANVASES: usize = 32;
 const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot
+pub const MAIN_MENU_NAME: &'static str = "main menu";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
+/*
+  For now, app focus from menus is cooperative (menu items must relinquish focus).
+  However, later on, I think it would be good to implement a press-hold to feature to
+  swap focus in case of an app hang failure. This feature would probably be best done
+  by adding a hook to the keyboard manager to look for a press-hold on the "select" key
+  and then sending a message to the registered listener about the issue.
+*/
 struct ContextManager {
     tm: TokenManager,
     contexts: [Option<UxContext>; MAX_UX_CONTEXTS],
     focused_context: Option<[u32; 4]>, // app_token of the app that has I/O focus, if any
+    last_context: Option<[u32; 4]>, // previously focused context, if any
     imef: ime_plugin_api::ImeFrontEnd,
+    imef_active: bool,
     kbd: keyboard::Keyboard,
 }
 impl ContextManager {
@@ -102,7 +127,9 @@ impl ContextManager {
             tm: TokenManager::new(&xns),
             contexts: [None; MAX_UX_CONTEXTS],
             focused_context: None,
+            last_context: None,
             imef,
+            imef_active: false,
             kbd,
         }
     }
@@ -120,6 +147,7 @@ impl ContextManager {
                 trng: &trng::Trng,
                 status_canvas: &Canvas,
                 canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+                trust_level: u8,
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
         let maybe_token = self.tm.claim_token(registration.app_name.as_str().unwrap());
@@ -127,14 +155,16 @@ impl ContextManager {
         if let Some(token) = maybe_token {
             match registration.ux_type {
                 UxType::Chat => {
-                    let chatlayout = ChatLayout::init(&gfx, &trng,
-                        BOOT_CONTEXT_TRUSTLEVEL, &status_canvas, canvases).expect("couldn't create chat layout");
-                    let ux_context = UxContext {
+                    let mut chatlayout = ChatLayout::init(&gfx, &trng,
+                        trust_level, &status_canvas, canvases).expect("couldn't create chat layout");
+                    // default to off-screen for all layouts
+                    chatlayout.set_visibility_state(false, canvases);
+                        let ux_context = UxContext {
                         layout: UxLayout::ChatLayout(chatlayout),
                         predictor: registration.predictor,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        trust_level: BOOT_CONTEXT_TRUSTLEVEL,
+                        trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: registration.gotinput_id,
@@ -151,14 +181,17 @@ impl ContextManager {
                     }
                 },
                 UxType::Menu => {
-                    let menulayout = MenuLayout::init(&gfx, &trng,
-                        BOOT_CONTEXT_TRUSTLEVEL, &status_canvas, canvases).expect("couldn't create menu layout");
+                    let mut menulayout = MenuLayout::init(&gfx, &trng,
+                        trust_level, canvases).expect("couldn't create menu layout");
+                    // default to off-screen for all layouts
+                    menulayout.set_visibility_state(false, canvases);
+                    log::debug!("debug layout: {:?}", menulayout);
                     let ux_context = UxContext {
                         layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
                         app_token: token,
                         gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
-                        trust_level: BOOT_CONTEXT_TRUSTLEVEL,
+                        trust_level,
                         listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
                         redraw_id: registration.redraw_id,
                         gotinput_id: None,
@@ -215,15 +248,91 @@ impl ContextManager {
         }
         None
     }
-    pub(crate) fn activate(&mut self,
-            gfx: &graphics_server::Gfx,
-            canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
-            token: [u32; 4],
-            clear: bool,
-        ) {
+    fn get_context_by_token_mut(&'_ mut self, token: [u32; 4]) -> Option<&'_ mut UxContext> {
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
                 if context.app_token == token {
+                    return Some(context)
+                }
+            }
+        }
+        None
+    }
+    fn get_context_by_token(&'_ self, token: [u32; 4]) -> Option<&'_ UxContext> {
+        for maybe_context in self.contexts.iter() {
+            if let Some(context) = maybe_context {
+                if context.app_token == token {
+                    return Some(context)
+                }
+            }
+        }
+        None
+    }
+    pub(crate) fn activate(&mut self,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        token: [u32; 4],
+        clear: bool,
+    ) {
+        let mut leaving_visibility: bool = false;
+        {
+            // using a temp copy of the old focus, check if we need to update any visibility state
+            let maybe_leaving_focused_context = if self.focused_context.is_some() {
+                if let Some(old_context) = self.get_context_by_token(self.focused_context.unwrap()) {
+                    Some(old_context.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let maybe_new_focus = self.get_context_by_token_mut(token);
+            if let Some(context) = maybe_new_focus {
+                if let Some(leaving_focused_context) = maybe_leaving_focused_context {
+                    if token != leaving_focused_context.app_token {
+                            if (context.layout.behavior()                 == LayoutBehavior::Alert) &&
+                            (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                                context.layout.set_visibility_state(true, canvases);
+                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
+                                leaving_visibility = false;
+                        } else if (context.layout.behavior()                 == LayoutBehavior::App) &&
+                                (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                                context.layout.set_visibility_state(true, canvases);
+                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
+                                leaving_visibility = false;
+                        } else if (context.layout.behavior()                 == LayoutBehavior::Alert) &&
+                                (leaving_focused_context.layout.behavior() == LayoutBehavior::App) {
+                                context.layout.set_visibility_state(true, canvases);
+                                //leaving_focused_context.layout.set_visibility_state(true, canvases);
+                                leaving_visibility = true;
+                        } else if (context.layout.behavior()                 == LayoutBehavior::App) &&
+                                (leaving_focused_context.layout.behavior() == LayoutBehavior::Alert) {
+                                context.layout.set_visibility_state(true, canvases);
+                                //leaving_focused_context.layout.set_visibility_state(false, canvases);
+                                leaving_visibility = false;
+                        }
+                    }
+                } else {
+                    // there was no current focus, just make the activation visible
+                    log::debug!("setting first-time visibility to context {:?}", token);
+                    context.layout.set_visibility_state(true, canvases);
+                }
+            }
+        }
+        {
+            // let all the previous operations go out of scope, so we can "check out" the old copy and modify it
+            if self.focused_context.is_some() {
+                if let Some(old_context) = self.get_context_by_token_mut(self.focused_context.unwrap()) {
+                    old_context.layout.set_visibility_state(leaving_visibility, canvases);
+                }
+            }
+        }
+        {
+            // now re-check-out the new context and finalize things
+            let maybe_new_focus = self.get_context_by_token(token);
+            if let Some(context) = maybe_new_focus {
+                if context.predictor.is_some() {
+                    // only hook up the IMEF if a predictor is selected for this context
                     let descriptor = ImefDescriptor {
                         input_canvas: context.layout.get_input_canvas(),
                         prediction_canvas: context.layout.get_prediction_canvas(),
@@ -231,19 +340,45 @@ impl ContextManager {
                         token: context.gam_token,
                     };
                     self.imef.connect_backend(descriptor).expect("couldn't connect IMEF to the current app");
-                    if clear {
-                        context.layout.clear(gfx, canvases).expect("can't clear on context activation");
-                    }
-                    // now update the IMEF area, since we're initialized
-                    // note: we may need to skip this call if the context does not utilize a predictor...
-                    self.imef.redraw().unwrap();
-
-                    // revert the keyboard vibe state
-                    self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
-
-                    self.focused_context = Some(context.app_token);
+                    self.imef_active = true;
+                } else {
+                    self.imef_active = false;
                 }
+
+                // now recompute the drawability of canvases, based on on-screen visibility and trust state
+                let screensize = gfx.screen_size().expect("Couldn't get screen size");
+                *canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
             }
+        }
+        {
+            // now re-check-out the new context and finalize things
+            let maybe_new_focus = self.get_context_by_token(token);
+            if let Some(context) = maybe_new_focus {
+                if clear {
+                    context.layout.clear(gfx, canvases).expect("can't clear on context activation");
+                }
+                // now update the IMEF area, since we're initialized
+                // note: we may need to skip this call if the context does not utilize a predictor...
+                if context.predictor.is_some() {
+                    self.imef.redraw().unwrap();
+                }
+
+                // revert the keyboard vibe state
+                self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
+
+                let last_token = context.app_token;
+                self.last_context = self.focused_context;
+                self.focused_context = Some(last_token);
+                self.redraw().expect("couldn't redraw the currently focused app");
+            }
+        }
+    }
+    pub(crate) fn revert_focus(&mut self,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+    ) {
+        if let Some(last) = self.last_context {
+            self.activate(gfx, canvases, last, false);
         }
     }
     pub(crate) fn redraw(&self) -> Result<(), xous::Error> { // redraws the currently focused context
@@ -285,29 +420,60 @@ impl ContextManager {
         }
         Err(xous::Error::ServerNotFound)
     }
-    pub(crate) fn key_event(&self, keys: [char; 4]) {
-        self.imef.send_keyevent(keys).expect("couldn't send keys to the IMEF");
-    }
-    fn focused_context(&'_ mut self) -> Option<&'_ mut UxContext> {
-        if let Some(focus) = self.focused_app() {
-            for maybe_context in self.contexts.iter_mut() {
-                if let Some(context) = maybe_context {
-                    if context.app_token == focus {
-                        return Some(context)
-                    }
+    pub(crate) fn key_event(&mut self, keys: [char; 4],
+        gfx: &graphics_server::Gfx,
+        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+    ) {
+        // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
+        if keys[0] == '∴' {
+            if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
+                // set the menu to the active context
+                self.activate(gfx, canvases, menu_token, false);
+            }
+        }
+
+        if self.imef_active {
+            // use the IMEF
+            self.imef.send_keyevent(keys).expect("couldn't send keys to the IMEF");
+        } else {
+            // forward the keyboard hits without any IME to the current context
+            log::debug!("forwarding raw key event");
+            if let Some(context) = self.focused_context() {
+                if let Some(rawkeys_id) = context.rawkeys_id {
+                    xous::send_message(context.listener,
+                        xous::Message::new_scalar(rawkeys_id as usize,
+                        keys[0] as u32 as usize,
+                        keys[1] as u32 as usize,
+                        keys[2] as u32 as usize,
+                        keys[3] as u32 as usize,
+                    )).expect("couldn't forward raw keys onto context listener");
                 }
             }
         }
-        None
+    }
+
+    fn focused_context(&'_ self) -> Option<&'_ UxContext> {
+        if let Some(focus) = self.focused_app() {
+            self.get_context_by_token(focus)
+        } else {
+            None
+        }
+    }
+    fn focused_context_mut(&'_ mut self) -> Option<&'_ mut UxContext> {
+        if let Some(focus) = self.focused_app() {
+            self.get_context_by_token_mut(focus)
+        } else {
+            None
+        }
     }
     pub(crate) fn set_audio_op(&mut self, audio_op: SetAudioOpcode) {
-        if let Some(context) = self.focused_context() {
+        if let Some(context) = self.focused_context_mut() {
             (*context).audioframe_id = Some(audio_op.opcode);
         }
     }
     pub(crate) fn vibe(&mut self, set_vibe: bool) {
         self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
-        if let Some(context) = self.focused_context() {
+        if let Some(context) = self.focused_context_mut() {
             (*context).vibe = set_vibe;
         }
     }
@@ -354,13 +520,17 @@ fn xmain() -> ! {
         255, &trng, None
     ).expect("couldn't create status canvas");
     canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
-    canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+    canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
     // make a thread to manage the status bar -- this needs to start late, after the IMEF and most other things are initialized
     // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
     let status_gid = status_canvas.gid().gid();
     log::trace!("starting status thread with gid {:?}", status_gid);
     xous::create_thread_4(status_thread, status_gid[0] as _, status_gid[1] as _, status_gid[2] as _, status_gid[3] as _).expect("couldn't create status thread");
+
+    // make a thread to manage the main menu.
+    log::trace!("starting menu thread");
+    xous::create_thread_0(main_menu_thread).expect("couldn't create menu thread");
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer.elapsed_ms();
@@ -389,6 +559,7 @@ fn xmain() -> ! {
                         Some(c) => {
                             let mut rect = c.clip_rect();
                             rect.normalize(); // normalize to 0,0 coordinates
+                            log::debug!("getcanvasbounds: {:?}", rect);
                             xous::return_scalar2(msg.sender,
                                 rect.tl.into(),
                                 rect.br.into(),
@@ -483,7 +654,7 @@ fn xmain() -> ! {
                                 buffer.replace(ret).unwrap();
                                 canvas.do_drawn().expect("couldn't set canvas to drawn");
                             } else {
-                                info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored.");
+                                info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
                             }
                         } else {
                             info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
@@ -500,7 +671,7 @@ fn xmain() -> ! {
                 let granted = context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &&status_canvas, &mut canvases);
                 if granted.is_some() {
                     // recompute the canvas orders based on the new layout
-                    canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+                    canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
                     context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
                 cb.granted = granted;
@@ -514,7 +685,6 @@ fn xmain() -> ! {
                 log::debug!("RequestContentCanvas {:?}", req);
 
                 let ret = api::Return::ContentCanvasReturn(context_mgr.get_content_canvas(req));
-                log::debug!("returning {:?}", ret);
                 buffer.replace(ret).unwrap();
             }
             Some(Opcode::RenderObject) => {
@@ -583,12 +753,16 @@ fn xmain() -> ! {
             Some(Opcode::RegisterUx) => {
                 let mut buffer = unsafe{ Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let registration = buffer.to_original::<UxRegistration, _>().unwrap();
-                let token = context_mgr.register(&gfx, &trng, &status_canvas, &mut canvases, registration);
+
+                // note that we are currently assigning all Ux registrations a trust level consistent with a boot context (ultimately trusted)
+                // this needs to be modified later on once we allow post-boot apps to be created
+                let token = context_mgr.register(&gfx, &trng, &status_canvas, &mut canvases,
+                    BOOT_CONTEXT_TRUSTLEVEL, registration);
 
                 // compute what canvases are drawable
                 // this _replaces_ the original canvas structure, to avoid complications of tracking mutable references through compound data structures
                 // this is broken into two steps because of https://github.com/rust-lang/rust/issues/71126
-                canvases = recompute_canvases(canvases, Rectangle::new(Point::new(0, 0), screensize));
+                canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
                 buffer.replace(Return::UxToken(token)).unwrap();
             },
@@ -628,21 +802,33 @@ fn xmain() -> ! {
                         '\u{0000}'
                     },
                 ];
-                context_mgr.key_event(keys);
+                context_mgr.key_event(keys, &gfx, &mut canvases);
             }),
             Some(Opcode::Vibe) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
                 if ena != 0 { context_mgr.vibe(true) }
                 else { context_mgr.vibe(false) }
             }),
+            Some(Opcode::RevertFocus) => {
+                context_mgr.revert_focus(&gfx, &mut canvases);
+            },
+            Some(Opcode::RequestFocus) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
+                // TODO: add some limitations around who can request focus
+                // for now, it's the boot set so we just trust the requestor
+                context_mgr.activate(&gfx, &mut canvases, [t0 as u32, t1 as u32, t2 as u32, t3 as u32], true);
+
+                // this is a blocking scalar, so return /something/ so we know to move on
+                xous::return_scalar(msg.sender, 1).expect("couldn't confirm focus activation");
+            }),
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }
+        /*
         // if we don't have a focused app, try and find the default boot app and bring it to focus.
         if context_mgr.focused_app().is_none() {
             if let Some(shellchat_token) = context_mgr.find_app_token_by_name(BOOT_APP_NAME) {
                 context_mgr.activate(&gfx, &mut canvases, shellchat_token, true);
             }
-        }
+        }*/
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");

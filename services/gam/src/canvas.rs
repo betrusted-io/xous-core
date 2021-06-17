@@ -178,7 +178,7 @@ pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(canvases: FnvIndexMap<Gid, Canvas, 32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, 32> {
+pub fn recompute_canvases(canvases: &FnvIndexMap<Gid, Canvas, 32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, 32> {
     let debug = false;
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.

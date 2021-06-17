@@ -65,10 +65,13 @@ impl Repl{
             rawkeys_id: None,
         }).expect("couldn't register Ux context for shellchat");
 
+        // we should be the first app running, so get the focus
+        gam.request_focus(token.unwrap());
+
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
-        log::trace!("content canvas {:?}", content);
+        log::debug!("content canvas {:?}", content);
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        log::trace!("size {:?}", screensize);
+        log::debug!("size {:?}", screensize);
         Repl {
             input: None,
             msg: None,

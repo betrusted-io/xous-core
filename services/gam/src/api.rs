@@ -112,6 +112,12 @@ pub(crate) enum Opcode {
     /// used to turn keyboard vibrate on and off
     Vibe,
 
+    /// called by a context when it's done with taking the screen; requests the GAM to revert focus to the last-focused app
+    RevertFocus,
+
+    /// request an app to take the focus
+    RequestFocus,
+
     /////// planned
 
     // hides a canvas with a given GID

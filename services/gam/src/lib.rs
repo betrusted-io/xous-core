@@ -220,6 +220,20 @@ impl Gam {
             ena, 0, 0, 0,)
         ).map(|_| ())
     }
+    /// this indicates to the GAM that the currently running app no longer wants to be the focus of attention
+    /// we might respect that. or maybe not. depends on the GAM's policies.
+    pub fn relinquish_focus(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RevertFocus.to_usize().unwrap(),
+            0, 0, 0, 0,)
+        ).map(|_| ())
+    }
+    pub fn request_focus(&self, token: [u32; 4]) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::RequestFocus.to_usize().unwrap(),
+            token[0] as usize, token[1] as usize, token[2] as usize, token[3] as usize,)
+        ).map(|_| ())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
