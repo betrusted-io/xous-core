@@ -384,6 +384,27 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
                             system_services.process_name(process.pid).unwrap_or("")
                         );
                         process.activate().unwrap();
+                    }
+                }
+                system_services
+                    .get_process(current_pid)
+                    .unwrap()
+                    .activate()
+                    .unwrap();
+            });
+        }
+        b'P' => {
+            println!("Printing processes and threads");
+            crate::services::SystemServices::with(|system_services| {
+                let current_pid = system_services.current_pid();
+                for process in &system_services.processes {
+                    if !process.free() {
+                        println!(
+                            "{:?} {}:",
+                            process,
+                            system_services.process_name(process.pid).unwrap_or("")
+                        );
+                        process.activate().unwrap();
                         crate::arch::process::Process::with_current_mut(|arch_process| {
                             arch_process.print_all_threads()
                         });
@@ -461,7 +482,8 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
             #[cfg(feature = "gdbserver")]
             println!(" g  | enter the gdb server");
             println!(" m  | print MMU page tables of all processes");
-            println!(" p  | print all processes and threads");
+            println!(" p  | print all processes");
+            println!(" P  | print all processes and threads");
             println!(" r  | report RAM usage of all processes");
             println!(" s  | Suspend PID 3");
             println!(" c  | Continue PID 3");
