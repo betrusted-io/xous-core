@@ -211,6 +211,8 @@ pub trait ImeFrontEndApi {
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
     fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
+    fn conn(&self) -> xous::CID;
+    fn getop_process_keys(&self) -> u32;
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
@@ -252,6 +254,10 @@ impl Drop for ImeFrontEnd {
 }
 
 impl ImeFrontEndApi for ImeFrontEnd {
+    fn conn(&self) -> xous::CID { self.cid }
+    fn getop_process_keys(&self) -> u32 {
+        ImefOpcode::ProcessKeys.to_u32().unwrap()
+    }
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
         buf.lend(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_| ())

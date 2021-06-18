@@ -184,7 +184,7 @@ impl XousKeyboardHandler {
                 Key::F2 => 0x12_u8.into(),
                 Key::F3 => 0x13_u8.into(),
                 Key::F4 => 0x14_u8.into(),
-                Key::F5 => '😃',
+                Key::F5 => '😊',
                 Key::F6 => '福',
                 _ => '\u{0000}',
             }

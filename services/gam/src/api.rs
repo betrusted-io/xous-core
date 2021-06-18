@@ -41,6 +41,12 @@ pub struct SetAudioOpcode {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct SwitchToApp {
+    pub token: [u32; 4],
+    pub app_name: String::<128>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum UxType {
     Chat,
     Menu,
@@ -124,6 +130,7 @@ pub(crate) enum Opcode {
 
     /// called by a context when it's done with taking the screen; requests the GAM to revert focus to the last-focused app
     RevertFocus,
+    RevertFocusNb, // non-blocking version
 
     /// request an app to take the focus
     RequestFocus,
@@ -133,6 +140,12 @@ pub(crate) enum Opcode {
 
     /// request redraw of IME area
     RedrawIme,
+
+    /// switch focus to an app
+    SwitchToApp,
+
+    /// raise a context menu
+    RaiseMenu,
 
     Quit,
 }

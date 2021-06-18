@@ -7,8 +7,6 @@ mod status;
 use status::*;
 mod canvas;
 use canvas::*;
-mod menu;
-use menu::*;
 
 mod tokens;
 use tokens::*;
@@ -31,8 +29,9 @@ use core::{sync::atomic::{AtomicU32, Ordering}};
 
 use enum_dispatch::enum_dispatch;
 
+use gam::{MenuItem, MenuPayload, Menu, MenuOpcode};
+
 //// todo:
-// - create menu server
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
 
 #[derive(PartialEq, Eq)]
@@ -71,7 +70,7 @@ pub(crate) struct UxContext {
     pub layout: UxLayout,
     /// what prediction engine is being used
     pub predictor: Option<String::<64>>,
-    /// a putative human-readable name given to the context.
+    /// a putative human-readable name given to the context. The name itself is stored in the TokenManager, not in this struct.
     /// Passed to the TokenManager to compute a trust level; add the app's name to tokens.rs EXPECTED_BOOT_CONTEXTS if you want this to succeed.
     pub app_token: [u32; 4], // shared with the app, can be used for other auths to other servers (e.g. audio codec)
     /// a token associated with the UxContext, but private to the GAM (not shared with the app). [currently no use for this, just seems like a good idea...]
@@ -462,12 +461,16 @@ impl ContextManager {
     ) {
         // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
         // only pop up the menu if it isn't already popped up
-        if keys[0] == '∴' && (self.focused_context != self.main_menu_app_token) {
-            if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
-                // set the menu to the active context
-                self.activate(gfx, canvases, menu_token, false);
-                // don't pass the initial key hit back to the menu app, just eat it and return
-                return;
+        if keys[0] == '∴' {
+            if let Some(context) = self.get_context_by_token(self.focused_context.unwrap()) {
+                if context.layout.behavior() == LayoutBehavior::App {
+                    if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
+                        // set the menu to the active context
+                        self.activate(gfx, canvases, menu_token, false);
+                        // don't pass the initial key hit back to the menu app, just eat it and return
+                        return;
+                    }
+                }
             }
         }
 
@@ -514,6 +517,25 @@ impl ContextManager {
         self.kbd.set_vibe(set_vibe).expect("couldn't set vibe on keyboard");
         if let Some(context) = self.focused_context_mut() {
             (*context).vibe = set_vibe;
+        }
+    }
+    pub(crate) fn raise_menu(&mut self,
+        name: &str,
+        gfx: &graphics_server::Gfx,
+        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+    ) {
+        log::debug!("looking for menu {}", name);
+        if let Some(token) = self.find_app_token_by_name(name) {
+            log::debug!("found menu token: {:?}", token);
+            if let Some(context) = self.get_context_by_token(token) {
+                log::debug!("found menu context");
+                // don't allow raising of "apps" without authentication
+                // but alerts can be raised without authentication
+                if context.layout.behavior() == LayoutBehavior::Alert {
+                    log::debug!("activating context");
+                    self.activate(gfx, canvases, token, false);
+                }
+            }
         }
     }
 }
@@ -868,6 +890,10 @@ fn xmain() -> ! {
             }),
             Some(Opcode::RevertFocus) => {
                 context_mgr.revert_focus(&gfx, &mut canvases);
+                xous::return_scalar(msg.sender, 0).expect("couldn't unblock caller");
+            },
+            Some(Opcode::RevertFocusNb) => {
+                context_mgr.revert_focus(&gfx, &mut canvases);
             },
             Some(Opcode::RequestFocus) => msg_blocking_scalar_unpack!(msg, t0, t1, t2, t3, {
                 // TODO: add some limitations around who can request focus
@@ -884,6 +910,24 @@ fn xmain() -> ! {
             Some(Opcode::RedrawIme) => {
                 context_mgr.redraw_imef().expect("couldn't redraw the IMEF");
             },
+            Some(Opcode::SwitchToApp) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let switchapp = buffer.to_original::<SwitchToApp, _>().unwrap();
+
+                if let Some(menu_token) = context_mgr.find_app_token_by_name(MAIN_MENU_NAME) {
+                    if menu_token == switchapp.token {
+                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                        }
+                    }
+                }
+            },
+            Some(Opcode::RaiseMenu) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let menu_name = buffer.to_original::<String::<128>, _>().unwrap();
+                log::debug!("got request to raise menu {}", menu_name);
+                context_mgr.raise_menu(menu_name.as_str().unwrap(), &gfx, &mut canvases);
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

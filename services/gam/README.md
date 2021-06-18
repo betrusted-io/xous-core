@@ -15,6 +15,12 @@ Giving processes direct access to `graphics-server` means that a less trusted
 program could draw into an OS-reserved area, thus presenting false information
 to a user. The GAM solves this problem by dividing the screen into `Canvas` objects.
 
+### Ux Context Names
+See `tokens.rs` for a list of expected boot UX contexts. The GAM enforces a
+policy that disallows the registration of unexpected UX contexts (including menus).
+When adding more UX elements, be sure to expand the list of `EXPECTED_BOOT_CONTEXTS`,
+or else the registration will fail.
+
 ### Canvas
 
 A `Canvas` is a minimal data structure that defines a physical region of the
@@ -82,6 +88,7 @@ a trust and complexity issue to allow for simultaneous stacking of trust domains
 with live, full-content update of the underlying layers.
 
 ### Defacing
+
 Defacing is a policy implemented by the GAM which ensures that when trusted
 objects are overlaid on top of less trusted objects, the less trusted objects
 cannot be mistaken for a trusted object. This is to assist users with avoiding

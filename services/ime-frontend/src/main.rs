@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+mod emoji;
+use emoji::*;
 
 use gam::api::SetCanvasBoundsRequest;
 use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
@@ -19,6 +21,7 @@ use core::fmt::Write;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
+pub(crate) const EMOJI_MENU_NAME: &'static str = "emoji menu";
 
 struct InputTracker {
     /// connection for handling graphical update requests
@@ -105,6 +108,9 @@ impl InputTracker {
     pub fn clear_pred_canvas(&mut self) { self.pred_canvas = None }
     pub fn is_init(&self) -> bool {
         self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
+    }
+    pub fn activate_emoji(&self) {
+        self.gam.raise_menu(EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
     }
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
@@ -602,13 +608,15 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    // only one connection allowed: GAM
-    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(1)).expect("can't register server");
+    // only two connections allowed: GAM, and my emoji menu service
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
 
     let mut tracker = InputTracker::new(&xns);
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
+
+    xous::create_thread_0(emoji_menu_thread).expect("can't start emoji handler menu");
 
     log::trace!("Initialized but still waiting for my canvas Gids");
     loop {
@@ -697,26 +705,30 @@ fn xmain() -> ! {
                             },
                         ];
                         log::trace!("tracking keys: {:?}", keys);
-                        if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
-                            if dbglistener{info!("sending listeners {:?}", line);}
-                            for maybe_conn in listeners.iter_mut() {
-                                if let Some(conn) = maybe_conn {
-                                    if dbglistener{info!("sending to conn {:?}", conn);}
-                                    let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
-                                    match buf.send(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
-                                        Err(xous::Error::ServerNotFound) => {
-                                            *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
-                                        },
-                                        Ok(xous::Result::Ok) => {},
-                                        Ok(xous::Result::MemoryReturned(offset, valid)) => {
-                                            // ignore anything that's returned, but note it in case we're debugging
-                                            log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
-                                        },
-                                        Err(e) => {
-                                            log::error!("unhandled error in callback processing: {:?}", e);
-                                        }
-                                        Ok(e) => {
-                                            log::error!("unexpected result in callback processing: {:?}", e);
+                        if keys[0] == '😊' {
+                            tracker.activate_emoji();
+                        } else {
+                            if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
+                                if dbglistener{info!("sending listeners {:?}", line);}
+                                for maybe_conn in listeners.iter_mut() {
+                                    if let Some(conn) = maybe_conn {
+                                        if dbglistener{info!("sending to conn {:?}", conn);}
+                                        let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
+                                        match buf.send(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
+                                            Err(xous::Error::ServerNotFound) => {
+                                                *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+                                            },
+                                            Ok(xous::Result::Ok) => {},
+                                            Ok(xous::Result::MemoryReturned(offset, valid)) => {
+                                                // ignore anything that's returned, but note it in case we're debugging
+                                                log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
+                                            },
+                                            Err(e) => {
+                                                log::error!("unhandled error in callback processing: {:?}", e);
+                                            }
+                                            Ok(e) => {
+                                                log::error!("unexpected result in callback processing: {:?}", e);
+                                            }
                                         }
                                     }
                                 }
