@@ -3,6 +3,7 @@
 pub mod api;
 
 use core::fmt::Write;
+use api::Disconnect;
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
@@ -70,6 +71,40 @@ impl XousNames {
         }
     }
 
+    pub fn request_connection_with_token(&self, name: &str) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
+        let mut lookup_name = xous_ipc::String::<64>::new();
+        write!(lookup_name, "{}", name).expect("name problably too long");
+        let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
+
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Lookup.to_u32().unwrap()
+        )
+        .or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::CID((cid, token)) => Ok((cid, token)),
+            // api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::ServerNotFound),
+        }
+    }
+    pub fn disconnect_with_token(&self, name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
+        let disconnect = Disconnect {
+            name: String::<64>::from_str(name),
+            token,
+        };
+        let mut buf = Buffer::into_buf(disconnect).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Disconnect.to_u32().unwrap()
+        ).or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::Success => Ok(()),
+            _ => Err(xous::Error::ServerNotFound),
+        }
+    }
+
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
         write!(lookup_name, "{}", name).expect("name problably too long");
@@ -83,7 +118,7 @@ impl XousNames {
         .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
-            api::Return::CID(cid) => Ok(cid),
+            api::Return::CID((cid, _)) => Ok(cid),
             // api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
             _ => Err(xous::Error::ServerNotFound),
         }

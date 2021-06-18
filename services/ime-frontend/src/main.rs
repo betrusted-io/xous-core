@@ -34,6 +34,8 @@ struct InputTracker {
 
     /// our current prediction engine
     predictor: Option<PredictionPlugin>,
+    /// the name & token of our engine, so we can disconnect later on
+    pub predictor_conn: Option<(String::<64>, [u32; 4])>,
     /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
     pred_triggers: Option<PredictionTriggers>,
     /// set if we're in a state where a backspace should trigger an unpredict
@@ -66,6 +68,7 @@ impl InputTracker {
             input_canvas: None,
             pred_canvas: None,
             predictor: None,
+            predictor_conn: None,
             pred_triggers: None,
             gam_token: None,
             can_unpick: false,
@@ -82,10 +85,15 @@ impl InputTracker {
     pub fn set_gam_token(&mut self, token: [u32; 4]) {
         self.gam_token = Some(token);
     }
-    pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
-        self.predictor = Some(predictor);
-        self.pred_triggers = Some(predictor.get_prediction_triggers()
-        .expect("InputTracker failed to get prediction triggers from plugin"));
+    pub fn set_predictor(&mut self, predictor: Option<PredictionPlugin>) {
+        self.predictor = predictor;
+        if let Some(pred) = predictor {
+            self.pred_triggers = Some(pred.get_prediction_triggers()
+            .expect("InputTracker failed to get prediction triggers from plugin"));
+        }
+    }
+    pub fn get_predictor(&self) -> Option<PredictionPlugin> {
+        self.predictor
     }
     pub fn set_input_canvas(&mut self, input: Gid) {
         self.input_canvas = Some(input);
@@ -621,10 +629,25 @@ fn xmain() -> ! {
                 } else {
                     tracker.clear_pred_canvas();
                 }
+                // disconnect any existing predictor, if we have one already
+                if let Some(_pred) = tracker.get_predictor() {
+                    if let Some((name, token)) = tracker.predictor_conn {
+                        xns.disconnect_with_token(name.as_str().unwrap(), token)
+                           .expect("couldn't disconnect from previous predictor. Something is wrong with internal state!");
+                    }
+                    tracker.predictor_conn = None;
+                    tracker.set_predictor(None);
+                }
                 if let Some(s) = descriptor.predictor {
                     log::trace!("got prediction server: {}", s.as_str().unwrap());
-                    match xns.request_connection(s.as_str().unwrap()) {
-                        Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
+                    match xns.request_connection_with_token(s.as_str().unwrap()) {
+                        Ok((pc, token)) => {
+                            tracker.set_predictor( Some(ime_plugin_api::PredictionPlugin {connection: Some(pc)}) );
+                            tracker.predictor_conn = Some(
+                                (String::<64>::from_str(s.as_str().unwrap()),
+                                token.expect("didn't get the disconnect token!"))
+                            );
+                        },
                         _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str().unwrap()),
                     }
                 }

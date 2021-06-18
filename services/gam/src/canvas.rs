@@ -145,7 +145,7 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
-pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
+pub fn deface(gfx: &graphics_server::Gfx, tng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
     for (_, c) in canvases.iter() {
@@ -163,11 +163,12 @@ pub fn deface(gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas
         in between states, so in the worst case we are drawing defacement with a rectangular clip
         area open in the middle of a canvas...
          */
-        //Err(xous::Error::InternalError)
-
         // temporarirly clear the error so we can develop other features
         for (_, c) in canvases.iter_mut() {
             if c.needs_defacing() {
+                // do the actual defacing
+
+                // indicate that the defacement has happened to the canvas state machine
                 c.do_defaced();
             }
         }

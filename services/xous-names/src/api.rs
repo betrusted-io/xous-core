@@ -13,6 +13,8 @@ pub(crate) enum Opcode {
     AuthenticatedLookup,
     /// unregister a server, given its cryptographically unique SID.
     Unregister,
+    /// disconnect, given a server name and a cryptographically unique, one-time use token
+    Disconnect,
     /// indicates if all inherentely trusted slots have been occupied. Should not run untrusted code until this is the case.
     TrustedInitDone,
 }
@@ -25,14 +27,22 @@ pub(crate) enum Return {
     Failure,
     /// A server was successfully created with the given SID
     SID([u32; 4]),
-    /// A connection was successfully made with the given CID
-    CID(xous::CID),
+    /// A connection was successfully made with the given CID; an optional "disconnect token" is provided
+    CID((xous::CID, Option<[u32; 4]>)),
+    /// Operation requested was otherwise successful (currently only used by disconnect to ack the disconnect)
+    Success,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Registration {
     pub name: xous_ipc::String::<64>,
     pub conn_limit: Option<u32>,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub(crate) struct Disconnect {
+    pub name: xous_ipc::String::<64>,
+    pub token: [u32; 4],
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]

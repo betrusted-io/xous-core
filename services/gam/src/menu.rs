@@ -86,7 +86,7 @@ impl Menu {
             RoundedRectangle::new(
                 Rectangle::new_with_style(Point::new(0, 0), canvas_size,
                     DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)
-                ), 10
+                ), 5
             )).unwrap();
     }
     pub fn key_event(&mut self, keys: [char; 4]) {
@@ -94,6 +94,7 @@ impl Menu {
             log::trace!("got key '{}'", k);
             match k {
                 '∴' => {
+                    log::info!("relinquishing focus");
                     self.gam.relinquish_focus().expect("couldn't relinquish focus of the menu!");
                 },
                 '←' => {

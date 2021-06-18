@@ -94,7 +94,7 @@ pub(crate) struct UxContext {
 }
 const MAX_UX_CONTEXTS: usize = 4;
 pub(crate) const MAX_CANVASES: usize = 32;
-const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot
+// const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const MAIN_MENU_NAME: &'static str = "main menu";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
@@ -113,6 +113,7 @@ struct ContextManager {
     imef: ime_plugin_api::ImeFrontEnd,
     imef_active: bool,
     kbd: keyboard::Keyboard,
+    main_menu_app_token: Option<[u32; 4]>, // app_token of the main menu, if it has been registered
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -131,6 +132,7 @@ impl ContextManager {
             imef,
             imef_active: false,
             kbd,
+            main_menu_app_token: None,
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -203,6 +205,12 @@ impl ContextManager {
                         if maybe_context.is_none() {
                             *maybe_context = Some(ux_context);
                             found_slot = true;
+                            // if this is the main menu, note its app token, as we have to conjure it later on
+                            if registration.app_name.as_str().unwrap() == MAIN_MENU_NAME {
+                                log::debug!("main menu found and registered!");
+                                assert!(self.main_menu_app_token == None, "attempt to double-register main menu handler, this should never happen.");
+                                self.main_menu_app_token = Some(token);
+                            }
                             break;
                         }
                     }
@@ -425,10 +433,13 @@ impl ContextManager {
         canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
     ) {
         // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
-        if keys[0] == '∴' {
+        // only pop up the menu if it isn't already popped up
+        if keys[0] == '∴' && (self.focused_context != self.main_menu_app_token) {
             if let Some(menu_token) = self.find_app_token_by_name(MAIN_MENU_NAME) {
                 // set the menu to the active context
                 self.activate(gfx, canvases, menu_token, false);
+                // don't pass the initial key hit back to the menu app, just eat it and return
+                return;
             }
         }
 
@@ -595,13 +606,13 @@ fn xmain() -> ! {
                     if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
                         last_time = elapsed_time;
 
-                        deface(&gfx, &mut canvases);
+                        deface(&gfx, &trng, &mut canvases);
                         log::trace!("flushing...");
                         gfx.flush().expect("couldn't flush buffer to screen");
-                        /* // this throws errors right now because deface() doesn't work.
+
                         for (_, c) in canvases.iter_mut() {
                             c.do_flushed();
-                        }*/
+                        }
                     }
                 })
             }

@@ -66,7 +66,7 @@ impl Repl{
         }).expect("couldn't register Ux context for shellchat");
 
         // we should be the first app running, so get the focus
-        gam.request_focus(token.unwrap());
+        gam.request_focus(token.unwrap()).expect("couldn't take focus");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
         log::debug!("content canvas {:?}", content);
