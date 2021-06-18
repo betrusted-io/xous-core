@@ -19,22 +19,82 @@ _xous_syscall:
     sw          a7, 7*REGBYTES(t0)
     ret
 
-.global aes_enc_round
-aes_enc_round:
-    .word       0xb5050b // aes_enc_round a0, a1, a0
+.global vex_aes_enc_id_0
+vex_aes_enc_id_0:
+    .word       0x00b5050b // vex_aes_enc_id a0, a1, a0, #0
     ret
 
-.global aes_enc_round_last
-aes_enc_round_last:
-    .word       0x4b5050b // aes_enc_round_last a0, a1, a0
+.global vex_aes_enc_id_1
+vex_aes_enc_id_1:
+    .word       0x10b5050b // vex_aes_enc_id a0, a1, a0, #1
     ret
 
-.global aes_dec_round
-aes_dec_round:
-    .word       0x2b5050b // aes_dec_round a0, a1, a0
+.global vex_aes_enc_id_2
+vex_aes_enc_id_2:
+    .word       0x20b5050b // vex_aes_enc_id a0, a1, a0, #2
     ret
 
-.global aes_dec_round_last
-aes_dec_round_last:
-    .word       0x6b5050b // aes_dec_round_last a0, a1, a0
+.global vex_aes_enc_id_3
+vex_aes_enc_id_3:
+    .word       0x30b5050b // vex_aes_enc_id a0, a1, a0, #3
+    ret
+
+.global vex_aes_enc_id_last_0
+vex_aes_enc_id_last_0:
+    .word       0x04b5050b // vex_aes_enc_id_last a0, a1, a0, #0
+    ret
+
+.global vex_aes_enc_id_last_1
+vex_aes_enc_id_last_1:
+    .word       0x14b5050b // vex_aes_enc_id_last a0, a1, a0, #1
+    ret
+
+.global vex_aes_enc_id_last_2
+vex_aes_enc_id_last_2:
+    .word       0x24b5050b // vex_aes_enc_id_last a0, a1, a0, #2
+    ret
+
+.global vex_aes_enc_id_last_3
+vex_aes_enc_id_last_3:
+    .word       0x34b5050b // vex_aes_enc_id_last a0, a1, a0, #3
+    ret
+
+.global vex_aes_dec_id_0
+vex_aes_dec_id_0:
+    .word       0x02b5050b // vex_aes_dec_id a0, a1, a0, #0
+    ret
+
+.global vex_aes_dec_id_1
+vex_aes_dec_id_1:
+    .word       0x12b5050b // vex_aes_dec_id a0, a1, a0, #1
+    ret
+
+.global vex_aes_dec_id_2
+vex_aes_dec_id_2:
+    .word       0x22b5050b // vex_aes_dec_id a0, a1, a0, #2
+    ret
+
+.global vex_aes_dec_id_3
+vex_aes_dec_id_3:
+    .word       0x32b5050b // vex_aes_dec_id a0, a1, a0, #3
+    ret
+
+.global vex_aes_dec_id_last_0
+vex_aes_dec_id_last_0:
+    .word       0x06b5050b // vex_aes_dec_id_last a0, a1, a0, #0
+    ret
+
+.global vex_aes_dec_id_last_1
+vex_aes_dec_id_last_1:
+    .word       0x16b5050b // vex_aes_dec_id_last a0, a1, a0, #1
+    ret
+
+.global vex_aes_dec_id_last_2
+vex_aes_dec_id_last_2:
+    .word       0x26b5050b // vex_aes_dec_id_last a0, a1, a0, #2
+    ret
+
+.global vex_aes_dec_id_last_3
+vex_aes_dec_id_last_3:
+    .word       0x36b5050b // vex_aes_dec_id_last a0, a1, a0, #3
     ret

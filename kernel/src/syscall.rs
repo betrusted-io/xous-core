@@ -30,6 +30,7 @@ enum ExecutionType {
     NonBlocking,
 }
 
+#[cfg(baremetal)]
 pub fn reset_switchto_caller() {
     unsafe { SWITCHTO_CALLER = None };
 }

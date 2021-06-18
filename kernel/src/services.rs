@@ -1962,6 +1962,16 @@ impl SystemServices {
                 server.discard_messages_for_pid(target_pid);
             }
         }
+
+        // Now that the server has been "Disconnected", free the server entry.
+        for server in self.servers.iter_mut() {
+            if let Some(server_inner) = server {
+                if server_inner.pid == target_pid {
+                    *server = None;
+                }
+            }
+        }
+
         let process = self.get_process_mut(target_pid)?;
         process.activate()?;
         let parent_pid = process.ppid;
