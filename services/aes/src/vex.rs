@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+
 use crate::{Block, ParBlocks};
 use cipher::{
     consts::{U16, U32, U8},

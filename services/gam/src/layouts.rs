@@ -222,7 +222,7 @@ impl LayoutApi for MenuLayout {
         rect.style = DrawStyle {fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0,};
         gfx.draw_rectangle(rect)
     }
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error> {
+    fn resize_height(&mut self, _gfx: &graphics_server::Gfx, new_height: i16, _status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error> {
         let menu_canvas = canvases.get_mut(&self.menu).expect("couldn't find menu canvas");
         let orig_rect = menu_canvas.clip_rect();
 

@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+
 #[cfg(target_os = "none")]
 use utralib::generated::*;
 

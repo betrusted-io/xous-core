@@ -1,3 +1,6 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+#![cfg_attr(not(target_os = "none"), allow(unused_imports))]
+
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 

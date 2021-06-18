@@ -6,6 +6,7 @@ use xous::msg_scalar_unpack;
 
 const MAX_ITEMS: usize = 16;
 
+#[allow(dead_code)] // here until Memory types are implemented
 #[derive(Debug, Copy, Clone)]
 pub enum MenuPayload {
     /// memorized scalar payload
@@ -33,6 +34,8 @@ pub struct Menu {
     pub authtoken: [u32; 4],
     pub margin: i16,
     pub divider_margin: i16,
+    pub line_height: i16,
+    pub canvas_width: Option<i16>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -61,6 +64,7 @@ impl Menu {
         ).expect("couldn't register my Ux element with GAM");
         log::debug!("requesting content canvas for menu");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
+        let line_height = gam.glyph_height_hint(gam::GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16;
         Menu {
             sid,
             gam,
@@ -71,6 +75,8 @@ impl Menu {
             authtoken: authtoken.unwrap(),
             margin: 4,
             divider_margin: 20,
+            line_height,
+            canvas_width: None,
         }
     }
     // if successful, returns None, otherwise, the menu item
@@ -90,19 +96,13 @@ impl Menu {
 
         if success {
             // now, recompute the height
-            let mut total_items = 0;
-            for item in self.items.iter() {
-                if item.is_some() {
-                    total_items += 1;
-                }
-            }
+            let mut total_items = self.num_items();
             if total_items == 0 {
                 total_items = 1; // just so we see a blank menu at least, and have a clue how to debug
             }
-            let line_height = self.gam.glyph_height_hint(gam::GlyphStyle::Regular).expect("couldn't get glyph height hint");
             let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
             let mut new_bounds = SetCanvasBoundsRequest {
-                requested: Point::new(current_bounds.x, (total_items * line_height + self.margin as usize * 2) as i16),
+                requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
                 granted: None,
                 token_type: gam::TokenType::App,
                 token: self.authtoken,
@@ -115,13 +115,76 @@ impl Menu {
             Some(new_item)
         }
     }
-    pub fn redraw(&mut self) {
+    pub fn draw_item(&self, index: i16, with_marker: bool) {
         use core::fmt::Write;
+        let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
 
+        if let Some(item) = self.items[index as usize] {
+            let mut item_tv = TextView::new(
+                self.canvas,
+                TextBounds::BoundingBox(Rectangle::new(
+                    Point::new(self.margin, index * self.line_height + self.margin),
+                    Point::new(canvas_size.x - self.margin, (index + 1) * self.line_height + self.margin),
+                )));
+
+            if with_marker {
+                write!(item_tv.text, " • ").unwrap();
+            } else {
+                write!(item_tv.text, "    ").unwrap();
+            }
+            write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
+            item_tv.draw_border = false;
+            item_tv.style = GlyphStyle::Small;
+            item_tv.margin = Point::new(0, 0);
+            item_tv.ellipsis = true;
+
+            self.gam.post_textview(&mut item_tv).expect("couldn't render menu list item");
+        }
+    }
+    // draw a dividing line above the indexed item
+    pub fn draw_divider(&self, index: i16) {
+        if let Some(canvas_width) = self.canvas_width {
+            self.gam.draw_line(self.canvas, Line::new_with_style(
+                Point::new(self.divider_margin, index * self.line_height + self.margin/2),
+                Point::new(canvas_width - self.divider_margin, index * self.line_height + self.margin/2),
+                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
+                ).expect("couldn't draw dividing line")
+        } else {
+            log::debug!("cant draw divider because our canvas width was not initialized. Ignoring request.");
+        }
+    }
+    pub fn prev_item(&mut self) {
+        if self.index > 0 {
+            // wipe out the current marker
+            self.draw_item(self.index as i16, false);
+            self.index -= 1;
+            // add the marker to the pervious item
+            self.draw_item(self.index as i16, true);
+
+            if self.index != 0 {
+                self.draw_divider(self.index as i16);
+            }
+            self.draw_divider(self.index as i16);
+        }
+    }
+    pub fn next_item(&mut self) {
+        if self.index < (self.num_items() - 1) {
+            // wipe out the current marker
+            self.draw_item(self.index as i16, false);
+            self.index += 1;
+            // add the marker to the pervious item
+            self.draw_item(self.index as i16, true);
+
+            if self.index != 1 {
+                self.draw_divider(self.index as i16 - 1);
+            }
+            self.draw_divider(self.index as i16);
+        }
+    }
+    pub fn redraw(&mut self) {
         // for now, just draw a black rectangle
         log::trace!("menu redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
-        let line_height = self.gam.glyph_height_hint(gam::GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16;
         // draw the outer border
         self.gam.draw_rounded_rectangle(self.canvas,
             RoundedRectangle::new(
@@ -133,64 +196,67 @@ impl Menu {
         // draw the line items
         // we require that the items list be in index-order, with no holes: we abort at the first None item
         let mut cur_index: i16 = 0;
-        let mut first_item = true;
         for maybe_item in self.items.iter() {
-            if let Some(item) = maybe_item {
-                let mut item_tv = TextView::new(
-                    self.canvas,
-                    TextBounds::BoundingBox(Rectangle::new(
-                        Point::new(self.margin, cur_index * line_height + self.margin as i16),
-                        Point::new(canvas_size.x - self.margin, (cur_index + 1) * line_height + self.margin as i16),
-                    )));
-
+            if let Some(_item) = maybe_item {
                 if self.index == cur_index as usize {
-                    write!(item_tv.text, " • ").unwrap();
+                    self.draw_item(cur_index as i16, true);
                 } else {
-                    write!(item_tv.text, "    ").unwrap();
+                    self.draw_item(cur_index as i16, false);
                 }
-                write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
-                item_tv.draw_border = false;
-                item_tv.style = GlyphStyle::Small;
-                item_tv.margin = Point::new(0, 0);
-                item_tv.ellipsis = true;
-
-                self.gam.post_textview(&mut item_tv).expect("couldn't render menu list item");
-
-                if !first_item {
-                    // draw a dividing line above this item
-                    self.gam.draw_line(self.canvas, Line::new_with_style(
-                        Point::new(self.divider_margin, cur_index * line_height + self.margin/2),
-                        Point::new(canvas_size.x - self.divider_margin, cur_index * line_height + self.margin/2),
-                        DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
-                    ).expect("couldn't draw dividing line")
+                if cur_index != 0 {
+                    self.draw_divider(cur_index);
                 }
 
                 cur_index += 1;
-                first_item = false;
             } else {
                 break;
             }
         }
     }
+    fn num_items(&self) -> usize {
+        let mut items = 0;
+        for maybe_item in self.items.iter() {
+            if maybe_item.is_some() {
+                items += 1;
+            } else {
+                break;
+            }
+        }
+        items
+    }
     pub fn key_event(&mut self, keys: [char; 4]) {
         for &k in keys.iter() {
-            log::trace!("got key '{}'", k);
+            log::debug!("got key '{}'", k);
             match k {
                 '∴' => {
-                    log::info!("relinquishing focus");
-                    self.gam.relinquish_focus().expect("couldn't relinquish focus of the menu!");
+                    if let Some(mi) = self.items[self.index] {
+                        log::debug!("doing menu action for {}", mi.name);
+                        match mi.action_payload {
+                            MenuPayload::Scalar(args) => {
+                                xous::send_message(mi.action_conn,
+                                    xous::Message::new_scalar(mi.action_opcode as usize,
+                                        args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize)
+                                ).expect("couldn't send menu action");
+                            },
+                            MenuPayload::Memory((_buf, _len)) => {
+                                unimplemented!("menu buffer targets are a future feature");
+                            }
+                        }
+                    }
                 },
                 '←' => {
-                    log::info!("got left arrow");
+                    // placeholder
+                    log::trace!("got left arrow");
                 }
                 '→' => {
-                    log::info!("got right arrow");
+                    // placeholder
+                    log::trace!("got right arrow");
                 }
                 '↑' => {
-                    log::info!("got up arrow");
+                    self.prev_item();
                 }
                 '↓' => {
-                    log::info!("got down arrow");
+                    self.next_item();
                 }
                 _ => {}
             }

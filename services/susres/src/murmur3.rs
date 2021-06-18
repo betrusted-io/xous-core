@@ -1,3 +1,4 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
 // Copyright (c) 2020 Stu Small
 //
 // Licensed under the Apache License, Version 2.0

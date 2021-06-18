@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
@@ -417,7 +419,7 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 csr = Some(CSR::new(base as *mut u32));
             }),
             #[cfg(not(target_os = "none"))]
-            Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
+            Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, _base, _, _, _, {
                 // ignore the opcode in hosted mode
             }),
             Some(TimeoutOpcode::Run) => {
