@@ -256,6 +256,24 @@ impl ContextManager {
         }
         None
     }
+    // hmmm...feels wrong to have basically a dupe of the above. Maybe this abstraction needs to be cleaned up a bit.
+    pub(crate) fn set_canvas_height_app_token(&mut self,
+        gfx: &graphics_server::Gfx,
+        app_token: [u32; 4],
+        new_height: i16,
+        status_canvas: &Canvas,
+        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Option<Point> {
+
+        for maybe_context in self.contexts.iter_mut() {
+            if let Some(context) = maybe_context {
+                if context.app_token == app_token {
+                    let result = context.layout.resize_height(gfx, new_height, status_canvas, canvases).expect("couldn't adjust height of active Ux context");
+                    return Some(result)
+                }
+            }
+        }
+        None
+    }
     fn get_context_by_token_mut(&'_ mut self, token: [u32; 4]) -> Option<&'_ mut UxContext> {
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
@@ -682,10 +700,14 @@ fn xmain() -> ! {
                 let mut cb = buffer.to_original::<SetCanvasBoundsRequest, _>().unwrap();
                 log::debug!("SetCanvasBoundsRequest {:?}", cb);
 
-                let granted = context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases);
+                let granted = if cb.token_type == TokenType::Gam {
+                    context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases)
+                } else {
+                    context_mgr.set_canvas_height_app_token(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases)
+                };
                 if granted.is_some() {
                     // recompute the canvas orders based on the new layout
-                    let mut recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
+                    let recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
                     canvases = recomp_canvases;
                     context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
@@ -834,16 +856,17 @@ fn xmain() -> ! {
                 // this is a blocking scalar, so return /something/ so we know to move on
                 xous::return_scalar(msg.sender, 1).expect("couldn't confirm focus activation");
             }),
+            Some(Opcode::QueryGlyphProps) => msg_blocking_scalar_unpack!(msg, style, _, _, _, {
+                let height = gfx.glyph_height_hint(GlyphStyle::from(style)).expect("couldn't query glyph height from gfx");
+                xous::return_scalar(msg.sender, height).expect("could not return QueryGlyphProps request");
+            }),
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }
-        /*
-        // if we don't have a focused app, try and find the default boot app and bring it to focus.
-        if context_mgr.focused_app().is_none() {
-            if let Some(shellchat_token) = context_mgr.find_app_token_by_name(BOOT_APP_NAME) {
-                context_mgr.activate(&gfx, &mut canvases, shellchat_token, true);
-            }
-        }*/
+
+        // we don't currently have a mechanism to guarantee that the default app has focus
+        // right now, it just depends upon it requesting focus, and none others taking it.
+        // probably something should be inserted around here to take care of that?
     }
     // clean up our program
     log::trace!("main loop exit, destroying servers");

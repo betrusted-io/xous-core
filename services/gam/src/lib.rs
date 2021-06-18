@@ -6,6 +6,7 @@ pub use api::*;
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
+pub use graphics_server::GlyphStyle;
 
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, CID, Message};
@@ -28,7 +29,7 @@ impl Gam {
           callback_sid: None,
         })
     }
-
+    pub fn conn(&self) -> CID { self.conn }
     pub fn redraw(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
@@ -233,6 +234,18 @@ impl Gam {
             Message::new_blocking_scalar(Opcode::RequestFocus.to_usize().unwrap(),
             token[0] as usize, token[1] as usize, token[2] as usize, token[3] as usize,)
         ).map(|_| ())
+    }
+
+    pub fn glyph_height_hint(&self, glyph: GlyphStyle) -> Result<usize, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::QueryGlyphProps.to_usize().unwrap(),
+            glyph as usize, 0, 0, 0,)
+        ).expect("QueryGlyphProps failed");
+        if let xous::Result::Scalar1(h) = response {
+            Ok(h)
+        } else {
+            panic!("unexpected return value: {:#?}", response);
+        }
     }
 }
 

@@ -374,6 +374,7 @@ impl InputTracker {
                             let mut req = SetCanvasBoundsRequest {
                                 requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
                                 granted: None,
+                                token_type: gam::TokenType::Gam,
                                 token: self.gam_token.unwrap(),
                             };
                             if debug1{info!("attempting resize to {:?}", req.requested);}
@@ -480,6 +481,7 @@ impl InputTracker {
                     let mut req = SetCanvasBoundsRequest {
                         requested: Point::new(0, ic_bounds.y + delta as i16),
                         granted: None,
+                        token_type: gam::TokenType::Gam,
                         token: self.gam_token.unwrap(),
                     };
                     if debug1{info!("attempting resize to {:?}", req.requested);}

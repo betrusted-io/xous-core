@@ -17,9 +17,19 @@ pub struct GamObject {
     pub obj: GamObjectType,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
+pub enum TokenType {
+    /// GAM tokens are for objects that the GAM delegates to do app logic.
+    /// this is different to prevent delegated apps from masquerading as the app itself
+    Gam,
+    /// App token is a token given to the app and only the app to identify itself to the Gam
+    /// for any requests
+    App,
+}
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct SetCanvasBoundsRequest {
     pub token: [u32; 4],
+    pub token_type: TokenType,
     pub requested: Point,
     pub granted: Option<Point>,
 }
@@ -118,13 +128,8 @@ pub(crate) enum Opcode {
     /// request an app to take the focus
     RequestFocus,
 
-    /////// planned
-
-    // hides a canvas with a given GID
-    //HideCanvas(Gid),
-
-    // indicates if the current UI layout requires an input field
-    //HasInput(bool),
+    /// pass-through to get glyph heights to assist with layout planning, without having to create a gfx connection
+    QueryGlyphProps,
 
     Quit,
 }
