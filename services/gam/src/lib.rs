@@ -30,6 +30,9 @@ impl Gam {
         })
     }
     pub fn conn(&self) -> CID { self.conn }
+    pub fn getop_revert_focus(&self) -> u32 {
+        Opcode::RevertFocus.to_u32().unwrap()
+    }
     pub fn redraw(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::Redraw.to_usize().unwrap(), 0, 0, 0, 0)
@@ -246,6 +249,12 @@ impl Gam {
         } else {
             panic!("unexpected return value: {:#?}", response);
         }
+    }
+    pub fn request_ime_redraw(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::RedrawIme.to_usize().unwrap(),
+            0, 0, 0, 0,)
+        ).map(|_| ())
     }
 }
 

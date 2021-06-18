@@ -386,7 +386,8 @@ impl ContextManager {
                 // now update the IMEF area, since we're initialized
                 // note: we may need to skip this call if the context does not utilize a predictor...
                 if context.predictor.is_some() {
-                    self.imef.redraw().unwrap();
+                    log::debug!("calling IMEF redraw");
+                    self.imef.redraw(true).unwrap();
                 }
 
                 // revert the keyboard vibe state
@@ -422,6 +423,15 @@ impl ContextManager {
             return Err(xous::Error::UseBeforeInit)
         }
         Err(xous::Error::ServerNotFound)
+    }
+    pub(crate) fn redraw_imef(&self) -> Result<(), xous::Error> {
+        if let Some(context) = self.focused_context() {
+            if context.predictor.is_some() {
+                log::debug!("calling IMEF redraw");
+                self.imef.redraw(true).unwrap();
+            }
+        }
+        Ok(())
     }
     pub(crate) fn find_app_token_by_name(&self, name: &str) -> Option<[u32; 4]> {
         self.tm.find_token(name)
@@ -521,7 +531,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -588,7 +598,7 @@ fn xmain() -> ! {
                         Some(c) => {
                             let mut rect = c.clip_rect();
                             rect.normalize(); // normalize to 0,0 coordinates
-                            log::debug!("getcanvasbounds: {:?}", rect);
+                            log::trace!("getcanvasbounds: {:?}", rect);
                             xous::return_scalar2(msg.sender,
                                 rect.tl.into(),
                                 rect.br.into(),
@@ -698,7 +708,7 @@ fn xmain() -> ! {
             Some(Opcode::SetCanvasBounds) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut cb = buffer.to_original::<SetCanvasBoundsRequest, _>().unwrap();
-                log::debug!("SetCanvasBoundsRequest {:?}", cb);
+                log::trace!("SetCanvasBoundsRequest {:?}", cb);
 
                 let granted = if cb.token_type == TokenType::Gam {
                     context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases)
@@ -713,13 +723,13 @@ fn xmain() -> ! {
                 }
                 cb.granted = granted;
                 let ret = api::Return::SetCanvasBoundsReturn(cb);
-                log::debug!("returning {:?}", cb);
+                log::trace!("returning {:?}", cb);
                 buffer.replace(ret).unwrap();
             }
             Some(Opcode::RequestContentCanvas) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let req = buffer.to_original::<[u32; 4], _>().unwrap();
-                log::debug!("RequestContentCanvas {:?}", req);
+                log::trace!("RequestContentCanvas {:?}", req);
 
                 let ret = api::Return::ContentCanvasReturn(context_mgr.get_content_canvas(req));
                 buffer.replace(ret).unwrap();
@@ -727,7 +737,7 @@ fn xmain() -> ! {
             Some(Opcode::RenderObject) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let obj = buffer.to_original::<GamObject, _>().unwrap();
-                log::debug!("renderobject {:?}", obj);
+                log::trace!("renderobject {:?}", obj);
                 if let Some(canvas) = canvases.get_mut(&obj.canvas) {
                     // first, figure out if we should even be drawing to this canvas.
                     if canvas.is_drawable() {
@@ -860,6 +870,9 @@ fn xmain() -> ! {
                 let height = gfx.glyph_height_hint(GlyphStyle::from(style)).expect("couldn't query glyph height from gfx");
                 xous::return_scalar(msg.sender, height).expect("could not return QueryGlyphProps request");
             }),
+            Some(Opcode::RedrawIme) => {
+                context_mgr.redraw_imef().expect("couldn't redraw the IMEF");
+            },
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

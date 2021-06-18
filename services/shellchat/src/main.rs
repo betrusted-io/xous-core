@@ -237,6 +237,7 @@ impl Repl{
                 break; // we get None on the bounds computed if the text view fell off the top of the screen
             }
         }
+        // self.gam.request_ime_redraw().expect("couldn't redraw the IME area");
         Ok(())
     }
 }
@@ -262,7 +263,7 @@ pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

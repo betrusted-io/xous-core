@@ -631,6 +631,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "rtc",
+ "susres",
  "ticktimer-server",
  "trng",
  "utralib",

@@ -209,7 +209,7 @@ pub struct ImefDescriptor {
 pub trait ImeFrontEndApi {
     fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
-    fn redraw(&self) -> Result<(), xous::Error>;
+    fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
     fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
 }
 
@@ -286,10 +286,11 @@ impl ImeFrontEndApi for ImeFrontEnd {
         Ok(())
     }
 
-    fn redraw(&self) -> Result<(), xous::Error> {
+    fn redraw(&self, force_all: bool) -> Result<(), xous::Error> {
+        let arg = if force_all { 1 } else { 0 };
         send_message(self.cid,
             Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(),
-            0, 0, 0, 0)
+            arg, 0, 0, 0)
         )?;
         Ok(())
     }

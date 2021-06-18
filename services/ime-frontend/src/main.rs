@@ -224,7 +224,7 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
         let mut retstring: Option<String::<4000>> = None;
@@ -465,7 +465,7 @@ impl InputTracker {
 
             input_tv.insertion = Some(self.insertion as _);
             if debug1{info!("insertion point is {}, characters in string {}", self.insertion, self.characters);}
-            if do_redraw {
+            if do_redraw || force_redraw {
                 write!(input_tv.text, "{}", self.line.as_str().expect("couldn't convert str")).expect("couldn't update TextView string in input canvas");
                 self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                 if debug1{info!("got computed cursor of {:?}", input_tv.cursor);}
@@ -547,7 +547,7 @@ impl InputTracker {
                 write!(empty_tv.text, "Ready for input...").expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
-            } else if update_predictor  {
+            } else if update_predictor || force_redraw {
                 // alright, first, let's clear the area
                 self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
@@ -697,7 +697,7 @@ fn xmain() -> ! {
                             },
                         ];
                         log::trace!("tracking keys: {:?}", keys);
-                        if let Some(line) = tracker.update(keys).expect("couldn't update input tracker with latest key presses") {
+                        if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
                             if dbglistener{info!("sending listeners {:?}", line);}
                             for maybe_conn in listeners.iter_mut() {
                                 if let Some(conn) = maybe_conn {
@@ -728,15 +728,16 @@ fn xmain() -> ! {
                     // ignore keyboard events until we've fully initialized
                 }
             }
-            Some(ImefOpcode::Redraw) => {
+            Some(ImefOpcode::Redraw) => msg_scalar_unpack!(msg, arg, _, _, _, {
                 if tracker.is_init() {
+                    let force = if arg != 0 { true } else { false };
                     tracker.clear_area().expect("can't initially clear areas");
-                    tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+                    tracker.update(['\u{0000}'; 4], force).expect("can't setup initial screen arrangement");
                 } else {
                     log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
                 }
-            }
+            }),
             Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}
             None => {log::error!("couldn't convert opcode");}
         }

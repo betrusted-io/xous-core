@@ -131,6 +131,9 @@ pub(crate) enum Opcode {
     /// pass-through to get glyph heights to assist with layout planning, without having to create a gfx connection
     QueryGlyphProps,
 
+    /// request redraw of IME area
+    RedrawIme,
+
     Quit,
 }
 

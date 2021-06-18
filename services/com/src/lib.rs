@@ -57,6 +57,8 @@ impl Com {
             ec_acquired: false,
         })
     }
+    pub fn conn(&self) -> CID {self.conn}
+    pub fn getop_backlight(&self) -> u32 {Opcode::SetBackLight.to_u32().unwrap()}
 
     pub fn power_off_soc(&self) -> Result<(), xous::Error> {
         send_message(self.conn,

@@ -54,6 +54,8 @@ impl Susres {
             execution_gate_conn: 0,
         })
     }
+    pub fn conn(&self) -> CID { self.conn }
+    pub fn getop_suspend(&self) -> u32 { Opcode::SuspendRequest.to_u32().unwrap() }
 
     pub fn new_without_hook(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SUSRES)?;

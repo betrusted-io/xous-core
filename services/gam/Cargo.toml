@@ -28,6 +28,8 @@ num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
+susres = {path = "../susres"} # used for the sleep now menu item
+
 enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
