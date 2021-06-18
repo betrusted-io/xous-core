@@ -2,7 +2,6 @@ use gam::SetCanvasBoundsRequest;
 use xous_ipc::*;
 use graphics_server::*;
 use num_traits::*;
-use xous::msg_scalar_unpack;
 
 const MAX_ITEMS: usize = 16;
 
@@ -17,11 +16,11 @@ pub enum MenuPayload {
 }
 #[derive(Debug, Copy, Clone)]
 pub struct MenuItem {
-    name: String::<64>,
-    action_conn: xous::CID,
-    action_opcode: u32,
-    action_payload: MenuPayload,
-    close_on_select: bool,
+    pub name: String::<64>,
+    pub action_conn: xous::CID,
+    pub action_opcode: u32,
+    pub action_payload: MenuPayload,
+    pub close_on_select: bool,
 }
 
 #[derive(Debug)]
@@ -277,93 +276,4 @@ impl Menu {
             }
         }
     }
-}
-
-/////// strictly speaking this doesn't have to be in this file, but we make it part of this server so we are guaranteed to have a main menu at all times
-pub fn main_menu_thread() {
-    let mut menu = Menu::new(crate::MAIN_MENU_NAME);
-
-    let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let com = com::Com::new(&xns).unwrap();
-
-    let blon_item = MenuItem {
-        name: String::<64>::from_str("Backlight on"),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(blon_item);
-
-    let bloff_item = MenuItem {
-        name: String::<64>::from_str("Backlight off"),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(bloff_item);
-
-    let sleep_item = MenuItem {
-        name: String::<64>::from_str("Sleep now"),
-        action_conn: susres.conn(),
-        action_opcode: susres.getop_suspend(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(sleep_item);
-
-    let close_item = MenuItem {
-        name: String::<64>::from_str("Close Menu"),
-        action_conn: menu.gam.conn(),
-        action_opcode: menu.gam.getop_revert_focus(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: false, // don't close because we're already closing
-    };
-    menu.add_item(close_item);
-
-    loop {
-        let msg = xous::receive_message(menu.sid).unwrap();
-        log::trace!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(MenuOpcode::Redraw) => {
-                menu.redraw();
-            },
-            Some(MenuOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                menu.key_event(keys);
-            }),
-            Some(MenuOpcode::Quit) => {
-                break;
-            },
-            None => {
-                log::error!("unknown opcode {:?}", msg.body.id());
-            }
-        }
-    }
-    log::trace!("menu thread exit, destroying servers");
-    // do we want to add a deregister_ux call to the system?
-    xous::destroy_server(menu.sid).unwrap();
 }
