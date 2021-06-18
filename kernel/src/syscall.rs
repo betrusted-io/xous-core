@@ -146,89 +146,106 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
         // If the server has an available thread to receive the message,
         // transfer it right away.
-        if ss.runnable(server_pid, None).unwrap() {
-            let server = ss
-                .server_from_sidx_mut(sidx)
-                .expect("server couldn't be located");
-            if let Some(server_tid) = server.take_available_thread() {
-                // klog!(
-                //     "there are threads available in PID {} to handle this message -- marking as Ready",
-                //     server_pid
-                // );
-                let sender_idx = if message.is_blocking() {
-                    ss.remember_server_message(sidx, pid, thread, &message, client_address)
-                        .map_err(|e| {
-                            klog!("error remembering server message: {:?}", e);
-                            ss.server_from_sidx_mut(sidx)
-                                .expect("server couldn't be located")
-                                .return_available_thread(server_tid);
-                            e
-                        })?
+        let server = ss
+            .server_from_sidx_mut(sidx)
+            .expect("server couldn't be located");
+        if let Some(server_tid) = server.take_available_thread() {
+            // klog!(
+            //     "there are threads available in PID {} to handle this message -- marking as Ready",
+            //     server_pid
+            // );
+            let sender_idx = if message.is_blocking() {
+                ss.remember_server_message(sidx, pid, thread, &message, client_address)
+                    .map_err(|e| {
+                        klog!("error remembering server message: {:?}", e);
+                        ss.server_from_sidx_mut(sidx)
+                            .expect("server couldn't be located")
+                            .return_available_thread(server_tid);
+                        e
+                    })?
+            } else {
+                0
+            };
+            let sender = SenderID::new(sidx, sender_idx, Some(pid));
+            klog!(
+                "server connection data: sidx: {}, idx: {}, server pid: {}",
+                sidx,
+                sender_idx,
+                server_pid
+            );
+            let envelope = MessageEnvelope {
+                sender: sender.into(),
+                body: message,
+            };
+
+            // Mark the server's context as "Ready". If this fails, return the context
+            // to the blocking list.
+            ss.ready_thread(server_pid, server_tid).map_err(|e| {
+                ss.server_from_sidx_mut(sidx)
+                    .expect("server couldn't be located")
+                    .return_available_thread(server_tid);
+                e
+            })?;
+
+            let runnable = ss
+                .runnable(server_pid, Some(server_tid))
+                .expect("server doesn't exist");
+            // --- NOTE: Returning this value //
+            return if blocking && cfg!(baremetal) {
+                if !runnable {
+                    // If it's not runnable (e.g. it's being debugged), switch to the parent.
+                    let (ppid, ptid) = unsafe { SWITCHTO_CALLER.take().unwrap() };
+                    klog!("Activating Server parent process (server is blocked) and switching away from Client");
+                    ss.set_thread_result(
+                        server_pid,
+                        server_tid,
+                        xous_kernel::Result::Message(envelope),
+                    )
+                    .expect("couldn't set result for server thread");
+                    ss.activate_process_thread(thread, ppid, ptid, false)
+                        .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
                 } else {
-                    0
-                };
-                let sender = SenderID::new(sidx, sender_idx, Some(pid));
-                klog!(
-                    "server connection data: sidx: {}, idx: {}, server pid: {}",
-                    sidx,
-                    sender_idx,
-                    server_pid
-                );
-                let envelope = MessageEnvelope {
-                    sender: sender.into(),
-                    body: message,
-                };
-
-                // Mark the server's context as "Ready". If this fails, return the context
-                // to the blocking list.
-                ss.ready_thread(server_pid, server_tid).map_err(|e| {
-                    ss.server_from_sidx_mut(sidx)
-                        .expect("server couldn't be located")
-                        .return_available_thread(server_tid);
-                    e
-                })?;
-
-                // --- NOTE: Returning this value //
-                return if blocking && cfg!(baremetal) {
+                    // Switch to the server, since it's in a state to be run.
                     klog!("Activating Server context and switching away from Client");
                     ss.activate_process_thread(thread, server_pid, server_tid, false)
                         .map(|_| Ok(xous_kernel::Result::Message(envelope)))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
-                } else if blocking && !cfg!(baremetal) {
-                    klog!("Blocking client, since it sent a blocking message");
-                    ss.switch_from_thread(pid, thread)?;
-                    ss.switch_to_thread(server_pid, Some(server_tid))?;
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::Message(envelope),
-                    )
-                    .map(|_| xous_kernel::Result::BlockedProcess)
-                } else if cfg!(baremetal) {
-                    klog!("Setting the return value of the Server ({}:{}) to {:?} and returning to Client",
-                        server_pid, server_tid, envelope);
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::Message(envelope),
-                    )
-                    .map(|_| xous_kernel::Result::Ok)
-                } else {
-                    klog!(
-                        "setting the return value of the Server to {:?} and returning to Client",
-                        envelope
-                    );
-                    // "Switch to" the server PID when not running on bare metal. This ensures
-                    // that it's "Running".
-                    ss.switch_to_thread(server_pid, Some(server_tid))?;
-                    ss.set_thread_result(
-                        server_pid,
-                        server_tid,
-                        xous_kernel::Result::Message(envelope),
-                    )
-                    .map(|_| xous_kernel::Result::Ok)
-                };
-            }
+                }
+            } else if blocking && !cfg!(baremetal) {
+                klog!("Blocking client, since it sent a blocking message");
+                ss.switch_from_thread(pid, thread)?;
+                ss.switch_to_thread(server_pid, Some(server_tid))?;
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::BlockedProcess)
+            } else if cfg!(baremetal) {
+                klog!("Setting the return value of the Server ({}:{}) to {:?} and returning to Client",
+                    server_pid, server_tid, envelope);
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::Ok)
+            } else {
+                klog!(
+                    "setting the return value of the Server to {:?} and returning to Client",
+                    envelope
+                );
+                // "Switch to" the server PID when not running on bare metal. This ensures
+                // that it's "Running".
+                ss.switch_to_thread(server_pid, Some(server_tid))?;
+                ss.set_thread_result(
+                    server_pid,
+                    server_tid,
+                    xous_kernel::Result::Message(envelope),
+                )
+                .map(|_| xous_kernel::Result::Ok)
+            };
         }
         klog!(
             "no threads available in PID {} to handle this message, so queueing",
@@ -344,12 +361,14 @@ fn return_memory(
             len.get(),
         )?;
 
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
         // Unblock the client context to allow it to continue.
-        if !cfg!(baremetal) || in_irq {
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // Send a message to the client, in order to wake it up
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
-            ss.switch_to_thread(client_pid, Some(client_tid))?;
+            // ss.switch_to_thread(client_pid, Some(client_tid))?;
             ss.set_thread_result(
                 client_pid,
                 client_tid,
@@ -415,7 +434,9 @@ fn return_scalar(
             }
         };
 
-        if !cfg!(baremetal) || in_irq {
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -423,7 +444,7 @@ fn return_scalar(
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-            if in_irq {
+            if cfg!(baremetal) {
                 ss.ready_thread(client_pid, client_tid)?;
             }
             Ok(xous_kernel::Result::Ok)
@@ -484,7 +505,9 @@ fn return_scalar2(
             }
         };
 
-        if !cfg!(baremetal) || in_irq {
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -496,7 +519,7 @@ fn return_scalar2(
                 client_tid,
                 xous_kernel::Result::Scalar2(arg1, arg2),
             )?;
-            if in_irq {
+            if cfg!(baremetal) {
                 ss.ready_thread(client_pid, client_tid)?;
             }
             Ok(xous_kernel::Result::Ok)
