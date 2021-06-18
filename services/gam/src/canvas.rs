@@ -145,7 +145,7 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
-pub fn deface(gfx: &graphics_server::Gfx, tng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> Result<(), xous::Error> {
+pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> bool {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
     for (_, c) in canvases.iter() {
@@ -154,7 +154,10 @@ pub fn deface(gfx: &graphics_server::Gfx, tng: &trng::Trng, canvases: &mut FnvIn
         }
     }
     if needs_defacing {
-        error!("GAM: haven't implemented canvas defacing yet");
+        log::debug!("doing a deface computation!");
+
+        let screensize = gfx.screen_size().unwrap();
+        let screen_rect = Rectangle::new(Point::new(0, 0,), screensize);
         /*
         This routine will need to do something similar to recompute_canvases, where it extracts
         a sorted order and draws the defacement upon the canvas that requires defacing.
@@ -163,19 +166,63 @@ pub fn deface(gfx: &graphics_server::Gfx, tng: &trng::Trng, canvases: &mut FnvIn
         in between states, so in the worst case we are drawing defacement with a rectangular clip
         area open in the middle of a canvas...
          */
-        // temporarirly clear the error so we can develop other features
         for (_, c) in canvases.iter_mut() {
             if c.needs_defacing() {
-                // do the actual defacing
+                let clip_rect = c.clip_rect();
+                if clip_rect.intersects(screen_rect) {
+                    let width = clip_rect.br().x - clip_rect.tl().x;
+                    let height = clip_rect.br().y - clip_rect.tl().y;
+
+                    // roughly scale the number of lines hatched by the size of the clipping area to deface
+                    let mut num_lines = (width + height) / 24;
+                    if num_lines < 8 {
+                        num_lines = 8;
+                    }
+                    if num_lines > 40 {
+                        num_lines = 40;
+                    }
+                    // log::debug!("deface width {} height {}, numlines {}, cliprect {:?}", width, height, num_lines, clip_rect);
+
+                    // draw 32 lines, of random orientation and lengths, across the clip area.
+                    for _ in 0..num_lines {
+                        // do the actual defacing
+                        // get 64 bits of entropy, and express it geometrically
+                        let mut rand = trng.get_u64().unwrap();
+                        let mut x = (rand & 0xFFF) as i16;
+                        rand >>= 12;
+                        let mut y = (rand & 0xFFF) as i16;
+                        rand >>= 12;
+                        let mut delta_x = (rand & 0x3F) as i16 + 64;
+                        rand >>= 6;
+                        if (rand & 1) == 1 {
+                            delta_x = -delta_x;
+                        }
+                        rand >>= 1;
+                        let mut delta_y = (rand & 0x3F) as i16 + 64;
+                        rand >>= 6;
+                        if (rand & 1) == 1 {
+                            delta_y = -delta_y;
+                        }
+                        // rand >>= 1;
+
+                        x = x % width;
+                        y = y % height;
+
+                        gfx.draw_line_clipped(
+                            Line::new_with_style(
+                                Point::new(x, y),
+                                Point::new(x + delta_x, y + delta_y),
+                                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)),
+                                clip_rect).unwrap();
+                    }
+                }
 
                 // indicate that the defacement has happened to the canvas state machine
-                c.do_defaced();
+                c.do_defaced().expect("couldn't update defacement state");
             }
         }
-        Ok(())
-    } else {
-        Ok(())
     }
+    needs_defacing
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen

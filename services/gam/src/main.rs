@@ -377,8 +377,8 @@ impl ContextManager {
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
-                self.redraw().expect("couldn't redraw the currently focused app");
             }
+            self.redraw().expect("couldn't redraw the currently focused app");
         }
     }
     pub(crate) fn revert_focus(&mut self,
@@ -606,12 +606,15 @@ fn xmain() -> ! {
                     if elapsed_time - last_time > 33 {  // rate limit updates, no point in going faster than the eye can see
                         last_time = elapsed_time;
 
-                        deface(&gfx, &trng, &mut canvases);
+                        if deface(&gfx, &trng, &mut canvases) {
+                            // redraw the trusted foreground apps after a defacement
+                            context_mgr.redraw().expect("couldn't redraw after defacement");
+                        }
                         log::trace!("flushing...");
                         gfx.flush().expect("couldn't flush buffer to screen");
 
                         for (_, c) in canvases.iter_mut() {
-                            c.do_flushed();
+                            c.do_flushed().expect("couldn't update flushed state");
                         }
                     }
                 })
@@ -679,10 +682,11 @@ fn xmain() -> ! {
                 let mut cb = buffer.to_original::<SetCanvasBoundsRequest, _>().unwrap();
                 log::debug!("SetCanvasBoundsRequest {:?}", cb);
 
-                let granted = context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &&status_canvas, &mut canvases);
+                let granted = context_mgr.set_canvas_height(&gfx, cb.token, cb.requested.y, &status_canvas, &mut canvases);
                 if granted.is_some() {
                     // recompute the canvas orders based on the new layout
-                    canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
+                    let mut recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
+                    canvases = recomp_canvases;
                     context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
                 cb.granted = granted;

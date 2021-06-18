@@ -85,7 +85,7 @@ impl Menu {
         self.gam.draw_rounded_rectangle(self.canvas,
             RoundedRectangle::new(
                 Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)
+                    DrawStyle::new(PixelColor::Light, PixelColor::Dark, 3)
                 ), 5
             )).unwrap();
     }
