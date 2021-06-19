@@ -50,7 +50,7 @@ pub fn pump_thread(conn: usize) {
             Ok(xous::Result::Ok) => {},
             _ => panic!("unhandled error in status pump thread")
         }
-        ticktimer.sleep_ms(250).unwrap();
+        ticktimer.sleep_ms(1000).unwrap();
     }
 }
 
@@ -183,6 +183,8 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     } else {
                         write!(&mut security_tv, " USB secured").unwrap();
                     }
+                    // only post the view if something has actually changed
+                    gam.post_textview(&mut security_tv).unwrap();
                 }
                 let elapsed_time = ticktimer.elapsed_ms();
                 let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
@@ -235,7 +237,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     }
                     last_seconds = now_seconds;
                     uptime_tv.clear_str();
-                    if (stats_phase > 3) && datetime.is_some() {
+                    if (stats_phase >= 2) && datetime.is_some() {
                         let dt = datetime.unwrap();
                         let day = match dt.weekday {
                             rtc::Weekday::Monday => "Mon",
@@ -257,9 +259,8 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     log::trace!("|status: requesting draw of '{}'", uptime_tv);
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");
                     gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
-                    gam.post_textview(&mut security_tv).unwrap();
                     gam.redraw().expect("|status: couldn't redraw");
-                    stats_phase = (stats_phase + 1) % 8;
+                    stats_phase = (stats_phase + 1) % 4;
                 }
                 if elapsed_time - last_time > batt_interval {
                     //info!("|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());

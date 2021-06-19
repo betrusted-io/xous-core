@@ -522,6 +522,7 @@ impl Menu {
                 break;
             }
         }
+        self.gam.redraw().unwrap();
     }
     fn num_items(&self) -> usize {
         let mut items = 0;
@@ -558,6 +559,7 @@ impl Menu {
                         }
                         self.index = 0; // reset the index to 0
                     }
+                    self.gam.redraw().unwrap();
                 },
                 '←' => {
                     // placeholder
@@ -569,9 +571,11 @@ impl Menu {
                 }
                 '↑' => {
                     self.prev_item();
+                    self.gam.redraw().unwrap();
                 }
                 '↓' => {
                     self.next_item();
+                    self.gam.redraw().unwrap();
                 }
                 _ => {}
             }
