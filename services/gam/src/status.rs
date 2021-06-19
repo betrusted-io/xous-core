@@ -88,6 +88,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     uptime_tv.draw_border = false;
     uptime_tv.margin = Point::new(3, 0);
     write!(uptime_tv, "Booting up...").expect("|status: couldn't init uptime text");
+    gam.post_textview(&mut uptime_tv).expect("|status: can't draw battery stats");
     log::trace!("|status: screensize as reported: {:?}", screensize);
     log::trace!("|status: uptime initialized to '{:?}'", uptime_tv);
 
@@ -98,6 +99,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     battstats_tv.style = blitstr::GlyphStyle::Small;
     battstats_tv.draw_border = false;
     battstats_tv.margin = Point::new(0, 0);
+    gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
 
     // initialize to some "sane" mid-point defaults, so we don't trigger errors later on before the first real battstat reading comes
     let mut stats = BattStats {
@@ -106,9 +108,6 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
         current: 0,
         remaining_capacity: 650,
     };
-    let mut last_time: u64 = ticktimer.elapsed_ms();
-    let mut stats_phase: usize = 0;
-    let mut last_seconds: usize = ((last_time / 1000) % 60) as usize;
 
     let style_dark = DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1);
     gam.draw_line(status_gid, Line::new_with_style(
@@ -128,9 +127,6 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
 
     rtc.hook_rtc_callback(dt_callback).unwrap();
     let mut datetime: Option<rtc::DateTime> = None;
-    let mut dt_pump_modulus = 15;
-
-    let mut charger_pump_modulus = 0;
     let llio = llio::Llio::new(&xns).unwrap();
 
     let mut debug_unlocked = llio.debug_usb_unlocked().unwrap();
@@ -146,19 +142,25 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     security_tv.invert = true;
     write!(&mut security_tv, " USB unlocked").unwrap();
     gam.post_textview(&mut security_tv).unwrap();
+    gam.redraw().unwrap();  // initial boot redraw
 
-    let secs_interval;
+    let mut stats_phase: usize = 0;
+
+    let dt_pump_interval = 15;
+    let charger_pump_interval = 60;
+    let stats_interval;
     let batt_interval;
     if cfg!(feature = "slowstatus") {
         // lower the status output rate for braille mode, debugging, etc.
-        secs_interval = 10;
-        batt_interval = 5000;
+        stats_interval = 30;
+        batt_interval = 60;
     } else {
-        secs_interval = 1;
-        batt_interval = 500;
+        stats_interval = 4;
+        batt_interval = 4;
     }
+    let mut battstats_phase = true;
+    let mut needs_redraw = false;
 
-    last_seconds = last_seconds - 1; // this will force the uptime to redraw
     info!("|status: starting main loop");
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
@@ -167,12 +169,15 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
             Some(StatusOpcode::BattStats) => msg_scalar_unpack!(msg, lo, hi, _, _, {
                 stats = [lo, hi].into();
                 battstats_tv.clear_str();
-                // toggle between two views of the data; duration of toggle is set by the modulus and thresholds below
-                if stats_phase > 3 {
+                // toggle between two views of the data every time we have a status update
+                if battstats_phase {
                     write!(&mut battstats_tv, "{}mV {}mA", stats.voltage, stats.current).expect("|status: can't write string");
                 } else {
                     write!(&mut battstats_tv, "{}mAh {}%", stats.remaining_capacity, stats.soc).expect("|status: can't write string");
                 }
+                gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
+                battstats_phase = !battstats_phase;
+                needs_redraw = true;
             }),
             Some(StatusOpcode::Pump) => {
                 if debug_unlocked != llio.debug_usb_unlocked().unwrap() {
@@ -185,89 +190,87 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                     }
                     // only post the view if something has actually changed
                     gam.post_textview(&mut security_tv).unwrap();
+                    needs_redraw = true;
                 }
-                let elapsed_time = ticktimer.elapsed_ms();
-                let now_seconds: usize = ((elapsed_time / 1000) % 60) as usize;
-                if (now_seconds / secs_interval) != (last_seconds / secs_interval) {
-                    charger_pump_modulus += 1;
-                    if charger_pump_modulus > 60 {
-                        // once a minute confirm that the charger is in the right state.
-                        charger_pump_modulus = 0;
-                        if stats.soc < 95 || stats.remaining_capacity < 1000 { // only request if we aren't fully charged, either by SOC or capacity metrics
-                            if (llio.adc_vbus().unwrap() as f64) * 0.005033 > 4.45 { // 4.45V is our threshold for deciding if a cable is present
-                                // charging cable is present
-                                if !com.is_charging().expect("couldn't check charging state") {
-                                    // not charging, but cable is present
-                                    log::info!("Charger present, but not currently charging. Automatically requesting charge start.");
-                                    com.request_charging().expect("couldn't send charge request");
-                                }
+                if (stats_phase % batt_interval) == (batt_interval - 1) {
+                    com.req_batt_stats().expect("Can't get battery stats from COM");
+                }
+
+                if (stats_phase % charger_pump_interval) == 1 { // stagger periodic tasks
+                    // once a minute confirm that the charger is in the right state.
+                    if stats.soc < 95 || stats.remaining_capacity < 1000 { // only request if we aren't fully charged, either by SOC or capacity metrics
+                        if (llio.adc_vbus().unwrap() as f64) * 0.005033 > 4.45 { // 4.45V is our threshold for deciding if a cable is present
+                            // charging cable is present
+                            if !com.is_charging().expect("couldn't check charging state") {
+                                // not charging, but cable is present
+                                log::info!("Charger present, but not currently charging. Automatically requesting charge start.");
+                                com.request_charging().expect("couldn't send charge request");
                             }
                         }
                     }
-                    dt_pump_modulus += 1;
-                    if dt_pump_modulus > 15 {
-                        dt_pump_modulus = 0;
-                        #[cfg(target_os = "none")]
-                        rtc.request_datetime().expect("|status: can't request datetime from RTC");
-                        #[cfg(not(target_os = "none"))]
-                        {
-                            log::trace!("hosted request of date time - short circuiting server call");
-                            use chrono::prelude::*;
-                            use rtc::Weekday;
-                            let now = Local::now();
-                            let wday: Weekday = match now.weekday() {
-                                chrono::Weekday::Mon => Weekday::Monday,
-                                chrono::Weekday::Tue => Weekday::Tuesday,
-                                chrono::Weekday::Wed => Weekday::Wednesday,
-                                chrono::Weekday::Thu => Weekday::Thursday,
-                                chrono::Weekday::Fri => Weekday::Friday,
-                                chrono::Weekday::Sat => Weekday::Saturday,
-                                chrono::Weekday::Sun => Weekday::Sunday,
-                            };
-                            datetime = Some(rtc::DateTime {
-                                seconds: now.second() as u8,
-                                minutes: now.minute() as u8,
-                                hours: now.hour() as u8,
-                                months: now.month() as u8,
-                                days: now.day() as u8,
-                                years: (now.year() - 2000) as u8,
-                                weekday: wday,
-                            });
-                        }
-                    }
-                    last_seconds = now_seconds;
-                    uptime_tv.clear_str();
-                    if (stats_phase >= 2) && datetime.is_some() {
-                        let dt = datetime.unwrap();
-                        let day = match dt.weekday {
-                            rtc::Weekday::Monday => "Mon",
-                            rtc::Weekday::Tuesday => "Tue",
-                            rtc::Weekday::Wednesday => "Wed",
-                            rtc::Weekday::Thursday => "Thu",
-                            rtc::Weekday::Friday => "Fri",
-                            rtc::Weekday::Saturday => "Sat",
-                            rtc::Weekday::Sunday => "Sun",
+                }
+                if (stats_phase % dt_pump_interval) == 2 {
+                    #[cfg(target_os = "none")]
+                    rtc.request_datetime().expect("|status: can't request datetime from RTC");
+                    #[cfg(not(target_os = "none"))]
+                    {
+                        log::trace!("hosted request of date time - short circuiting server call");
+                        use chrono::prelude::*;
+                        use rtc::Weekday;
+                        let now = Local::now();
+                        let wday: Weekday = match now.weekday() {
+                            chrono::Weekday::Mon => Weekday::Monday,
+                            chrono::Weekday::Tue => Weekday::Tuesday,
+                            chrono::Weekday::Wed => Weekday::Wednesday,
+                            chrono::Weekday::Thu => Weekday::Thursday,
+                            chrono::Weekday::Fri => Weekday::Friday,
+                            chrono::Weekday::Sat => Weekday::Saturday,
+                            chrono::Weekday::Sun => Weekday::Sunday,
                         };
-                        write!(&mut uptime_tv, "{:02}:{:02} {} {}/{}", dt.hours, dt.minutes, day, dt.months, dt.days).unwrap();
-                    } else {
-                        let (latest_activity, period) = llio.activity_instantaneous().expect("couldn't get CPU activity");
-                        write!(&mut uptime_tv, "Up {}:{:02}:{:02} {:.0}%",
-                            (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, now_seconds,
-                            ((latest_activity as f32) / (period as f32)) * 100.0
-                        ).expect("|status: can't write string");
+                        datetime = Some(rtc::DateTime {
+                            seconds: now.second() as u8,
+                            minutes: now.minute() as u8,
+                            hours: now.hour() as u8,
+                            months: now.month() as u8,
+                            days: now.day() as u8,
+                            years: (now.year() - 2000) as u8,
+                            weekday: wday,
+                        });
                     }
-                    log::trace!("|status: requesting draw of '{}'", uptime_tv);
+                }
+                if (stats_phase % stats_interval == 0) && ((stats_phase % (stats_interval * 2)) == stats_interval) && datetime.is_some() {
+                    let dt = datetime.unwrap();
+                    let day = match dt.weekday {
+                        rtc::Weekday::Monday => "Mon",
+                        rtc::Weekday::Tuesday => "Tue",
+                        rtc::Weekday::Wednesday => "Wed",
+                        rtc::Weekday::Thursday => "Thu",
+                        rtc::Weekday::Friday => "Fri",
+                        rtc::Weekday::Saturday => "Sat",
+                        rtc::Weekday::Sunday => "Sun",
+                    };
+                    uptime_tv.clear_str();
+                    write!(&mut uptime_tv, "{:02}:{:02} {} {}/{}", dt.hours, dt.minutes, day, dt.months, dt.days).unwrap();
                     gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");
-                    gam.post_textview(&mut battstats_tv).expect("|status: can't draw battery stats");
+                    needs_redraw = true;
+                } else if (stats_phase % (stats_interval * 2)) < stats_interval {
+                    uptime_tv.clear_str();
+                    let (latest_activity, period) = llio.activity_instantaneous().expect("couldn't get CPU activity");
+                    // use ticktimer, not stats_phase, because stats_phase encodes some phase drift due to task-switching overhead
+                    let elapsed_time = ticktimer.elapsed_ms();
+                    write!(&mut uptime_tv, "Up {}:{:02}:{:02} {:.0}%",
+                        (elapsed_time / 3_600_000), (elapsed_time / 60_000) % 60, (elapsed_time / 1000) % 60,
+                        ((latest_activity as f32) / (period as f32)) * 100.0
+                    ).expect("|status: can't write string");
+                    gam.post_textview(&mut uptime_tv).expect("|status: can't draw uptime");
+                    needs_redraw = true;
+                }
+                if needs_redraw {
                     gam.redraw().expect("|status: couldn't redraw");
-                    stats_phase = (stats_phase + 1) % 4;
+                    needs_redraw = false;
                 }
-                if elapsed_time - last_time > batt_interval {
-                    //info!("|status: size of TextView type: {} bytes", core::mem::size_of::<TextView>());
-                    log::trace!("|status: periodic tasks: updating uptime, requesting battstats");
-                    last_time = elapsed_time;
-                    com.req_batt_stats().expect("Can't get battery stats from COM");
-                }
+
+                stats_phase = stats_phase + 1;
             }
             Some(StatusOpcode::DateTime) => {
                 //log::info!("got DateTime update");
