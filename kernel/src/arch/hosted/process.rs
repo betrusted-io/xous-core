@@ -394,6 +394,12 @@ impl Process {
         });
         Ok(())
     }
+
+    pub fn print_all_threads(&self) {}
 }
 
 impl Thread {}
+
+pub fn current_tid() -> TID {
+    1
+}

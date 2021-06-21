@@ -107,7 +107,6 @@ impl MemoryManager {
         MEMORY_MANAGER.with(|ss| f(&mut ss.borrow_mut()))
     }
 
-    #[cfg(baremetal)]
     pub fn with<F, R>(f: F) -> R
     where
         F: FnOnce(&MemoryManager) -> R,
@@ -120,6 +119,7 @@ impl MemoryManager {
         #[cfg(not(baremetal))]
         MEMORY_MANAGER.with(|ss| f(&ss.borrow_mut()))
     }
+
     #[cfg(baremetal)]
     pub fn init_from_memory(
         &mut self,
@@ -177,9 +177,9 @@ impl MemoryManager {
 
     /// Print the number of RAM bytes used by the specified process.
     /// This does not include memory such as peripherals and CSRs.
-    #[cfg(baremetal)]
     pub fn ram_used_by(&self, pid: PID) -> usize {
         let mut owned_bytes = 0;
+        #[cfg(baremetal)]
         unsafe {
             for owner in &MEMORY_ALLOCATIONS[0..self.ram_size / PAGE_SIZE] {
                 if owner == &Some(pid) {

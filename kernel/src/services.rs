@@ -2135,4 +2135,9 @@ impl SystemServices {
         }
         None
     }
+
+    #[cfg(not(baremetal))]
+    pub fn process_name(&self, pid: PID) -> Option<&str> {
+        None
+    }
 }

@@ -163,7 +163,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
 }
 
 fn process_irq_character(b: u8) {
-    #[cfg(feature = "gdbserver")]
+    #[cfg(all(feature = "gdbserver", baremetal))]
     if gdb_server::handle(b) {
         return;
     }
@@ -259,7 +259,7 @@ fn process_irq_character(b: u8) {
             });
             println!("{} k total", total_bytes / 1024);
         }
-        #[cfg(feature = "gdbserver")]
+        #[cfg(all(feature = "gdbserver", baremetal))]
         b'g' => {
             println!("Starting GDB server -- attach your debugger now");
             gdb_server::setup();
@@ -268,7 +268,7 @@ fn process_irq_character(b: u8) {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");
-            #[cfg(feature = "gdbserver")]
+            #[cfg(all(feature = "gdbserver", baremetal))]
             println!(" g  | enter the gdb server");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
