@@ -383,12 +383,11 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     }
 
     // Ensure we're allowed to read it.
-    if l0_pt.entries[vpn0] & MMUFlags::W.bits() == 0 {
-        Err(xous_kernel::Error::AccessDenied)?;
-    }
+    let was_writable = l0_pt.entries[vpn0] & MMUFlags::W.bits() != 0;
 
     // Strip the USER flag to the entry so we can read it
     l0_pt.entries[vpn0] &= !MMUFlags::USER.bits();
+    l0_pt.entries[vpn0] |= MMUFlags::W.bits();
     unsafe { flush_mmu() };
 
     // Perform the write
@@ -396,6 +395,11 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
 
     // Add the USER flag back to the entry
     l0_pt.entries[vpn0] |= MMUFlags::USER.bits();
+
+    // Strip the "writable" bit if it wasn't set before
+    if !was_writable {
+        l0_pt.entries[vpn0] &= !MMUFlags::W.bits();
+    }
     unsafe { flush_mmu() };
 
     Ok(())
