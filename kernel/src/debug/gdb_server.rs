@@ -159,7 +159,7 @@ impl MultiThreadOps for XousTarget {
                 .activate()
                 .unwrap();
             data.iter_mut().for_each(|b| {
-                *b = crate::arch::mem::peek_memory(current_addr as *mut u8).unwrap_or(0x55);
+                *b = crate::arch::mem::peek_memory(current_addr as *mut u8).unwrap_or(0xff);
                 current_addr += 1;
             });
 
@@ -195,6 +195,7 @@ impl MultiThreadOps for XousTarget {
                 .unwrap();
             data.iter().for_each(|b| {
                 if let Err(_e) = crate::arch::mem::poke_memory(current_addr as *mut u8, *b) {
+                    panic!("couldn't poke memory: {:?}", _e);
                     // gprintln!("Error writing to {:08x}: {:?}", current_addr, e);
                 }
                 current_addr += 1;
