@@ -368,7 +368,8 @@ fn return_memory(
             // Send a message to the client, in order to wake it up
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
-            // ss.switch_to_thread(client_pid, Some(client_tid))?;
+            #[cfg(not(baremetal))]
+            ss.switch_to_thread(client_pid, Some(client_tid))?;
             ss.set_thread_result(
                 client_pid,
                 client_tid,
