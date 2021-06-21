@@ -11,6 +11,7 @@ content-plugin-api = {path = "../content-plugin-api"}# all content canvas provid
 gam = {path = "../gam"}
 graphics-server = {path = "../graphics-server"}
 ime-plugin-api = {path = "../ime-plugin-api"}
+ime-plugin-shell = {path = "../ime-plugin-shell"}
 llio = {path = "../llio"}
 rtc = {path = "../rtc"}
 log = "0.4"
@@ -24,6 +25,8 @@ susres = {path = "../susres"}
 codec = {path = "../codec"}
 engine-sha512 = {path="../engine-sha512"}
 digest = "0.9"
+aes-xous={path="../aes"}
+cipher = "0.3"
 
 heapless = "0.7"
 trng = {path = "../trng"}

@@ -59,6 +59,8 @@ pub enum Opcode {
     /// return the prediction triggers used by this IME. These are characters that can indicate that a
     /// whole predictive unit has been entered.
     GetPredictionTriggers,
+
+    Quit,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -176,14 +178,8 @@ impl PredictionApi for PredictionPlugin {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ImefOpcode {
-    /// informs me where my input canvas is
-    SetInputCanvas, //(Gid),
-
-    /// informs me where my prediction canvas is
-    SetPredictionCanvas, //(Gid),
-
-    /// set prediction server. Must be a String of the name of a server that is loaded in the system.
-    SetPredictionServer, //(String<64>),
+    /// connect an backend configuration
+    ConnectBackend,
 
     /// register a listener for finalized inputs
     RegisterListener, //(String<64>),
@@ -194,8 +190,7 @@ pub enum ImefOpcode {
     /// force a redraw of the UI
     Redraw,
 
-    // this is the event opcode used by listeners
-    //GotInputLine, //(String<4000>),
+    Quit,
 }
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ImefCallback {
@@ -203,12 +198,21 @@ pub enum ImefCallback {
     Drop,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct ImefDescriptor {
+    pub input_canvas: Option<graphics_server::Gid>,
+    pub prediction_canvas: Option<graphics_server::Gid>,
+    pub predictor: Option<String::<64>>,
+    pub token: [u32; 4], // token used to lookup our connected app inside the GAM
+}
+
 pub trait ImeFrontEndApi {
-    fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
-    fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error>;
-    fn set_predictor(&self, servername: &str) -> Result<(), xous::Error>;
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error>;
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error>;
-    fn redraw(&self) -> Result<(), xous::Error>;
+    fn redraw(&self, force_all: bool) -> Result<(), xous::Error>;
+    fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error>;
+    fn conn(&self) -> xous::CID;
+    fn getop_process_keys(&self) -> u32;
 }
 
 pub const SERVER_NAME_IME_FRONT: &str = "_IME front end_";
@@ -250,28 +254,24 @@ impl Drop for ImeFrontEnd {
 }
 
 impl ImeFrontEndApi for ImeFrontEnd {
-    fn set_input_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
-        send_message(self.cid,
-            Message::new_scalar(ImefOpcode::SetInputCanvas.to_usize().unwrap(),
-            g.gid()[0] as _, g.gid()[1] as _, g.gid()[2] as _, g.gid()[3] as _
-        ))?;
-        Ok(())
+    fn conn(&self) -> xous::CID { self.cid }
+    fn getop_process_keys(&self) -> u32 {
+        ImefOpcode::ProcessKeys.to_u32().unwrap()
+    }
+    fn connect_backend(&self, descriptor: ImefDescriptor) -> Result<(), xous::Error> {
+        let buf = Buffer::into_buf(descriptor).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.cid, ImefOpcode::ConnectBackend.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_| ())
     }
 
-    fn set_prediction_canvas(&self, g: graphics_server::Gid) -> Result<(), xous::Error> {
-        send_message(self.cid,
-            Message::new_scalar(ImefOpcode::SetPredictionCanvas.to_usize().unwrap(),
-            g.gid()[0] as _, g.gid()[1] as _, g.gid()[2] as _, g.gid()[3] as _
-        ))?;
-        Ok(())
-    }
-
-    fn set_predictor(&self, servername: &str) -> Result<(), xous::Error> {
-        let mut server = String::<64>::new();
-        use core::fmt::Write;
-        write!(server, "{}", servername).expect("couldn't write set_predictor server name");
-        let buf = Buffer::into_buf(server).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.cid, ImefOpcode::SetPredictionServer.to_u32().unwrap()).map(|_|())
+    fn send_keyevent(&self, keys: [char; 4]) -> Result<(), xous::Error> {
+        log::trace!("sending keys: {:?}", keys);
+        xous::send_message(self.cid,
+            xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
+            keys[0] as u32 as usize,
+            keys[1] as u32 as usize,
+            keys[2] as u32 as usize,
+            keys[3] as u32 as usize,
+        )).map(|_|())
     }
 
     fn hook_listener_callback(&mut self, cb: fn(String::<4000>)) -> Result<(), xous::Error> {
@@ -292,10 +292,11 @@ impl ImeFrontEndApi for ImeFrontEnd {
         Ok(())
     }
 
-    fn redraw(&self) -> Result<(), xous::Error> {
+    fn redraw(&self, force_all: bool) -> Result<(), xous::Error> {
+        let arg = if force_all { 1 } else { 0 };
         send_message(self.cid,
             Message::new_scalar(ImefOpcode::Redraw.to_usize().unwrap(),
-            0, 0, 0, 0)
+            arg, 0, 0, 0)
         )?;
         Ok(())
     }

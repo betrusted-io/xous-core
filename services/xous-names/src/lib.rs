@@ -3,6 +3,7 @@
 pub mod api;
 
 use core::fmt::Write;
+use api::Disconnect;
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
@@ -19,22 +20,37 @@ impl XousNames {
         })
     }
 
-    pub fn unregister_server(&self, _sid: xous::SID) -> Result<(), xous::Error> {
-        // placeholder function for a future call that will search the name table and remove
-        // a given SID from the table. It's considered "secure" because you'd have to guess a random 128-bit SID
+    pub fn unregister_server(&self, sid: xous::SID) -> Result<(), xous::Error> {
+        // searches the name table and removes a given SID from the table.
+        // It's considered "secure" because you'd have to guess a random 128-bit SID
         // to destroy someone else's SID.
 
         // note that with the current implementation, the destroy call will have to be an O(N) search through
         // the server table, but this is OK as we expect <100 servers on a device
-        Ok(())
+        let s = sid.to_array();
+        let response = xous::send_message(self.conn,
+            xous::Message::new_blocking_scalar(api::Opcode::Unregister.to_usize().unwrap(), s[0] as usize, s[1] as usize, s[2] as usize, s[3] as usize)
+        ).expect("unregistration failed");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(())
+            } else {
+                Err(xous::Error::ServerNotFound)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
     }
 
-    pub fn register_name(&self, name: &str) -> Result<xous::SID, xous::Error> {
-        let mut registration_name = String::<64>::new();
+    pub fn register_name(&self, name: &str, max_conns: Option<u32>) -> Result<xous::SID, xous::Error> {
+        let mut registration = api::Registration {
+            name: String::<64>::new(),
+            conn_limit: max_conns,
+        };
         // could also do String::from_str() but in this case we want things to fail if the string is too long.
-        write!(registration_name, "{}", name).expect("name probably too long");
+        write!(registration.name, "{}", name).expect("name probably too long");
 
-        let mut buf = Buffer::into_buf(registration_name).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
 
         buf.lend_mut(
             self.conn,
@@ -55,7 +71,40 @@ impl XousNames {
         }
     }
 
-    /// note: if this throws an AccessDenied error, you can retry with a request_authenticate_connection() call (to be written)
+    pub fn request_connection_with_token(&self, name: &str) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
+        let mut lookup_name = xous_ipc::String::<64>::new();
+        write!(lookup_name, "{}", name).expect("name problably too long");
+        let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
+
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Lookup.to_u32().unwrap()
+        )
+        .or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::CID((cid, token)) => Ok((cid, token)),
+            // api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::ServerNotFound),
+        }
+    }
+    pub fn disconnect_with_token(&self, name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
+        let disconnect = Disconnect {
+            name: String::<64>::from_str(name),
+            token,
+        };
+        let mut buf = Buffer::into_buf(disconnect).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(
+            self.conn,
+            api::Opcode::Disconnect.to_u32().unwrap()
+        ).or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::Success => Ok(()),
+            _ => Err(xous::Error::ServerNotFound),
+        }
+    }
+
     pub fn request_connection(&self, name: &str) -> Result<xous::CID, xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
         write!(lookup_name, "{}", name).expect("name problably too long");
@@ -69,7 +118,7 @@ impl XousNames {
         .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
-            api::Return::CID(cid) => Ok(cid),
+            api::Return::CID((cid, _)) => Ok(cid),
             // api::Return::AuthenticateRequest(_) => Err(xous::Error::AccessDenied),
             _ => Err(xous::Error::ServerNotFound),
         }
@@ -87,6 +136,26 @@ impl XousNames {
             xous::yield_slice();
         }
     }
+
+    pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
+        let response = xous::send_message(self.conn,
+            xous::Message::new_blocking_scalar(api::Opcode::TrustedInitDone.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't query trusted_init_done");
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    // todo:
+    // pub fn authenticated_connection(&self, name: &str, key: Authkey)
+    // this function will create an authenticated connection, if such are allowed
+    // it's intended for use by dynamically-loaded third-party apps. As of Xous 0.8 this isn't supported, so it's just a "todo"
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

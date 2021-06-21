@@ -523,6 +523,9 @@ impl Llio {
             Err(xous::Error::InternalError)
         }
     }
+    pub fn debug_usb_unlocked(&self) -> Result<bool, xous::Error> {
+        Ok(true) // for now, always return true, because we don't have the hardware yet to lock out debug USB
+    }
 }
 
 

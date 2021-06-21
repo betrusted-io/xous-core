@@ -91,6 +91,8 @@ mod backlight; use backlight::*;
 mod accel;    use accel::*;
 mod sha;      use sha::*;
 mod ecup;     use ecup::*;
+mod aes;      use aes::*;
+mod trng_cmd; use trng_cmd::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -110,6 +112,8 @@ pub struct CmdEnv {
     audio_cmd: Audio,
     sha_cmd: Sha,
     ecup_cmd: EcUpdate,
+    aes_cmd: Aes,
+    trng_cmd: TrngCmd,
 
     fcc_cmd: Fcc,
 }
@@ -127,6 +131,7 @@ impl CmdEnv {
         };
         let fcc = Fcc::new(&mut common);
         let sha = Sha::new(&xns, &mut common);
+        let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
         CmdEnv {
             common_env: common,
@@ -137,11 +142,13 @@ impl CmdEnv {
             sensors_cmd: Sensors::new(),
             callback_cmd: CallBack::new(),
             rtc_cmd: RtcCmd::new(&xns),
-            vibe_cmd: Vibe::new(&xns),
+            vibe_cmd: Vibe::new(),
             ssid_cmd: Ssid::new(),
             audio_cmd: Audio::new(&xns),
             sha_cmd: sha,
             ecup_cmd: ecup,
+            aes_cmd: aes,
+            trng_cmd: TrngCmd::new(),
 
             fcc_cmd: fcc,
         }
@@ -170,6 +177,8 @@ impl CmdEnv {
             &mut accel_cmd,
             &mut self.sha_cmd,
             &mut self.ecup_cmd,
+            &mut self.aes_cmd,
+            &mut self.trng_cmd,
 
             &mut self.fcc_cmd,
         ];

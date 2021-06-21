@@ -68,7 +68,7 @@ fn shell_main() -> ! {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let xns = xous_names::XousNames::new().unwrap();
-    let shell_server = xns.register_name(SERVER_NAME_SHELL).expect("BENCHMARK: can't register server");
+    let shell_server = xns.register_name(SERVER_NAME_SHELL, None).expect("BENCHMARK: can't register server");
 
     let gfx = graphics_server::Gfx::new(&xns).unwrap();
     let target_conn = xns.request_connection_blocking(benchmark_target::api::SERVER_NAME_BENCHMARK).expect("BENCHMARK: can't connect to COM");
@@ -130,7 +130,7 @@ fn shell_main() -> ! {
 
         // actual benchmark
         // get a scalar message
-        if true {
+        if false {
             // measured at 1479.2 iterations per second in this loop (hardware); 55/s (hosted)
 
             // xous v0.8
@@ -139,14 +139,20 @@ fn shell_main() -> ! {
             count = benchmark_target::test_scalar(target_conn, count).expect("BENCHMARK: couldn't send test message");
             check_count = check_count + 1;
         } else {
-            // works on hosted mode, 35/s (hosted)
-            // measured at 762.6 iterations per second (hardware)
+            if false {
+                // works on hosted mode, 35/s (hosted)
+                // measured at 762.6 iterations per second (hardware)
 
-            // xous v0.8
-            // 9,928 per 10s = 992.8/s (hardware)
-            // 243 per 10s = 24.3/s (hosted)
-            count = benchmark_target::test_memory(target_conn, count).expect("BENCHMARK: couldn't send test message");
-            check_count = check_count + 1;
+                // xous v0.8
+                // 9,928 per 10s = 992.8/s (hardware)
+                // 243 per 10s = 24.3/s (hosted)
+                count = benchmark_target::test_memory(target_conn, count).expect("BENCHMARK: couldn't send test message");
+                check_count = check_count + 1;
+            } else {
+                // simple send benchmark, instead of lend
+                count = benchmark_target::test_memory_send(target_conn, count).expect("BENCHMARK: couldn't send test message");
+                check_count = check_count + 1;
+            }
         }
 
         if update_result {

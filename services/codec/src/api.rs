@@ -85,6 +85,8 @@ pub struct FrameRing {
     wr_frame: usize,
     // a pointer for more efficient recording during interrupt contexts
     rec_ptr: usize,
+    // authenication token authorizing playback
+    auth_token: Option<[u32; 4]>,
 }
 impl FrameRing {
     pub fn new() -> FrameRing {
@@ -93,6 +95,7 @@ impl FrameRing {
             rd_frame: 0,
             wr_frame: 0,
             rec_ptr: 0,
+            auth_token: None,
         }
     }
     pub fn clear(&mut self) {

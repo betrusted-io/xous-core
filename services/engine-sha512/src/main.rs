@@ -1,3 +1,6 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+#![cfg_attr(not(target_os = "none"), allow(unused_imports))]
+
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
@@ -327,11 +330,12 @@ fn xmain() -> ! {
     use crate::implementation::Engine512;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let engine512_sid = xns.register_name(api::SERVER_NAME_SHA512).expect("can't register server");
+    // anyone is allowed to connect to this service; authentication by tokens used
+    let engine512_sid = xns.register_name(api::SERVER_NAME_SHA512, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", engine512_sid);
 
     let mut engine512 = Engine512::new();

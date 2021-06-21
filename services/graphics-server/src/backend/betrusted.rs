@@ -128,7 +128,12 @@ impl XousDisplay {
     pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }
 
     pub fn redraw(&mut self) {
-        while self.busy() {xous::yield_slice()}
+        let mut busy_count = 0;
+        let mut dirty_count = 0;
+        while self.busy() {
+            xous::yield_slice();
+            busy_count += 1;
+        }
         let fb: *mut [u32; FB_SIZE] = self.fb.as_mut_ptr() as *mut [u32; FB_SIZE];
         let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
         for words in 0..FB_SIZE {
@@ -140,10 +145,14 @@ impl XousDisplay {
         // clear all the dirty bits, under the theory that it's time-wise cheaper on average
         // to visit every line and clear the dirty bits than it is to do an update_all()
         for lines in 0..FB_LINES {
+            if unsafe{(*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000} != 0x0 {
+                dirty_count += 1;
+            }
             unsafe {
                 (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
             }
         }
+        log::trace!("redraw {}/{}", busy_count, dirty_count);
     }
 
     // note: this API is used by emulation, don't remove calls to it

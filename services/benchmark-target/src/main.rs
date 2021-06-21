@@ -16,9 +16,10 @@ fn xmain() -> ! {
     info!("BENCHTARGET: my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let bench_sid = xns.register_name(api::SERVER_NAME_BENCHMARK).expect("BENCHTARGET: can't register server");
+    let bench_sid = xns.register_name(api::SERVER_NAME_BENCHMARK, None).expect("BENCHTARGET: can't register server");
     info!("BENCHTARGET: registered with NS -- {:?}", bench_sid);
 
+    let mut state: u32 = 0;
     loop {
         let mut envelope = xous::receive_message(bench_sid).unwrap();
         match FromPrimitive::from_usize(envelope.body.id()) {
@@ -34,6 +35,11 @@ fn xmain() -> ! {
                 ret.challenge[0] = reg.challenge[0] + 1;
                 buffer.replace(ret).unwrap();
             },
+            Some(Opcode::TestMemorySend) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(envelope.body.memory_message_mut().unwrap()) };
+                let reg = buffer.to_original::<TestStruct, _>().unwrap();
+                state += reg.challenge[0];
+            }
             None => {error!("BENCHTARGET: couldn't convert opcode");}
         }
     }

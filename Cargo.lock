@@ -9,6 +9,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee2a4ec343196209d6594e19543ae87a39f96d5534d7174822a3ad825dd6ed7e"
 
 [[package]]
+name = "aes-test"
+version = "0.1.0"
+dependencies = [
+ "hex-literal 0.3.1",
+ "log",
+ "log-server",
+ "xous",
+]
+
+[[package]]
+name = "aes-xous"
+version = "0.1.0"
+dependencies = [
+ "cipher",
+ "ctr",
+ "hex-literal 0.2.1",
+ "log",
+ "log-server",
+ "opaque-debug",
+ "xous",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,6 +312,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cipher"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ee52072ec15386f770805afd189a01c8841be8696bed250fa2f13c4c0d6dfb7"
+dependencies = [
+ "generic-array 0.14.4",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -453,6 +485,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctr"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a232f92a03f37dd7d7dd2adc67166c77e9cd88de5b019b9a9eecfaeaf7bfd481"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,6 +546,18 @@ dependencies = [
  "xous",
  "xous-ipc",
  "xous-names",
+]
+
+[[package]]
+name = "enum_dispatch"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd53b3fde38a39a06b2e66dc282f3e86191e53bd04cc499929c15742beae3df8"
+dependencies = [
+ "once_cell",
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.60",
 ]
 
 [[package]]
@@ -561,14 +614,15 @@ dependencies = [
 name = "gam"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "blitstr-ref",
  "chrono",
  "com",
  "content-plugin-api",
+ "enum_dispatch",
  "graphics-server",
  "heapless 0.7.0",
  "ime-plugin-api",
+ "ime-plugin-shell",
  "keyboard",
  "llio",
  "log",
@@ -577,6 +631,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "rtc",
+ "susres",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -645,6 +700,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "susres",
+ "trng",
  "utralib",
  "xous",
  "xous-ipc",
@@ -717,6 +773,31 @@ name = "hex"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "644f9158b2f133fd50f5fb3242878846d9eb792e445c893805ff0e3824006e35"
+
+[[package]]
+name = "hex-literal"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "961de220ec9a91af2e1e5bd80d02109155695e516771762381ef8581317066e0"
+dependencies = [
+ "hex-literal-impl",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "hex-literal"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5af1f635ef1bc545d78392b136bfe1c9809e029023c84a3638a864a10b8819c8"
+
+[[package]]
+name = "hex-literal-impl"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "853f769599eb31de176303197b7ba4973299c38c7a7604a6bc88c3eef05b9b46"
+dependencies = [
+ "proc-macro-hack",
+]
 
 [[package]]
 name = "humantime"
@@ -1059,6 +1140,12 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
+
+[[package]]
+name = "proc-macro-hack"
+version = "0.5.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro2"
@@ -1443,6 +1530,8 @@ checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 name = "shellchat"
 version = "0.1.0"
 dependencies = [
+ "aes-xous",
+ "cipher",
  "codec",
  "com",
  "content-plugin-api",
@@ -1452,6 +1541,7 @@ dependencies = [
  "graphics-server",
  "heapless 0.7.0",
  "ime-plugin-api",
+ "ime-plugin-shell",
  "keyboard",
  "llio",
  "log",
@@ -1649,10 +1739,12 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "rkyv 0.4.3",
  "susres",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 

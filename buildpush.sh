@@ -6,15 +6,14 @@ UPDATE_FPGA=1
 UPDATE_KERNEL=1
 UPDATE_LOADER=1
 USE_USB=1
-FPGA_IMAGE=../betrusted-soc/build/gateware/soc_csr.bin
+FPGA_IMAGE=precursors/soc_csr.bin
 KERNEL_IMAGE=target/riscv32imac-unknown-none-elf/release/xous.img
 LOADER_IMAGE=target/riscv32imac-unknown-none-elf/release/loader.bin
 CSR_CSV=
 USE_IDENTITY=0
 USE_NIGHTLY=
 IMAGE=hw-image
-SOC_SVD=../betrusted-soc/build/software/soc.svd
-OVERRIDE_SVD=
+SOC_SVD=precursors/soc.svd
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -69,10 +68,6 @@ do
 	  IMAGE=av-test
 	  shift
 	  ;;
-      -p|--prebuild)
-	  OVERRIDE_SVD=precursors/soc.svd
-	  shift
-	  ;;
       --image)
 	  IMAGE=$2
 	  shift
@@ -101,15 +96,7 @@ DESTDIR=code/precursors
 # full rebuild, and not just an incremental rebuild. :-/
 #touch services/log-server/src/main.rs # bump the build time in the log server
 
-if [ -z "$OVERRIDE_SVD" ]
-then
-  cargo $USE_NIGHTLY xtask $IMAGE $SOC_SVD
-# only copy if changed, othrewise it seems to trigger extra build effort...
-  rsync -a --no-times --checksum $SOC_SVD svd2utra/examples/soc.svd
-  rsync -a --no-times --checksum $SOC_SVD emulation/soc/renode.svd
-else
-  cargo $USE_NIGHTLY xtask $IMAGE $OVERRIDE_SVD
-fi
+cargo $USE_NIGHTLY xtask $IMAGE $SOC_SVD
 
 if [ $? -ne 0 ]
 then

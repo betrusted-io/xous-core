@@ -1,7 +1,5 @@
 # Tools
 
-Maintainer's note: this is a mirror of the README.md file found in [betrusted-ec](https://github.com/betrusted-io/betrusted-ec/tools/README.md). This is not the master copy and may be stale.
-
 ## usb_update.py
 
 `usb_update.py` is the script for copying firmware packages from a host onto a Precursor device.
@@ -23,12 +21,18 @@ We would appreciate any improvements/suggestions for alternate Linux distros. `u
 
 ### Installation: Windows 10
 
-* You will need to install python3 from the Windows App store
-* Run `pip3 install pyusb progressbar2 [args]` from a Powershell
+* You will need to install python3 from the Windows App store if you don't already have it
+* Run `pip3 install pyusb progressbar2` from a Powershell
 * use [zadig](https://zadig.akeo.ie/) to remap `Precursor pvt2`'s Windows driver to `libusb-win32`
 * Run `python3 .\usb_update.py [args]` from a Powershell; elevated privs are not necessary after using `zadig`.
 
+Users have reported trouble navigating the Zadig UI. Here is a guide:
+
 ![zadig screenshot](zadig.png)
+
+1. Select "Precursor pvt2" from the large pull-down box. Click the "Edit" checkbox if the menu is blank or unselectable.
+1. Select the driver to be "libusb-win32", using the red highlighted arrows, as shown in the *right* text box. You can ignore the text in the left box.
+1. Click the "Install Driver" (or "Reinstall driver") button (highlighted in green) once these settings are made. This step can take several minutes.
 
 ### Installation: iOS
 

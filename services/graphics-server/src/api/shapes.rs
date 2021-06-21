@@ -151,6 +151,13 @@ impl Rectangle {
         self.tl.y += offset.y;
         self.br.y += offset.y;
     }
+    pub fn translate_chain(self, offset: Point) -> Rectangle {
+        Rectangle {
+            tl: Point::new(self.tl.x + offset.x, self.tl.y + offset.y),
+            br: Point::new(self.br.x + offset.x, self.br.y + offset.y),
+            style: self.style,
+        }
+    }
     pub fn normalize(&mut self) {
         self.br.x -= self.tl.x;
         self.br.y -= self.tl.y;

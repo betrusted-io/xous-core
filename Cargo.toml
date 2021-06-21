@@ -25,12 +25,14 @@ default-members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/aes",
 ]
 members = [
   "xous-ipc",
   "xous-rs",
   "tools",
   "macros",
+  "services/aes-test",
   "services/graphics-server",
   "services/log-server",
   "services/ticktimer-server",
@@ -62,6 +64,7 @@ members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/aes",
 ]
 resolver = "2"
 

@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "none"), allow(dead_code))]
+
 use crate::api::Point;
 use minifb::{Key, Window, WindowOptions};
 
@@ -65,8 +67,8 @@ impl XousDisplay {
             emulated_buffer: [0u32; FB_SIZE],
         }
     }
-    pub fn suspend(&self, flag: bool) {}
-    pub fn resume(&self, flag: bool) {}
+    pub fn suspend(&self, _flag: bool) {}
+    pub fn resume(&self, _flag: bool) {}
 
     pub fn screen_size(&self) -> Point {
         Point::new(WIDTH as i16, HEIGHT as i16)
@@ -172,8 +174,8 @@ impl XousKeyboardHandler {
                 Key::Up => '↑',
                 Key::Down => '↓',
                 Key::Home => '∴',
-                Key::Backspace => 0x8_u8.into(),
-                Key::Delete => 0x8_u8.into(),
+                Key::Backspace => '\u{0008}',
+                Key::Delete => '\u{0008}',
                 Key::Enter => 0xd_u8.into(),
                 Key::Space => ' ',
                 Key::Comma => ',',
@@ -182,7 +184,7 @@ impl XousKeyboardHandler {
                 Key::F2 => 0x12_u8.into(),
                 Key::F3 => 0x13_u8.into(),
                 Key::F4 => 0x14_u8.into(),
-                Key::F5 => '😃',
+                Key::F5 => '😊',
                 Key::F6 => '福',
                 _ => '\u{0000}',
             }
@@ -229,8 +231,8 @@ impl XousKeyboardHandler {
                 Key::Up => '↑',
                 Key::Down => '↓',
                 Key::Home => '∴',
-                Key::Backspace => 0x8_u8.into(),
-                Key::Delete => 0x8_u8.into(),
+                Key::Backspace => '\u{0008}',
+                Key::Delete => '\u{0008}',
                 Key::Space => ' ',
                 Key::Comma => '<',
                 Key::Period => '>',

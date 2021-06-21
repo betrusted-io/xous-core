@@ -17,7 +17,12 @@ string into the SID except by resolving it with `xous-name-server`.
 On boot, a trusted set of processes are started which form the
 operating system. These must all claim names in the name space before
 any further processes are started, to prevent later processes from
-claiming their names.
+claiming their names. Servers can also optionally limit the total
+number of connections allowed, which effectively makes them unreachable
+by less trusted code that is run after the core trusted set of processes
+have started up. The `trusted_init_done()` libary call on the name
+server will return true if all the servers that have a connection
+limit have fully populated all of their connections.
 
 The exception to random SIDs are the `xous-name-server`,
 `xous-log-server ` (note the trailing space), and `ticktimer-server`.
@@ -36,10 +41,10 @@ A new process that intends to receive messages uses the `register_name` convenie
 function in the `xous-names/src/lib.rs` file, with the following procedure.
 
 1. It calls `register_name` with a preferred ASCII name string,
-limited to 64 characters. The convenience function wraps this in an `rkyv`
-object and passes it as mutable-borrowed memory to the name server.
+limited to 64 characters. It also specifies how many connections the server
+will allow. `None` on the specifier means no limit.
 
-2. `xous-name-server` returns the borrowed memory to the server, where the
+1. `xous-name-server` returns the borrowed memory to the server, where the
 buffer has been replaced with a response field. In the case that the registration
 is affirmed, the SID field in `Registration` contains the assigned SID
 of calling process. In the case that the name is determined to be invalid
@@ -117,19 +122,11 @@ does not "leak" memory.
 
 The current implementation is a hash map that matches randomly generated
 names with a list of names each server selects for itself. Currently, any
-request to lookup and connect to a server will succeed, but the hooks
+request to lookup and connect to a server will succeed up to the limit
+of connections (if any) specified by a server, but the hooks
 are there to enforce permissions and deny connections, and/or request
 authentication for connection.
 
-Most server names are crate-local, and are bound through library functions
-called during the creation of server access objects. However, some names
-of servers which may not be statically bound are stored in `xous-rs/names.rs`.
-The intention is that this is a list of "public" services that should
-be well-known and generally all processes are allowed to connect to
-these.
-
-Later on, we may implement servers that handle sensitive information;
-and also, user processes can start private servers that should be isolated
-from others, and thus have restricted permissions. These names may not
-appear in this list, or they may appear but also we'll have annotations
-for permissions and security.
+Server names are crate-local, and are bound through library functions
+called during the creation of server access objects. In other words,
+there is no global name space for servers.

@@ -1,9 +1,11 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+mod emoji;
+use emoji::*;
 
 use gam::api::SetCanvasBoundsRequest;
-use ime_plugin_api::{ImefOpcode, ImefCallback};
+use ime_plugin_api::{ImefCallback, ImefDescriptor, ImefOpcode};
 
 use log::{error, info};
 
@@ -19,6 +21,7 @@ use core::fmt::Write;
 
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
+pub(crate) const EMOJI_MENU_NAME: &'static str = "emoji menu";
 
 struct InputTracker {
     /// connection for handling graphical update requests
@@ -29,9 +32,13 @@ struct InputTracker {
     input_canvas: Option<Gid>,
     /// prediction display area, as given by the GAM
     pred_canvas: Option<Gid>,
+    /// gam token, so the GAM can find the application that requested us
+    gam_token: Option<[u32; 4]>,
 
     /// our current prediction engine
     predictor: Option<PredictionPlugin>,
+    /// the name & token of our engine, so we can disconnect later on
+    pub predictor_conn: Option<(String::<64>, [u32; 4])>,
     /// cached copy of the predictor's triggers for predictions. Only valid if predictor is not None
     pred_triggers: Option<PredictionTriggers>,
     /// set if we're in a state where a backspace should trigger an unpredict
@@ -64,7 +71,9 @@ impl InputTracker {
             input_canvas: None,
             pred_canvas: None,
             predictor: None,
+            predictor_conn: None,
             pred_triggers: None,
+            gam_token: None,
             can_unpick: false,
             pred_phrase: String::<4000>::new(),
             last_trigger_char: Some(0),
@@ -76,19 +85,32 @@ impl InputTracker {
             pred_options: [None; MAX_PREDICTION_OPTIONS],
         }
     }
-    pub fn set_predictor(&mut self, predictor: PredictionPlugin) {
-        self.predictor = Some(predictor);
-        self.pred_triggers = Some(predictor.get_prediction_triggers()
-        .expect("InputTracker failed to get prediction triggers from plugin"));
+    pub fn set_gam_token(&mut self, token: [u32; 4]) {
+        self.gam_token = Some(token);
+    }
+    pub fn set_predictor(&mut self, predictor: Option<PredictionPlugin>) {
+        self.predictor = predictor;
+        if let Some(pred) = predictor {
+            self.pred_triggers = Some(pred.get_prediction_triggers()
+            .expect("InputTracker failed to get prediction triggers from plugin"));
+        }
+    }
+    pub fn get_predictor(&self) -> Option<PredictionPlugin> {
+        self.predictor
     }
     pub fn set_input_canvas(&mut self, input: Gid) {
         self.input_canvas = Some(input);
     }
+    pub fn clear_input_canvas(&mut self) { self.input_canvas = None }
     pub fn set_pred_canvas(&mut self, pred: Gid) {
         self.pred_canvas = Some(pred);
     }
+    pub fn clear_pred_canvas(&mut self) { self.pred_canvas = None }
     pub fn is_init(&self) -> bool {
         self.input_canvas.is_some() && self.pred_canvas.is_some() && self.predictor.is_some()
+    }
+    pub fn activate_emoji(&self) {
+        self.gam.raise_menu(EMOJI_MENU_NAME).expect("couldn't activate emoji menu");
     }
 
     pub fn clear_area(&mut self) -> Result<(), xous::Error> {
@@ -208,7 +230,7 @@ impl InputTracker {
         }
     }
 
-    pub fn update(&mut self, newkeys: [char; 4]) -> Result<Option<String::<4000>>, xous::Error> {
+    pub fn update(&mut self, newkeys: [char; 4], force_redraw: bool) -> Result<Option<String::<4000>>, xous::Error> {
         let debug1= false;
         let mut update_predictor = false;
         let mut retstring: Option<String::<4000>> = None;
@@ -356,9 +378,10 @@ impl InputTracker {
                         self.insertion = 0;
                         if self.was_grown {
                             let mut req = SetCanvasBoundsRequest {
-                                canvas: ic,
                                 requested: Point::new(0, 0), // size 0 will snap to the original smallest default size
                                 granted: None,
+                                token_type: gam::TokenType::Gam,
+                                token: self.gam_token.unwrap(),
                             };
                             if debug1{info!("attempting resize to {:?}", req.requested);}
                             self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
@@ -448,7 +471,7 @@ impl InputTracker {
 
             input_tv.insertion = Some(self.insertion as _);
             if debug1{info!("insertion point is {}, characters in string {}", self.insertion, self.characters);}
-            if do_redraw {
+            if do_redraw || force_redraw {
                 write!(input_tv.text, "{}", self.line.as_str().expect("couldn't convert str")).expect("couldn't update TextView string in input canvas");
                 self.gam.post_textview(&mut input_tv).expect("can't draw input TextView");
                 if debug1{info!("got computed cursor of {:?}", input_tv.cursor);}
@@ -462,9 +485,10 @@ impl InputTracker {
                         31 // a default value to grow in case we don't have a valid last height
                     };
                     let mut req = SetCanvasBoundsRequest {
-                        canvas: ic,
                         requested: Point::new(0, ic_bounds.y + delta as i16),
                         granted: None,
+                        token_type: gam::TokenType::Gam,
+                        token: self.gam_token.unwrap(),
                     };
                     if debug1{info!("attempting resize to {:?}", req.requested);}
                     self.gam.set_canvas_bounds_request(&mut req).expect("couldn't call set_bounds_request on input area overflow");
@@ -529,7 +553,7 @@ impl InputTracker {
                 write!(empty_tv.text, "Ready for input...").expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
-            } else if update_predictor  {
+            } else if update_predictor || force_redraw {
                 // alright, first, let's clear the area
                 self.gam.draw_rectangle(pc, pc_clip).expect("couldn't clear predictor area");
 
@@ -574,27 +598,6 @@ impl InputTracker {
     }
 }
 
-// we have to store this connection state somewhere, either in the lib side or the local side
-// it's unsafe to access because in theory, someone could change the value between when we
-// unwrap it and when we use it. However, we guarantee this not to happen through the construction
-// of the program itself. Later on (maybe in v0.9) once we get Boxed closures, it would be good to
-// re-implement this callback as a Boxed closure instead of a function, but for Xous 0.8 this is the best
-// we can do.
-static mut CB_TO_MAIN_CONN: Option<CID> = None;
-fn handle_keyevents(keys: [char; 4]) {
-    log::trace!("got key event callback");
-    if let Some(cb_to_main_conn) = unsafe{CB_TO_MAIN_CONN} {
-        log::trace!("sending keys: {:?}", keys);
-        xous::send_message(cb_to_main_conn,
-            xous::Message::new_scalar(ImefOpcode::ProcessKeys.to_usize().unwrap(),
-            keys[0] as u32 as usize,
-            keys[1] as u32 as usize,
-            keys[2] as u32 as usize,
-            keys[3] as u32 as usize,
-        )).unwrap();
-    }
-}
-
 #[xous::xous_main]
 fn xmain() -> ! {
     let debug1 = false;
@@ -605,45 +608,60 @@ fn xmain() -> ! {
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT).expect("can't register server");
+    // only two connections allowed: GAM, and my emoji menu service
+    let imef_sid = xns.register_name(ime_plugin_api::SERVER_NAME_IME_FRONT, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", imef_sid);
-
-    // hook the keyboard event server and have it forward keys to our local main loop
-    unsafe{CB_TO_MAIN_CONN = Some(xous::connect(imef_sid).unwrap())};
-    let mut kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
-    kbd.hook_keyboard_events(handle_keyevents).unwrap();
 
     let mut tracker = InputTracker::new(&xns);
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
+
+    xous::create_thread_0(emoji_menu_thread).expect("can't start emoji handler menu");
 
     log::trace!("Initialized but still waiting for my canvas Gids");
     loop {
         let msg = xous::receive_message(imef_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(ImefOpcode::SetInputCanvas) => {
-                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
-                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
-                    if debug1 || dbgcanvas {info!("got input canvas {:?}", g);}
-                    tracker.set_input_canvas(g);
-                });
-            }
-            Some(ImefOpcode::SetPredictionCanvas) => {
-                msg_scalar_unpack!(msg, g0, g1, g2, g3, {
-                    let g = Gid::new([g0 as _, g1 as _, g2 as _, g3 as _]);
-                    if debug1 || dbgcanvas {info!("got prediction canvas {:?}", g);}
-                    tracker.set_pred_canvas(g);
-                });
-            }
-            Some(ImefOpcode::SetPredictionServer) => {
+            Some(ImefOpcode::ConnectBackend) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let s = buffer.as_flat::<String::<64>, _>().unwrap();
-                log::trace!("got prediction server: {}", s.as_str());
-                match xns.request_connection(s.as_str()) {
-                    Ok(pc) => tracker.set_predictor(ime_plugin_api::PredictionPlugin {connection: Some(pc)}),
-                    _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str()),
+                let descriptor = buffer.to_original::<ImefDescriptor, _>().unwrap();
+
+                if let Some(input) = descriptor.input_canvas {
+                    if debug1 || dbgcanvas {info!("got input canvas {:?}", input);}
+                    tracker.set_input_canvas(input);
+                } else {
+                    tracker.clear_input_canvas();
                 }
+                if let Some(pred) = descriptor.prediction_canvas {
+                    if debug1 || dbgcanvas {info!("got prediction canvas {:?}", pred);}
+                    tracker.set_pred_canvas(pred);
+                } else {
+                    tracker.clear_pred_canvas();
+                }
+                // disconnect any existing predictor, if we have one already
+                if let Some(_pred) = tracker.get_predictor() {
+                    if let Some((name, token)) = tracker.predictor_conn {
+                        xns.disconnect_with_token(name.as_str().unwrap(), token)
+                           .expect("couldn't disconnect from previous predictor. Something is wrong with internal state!");
+                    }
+                    tracker.predictor_conn = None;
+                    tracker.set_predictor(None);
+                }
+                if let Some(s) = descriptor.predictor {
+                    log::trace!("got prediction server: {}", s.as_str().unwrap());
+                    match xns.request_connection_with_token(s.as_str().unwrap()) {
+                        Ok((pc, token)) => {
+                            tracker.set_predictor( Some(ime_plugin_api::PredictionPlugin {connection: Some(pc)}) );
+                            tracker.predictor_conn = Some(
+                                (String::<64>::from_str(s.as_str().unwrap()),
+                                token.expect("didn't get the disconnect token!"))
+                            );
+                        },
+                        _ => error!("can't find predictive engine {}, retaining existing one.", s.as_str().unwrap()),
+                    }
+                }
+                tracker.set_gam_token(descriptor.token);
             }
             Some(ImefOpcode::RegisterListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
@@ -687,27 +705,30 @@ fn xmain() -> ! {
                             },
                         ];
                         log::trace!("tracking keys: {:?}", keys);
-                        if let Some(line) = tracker.update(keys).expect("couldn't update input tracker with latest key presses") {
-                            if dbglistener{info!("sending listeners {:?}", line);}
-                            let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
-
-                            for maybe_conn in listeners.iter_mut() {
-                                if let Some(conn) = maybe_conn {
-                                    if dbglistener{info!("sending to conn {:?}", conn);}
-                                    match buf.lend(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
-                                        Err(xous::Error::ServerNotFound) => {
-                                            *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
-                                        },
-                                        Ok(xous::Result::Ok) => {},
-                                        Ok(xous::Result::MemoryReturned(offset, valid)) => {
-                                            // ignore anything that's returned, but note it in case we're debugging
-                                            log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
-                                        },
-                                        Err(e) => {
-                                            log::error!("unhandled error in callback processing: {:?}", e);
-                                        }
-                                        Ok(e) => {
-                                            log::error!("unexpected result in callback processing: {:?}", e);
+                        if keys[0] == '😊' {
+                            tracker.activate_emoji();
+                        } else {
+                            if let Some(line) = tracker.update(keys, false).expect("couldn't update input tracker with latest key presses") {
+                                if dbglistener{info!("sending listeners {:?}", line);}
+                                for maybe_conn in listeners.iter_mut() {
+                                    if let Some(conn) = maybe_conn {
+                                        if dbglistener{info!("sending to conn {:?}", conn);}
+                                        let buf = Buffer::into_buf(line).or(Err(xous::Error::InternalError)).unwrap();
+                                        match buf.send(*conn, ImefCallback::GotInputLine.to_u32().unwrap()) {
+                                            Err(xous::Error::ServerNotFound) => {
+                                                *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
+                                            },
+                                            Ok(xous::Result::Ok) => {},
+                                            Ok(xous::Result::MemoryReturned(offset, valid)) => {
+                                                // ignore anything that's returned, but note it in case we're debugging
+                                                log::trace!("memory was returned in callback: offset {:?}, valid {:?}", offset, valid);
+                                            },
+                                            Err(e) => {
+                                                log::error!("unhandled error in callback processing: {:?}", e);
+                                            }
+                                            Ok(e) => {
+                                                log::error!("unexpected result in callback processing: {:?}", e);
+                                            }
                                         }
                                     }
                                 }
@@ -719,24 +740,21 @@ fn xmain() -> ! {
                     // ignore keyboard events until we've fully initialized
                 }
             }
-            Some(ImefOpcode::Redraw) => {
+            Some(ImefOpcode::Redraw) => msg_scalar_unpack!(msg, arg, _, _, _, {
                 if tracker.is_init() {
+                    let force = if arg != 0 { true } else { false };
                     tracker.clear_area().expect("can't initially clear areas");
-                    tracker.update(['\u{0000}'; 4]).expect("can't setup initial screen arrangement");
+                    tracker.update(['\u{0000}'; 4], force).expect("can't setup initial screen arrangement");
                 } else {
                     log::trace!("got redraw, but we're not initialized");
                     // ignore keyboard events until we've fully initialized
                 }
-            }
-            None => {log::error!("couldn't convert opcode"); break}
+            }),
+            Some(ImefOpcode::Quit) => {log::error!("recevied quit, goodbye!"); break;}
+            None => {log::error!("couldn't convert opcode");}
         }
     }
     log::trace!("main loop exit, destroying servers");
-    unsafe{
-        if let Some(cb) = CB_TO_MAIN_CONN {
-            xous::disconnect(cb).unwrap();
-        }
-    }
     xns.unregister_server(imef_sid).unwrap();
     xous::destroy_server(imef_sid).unwrap();
     log::trace!("quitting");
