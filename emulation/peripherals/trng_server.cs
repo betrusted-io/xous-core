@@ -33,6 +33,13 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                 {
                     return (uint)rng.Next();
                 }, name: "DATA");
+            Registers.URANDOM.Define(this)
+                .WithValueField(0, 32, FieldMode.Read, valueProviderCallback: _ =>
+                {
+                    return (uint)rng.Next();
+                }, name: "URANDOM");
+            Registers.URANDOM_VALID.Define(this)
+                .WithFlag(0, FieldMode.Read, valueProviderCallback: _ => { return true; }, name: "URANDOM_VALID");
         }
 
         private readonly PseudorandomNumberGenerator rng = EmulationManager.Instance.CurrentEmulation.RandomGenerator;
@@ -45,10 +52,14 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             STATUS = 0x8,
             AV_CONFIG = 0xc,
             RO_CONFIG = 0x10,
-            ERRORS = 0x14,
-            EV_STATUS = 0x18,
-            EV_PENDING = 0x1c,
-            EV_ENABLE = 0x20,
+
+            READY = 0xd8,
+            EV_STATUS = 0xdc,
+            EV_PENDING = 0xe0,
+            EV_ENABLE = 0xe4,
+            URANDOM = 0xf0,
+            URANDOM_VALID = 0xf4,
+            TEST = 0xf8,
         }
     }
 }
