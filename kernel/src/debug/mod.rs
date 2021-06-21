@@ -72,7 +72,7 @@ impl Uart {
     #[allow(dead_code)]
     pub fn init(self) {
         unsafe { INITIALIZED = true };
-        let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
@@ -81,7 +81,7 @@ impl Uart {
             return;
         }
 
-        let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // Wait until TXFULL is `0`
         while uart_csr.r(utra::uart::TXFULL) != 0 {
             ()
@@ -107,182 +107,38 @@ impl Uart {
 
     #[allow(dead_code)]
     pub fn getc(&self) -> Option<u8> {
-        let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
+        let uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
-        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
-            0 => None,
-            ack => {
-                let c = Some(uart_csr.r(utra::uart::RXTX) as u8);
-                uart_csr.wfo(utra::uart::EV_PENDING_RX, ack);
-                c
-            }
+        match uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) {
+            1 => None,
+            _ => Some(uart_csr.r(utra::uart::RXTX) as u8),
         }
+    }
+
+    pub fn acknowledge_irq(&self) {
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
+        uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
     }
 }
 
 #[cfg(all(feature = "gdbserver", baremetal))]
-mod gdb_server {
-    use gdbstub::common::Tid;
-    use gdbstub::target::ext::base::multithread::{
-        GdbInterrupt, MultiThreadOps, ResumeAction, ThreadStopReason,
-    };
-
-    use gdbstub::state_machine::GdbStubStateMachine;
-    use gdbstub::target::ext::base::BaseOps;
-    use gdbstub::target::{Target, TargetResult};
-
-    pub struct XousTarget {
-        pid: Option<xous_kernel::PID>,
-        tid: Option<xous_kernel::TID>,
-        thread_mask: usize,
-    }
-    pub struct XousDebugState<'a> {
-        pub target: XousTarget,
-        pub server: GdbStubStateMachine<'a, XousTarget, super::Uart>,
-    }
-
-    pub static mut GDB_STATE: Option<XousDebugState> = None;
-    pub static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
-
-    impl XousTarget {
-        pub fn new() -> XousTarget {
-            XousTarget {
-                pid: None,
-                tid: None,
-                thread_mask: 0,
-            }
-        }
-    }
-
-    impl Target for XousTarget {
-        type Arch = gdbstub_arch::riscv::Riscv32;
-        type Error = &'static str;
-        fn base_ops(&mut self) -> BaseOps<Self::Arch, Self::Error> {
-            BaseOps::MultiThread(self)
-        }
-    }
-
-    impl MultiThreadOps for XousTarget {
-        #[inline(never)]
-        fn resume(
-            &mut self,
-            default_resume_action: ResumeAction,
-            gdb_interrupt: GdbInterrupt<'_>,
-        ) -> Result<ThreadStopReason<u32>, Self::Error> {
-            match default_resume_action {
-                ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
-                    Err("single-stepping not supported")?
-                }
-                _ => (),
-            }
-
-            crate::services::SystemServices::with(|system_services| {
-                let current_pid = system_services.current_pid();
-
-                for process in &system_services.processes {
-                    if !process.free() {
-                        println!(
-                            "PID {} {}:",
-                            process.pid,
-                            system_services.process_name(process.pid).unwrap_or("")
-                        );
-                        process.activate().unwrap();
-                        crate::arch::mem::MemoryMapping::current().print_map();
-                        println!();
-                    }
-                }
-                system_services
-                    .get_process(current_pid)
-                    .unwrap()
-                    .activate()
-                    .unwrap();
-            });
-            Ok(ThreadStopReason::GdbInterrupt)
-        }
-
-        #[inline(never)]
-        fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn set_resume_action(
-            &mut self,
-            _tid: Tid,
-            _action: ResumeAction,
-        ) -> Result<(), Self::Error> {
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn read_registers(
-            &mut self,
-            _regs: &mut gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
-            _tid: Tid,
-        ) -> TargetResult<(), Self> {
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn write_registers(
-            &mut self,
-            _regs: &gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
-            _tid: Tid,
-        ) -> TargetResult<(), Self> {
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn read_addrs(
-            &mut self,
-            _start_addr: u32,
-            data: &mut [u8],
-            _tid: Tid, // same address space for each core
-        ) -> TargetResult<(), Self> {
-            data.iter_mut().for_each(|b| *b = 0x55);
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn write_addrs(
-            &mut self,
-            _start_addr: u32,
-            _data: &[u8],
-            _tid: Tid, // same address space for each core
-        ) -> TargetResult<(), Self> {
-            Ok(())
-        }
-
-        #[inline(never)]
-        fn list_active_threads(
-            &mut self,
-            register_thread: &mut dyn FnMut(Tid),
-        ) -> Result<(), Self::Error> {
-            // register_thread(Tid::new(1).unwrap());
-            // register_thread(Tid::new(2).unwrap());
-            Ok(())
-        }
-    }
-}
+mod gdb_server;
 
 #[cfg(all(feature = "gdbserver", baremetal))]
 impl gdbstub::Connection for Uart {
     type Error = ();
 
-    fn read(&mut self) -> Result<u8, Self::Error> {
-        Err(())
-    }
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         if unsafe { INITIALIZED != true } {
             Err(())?;
         }
-        let mut uart_csr = CSR::new(0xffcf_0000 as *mut u32);
-        // Wait until TXFULL is `0`
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
+        // Wait until TXFULL is not `0`
         while uart_csr.r(utra::uart::TXFULL) != 0 {
             ()
         }
-        uart_csr.wfo(utra::uart::RXTX_RXTX, byte as u32);
+        uart_csr.wo(utra::uart::RXTX, byte as u32);
         Ok(())
     }
     fn peek(&mut self) -> Result<Option<u8>, Self::Error> {
@@ -299,53 +155,17 @@ impl gdbstub::Connection for Uart {
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
-    let b = Uart {}
-        .getc()
-        .expect("no character queued despite interrupt");
+    let uart = Uart {};
+    while let Some(b) = uart.getc() {
+        process_irq_character(b);
+    }
+    uart.acknowledge_irq();
+}
 
+fn process_irq_character(b: u8) {
     #[cfg(feature = "gdbserver")]
-    unsafe {
-        use crate::debug::gdb_server::{XousDebugState, GDB_STATE};
-        use gdbstub::state_machine::GdbStubStateMachine;
-        use gdbstub::{DisconnectReason, GdbStubError};
-        if let Some(XousDebugState {
-            mut target,
-            server: gdb,
-        }) = GDB_STATE.take()
-        {
-            let new_gdb = match gdb {
-                GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(&mut target, b) {
-                    // Remote disconnected -- leave the `GDB_SERVER` as `None`.
-                    Ok((_, Some(disconnect_reason))) => {
-                        match disconnect_reason {
-                            DisconnectReason::Disconnect => println!("GDB Disconnected"),
-                            DisconnectReason::TargetExited(_) => println!("Target exited"),
-                            DisconnectReason::TargetTerminated(_) => println!("Target halted"),
-                            DisconnectReason::Kill => println!("GDB sent a kill command"),
-                        }
-                        return;
-                    }
-                    Err(GdbStubError::TargetError(_e)) => {
-                        println!("Target raised a fatal error");
-                        return;
-                    }
-                    Err(_e) => {
-                        println!("gdbstub internal error");
-                        return;
-                    }
-                    Ok((gdb, None)) => gdb,
-                },
-                // example_no_std stubs out resume, so this will never happen
-                GdbStubStateMachine::DeferredStopReason(_) => {
-                    panic!("Deferred stop shouldn't happen")
-                }
-            };
-            GDB_STATE = Some(XousDebugState {
-                target,
-                server: new_gdb,
-            });
-            return;
-        }
+    if gdb_server::handle(b) {
+        return;
     }
 
     match b {
@@ -441,39 +261,8 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
         }
         #[cfg(feature = "gdbserver")]
         b'g' => {
-            use gdb_server::{XousDebugState, XousTarget, GDB_BUFFER, GDB_STATE};
             println!("Starting GDB server -- attach your debugger now");
-            match gdbstub::GdbStubBuilder::new(Uart {})
-                .with_packet_buffer(unsafe { &mut GDB_BUFFER })
-                .build()
-            {
-                Ok(gdb) => match gdb.run_state_machine() {
-                    Ok(state) => unsafe {
-                        GDB_STATE = Some(XousDebugState {
-                            target: XousTarget::new(),
-                            server: state,
-                        });
-                    },
-                    Err(e) => println!("Unable to start GDB state machine: {}", e),
-                },
-                Err(e) => println!("Unable to start GDB server: {}", e),
-            }
-        }
-        b's' => {
-            println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>> Suspenidng PID 3");
-            crate::services::SystemServices::with_mut(|system_services| {
-                system_services
-                    .suspend_process(xous_kernel::PID::new(3).unwrap())
-                    .unwrap();
-            });
-        }
-        b'c' => {
-            println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>> Continuing (Resuming) PID 3");
-            crate::services::SystemServices::with_mut(|system_services| {
-                system_services
-                    .continue_process(xous_kernel::PID::new(3).unwrap())
-                    .unwrap();
-            });
+            gdb_server::setup();
         }
         b'h' => {
             println!("Xous Kernel Debug");
@@ -485,8 +274,6 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
             println!(" p  | print all processes");
             println!(" P  | print all processes and threads");
             println!(" r  | report RAM usage of all processes");
-            println!(" s  | Suspend PID 3");
-            println!(" c  | Continue PID 3");
         }
         _ => {}
     }

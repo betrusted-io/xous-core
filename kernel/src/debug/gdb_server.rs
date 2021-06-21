@@ -1,0 +1,335 @@
+use gdbstub::common::Tid;
+use gdbstub::target::ext::base::multithread::{
+    GdbInterrupt, MultiThreadOps, ResumeAction, ThreadStopReason,
+};
+
+use gdbstub::state_machine::GdbStubStateMachine;
+use gdbstub::target::ext::base::BaseOps;
+use gdbstub::target::{Target, TargetResult};
+
+pub struct XousTarget {
+    pid: Option<xous_kernel::PID>,
+}
+pub struct XousDebugState<'a> {
+    pub target: XousTarget,
+    pub server: GdbStubStateMachine<'a, XousTarget, super::Uart>,
+}
+
+pub static mut GDB_STATE: Option<XousDebugState> = None;
+pub static mut GDB_BUFFER: [u8; 4096] = [0u8; 4096];
+
+impl XousTarget {
+    pub fn new() -> XousTarget {
+        XousTarget {
+            // pid: Some(crate::services::SystemServices::with_mut(
+            //     |system_services| system_services.current_pid(),
+            pid: xous_kernel::PID::new(2),
+        }
+    }
+    pub fn pid(&self) -> &Option<xous_kernel::PID> {
+        &self.pid
+    }
+}
+
+impl Target for XousTarget {
+    type Arch = gdbstub_arch::riscv::Riscv32;
+    type Error = &'static str;
+    fn base_ops(&mut self) -> BaseOps<Self::Arch, Self::Error> {
+        BaseOps::MultiThread(self)
+    }
+}
+
+impl MultiThreadOps for XousTarget {
+    #[inline(never)]
+    fn resume(
+        &mut self,
+        default_resume_action: ResumeAction,
+        _gdb_interrupt: GdbInterrupt<'_>,
+    ) -> Result<Option<ThreadStopReason<u32>>, Self::Error> {
+        match default_resume_action {
+            ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
+                Err("single-stepping not supported")?
+            }
+            _ => (),
+        }
+
+        crate::services::SystemServices::with_mut(|system_services| {
+            system_services.continue_process(self.pid.unwrap()).unwrap()
+        });
+        Ok(None)
+    }
+
+    #[inline(never)]
+    fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn set_resume_action(&mut self, _tid: Tid, _action: ResumeAction) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn read_registers(
+        &mut self,
+        regs: &mut gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
+        tid: Tid,
+    ) -> TargetResult<(), Self> {
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+            // gprintln!("Getting registers for thread {}", tid);
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            let debugging_pid = self.pid.unwrap();
+            system_services
+                .get_process(debugging_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+            let process = crate::arch::process::Process::current();
+            let thread = process.thread(tid.get());
+            regs.x[0] = 0;
+            for (dbg_reg, thr_reg) in regs.x[1..].iter_mut().zip(thread.registers.iter()) {
+                *dbg_reg = (*thr_reg) as u32;
+            }
+            regs.pc = (thread.sepc) as u32;
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        });
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn write_registers(
+        &mut self,
+        regs: &gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
+        tid: Tid,
+    ) -> TargetResult<(), Self> {
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            let debugging_pid = self.pid.unwrap();
+            system_services
+                .get_process(debugging_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+            let mut process = crate::arch::process::Process::current();
+            let thread = process.thread_mut(tid.get());
+            for (thr_reg, dbg_reg) in thread.registers.iter_mut().zip(regs.x[1..].iter()) {
+                *thr_reg = (*dbg_reg) as usize;
+            }
+            thread.sepc = (regs.pc) as usize;
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        });
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn read_addrs(
+        &mut self,
+        start_addr: u32,
+        data: &mut [u8],
+        _tid: Tid, // same address space for each core
+    ) -> TargetResult<(), Self> {
+        let mut current_addr = start_addr;
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            let debugging_pid = self.pid.unwrap();
+            system_services
+                .get_process(debugging_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+            data.iter_mut().for_each(|b| {
+                *b = crate::arch::mem::peek_memory(current_addr as *mut u8).unwrap_or(0x55);
+                current_addr += 1;
+            });
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        });
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn write_addrs(
+        &mut self,
+        start_addr: u32,
+        data: &[u8],
+        _tid: Tid, // same address space for each core
+    ) -> TargetResult<(), Self> {
+        let mut current_addr = start_addr;
+        // gprintln!("Writing data to {:08x}", start_addr);
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            let debugging_pid = self.pid.unwrap();
+            system_services
+                .get_process(debugging_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+            data.iter().for_each(|b| {
+                if let Err(_e) = crate::arch::mem::poke_memory(current_addr as *mut u8, *b) {
+                    // gprintln!("Error writing to {:08x}: {:?}", current_addr, e);
+                }
+                current_addr += 1;
+            });
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        });
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn list_active_threads(
+        &mut self,
+        register_thread: &mut dyn FnMut(Tid),
+    ) -> Result<(), Self::Error> {
+        crate::services::SystemServices::with(|system_services| {
+            let current_pid = system_services.current_pid();
+
+            let debugging_pid = self.pid.unwrap();
+
+            // Actiavte the debugging process and iterate through it,
+            // noting down each active thread.
+            system_services
+                .get_process(debugging_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+            crate::arch::process::Process::current().for_each_thread_mut(|tid, _thr| {
+                // gprintln!("Registering thread {}", tid);
+                register_thread(Tid::new(tid).unwrap());
+            });
+
+            // Restore the previous PID
+            system_services
+                .get_process(current_pid)
+                .unwrap()
+                .activate()
+                .unwrap();
+        });
+        Ok(())
+    }
+}
+
+pub fn handle(b: u8) -> bool {
+    use gdbstub::{DisconnectReason, GdbStubError};
+    if let Some(XousDebugState {
+        mut target,
+        server: gdb,
+    }) = unsafe { GDB_STATE.take() }
+    {
+        // gprintln!("Adding char: {}", b as char);
+        let new_gdb = match gdb {
+            GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(&mut target, b) {
+                // Remote disconnected -- leave the `GDB_SERVER` as `None`.
+                Ok((gdb, Some(DisconnectReason::TargetTerminated(r)))) => {
+                    // gprintln!("Target halted: {}", r);
+                    crate::services::SystemServices::with_mut(|system_services| {
+                        system_services
+                            .suspend_process(target.pid().unwrap())
+                            .unwrap()
+                    });
+                    gdb
+                }
+                Ok((_, Some(_disconnect_reason))) => {
+                    // match disconnect_reason {
+                    //     DisconnectReason::Disconnect => gprintln!("GDB Disconnected"),
+                    //     DisconnectReason::TargetExited(_) => gprintln!("Target exited"),
+                    //     DisconnectReason::TargetTerminated(_) => unreachable!(),
+                    //     DisconnectReason::Kill => gprintln!("GDB sent a kill command"),
+                    // }
+                    return true;
+                }
+                Err(GdbStubError::TargetError(e)) => {
+                    // gprintln!("Target raised a fatal error: {}", e);
+                    return true;
+                }
+                Err(e) => {
+                    // gprintln!("gdbstub internal error: {}", e);
+                    return true;
+                }
+                Ok((gdb, None)) => gdb,
+            },
+
+            GdbStubStateMachine::DeferredStopReason(gdb_state) => {
+                match gdb_state.deferred_stop_reason(&mut target, ThreadStopReason::DoneStep) {
+                    Ok((gdb, None)) => {
+                        crate::services::SystemServices::with_mut(|system_services| {
+                            system_services
+                                .suspend_process(target.pid().unwrap())
+                                .unwrap()
+                        });
+                        gdb
+                    }
+                    Ok((_, Some(disconnect_reason))) => {
+                        // gprintln!("client disconnected: {:?}", disconnect_reason);
+                        return true;
+                    }
+                    Err(e) => {
+                        // gprintln!("deferred_stop_reason_error: {:?}", e);
+                        return true;
+                    }
+                }
+            }
+        };
+        unsafe {
+            GDB_STATE = Some(XousDebugState {
+                target,
+                server: new_gdb,
+            })
+        };
+        true
+    } else {
+        false
+    }
+}
+
+pub fn setup() {
+    match gdbstub::GdbStubBuilder::new(super::Uart {})
+        .with_packet_buffer(unsafe { &mut GDB_BUFFER })
+        .build()
+    {
+        Ok(gdb) => match gdb.run_state_machine() {
+            Ok(state) => unsafe {
+                GDB_STATE = Some(XousDebugState {
+                    target: XousTarget::new(),
+                    server: state,
+                });
+            },
+            Err(e) => println!("Unable to start GDB state machine: {}", e),
+        },
+        Err(e) => println!("Unable to start GDB server: {}", e),
+    }
+}
