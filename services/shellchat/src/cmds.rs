@@ -133,6 +133,17 @@ impl CmdEnv {
         let sha = Sha::new(&xns, &mut common);
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
+
+        // print our version info
+        let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
+        log::info!("SoC git rev {}.{}.{}+{} commit {:x}", maj, min, rev, extra, gitrev);
+        log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
+        let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
+        let dirtystr = if dirty { "dirty" } else { "clean" };
+        log::info!("EC git commit: {:x}, {}", rev, dirtystr);
+        let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
+        log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
+
         CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
