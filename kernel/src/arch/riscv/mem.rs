@@ -308,6 +308,99 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     Ok(())
 }
 
+pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
+    let virt = addr as usize;
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
+
+    assert!(vpn1 < 1024);
+    assert!(vpn0 < 1024);
+    assert!(vpo < 4096);
+
+    // The root (l1) pagetable is defined to be mapped into our virtual
+    // address space at this address.
+    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let ref mut l1_pt = l1_pt.entries;
+
+    // Subsequent pagetables are defined as being mapped starting at
+    // PAGE_TABLE_OFFSET
+    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+    // If the level 1 pagetable doesn't exist, then this address isn't valid.
+    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
+        return Err(xous_kernel::Error::BadAddress);
+    }
+
+    // Ensure the entry hasn't already been mapped.
+    if l0_pt.entries[vpn0] & 1 == 0 {
+        return Err(xous_kernel::Error::BadAddress);
+    }
+
+    // Strip the USER flag to the entry so we can read it
+    l0_pt.entries[vpn0] &= !MMUFlags::USER.bits();
+    unsafe { flush_mmu() };
+
+    // Perform the read
+    let val = unsafe { addr.read_volatile() };
+
+    // Add the USER flag back to the entry
+    l0_pt.entries[vpn0] |= MMUFlags::USER.bits();
+    unsafe { flush_mmu() };
+
+    Ok(val)
+}
+
+pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
+    let virt = addr as usize;
+    let vpn1 = (virt >> 22) & ((1 << 10) - 1);
+    let vpn0 = (virt >> 12) & ((1 << 10) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
+
+    assert!(vpn1 < 1024);
+    assert!(vpn0 < 1024);
+    assert!(vpo < 4096);
+
+    // The root (l1) pagetable is defined to be mapped into our virtual
+    // address space at this address.
+    let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+    let ref mut l1_pt = l1_pt.entries;
+
+    // Subsequent pagetables are defined as being mapped starting at
+    // PAGE_TABLE_OFFSET
+    let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+    // If the level 1 pagetable doesn't exist, then this address isn't valid.
+    if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
+        Err(xous_kernel::Error::BadAddress)?;
+    }
+
+    // Ensure the entry hasn't already been mapped.
+    if l0_pt.entries[vpn0] & 1 == 0 {
+        Err(xous_kernel::Error::BadAddress)?;
+    }
+
+    // Ensure we're allowed to read it.
+    if l0_pt.entries[vpn0] & MMUFlags::W.bits() == 0 {
+        Err(xous_kernel::Error::AccessDenied)?;
+    }
+
+    // Strip the USER flag to the entry so we can read it
+    l0_pt.entries[vpn0] &= !MMUFlags::USER.bits();
+    unsafe { flush_mmu() };
+
+    // Perform the write
+    unsafe { addr.write_volatile(val) };
+
+    // Add the USER flag back to the entry
+    l0_pt.entries[vpn0] |= MMUFlags::USER.bits();
+    unsafe { flush_mmu() };
+
+    Ok(())
+}
+
 /// Map the given page to the specified process table.  If necessary,
 /// allocate a new page.
 ///

@@ -225,6 +225,20 @@ impl Process {
         &process.threads[thread]
     }
 
+    pub fn for_each_thread_mut<F>(&self, mut op: F)
+    where
+        F: FnMut(TID, &Thread),
+    {
+        let process = unsafe { &mut *PROCESS };
+        for (idx, thread) in process.threads.iter_mut().enumerate() {
+            // Ignore threads that have no PC, and ignore the ISR thread
+            if thread.sepc == 0 || idx == IRQ_TID {
+                continue;
+            }
+            op(idx, thread);
+        }
+    }
+
     pub fn find_free_thread(&self) -> Option<TID> {
         let process = unsafe { &mut *PROCESS };
         let start_tid = process.last_tid_allocated as usize;
