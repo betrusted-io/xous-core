@@ -528,6 +528,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine-25519"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "engine-sha512"
 version = "0.1.0"
 dependencies = [

@@ -25,6 +25,7 @@ default-members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/engine-25519",
   "services/aes",
 ]
 members = [
@@ -64,6 +65,7 @@ members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/engine-25519",
   "services/aes",
 ]
 resolver = "2"

@@ -53,6 +53,7 @@ fn try_main() -> Result<(), DynError> {
         "susres",
         "codec",
         "engine-sha512",
+        "engine-25519",
     ];
     let benchmark_pkgs = [
         "benchmark",

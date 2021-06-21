@@ -1,5 +1,13 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+/*
+#[cfg(target_os = "none")]
+pub use curve25519_dalek_hw::*;
+
+#[cfg(not(target_os = "none"))]
+pub use curve25519_dalek::*;
+
+
 pub mod api;
 use xous::{CID, send_message};
 use num_traits::ToPrimitive;
@@ -27,3 +35,4 @@ impl Drop for Codec {
         }
     }
 }
+*/
