@@ -45,6 +45,11 @@ macro reset
     cpu SetRegisterUnsafe 10 0x40800000
 """
 
+# Connect the serial port to an Ethernet port
+mach set 0
+emulation CreateServerSocketTerminal 9999 "kernel" False
+connector Connect sysbus.uart kernel
+
 runMacro $reset
 sysbus.cpu InstallCustomInstructionHandlerFromFile "00ss0fdbbbbbaaaaa000ddddd0001011" @vexriscv-aes.py
 
