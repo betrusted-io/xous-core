@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(baremetal)]
 use core::fmt::{Error, Write};
 #[cfg(baremetal)]
 use utralib::generated::*;
+
+pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 
 #[macro_use]
 #[cfg(all(
@@ -15,15 +16,6 @@ use utralib::generated::*;
 pub mod debug_print_hardware {
     // the HW device mapping is done in main.rs/init(); the virtual address has to be in the top 4MiB as it is the only page shared among all processes
     pub const SUPERVISOR_UART_ADDR: *mut usize = 0xffcf_0000 as *mut usize; // see https://github.com/betrusted-io/xous-core/blob/master/docs/memory.md
-
-    #[macro_export]
-    macro_rules! print
-    {
-        ($($args:tt)+) => ({
-                use core::fmt::Write;
-                let _ = write!(crate::debug::Uart {}, $($args)+);
-        });
-    }
 }
 #[cfg(all(
     not(test),
@@ -32,15 +24,15 @@ pub mod debug_print_hardware {
 ))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART_ADDR;
 
-#[cfg(all(
-    not(test),
-    baremetal,
-    not(any(feature = "debug-print", feature = "print-panics"))
-))]
+#[cfg(all(not(test), baremetal))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
-        ()
+        unsafe {
+            if let Some(mut stream) = crate::debug::DEBUG_OUTPUT.as_mut() {
+                write!(&mut stream, $($args)+).unwrap();
+            }
+        }
     }};
 }
 
@@ -62,7 +54,7 @@ macro_rules! println
 #[cfg(baremetal)]
 pub struct Uart {}
 #[cfg(baremetal)]
-static mut INITIALIZED: bool = false;
+pub static mut UART: Uart = Uart {};
 
 #[cfg(all(baremetal, feature = "wrap-print"))]
 static mut CHAR_COUNT: usize = 0;
@@ -71,13 +63,13 @@ static mut CHAR_COUNT: usize = 0;
 impl Uart {
     #[allow(dead_code)]
     pub fn init(self) {
-        unsafe { INITIALIZED = true };
+        unsafe { DEBUG_OUTPUT = Some(&mut UART) };
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
     }
 
     pub fn putc(&self, c: u8) {
-        if unsafe { INITIALIZED != true } {
+        if unsafe { DEBUG_OUTPUT.is_none() } {
             return;
         }
 
@@ -107,6 +99,9 @@ impl Uart {
 
     #[allow(dead_code)]
     pub fn getc(&self) -> Option<u8> {
+        if unsafe { DEBUG_OUTPUT.is_none() } {
+            return None;
+        }
         let uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
@@ -117,6 +112,9 @@ impl Uart {
     }
 
     pub fn acknowledge_irq(&self) {
+        if unsafe { DEBUG_OUTPUT.is_none() } {
+            return;
+        }
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
     }
@@ -130,7 +128,7 @@ impl gdbstub::Connection for Uart {
     type Error = ();
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        if unsafe { INITIALIZED != true } {
+        if unsafe { DEBUG_OUTPUT.is_none() } {
             Err(())?;
         }
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);

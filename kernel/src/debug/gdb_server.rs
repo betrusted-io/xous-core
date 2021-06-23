@@ -2,6 +2,7 @@ use gdbstub::common::Tid;
 use gdbstub::target::ext::base::multithread::{
     GdbInterrupt, MultiThreadOps, ResumeAction, ThreadStopReason,
 };
+use gdbstub::{DisconnectReason, GdbStubError};
 
 use gdbstub::state_machine::GdbStubStateMachine;
 use gdbstub::target::ext::base::BaseOps;
@@ -40,12 +41,12 @@ impl Target for XousTarget {
 }
 
 impl MultiThreadOps for XousTarget {
-    #[inline(never)]
     fn resume(
         &mut self,
         default_resume_action: ResumeAction,
         _gdb_interrupt: GdbInterrupt<'_>,
     ) -> Result<Option<ThreadStopReason<u32>>, Self::Error> {
+        unsafe { HALTED = false };
         match default_resume_action {
             ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
                 Err("single-stepping not supported")?
@@ -59,17 +60,14 @@ impl MultiThreadOps for XousTarget {
         Ok(None)
     }
 
-    #[inline(never)]
     fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    #[inline(never)]
     fn set_resume_action(&mut self, _tid: Tid, _action: ResumeAction) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    #[inline(never)]
     fn read_registers(
         &mut self,
         regs: &mut gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
@@ -105,7 +103,6 @@ impl MultiThreadOps for XousTarget {
         Ok(())
     }
 
-    #[inline(never)]
     fn write_registers(
         &mut self,
         regs: &gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
@@ -139,7 +136,6 @@ impl MultiThreadOps for XousTarget {
         Ok(())
     }
 
-    #[inline(never)]
     fn read_addrs(
         &mut self,
         start_addr: u32,
@@ -173,7 +169,6 @@ impl MultiThreadOps for XousTarget {
         Ok(())
     }
 
-    #[inline(never)]
     fn write_addrs(
         &mut self,
         start_addr: u32,
@@ -211,7 +206,6 @@ impl MultiThreadOps for XousTarget {
         Ok(())
     }
 
-    #[inline(never)]
     fn list_active_threads(
         &mut self,
         register_thread: &mut dyn FnMut(Tid),
@@ -229,7 +223,7 @@ impl MultiThreadOps for XousTarget {
                 .activate()
                 .unwrap();
             crate::arch::process::Process::current().for_each_thread_mut(|tid, _thr| {
-                // gprintln!("Registering thread {}", tid);
+                println!("Registering thread {}", tid);
                 register_thread(Tid::new(tid).unwrap());
             });
 
@@ -245,7 +239,6 @@ impl MultiThreadOps for XousTarget {
 }
 
 pub fn handle(b: u8) -> bool {
-    use gdbstub::{DisconnectReason, GdbStubError};
     if let Some(XousDebugState {
         mut target,
         server: gdb,
@@ -255,7 +248,7 @@ pub fn handle(b: u8) -> bool {
         let new_gdb = match gdb {
             GdbStubStateMachine::Pump(gdb_state) => match gdb_state.pump(&mut target, b) {
                 // Remote disconnected -- leave the `GDB_SERVER` as `None`.
-                Ok((gdb, Some(DisconnectReason::TargetTerminated(r)))) => {
+                Ok((gdb, Some(DisconnectReason::TargetTerminated(_r)))) => {
                     // gprintln!("Target halted: {}", r);
                     crate::services::SystemServices::with_mut(|system_services| {
                         system_services
@@ -271,14 +264,17 @@ pub fn handle(b: u8) -> bool {
                     //     DisconnectReason::TargetTerminated(_) => unreachable!(),
                     //     DisconnectReason::Kill => gprintln!("GDB sent a kill command"),
                     // }
+                    cleanup();
                     return true;
                 }
                 Err(GdbStubError::TargetError(e)) => {
-                    // gprintln!("Target raised a fatal error: {}", e);
+                    println!("Target raised a fatal error: {}", e);
+                    cleanup();
                     return true;
                 }
                 Err(e) => {
-                    // gprintln!("gdbstub internal error: {}", e);
+                    println!("gdbstub internal error: {}", e);
+                    cleanup();
                     return true;
                 }
                 Ok((gdb, None)) => gdb,
@@ -295,11 +291,13 @@ pub fn handle(b: u8) -> bool {
                         gdb
                     }
                     Ok((_, Some(disconnect_reason))) => {
-                        // gprintln!("client disconnected: {:?}", disconnect_reason);
+                        println!("client disconnected: {:?}", disconnect_reason);
+                        cleanup();
                         return true;
                     }
                     Err(e) => {
-                        // gprintln!("deferred_stop_reason_error: {:?}", e);
+                        println!("deferred_stop_reason_error: {:?}", e);
+                        cleanup();
                         return true;
                     }
                 }
@@ -328,9 +326,53 @@ pub fn setup() {
                     target: XousTarget::new(),
                     server: state,
                 });
+                super::DEBUG_OUTPUT = Some(&mut GUART);
+                HALTED = true;
             },
             Err(e) => println!("Unable to start GDB state machine: {}", e),
         },
         Err(e) => println!("Unable to start GDB server: {}", e),
+    }
+}
+
+fn cleanup() {
+    unsafe { super::DEBUG_OUTPUT = Some(&mut super::UART) };
+}
+
+// Support printf() when running under a debugger
+pub struct GUart {}
+static mut GUART: GUart = GUart {};
+static mut HALTED: bool = false;
+
+impl core::fmt::Write for GUart {
+    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
+        fn putc(checksum: u8, c: u8) -> u8 {
+            unsafe { super::UART.putc(c) };
+            checksum.wrapping_add(c)
+        }
+        fn puth(checksum: u8, c: u8) -> u8 {
+            let hex = b"0123456789abcdef";
+            let c = c as usize;
+            let checksum = putc(checksum, hex[(c >> 4) & 0xf]);
+            putc(checksum, hex[(c >> 0) & 0xf])
+        }
+
+        // Can't write when we're halted
+        if unsafe { HALTED } {
+            return Ok(());
+        }
+
+        let mut checksum = 0u8;
+        putc(0, b'$');
+
+        checksum = putc(checksum, b'O');
+        for c in s.as_bytes() {
+            checksum = puth(checksum, *c);
+        }
+
+        putc(0, b'#');
+        puth(0, checksum);
+
+        Ok(())
     }
 }
