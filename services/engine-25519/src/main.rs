@@ -6,6 +6,7 @@ use api::*;
 
 use num_traits::*;
 use core::sync::atomic::{AtomicBool, Ordering};
+use xous::msg_blocking_scalar_unpack;
 
 #[cfg(target_os = "none")]
 mod implementation {
@@ -101,6 +102,8 @@ mod implementation {
         }
 
         pub fn suspend(&mut self) {
+            self.clean_resume = Some(false); // if this isn't set to try by the resume, then we've had a failure
+
             if self.csr.rf(utra::engine::STATUS_RUNNING) == 1 {
                 // request a pause from the engine. it will stop executing at the next microcode op
                 // and assert STATUS_PAUSE_GNT
@@ -124,7 +127,6 @@ mod implementation {
             self.sr_backing.suspend();
             // now backup all the machine registers
             self.susres.suspend();
-            self.clean_resume = None;
         }
         pub fn resume(&mut self) {
             // "power" should be resumed first by the restore, which would set the pause bit, if it was previously set
@@ -160,6 +162,69 @@ mod implementation {
                 self.clean_resume = Some(true);
             }
         }
+        const UCODE_U8_BASE: usize = 0x0;
+        const UCODE_U32_BASE: usize = 0x0;
+        const UCODE_U32_SIZE: usize = (0x1_0000 / 4);
+        const RF_U8_BASE: usize = 0x1_0000;
+        const RF_U32_BASE: usize = (0x1_0000 / 4);
+        const RF_U32_SIZE: usize = (0x4000 / 4);
+
+        pub fn run(&mut self, job: Job) {
+            // create a pointer to the entire memory window range
+            let mem_window: &mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)] = self.mem.as_mut_ptr() as *mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)];
+            // parcel out mutable subslices
+            // first, split into the ucode/rf areas
+            let (ucode_superblock, rf_superblock) = (&mem_window).split_at_mut(RF_U32_BASE);
+            // further reduce the ucode area to just the unaliased ucode region
+            let (ucode, _) = ucode_superblock.split_at_mut(UCODE_U32_SIZE);
+            // further reduce the rf area to just the unaliased rf region
+            let (rf, _) = rf_superblock.split_at_mut(RF_U32_SIZE);
+
+            let window = if let Some(w) = job.window {
+                w as usize
+            } else {
+                0 as usize // default window is 0
+            };
+
+            // this should "just panic" if we have a bad window arg, which is the desired behavior
+            for (&src, dst) in job.rf.iter().zip(rf[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter_mut()) {
+                *dst = src;
+            }
+            // copy in the microcode
+            for (&src, dst) in job.ucode.iter().zip(ucode.iter_mut()) {
+                *dst = src;
+            }
+            self.csr.wfo(utra::engine::WINDOW_WINDOW, window as u32); // this value should now be validated because an invalid window would cause a panic on slice copy
+            self.csr.wfo(utra::engine::MPSTART_MPSTART, job.uc_start);
+            self.csr.wfo(utra::engine::MPLEN_MPLEN, job.uc_len);
+
+            // this will start the run. interrupts should *already* be enabled for the completion notification...
+            self.csr.wfo(utra::engine::CONTROL_GO, 1);
+        }
+
+        pub fn get_result(&mut self) -> JobResult {
+            if let Some(clean_resume) = self.clean_resume {
+                if !clean_resume {
+                    return JobResult::SuspendError;
+                }
+            }
+
+            // create a pointer to the entire memory window range
+            let mem_window: &mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)] = self.mem.as_mut_ptr() as *mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)];
+            // parcel out mutable subslices
+            // first, split into the ucode/rf areas
+            let (_ucode_superblock, rf_superblock) = (&mem_window).split_at_mut(RF_U32_BASE);
+            // further reduce the ucode area to just the unaliased ucode region
+            let (rf, _) = rf_superblock.split_at_mut(RF_U32_SIZE);
+
+            let mut ret_rf: [u32; RF_SIZE_IN_U32] = [0; RF_SIZE_IN_U32];
+            let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;
+            for (&src, dst) in rf[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter().zip(ret_rf.iter_mut()) {
+                *dst = src;
+            }
+
+            JobResult::Result(ret_rf)
+        }
     }
 }
 
@@ -180,49 +245,12 @@ mod implementation {
         }
         pub fn resume(&self) {
         }
-    }
-}
-
-static RUN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
-static SUSPEND_FAILURE: AtomicBool = AtomicBool::new(false);
-static SUSPEND_PENDING: AtomicBool = AtomicBool::new(false);
-
-fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let susres_sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    let xns = xous_names::XousNames::new().unwrap();
-
-    // register a suspend/resume listener
-    let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
-
-    log::trace!("starting engine25519 suspend/resume manager loop");
-    loop {
-        let msg = xous::receive_message(susres_sid).unwrap();
-        log::trace!("Message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(SusResOps::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                SUSPEND_PENDING.store(true, Ordering::Relaxed);
-                while RUN_IN_PROGRESS.load(Ordering::Relaxed) {
-                    xous::yield_slice();
-                }
-                if susres.suspend_until_resume(token).expect("couldn't execute suspend/resume") == false {
-                    SUSPEND_FAILURE.store(true, Ordering::Relaxed);
-                } else {
-                    SUSPEND_FAILURE.store(false, Ordering::Relaxed);
-                }
-                SUSPEND_PENDING.store(false, Ordering::Relaxed);
-            }),
-            Some(SusResOps::Quit) => {
-                log::info!("Received quit opcode, exiting!");
-                break;
-            }
-            None => {
-                log::error!("Received unknown opcode: {:?}", msg);
-            }
+        pub fn run(&mut self, _job: Job) {
+        }
+        pub fn get_result(&mut self) -> JobResult {
+            JobResult::IllegalOpcodeException
         }
     }
-    xns.unregister_server(susres_sid).unwrap();
-    xous::destroy_server(susres_sid).unwrap();
 }
 
 #[xous::xous_main]
@@ -242,23 +270,61 @@ fn xmain() -> ! {
 
     log::trace!("ready to accept requests");
 
-    // handle suspend/resume with a separate thread, which monitors our in-progress state
-    // we can't save hardware state of a hash, so the hash MUST finish before we can suspend.
-    let susres_mgr_sid = xous::create_server().unwrap();
-    let (sid0, sid1, sid2, sid3) = susres_mgr_sid.to_u32();
-    xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
+    // register a suspend/resume listener
+    let sr_cid = xous::connect(engine25519_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut client_cid: Option<xous::CID> = None;
     loop {
         let msg = xous::receive_message(engine25519_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 engine25519.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 engine25519.resume();
             }),
+            Some(Opcode::RunJob) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let job = buffer.to_original::<Job, _>().unwrap();
+
+                let response = if client_id.is_none() {
+                    client_cid = Some(xous::connect(job.id).expect("couldn't connect to the caller's server"));
+                    engine25519.run(job);
+                    JobResult::Started
+                } else {
+                    JobResult::EngineUnavailable
+                };
+                buffer.replace(response).unwrap();
+            },
+            Some(Opcode::IsFree) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if client_id.is_none() {
+                    xous::return_scalar(msg.sender, 1).expect("couldn't return IsIdle query");
+                } else {
+                    xous::return_scalar(msg.sender, 0).expect("couldn't return IsIdle query");
+                }
+            }),
+            Some(Opcode::EngineDone) => {
+                if let Some(cid) = client_cid {
+                    let result = engine25519.get_result();
+                    let buf = Buffer::into_buf(result).or(Err(xous::Error::InternalError))?;
+                    buf.send(cid, Return::Result.to_u32().unwrap()).expect("couldn't return result to caller");
+
+                    // this simultaneously releases the lock and disconnects from the caller
+                    unsafe{xous::disconnect(client_cid.take()).expect("couldn't disconnect from the caller");}
+                } else {
+                    log::error!("illegal state: got a result, but no client was registered??");
+                }
+            },
+            Some(Opcode::IllegalOpcode) => {
+                let buf = Buffer::into_buf(JobResult::IllegalOpcodeException).or(Err(xous::Error::InternalError))?;
+                buf.send(cid, Return::Result.to_u32().unwrap()).expect("couldn't return result to caller");
+            }
+            Some(Opcode::Quit) => {
+                log::info!("Received quit opcode, exiting!");
+                break;
+            }
             None => {
                 log::error!("couldn't convert opcode");
-                break
             }
         }
     }
