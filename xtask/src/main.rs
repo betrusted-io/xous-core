@@ -1,4 +1,5 @@
 use std::{
+    convert::TryInto,
     env,
     io::{Read, Write},
     path::{Path, PathBuf, MAIN_SEPARATOR},
@@ -77,6 +78,9 @@ fn try_main() -> Result<(), DynError> {
         "susres",
         "com",
     ];
+    // A base set of packages. This is all you need for a normal
+    // operating system that can run libstd
+    let base_pkgs = ["ticktimer-server", "log-server"];
     let cbtest_pkgs = [
         "ticktimer-server",
         "log-server",
@@ -99,15 +103,13 @@ fn try_main() -> Result<(), DynError> {
         "com",
         "susres",
     ];
-    let aestest_pkgs = [
-            "ticktimer-server",
-            "log-server",
-            "aes-test",
-    ];
-    let task = env::args().nth(1);
+    let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
+    let mut args = env::args();
+    let task = args.nth(1);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
+        Some("libstd-test") => renode_image_extra(false, &base_pkgs, args.collect())?,
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
@@ -149,6 +151,8 @@ fn print_help() {
 renode-image            builds a functional image for renode
 renode-test             builds a test image for renode
 renode-image-debug      builds a test image for renode in debug mode
+libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
+                        specified on the command line (e.g. built externally)
 hw-image [soc.svd]      builds an image for real hardware
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
@@ -169,56 +173,56 @@ Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_up
 }
 
 fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynError> {
-    use std::process::Stdio;
     use std::io::{BufRead, BufReader, Error, ErrorKind};
+    use std::process::Stdio;
 
     if do_kernel {
         println!("Burning kernel");
         let stdout = Command::new("python3")
-        .arg("tools/usb_update.py")
-        .arg("-k")
-        .arg("target/riscv32imac-unknown-none-elf/release/xous.img")
-        .stdout(Stdio::piped())
-        .spawn()?
-        .stdout
-        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .arg("tools/usb_update.py")
+            .arg("-k")
+            .arg("target/riscv32imac-unknown-none-elf/release/xous.img")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
 
         let reader = BufReader::new(stdout);
-        reader.lines().for_each(|line|
-            println!("{}", line.unwrap())
-        );
+        reader
+            .lines()
+            .for_each(|line| println!("{}", line.unwrap()));
     }
     if do_loader {
         println!("Burning loader");
         let stdout = Command::new("python3")
-        .arg("tools/usb_update.py")
-        .arg("-l")
-        .arg("target/riscv32imac-unknown-none-elf/release/loader.bin")
-        .stdout(Stdio::piped())
-        .spawn()?
-        .stdout
-        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .arg("tools/usb_update.py")
+            .arg("-l")
+            .arg("target/riscv32imac-unknown-none-elf/release/loader.bin")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
 
         let reader = BufReader::new(stdout);
-        reader.lines().for_each(|line|
-            println!("{}", line.unwrap())
-        );
+        reader
+            .lines()
+            .for_each(|line| println!("{}", line.unwrap()));
     }
     if do_soc {
         println!("Burning SoC gateware");
         let stdout = Command::new("python3")
-        .arg("tools/usb_update.py")
-        .arg("-s")
-        .arg("precursors/soc_csr.bin")
-        .stdout(Stdio::piped())
-        .spawn()?
-        .stdout
-        .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+            .arg("tools/usb_update.py")
+            .arg("-s")
+            .arg("precursors/soc_csr.bin")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
 
         let reader = BufReader::new(stdout);
-        reader.lines().for_each(|line|
-            println!("{}", line.unwrap())
-        );
+        reader
+            .lines()
+            .for_each(|line| println!("{}", line.unwrap()));
     }
 
     Ok(())
@@ -316,6 +320,62 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         let mut pkg_path = base_path.clone();
         pkg_path.push(pkg);
         init.push(pkg_path);
+    }
+    build(
+        &["loader"],
+        debug,
+        Some(TARGET),
+        Some("loader".into()),
+        None,
+    )?;
+
+    create_image(
+        &kernel,
+        &init,
+        debug,
+        MemorySpec::SvdFile("emulation/soc/renode.svd".into()),
+    )?;
+
+    // Regenerate the Platform file
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "run",
+            "-p",
+            "svd2repl",
+            "--",
+            "-i",
+            "emulation/soc/renode.svd",
+            "-o",
+            "emulation/soc/betrusted-soc.repl",
+        ])
+        .status()?;
+    if !status.success() {
+        Err("Unable to regenerate Renode platform file")?;
+    }
+
+    Ok(())
+}
+
+/// Create a Renode image, and include the extra init programs specified
+/// on the command line.
+fn renode_image_extra(
+    debug: bool,
+    packages: &[&str],
+    extra_init: Vec<String>,
+) -> Result<(), DynError> {
+    let path = std::path::Path::new("emulation/soc/renode.svd");
+    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+    let kernel = build_kernel(debug)?;
+    let mut init = vec![];
+    let base_path = build(packages, debug, Some(TARGET), None, None)?;
+    for pkg in packages {
+        let mut pkg_path = base_path.clone();
+        pkg_path.push(pkg);
+        init.push(pkg_path);
+    }
+    for pkg in extra_init {
+        init.push(pkg.try_into().unwrap());
     }
     build(
         &["loader"],
