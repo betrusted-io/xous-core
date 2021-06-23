@@ -9,19 +9,20 @@ pub use curve25519_dalek::*;
 */
 
 pub mod api;
-use api::*;
-use xous::{CID, send_message};
-use num_traits::ToPrimitive;
+pub use api::*;
+use xous::{CID, Message};
+use num_traits::*;
+use xous_ipc::Buffer;
 
 static mut ENGINE_CB: Option<fn(JobResult)> = None;
 
 pub struct Engine25519 {
     conn: CID,
-    cb_sid: [u32; 4],
+    cb_sid: Option<[u32; 4]>,
 }
 impl Engine25519 {
-    pub fn new() -> Result<Self, xous::Error> {
-        let xns = xous_names::XousNames::new().unwrap();
+    // this is used to set up a system with async callbacks
+    pub fn new_async(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
         let sid = xous::create_server().unwrap();
@@ -31,29 +32,81 @@ impl Engine25519 {
 
         Ok(Engine25519 {
             conn,
-            cb_sid: sid.to_array(),
+            cb_sid: Some(sid.to_array()),
         })
     }
+    // typically, we just want synchronous callbacks. This integrates more nicely into single-threaded code.
+    pub fn new() -> Self {
+        let xns = xous_names::XousNames::new().unwrap();
+        let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
-    pub fn spawn_job(job: Job) -> Result<bool, xous::Error> {
-        let mut buf = Buffer::into_buf(job).or(ERr(xous::Error::InternalError))?;
+        Engine25519 {
+            conn,
+            cb_sid: None,
+        }
+    }
+
+    /// this is unsafe because the caller must make sure that within their process space, multiple threads
+    /// are not spawing concurrent jobs; or, if they do, they all share a common result_callback method:
+    /// we always blindly replace result_callback!
+    pub unsafe fn spawn_async_job(&mut self, job: &mut Job, result_callback: fn(JobResult)) -> Result<bool, xous::Error> {
+        if let Some(cb_sid) = self.cb_sid {
+            ENGINE_CB = Some(result_callback); // this is the unsafe bit!
+            job.id = Some(cb_sid);
+            let mut buf = Buffer::into_buf(*job).or(Err(xous::Error::InternalError))?;
+            buf.lend_mut(self.conn, Opcode::RunJob.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+            match buf.to_original().unwrap() {
+                JobResult::Started => Ok(true),
+                _ => Ok(false)
+            }
+        } else {
+            Err(xous::Error::InvalidSyscall)
+        }
+    }
+
+    /// this is a blocking version of spawn_async_job.
+    /// if the engine is free, it will block until a result is returned
+    /// if the engine is busy, it will return an EngineUnavailable result.
+    pub fn spawn_job(&mut self, job: Job) -> Result<[u32; RF_SIZE_IN_U32], xous::Error> {
+        if job.id.is_some() {
+            return Err(xous::Error::InvalidSyscall) // the job.id should be None for a sync job. Do not set it to Some, even as a joke.
+        }
+        let mut buf = Buffer::into_buf(job).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RunJob.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
-            JobResult::Started => Ok(true),
-            _ => Ok(false)
+            JobResult::Result(rf) => {
+                Ok(rf)
+            },
+            JobResult::EngineUnavailable => {
+                Err(xous::Error::ServerQueueFull)
+            },
+            JobResult::IllegalOpcodeException => {
+                Err(xous::Error::InvalidString)
+            },
+            _ => {
+                Err(xous::Error::InternalError)
+            }
         }
     }
 }
 
 impl Drop for Engine25519 {
     fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        // disconnect from the main server
         unsafe{xous::disconnect(self.conn).unwrap();}
+        // disconnect and destroy the callback server
+        if let Some(cb_sid) = self.cb_sid {
+            let cid = xous::connect(xous::SID::from_array(cb_sid)).unwrap();
+            xous::send_message(cid,
+                Message::new_scalar(Return::Quit.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
+            unsafe{xous::disconnect(cid).unwrap();}
+        }
     }
 }
 
-/// handles callback messages from I2C server, in the library user's process space.
+/// handles callback messages from the engine server, in the library user's process space.
 fn engine_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {

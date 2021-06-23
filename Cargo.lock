@@ -1553,6 +1553,7 @@ dependencies = [
  "com",
  "content-plugin-api",
  "digest",
+ "engine-25519",
  "engine-sha512",
  "gam",
  "graphics-server",

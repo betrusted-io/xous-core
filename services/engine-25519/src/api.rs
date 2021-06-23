@@ -1,23 +1,42 @@
 pub(crate) const SERVER_NAME_ENGINE25519: &str     = "_Curve-25519 Accelerator Engine_";
 
+// I don't understand why clippy says these are unused. But clippy is wrong. Shut up, clippy.
+#[allow(dead_code)]
+pub(crate) const UCODE_U8_BASE: usize = 0x0;
+#[allow(dead_code)]
+pub(crate) const UCODE_U32_BASE: usize = 0x0;
+#[allow(dead_code)]
+pub(crate) const UCODE_U32_SIZE: usize = 0x1000 / 4;
+#[allow(dead_code)]
+pub(crate) const UCODE_U8_SIZE: usize = 0x1000;
+#[allow(dead_code)]
+pub(crate) const RF_U8_BASE: usize = 0x1_0000;
+#[allow(dead_code)]
+pub(crate) const RF_U32_BASE: usize = 0x1_0000 / 4;
+#[allow(dead_code)]
+pub(crate) const RF_U32_SIZE: usize = 0x4000 / 4;
+#[allow(dead_code)]
+pub(crate) const RF_U8_SIZE: usize = 0x4000;
+
 pub(crate) const NUM_REGS: usize = 32;
 pub(crate) const BITWIDTH: usize = 256;
-pub(crate) const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/core::mem::size_of(u32)); // 32 registers, 256 bits/register, divided by 4 bytes per u32
+pub const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/core::mem::size_of::<u32>()); // 32 registers, 256 bits/register, divided by 4 bytes per u32
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub (crate) struct Job {
-    /// the SID of the server to which we should return results. Ideally, this is an application-specific server, and not your main loop server.
-    id: [u32; 4],
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
+pub struct Job {
+    /// If present the SID of the server to which we should return results asynchronously.
+    /// If None, then the job will run synchronously.
+    pub id: Option<[u32; 4]>,
     /// start location for microcode load
-    uc_start: u32,
+    pub uc_start: u32,
     /// length of the microcode to run
-    uc_len: u32,
+    pub uc_len: u32,
     /// microcode program
-    ucode: [u32; 1024],
+    pub ucode: [u32; 1024],
     /// initial register file contents (also contains any arguments to the program)
-    rf: [u32; RF_SIZE_IN_U32],
+    pub rf: [u32; RF_SIZE_IN_U32],
     /// which register window, if any, to use for the job
-    window: Option<u8>,
+    pub window: Option<u8>,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -32,8 +51,7 @@ pub(crate) enum Opcode {
     EngineDone,
     IllegalOpcode,
 
-    /// Suspend/resume callback
-    SuspendResume,
+    // note: suspend/resume handled by a separate thread and server
 
     /// exit the server
     Quit,
@@ -50,11 +68,20 @@ pub(crate) enum Return {
 
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub(crate) enum JobResult {
+pub enum JobResult {
     /// returns a copy of the entire register file as a result
     Result([u32; RF_SIZE_IN_U32]),
     Started,
     EngineUnavailable,
+    NotAsyncObject, // attempt to run an async job on an object that was setup for sync jobs
     IllegalOpcodeException,
     SuspendError,
+}
+
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+pub(crate) enum SusResOps {
+    /// Suspend/resume callback
+    SuspendResume,
+    /// exit the thread
+    Quit,
 }

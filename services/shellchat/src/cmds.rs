@@ -93,6 +93,7 @@ mod sha;      use sha::*;
 mod ecup;     use ecup::*;
 mod aes;      use aes::*;
 mod trng_cmd; use trng_cmd::*;
+mod engine;   use engine::*;
 
 mod fcc;      use fcc::*;
 mod pds; // dependency of the FCC file
@@ -114,6 +115,7 @@ pub struct CmdEnv {
     ecup_cmd: EcUpdate,
     aes_cmd: Aes,
     trng_cmd: TrngCmd,
+    engine_cmd: Engine,
 
     fcc_cmd: Fcc,
 }
@@ -133,6 +135,7 @@ impl CmdEnv {
         let sha = Sha::new(&xns, &mut common);
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
+        let engine = Engine::new(&xns, &mut common);
 
         // print our version info
         let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
@@ -160,6 +163,7 @@ impl CmdEnv {
             ecup_cmd: ecup,
             aes_cmd: aes,
             trng_cmd: TrngCmd::new(),
+            engine_cmd: engine,
 
             fcc_cmd: fcc,
         }
@@ -190,6 +194,7 @@ impl CmdEnv {
             &mut self.ecup_cmd,
             &mut self.aes_cmd,
             &mut self.trng_cmd,
+            &mut self.engine_cmd,
 
             &mut self.fcc_cmd,
         ];
