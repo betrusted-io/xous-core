@@ -14,13 +14,15 @@ pub(crate) const RF_U8_BASE: usize = 0x1_0000;
 #[allow(dead_code)]
 pub(crate) const RF_U32_BASE: usize = 0x1_0000 / 4;
 #[allow(dead_code)]
-pub(crate) const RF_U32_SIZE: usize = 0x4000 / 4;
+pub(crate) const RF_TOTAL_U32_SIZE: usize = 0x4000 / 4;
 #[allow(dead_code)]
-pub(crate) const RF_U8_SIZE: usize = 0x4000;
+pub(crate) const RF_TOTAL_U8_SIZE: usize = 0x4000;
 
 pub(crate) const NUM_REGS: usize = 32;
 pub(crate) const BITWIDTH: usize = 256;
-pub const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/core::mem::size_of::<u32>()); // 32 registers, 256 bits/register, divided by 4 bytes per u32
+pub(crate) const NUM_WINDOWS: usize = 16;
+pub const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32); // 32 registers, 256 bits/register/32 bits per u32
+pub const TOTAL_RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32)*NUM_WINDOWS; // 32 registers, 256 bits/register/32 bits per u32, times 16 windows
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
 pub struct Job {

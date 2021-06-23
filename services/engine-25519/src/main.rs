@@ -72,6 +72,8 @@ mod implementation {
 
     impl Engine25519Hw {
         pub fn new(handler_conn: xous::CID) -> Engine25519Hw {
+            assert!(TOTAL_RF_SIZE_IN_U32 == RF_TOTAL_U32_SIZE, "sanity check has failed on logical dimensions of register file vs hardware aperture sizes");
+
             log::trace!("creating engine25519 CSR");
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::engine::HW_ENGINE_BASE),
@@ -108,7 +110,7 @@ mod implementation {
             let rf_backing = xous::syscall::map_memory(
                 None,
                 None,
-                RF_U8_SIZE,
+                RF_TOTAL_U8_SIZE,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map RF backing store");
             let mut engine = Engine25519Hw {
@@ -196,9 +198,9 @@ mod implementation {
             // further reduce the ucode area to just the unaliased ucode region
             let (ucode, _) = ucode_superblock.split_at(UCODE_U32_SIZE);
             // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at(RF_U32_SIZE);
+            let (rf, _) = rf_superblock.split_at(RF_TOTAL_U32_SIZE);
 
-            let mut rf_backing = unsafe{*(self.rf_backing.as_mut_ptr() as *mut [u32; RF_U32_SIZE])};
+            let mut rf_backing = unsafe{*(self.rf_backing.as_mut_ptr() as *mut [u32; RF_TOTAL_U32_SIZE])};
             let mut ucode_backing = unsafe{*(self.ucode_backing.as_mut_ptr() as *mut [u32; UCODE_U32_SIZE])};
 
             for (&src, dst) in rf.iter().zip(rf_backing.iter_mut()) {
@@ -236,9 +238,9 @@ mod implementation {
             // further reduce the ucode area to just the unaliased ucode region
             let (ucode, _) = ucode_superblock.split_at_mut(UCODE_U32_SIZE);
             // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at_mut(RF_U32_SIZE);
+            let (rf, _) = rf_superblock.split_at_mut(RF_TOTAL_U32_SIZE);
 
-            let rf_backing = unsafe{*(self.rf_backing.as_ptr() as *const [u32; RF_U32_SIZE])};
+            let rf_backing = unsafe{*(self.rf_backing.as_ptr() as *const [u32; RF_TOTAL_U32_SIZE])};
             let ucode_backing = unsafe{*(self.ucode_backing.as_ptr() as *const [u32; UCODE_U32_SIZE])};
 
             for (&src, dst) in rf_backing.iter().zip(rf.iter_mut()) {
@@ -296,7 +298,7 @@ mod implementation {
             // further reduce the ucode area to just the unaliased ucode region
             let (ucode, _) = ucode_superblock.split_at_mut(UCODE_U32_SIZE);
             // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at_mut(RF_U32_SIZE);
+            let (rf, _) = rf_superblock.split_at_mut(RF_TOTAL_U32_SIZE);
 
             let window = if let Some(w) = job.window {
                 w as usize
@@ -351,7 +353,7 @@ mod implementation {
             // first, split into the ucode/rf areas
             let (_ucode_superblock, rf_superblock) = (&mem_window).split_at(RF_U32_BASE);
             // further reduce the ucode area to just the unaliased ucode region
-            let (rf, _) = rf_superblock.split_at(RF_U32_SIZE);
+            let (rf, _) = rf_superblock.split_at(RF_TOTAL_U32_SIZE);
 
             let mut ret_rf: [u32; RF_SIZE_IN_U32] = [0; RF_SIZE_IN_U32];
             let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;
@@ -448,9 +450,6 @@ fn xmain() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
-
-    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-    ticktimer.sleep_ms(500).unwrap();
 
     let xns = xous_names::XousNames::new().unwrap();
     let engine25519_sid = xns.register_name(api::SERVER_NAME_ENGINE25519, None).expect("can't register server");

@@ -71,7 +71,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         for _vector in 0..num_vectors {
             for argcnt in 0..num_args {
                 for word in 0..8 {
-                    job.rf[(window * 32 * 8 + argcnt * 8 + word) as usize] = vector_read(test_offset);
+                    job.rf[(/*window * 32 * 8 +*/ argcnt * 8 + word) as usize] = vector_read(test_offset);
                     test_offset += 1;
                 }
             }
@@ -82,7 +82,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
                     for word in 0..8 {
                         let expect = vector_read(test_offset);
                         test_offset += 1;
-                        let actual = rf_result[(window * 32 * 8 + 31 * 8 + word) as usize];
+                        let actual = rf_result[(/*window * 32 * 8 + */ 31 * 8 + word) as usize];
                         if expect != actual {
                             passed = false;
                         }
