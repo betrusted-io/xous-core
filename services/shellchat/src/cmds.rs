@@ -94,9 +94,10 @@ mod ecup;     use ecup::*;
 mod aes;      use aes::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
+mod console;  use console::*;
 
-mod fcc;      use fcc::*;
-mod pds; // dependency of the FCC file
+//mod fcc;      use fcc::*;
+//mod pds; // dependency of the FCC file
 
 #[derive(Debug)]
 pub struct CmdEnv {
@@ -117,7 +118,7 @@ pub struct CmdEnv {
     trng_cmd: TrngCmd,
     engine_cmd: Engine,
 
-    fcc_cmd: Fcc,
+    //fcc_cmd: Fcc,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -131,7 +132,7 @@ impl CmdEnv {
             trng: trng::Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
-        let fcc = Fcc::new(&mut common);
+        //let fcc = Fcc::new(&mut common);
         let sha = Sha::new(&xns, &mut common);
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
@@ -165,7 +166,7 @@ impl CmdEnv {
             trng_cmd: TrngCmd::new(),
             engine_cmd: engine,
 
-            fcc_cmd: fcc,
+            //fcc_cmd: fcc,
         }
     }
 
@@ -176,6 +177,7 @@ impl CmdEnv {
         let mut ver_cmd = Ver{};
         let mut backlight_cmd = Backlight{};
         let mut accel_cmd = Accel{};
+        let mut console_cmd = Console{};
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
@@ -195,8 +197,9 @@ impl CmdEnv {
             &mut self.aes_cmd,
             &mut self.trng_cmd,
             &mut self.engine_cmd,
+            &mut console_cmd,
 
-            &mut self.fcc_cmd,
+            //&mut self.fcc_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

@@ -526,6 +526,12 @@ impl Llio {
     pub fn debug_usb_unlocked(&self) -> Result<bool, xous::Error> {
         Ok(true) // for now, always return true, because we don't have the hardware yet to lock out debug USB
     }
+    pub fn set_uart_mux(&self, setting: UartType) -> Result<(), xous::Error> {
+        let arg = setting.into();
+        send_message(self.conn,
+            Message::new_scalar(Opcode::UartMux.to_usize().unwrap(), arg, 0, 0, 0)
+        ).map(|_| ())
+    }
 }
 
 

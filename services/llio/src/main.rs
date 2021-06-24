@@ -17,15 +17,6 @@ use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
 #[cfg(target_os = "none")]
 mod implementation {
-    // Encodes the currently valid mux values for the SoC UART hardware
-    #[allow(dead_code)]
-    enum UartMux {
-        Kernel = 0,
-        Log = 1,
-        App = 2,
-    }
-    const BOOT_UART: u32 = UartMux::Log as u32;
-
     use crate::api::*;
     use log::{error, info};
     use utralib::generated::*;
@@ -118,7 +109,7 @@ mod implementation {
         .expect("couldn't map GPIO CSR range");
         let mut gpio_csr = CSR::new(gpio_base.as_mut_ptr() as *mut u32);
         // setup the initial logging output
-        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, BOOT_UART);
+        gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, crate::api::BOOT_UART);
 
         gpio_base.as_mut_ptr() as *mut u32
     }
