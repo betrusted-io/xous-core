@@ -1596,7 +1596,7 @@ impl SystemServices {
                 })?;
 
                 #[cfg(not(baremetal))]
-                let backing = MemoryRange::new(4096, 4096).unwrap();
+                let backing = unsafe { MemoryRange::new(4096, 4096).unwrap() };
                 // println!(
                 //     "KERNEL({}): Found a free slot for server {:?} @ {} -- allocating an entry",
                 //     pid.get(),
