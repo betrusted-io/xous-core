@@ -12,6 +12,7 @@ ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
 susres = {path = "../susres"}
+llio =  {path = "../llio"} # temporary for testing some power stuff
 
 xous-ipc = {path="../../xous-ipc"}
 num-derive = {version = "0.3", default-features = false}

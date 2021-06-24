@@ -41,6 +41,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         if magic_number != 0x5645_4354 {
             break;
         }
+        log::debug!("vector at 0x{:x}", test_offset);
         test_offset += 1;
 
         let load_addr = (vector_read(test_offset) >> 16) & 0xFFFF;
@@ -68,7 +69,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         test_offset = test_offset + (8 - (test_offset % 8)); // skip over padding
 
         // copy in the arguments
-        for _vector in 0..num_vectors {
+        for vector in 0..num_vectors {
             for argcnt in 0..num_args {
                 for word in 0..8 {
                     job.rf[(/*window * 32 * 8 +*/ argcnt * 8 + word) as usize] = vector_read(test_offset);
@@ -77,6 +78,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             }
 
             let mut passed = true;
+            log::debug!("spawning job");
             match engine.spawn_job(job) {
                 Ok(rf_result) => {
                     for word in 0..8 {
@@ -84,12 +86,13 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
                         test_offset += 1;
                         let actual = rf_result[(/*window * 32 * 8 + */ 31 * 8 + word) as usize];
                         if expect != actual {
+                            log::error!("e/a {:08x}/{:08x}", expect, actual);
                             passed = false;
                         }
                     }
                 },
                 _ => {
-                    log::error!("system error in running test vector: {}", test_offset);
+                    log::error!("system error in running test vector: {}/0x{:x}", vector, test_offset);
                 }
             }
 
@@ -97,7 +100,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
                 passes += 1;
             } else {
                 fails += 1;
-                log::error!("arithmetic error in running test vector: {}", test_offset);
+                log::error!("arithmetic error in running test vector: {}/0x{:x}", vector, test_offset);
             }
         }
     }
@@ -179,6 +182,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
             match sub_cmd {
                 "check" => {
                     let mut engine = engine_25519::Engine25519::new();
+                    log::debug!("running vectors");
                     let (passes, fails) = run_vectors(&mut engine);
 
                     write!(ret, "Engine passed {} vectors, failed {} vectors", passes, fails).unwrap();

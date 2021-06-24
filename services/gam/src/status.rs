@@ -120,6 +120,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     // prime the loop
     com.req_batt_stats().expect("Can't get battery stats from COM");
 
+    log::debug!("initializing RTC...");
     let mut rtc = rtc::Rtc::new(&xns).unwrap();
 
     #[cfg(target_os = "none")]
@@ -129,6 +130,7 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let mut datetime: Option<rtc::DateTime> = None;
     let llio = llio::Llio::new(&xns).unwrap();
 
+    log::debug!("usb unlock notice...");
     let mut debug_unlocked = llio.debug_usb_unlocked().unwrap();
     // build security status textview
     let mut security_tv = TextView::new(status_gid,

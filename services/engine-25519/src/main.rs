@@ -17,7 +17,7 @@ static SUSPEND_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
-    use susres::{/*ManagedMem,*/ RegManager, RegOrField, SuspendResume};
+    use susres::{RegManager, RegOrField, SuspendResume};
     use num_traits::*;
     //use core::num::NonZeroUsize;
     use core::sync::atomic::Ordering;
@@ -26,13 +26,14 @@ mod implementation {
 
     pub struct Engine25519Hw {
         csr: utralib::CSR<u32>,
-        mem: xous::MemoryRange,
+        // these are slices mapped directly to the hardware memory space
+        ucode_hw: &'static mut [u32],
+        rf_hw: &'static mut [u32],
         susres: RegManager::<{utra::engine::ENGINE_NUMREGS}>,
         handler_conn: Option<xous::CID>,
-        //ucode_backing: ManagedMem::<UCODE_U32_SIZE>,
-        //rf_backing: ManagedMem::<RF_U32_SIZE>,
-        ucode_backing: xous::MemoryRange,
-        rf_backing: xous::MemoryRange,
+        // don't use the susres ManagedMem primitive; it blows out the stack. Instead, heap-allocate the backing stores.
+        ucode_backing: &'static mut [u32],
+        rf_backing: &'static mut [u32],
         mpc_resume: Option<u32>,
         clean_resume: Option<bool>,
         do_notify: bool,
@@ -91,23 +92,13 @@ mod implementation {
             )
             .expect("couldn't map engine memory window range");
 
-            /*
-            let ucode_mem = xous::MemoryRange {
-                addr: NonZeroUsize::new(mem.addr.get() + UCODE_U8_BASE).unwrap(),
-                size: NonZeroUsize::new(UCODE_U8_SIZE).unwrap(),
-            };
-            let rf_mem = xous::MemoryRange {
-                addr: NonZeroUsize::new(mem.addr.get() + RF_U8_BASE).unwrap(),
-                size: NonZeroUsize::new(RF_U8_SIZE).unwrap(),
-            };
-            */
-            let ucode_backing = xous::syscall::map_memory(
+            let ucode_mem = xous::syscall::map_memory(
                 None,
                 None,
                 UCODE_U8_SIZE,
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             ).expect("couldn't map backing store for microcode");
-            let rf_backing = xous::syscall::map_memory(
+            let rf_mem = xous::syscall::map_memory(
                 None,
                 None,
                 RF_TOTAL_U8_SIZE,
@@ -116,10 +107,11 @@ mod implementation {
             let mut engine = Engine25519Hw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                mem,
+                ucode_hw: unsafe{core::slice::from_raw_parts_mut(mem.as_mut_ptr().add(UCODE_U8_BASE) as *mut u32, UCODE_U32_SIZE)},
+                rf_hw: unsafe{core::slice::from_raw_parts_mut(mem.as_mut_ptr().add(RF_U8_BASE) as *mut u32, RF_TOTAL_U32_SIZE)},
                 handler_conn: Some(handler_conn),
-                ucode_backing, // : [0; UCODE_U32_SIZE], // ManagedMem::new(ucode_mem),
-                rf_backing, //: [0; RF_U32_SIZE], // ManagedMem::new(rf_mem),
+                ucode_backing: unsafe{core::slice::from_raw_parts_mut(ucode_mem.as_mut_ptr() as *mut u32, UCODE_U32_SIZE)},
+                rf_backing: unsafe{core::slice::from_raw_parts_mut(rf_mem.as_mut_ptr() as *mut u32, RF_TOTAL_U32_SIZE)},
                 mpc_resume: None,
                 clean_resume: None,
                 do_notify: false,
@@ -132,7 +124,7 @@ mod implementation {
                 handle_engine_irq,
                 (&mut engine) as *mut Engine25519Hw as *mut usize,
             )
-            .expect("couldn't claim Power irq");
+            .expect("couldn't claim engine irq");
 
             log::trace!("enabling interrupt");
             engine.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF); // clear any droppings.
@@ -187,26 +179,10 @@ mod implementation {
             };
 
             // copy the ucode & rf into the backing memory
-            //self.ucode_backing.suspend();
-            //self.rf_backing.suspend();
-            // do it manually, because the automated backing memory mechanism can't allocate a big enough data segment to work for blocks this large
-            // create a pointer to the entire memory window range
-            let mem_window = unsafe{*(self.mem.as_mut_ptr() as *const [u32; (utralib::HW_ENGINE_MEM_LEN / 4)])};
-            // parcel out mutable subslices
-            // first, split into the ucode/rf areas
-            let (ucode_superblock, rf_superblock) = mem_window.split_at(RF_U32_BASE);
-            // further reduce the ucode area to just the unaliased ucode region
-            let (ucode, _) = ucode_superblock.split_at(UCODE_U32_SIZE);
-            // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at(RF_TOTAL_U32_SIZE);
-
-            let mut rf_backing = unsafe{*(self.rf_backing.as_mut_ptr() as *mut [u32; RF_TOTAL_U32_SIZE])};
-            let mut ucode_backing = unsafe{*(self.ucode_backing.as_mut_ptr() as *mut [u32; UCODE_U32_SIZE])};
-
-            for (&src, dst) in rf.iter().zip(rf_backing.iter_mut()) {
+            for (&src, dst) in self.rf_hw.iter().zip(self.rf_backing.iter_mut()) {
                 *dst = src;
             }
-            for (&src, dst) in ucode.iter().zip(ucode_backing.iter_mut()) {
+            for (&src, dst) in self.ucode_hw.iter().zip(self.ucode_backing.iter_mut()) {
                 *dst = src;
             }
 
@@ -227,26 +203,11 @@ mod implementation {
                 true
             };
 
-            //self.rf_backing.resume();
-            //self.ucode_backing.resume();
-            // do it manually, because the automated backing memory mechanism can't allocate a big enough data segment to work for blocks this large
-            // create a pointer to the entire memory window range
-            let mut mem_window = unsafe{*(self.mem.as_mut_ptr() as *mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)])};
-            // parcel out mutable subslices
-            // first, split into the ucode/rf areas
-            let (ucode_superblock, rf_superblock) = mem_window.split_at_mut(RF_U32_BASE);
-            // further reduce the ucode area to just the unaliased ucode region
-            let (ucode, _) = ucode_superblock.split_at_mut(UCODE_U32_SIZE);
-            // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at_mut(RF_TOTAL_U32_SIZE);
-
-            let rf_backing = unsafe{*(self.rf_backing.as_ptr() as *const [u32; RF_TOTAL_U32_SIZE])};
-            let ucode_backing = unsafe{*(self.ucode_backing.as_ptr() as *const [u32; UCODE_U32_SIZE])};
-
-            for (&src, dst) in rf_backing.iter().zip(rf.iter_mut()) {
+            // restore ucode & rf
+            for (&src, dst) in self.rf_backing.iter().zip(self.rf_hw.iter_mut()) {
                 *dst = src;
             }
-            for (&src, dst) in ucode_backing.iter().zip(ucode.iter_mut()) {
+            for (&src, dst) in self.ucode_backing.iter().zip(self.ucode_hw.iter_mut()) {
                 *dst = src;
             }
 
@@ -285,38 +246,53 @@ mod implementation {
             }
         }
 
+        pub fn power_dbg(&self) -> u32 {
+            self.csr.r(utra::engine::POWER)
+        }
         pub fn run(&mut self, job: Job) {
+            log::trace!("entering run");
             // block any suspends from happening while we set up the engine
             DISALLOW_SUSPEND.store(true, Ordering::Relaxed);
+            log::trace!("power on");
             self.csr.rmwf(utra::engine::POWER_ON, 1);
 
-            // create a pointer to the entire memory window range
-            let mut mem_window = unsafe{*(self.mem.as_mut_ptr() as *mut [u32; (utralib::HW_ENGINE_MEM_LEN / 4)])};
-            // parcel out mutable subslices
-            // first, split into the ucode/rf areas
-            let (ucode_superblock, rf_superblock) = mem_window.split_at_mut(RF_U32_BASE);
-            // further reduce the ucode area to just the unaliased ucode region
-            let (ucode, _) = ucode_superblock.split_at_mut(UCODE_U32_SIZE);
-            // further reduce the rf area to just the unaliased rf region
-            let (rf, _) = rf_superblock.split_at_mut(RF_TOTAL_U32_SIZE);
-
+            log::trace!("extracting windows");
             let window = if let Some(w) = job.window {
                 w as usize
             } else {
                 0 as usize // default window is 0
             };
-
+            log::trace!("using window {}", window);
             // this should "just panic" if we have a bad window arg, which is the desired behavior
-            for (&src, dst) in job.rf.iter().zip(rf[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter_mut()) {
-                *dst = src;
+            //let mut num = 0;
+            for (&src, dst) in job.rf.iter().zip(self.rf_hw[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter_mut()) {
+                //*dst = src;  // this gets optimized away, so replace it with the below line of code
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                unsafe { (dst as *mut u32).write_volatile(src) };
+
+                // performance critical, so comment it out if not using this debug code
+                /*if src != 0 {
+                    log::trace!("rf {}: 0x{:08x}", num, src);
+                }
+                num += 1;*/
             }
             // copy in the microcode
-            for (&src, dst) in job.ucode.iter().zip(ucode.iter_mut()) {
-                *dst = src;
+            //num = 0;
+            for (&src, dst) in job.ucode.iter().zip(self.ucode_hw.iter_mut()) {
+                //*dst = src;  // this gets optimized away, so replace it with the below line of code
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                unsafe { (dst as *mut u32).write_volatile(src) };
+
+                /*if src != 0 {
+                    log::trace!("ucode {}: 0x{:08x}", num, src);
+                }
+                num += 1;*/
             }
             self.csr.wfo(utra::engine::WINDOW_WINDOW, window as u32); // this value should now be validated because an invalid window would cause a panic on slice copy
             self.csr.wfo(utra::engine::MPSTART_MPSTART, job.uc_start);
             self.csr.wfo(utra::engine::MPLEN_MPLEN, job.uc_len);
+
+            log::debug!("sanity check uc{:08x}, rf{:08x}", self.ucode_hw[0], self.rf_hw[0]);
 
             // determine if this a sync or async call
             if job.id.is_some() {
@@ -346,19 +322,20 @@ mod implementation {
                 self.csr.rmwf(utra::engine::POWER_ON, 0);
                 return JobResult::IllegalOpcodeException;
             }
-
-            // create a pointer to the entire memory window range
-            let mem_window = unsafe{*(self.mem.as_ptr() as *const [u32; (utralib::HW_ENGINE_MEM_LEN / 4)])};
-            // parcel out mutable subslices
-            // first, split into the ucode/rf areas
-            let (_ucode_superblock, rf_superblock) = (&mem_window).split_at(RF_U32_BASE);
-            // further reduce the ucode area to just the unaliased ucode region
-            let (rf, _) = rf_superblock.split_at(RF_TOTAL_U32_SIZE);
+            log::debug!("power: {}", self.csr.rf(utra::engine::POWER_ON));
 
             let mut ret_rf: [u32; RF_SIZE_IN_U32] = [0; RF_SIZE_IN_U32];
             let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;
-            for (&src, dst) in rf[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter().zip(ret_rf.iter_mut()) {
-                *dst = src;
+            //let mut num = 0;
+            for (&src, dst) in self.rf_hw[window * RF_SIZE_IN_U32..(window+1) * RF_SIZE_IN_U32].iter().zip(ret_rf.iter_mut()) {
+                //*dst = src;  // this gets optimized away, so replace it with the below line of code
+                // since these are given to us by an iter, and we aren't doing .add() etc. on the pointers, should be safe.
+                unsafe { (dst as *mut u32).write_volatile(src) };
+                /*
+                if src != 0 {
+                    log::debug!("result {}: 0x{:08x}", num, src);
+                }
+                num += 1;*/
             }
 
             self.csr.rmwf(utra::engine::POWER_ON, 0);
@@ -448,7 +425,7 @@ fn xmain() -> ! {
     use crate::implementation::Engine25519Hw;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -464,14 +441,15 @@ fn xmain() -> ! {
     // register a suspend/resume listener
     xous::create_thread_1(susres_thread, (&mut engine25519) as *mut Engine25519Hw as usize).expect("couldn't start susres handler thread");
 
-
     let mut client_cid: Option<xous::CID> = None;
     loop {
         let mut msg = xous::receive_message(engine25519_sid).unwrap();
+        log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::RunJob) => {
                 // don't start a new job if a suspend is in progress
                 while SUSPEND_IN_PROGRESS.load(Ordering::Relaxed) {
+                    log::trace!("waiting for suspend to finish");
                     xous::yield_slice();
                 }
 
@@ -480,6 +458,7 @@ fn xmain() -> ! {
 
                 let response = if client_cid.is_none() {
                     if let Some(job_id) = job.id {
+                        log::trace!("running async job");
                         // async job
                         // the presence of an ID indicates we are doing an async method
                         client_cid = Some(xous::connect(xous::SID::from_array(job_id)).expect("couldn't connect to the caller's server"));
@@ -487,15 +466,17 @@ fn xmain() -> ! {
                         // just let the caller know we started a job, but don't return any results
                         JobResult::Started
                     } else {
+                        log::trace!("running sync job {:?}", job);
                         // sync job
                         // start the job, which should set RUN_IN_PROGRESS to true
                         engine25519.run(job);
                         while RUN_IN_PROGRESS.load(Ordering::Relaxed) {
+                            log::debug!("power reg: 0x{:x}", engine25519.power_dbg());
                             // block until the job is done
                             xous::yield_slice();
                         }
                         engine25519.get_result() // return the result
-                    }
+                     }
                 } else {
                     JobResult::EngineUnavailable
                 };
