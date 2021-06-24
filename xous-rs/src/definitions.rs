@@ -637,6 +637,40 @@ impl MemoryRange {
     pub fn as_mut_ptr(&self) -> *mut u8 {
         self.addr.get() as *mut u8
     }
+
+    /// Return this memory as a slice of values. The resulting slice
+    /// will cover the maximum number of elements given the size of `T`.
+    /// For example, if the allocation is 4096 bytes, then the resulting
+    /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
+    /// `&[u32]` would have 1024. Values are rounded down.
+    pub fn as_slice<T>(&self) -> &[T] {
+        // This is safe because the pointer and length are guaranteed to
+        // be valid, as long as the user hasn't already called `as_ptr()`
+        // and done something unsound with the resulting pointer.
+        unsafe {
+            core::slice::from_raw_parts(
+                self.as_ptr() as *const T,
+                self.len() / core::mem::size_of::<T>(),
+            )
+        }
+    }
+
+    /// Return this memory as a slice of mutable values. The resulting slice
+    /// will cover the maximum number of elements given the size of `T`.
+    /// For example, if the allocation is 4096 bytes, then the resulting
+    /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
+    /// `&[u32]` would have 1024. Values are rounded down.
+    pub fn as_slice_mut<T>(&self) -> &mut [T] {
+        // This is safe because the pointer and length are guaranteed to
+        // be valid, as long as the user hasn't already called `as_ptr()`
+        // and done something unsound with the resulting pointer.
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self.as_mut_ptr() as *mut T,
+                self.len() / core::mem::size_of::<T>(),
+            )
+        }
+    }
 }
 
 /// Which memory region the operation should affect.
