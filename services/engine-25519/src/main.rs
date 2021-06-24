@@ -246,15 +246,22 @@ mod implementation {
             }
         }
 
-        pub fn power_dbg(&self) -> u32 {
+        #[allow(dead_code)]
+        pub(crate) fn power_dbg(&self) -> u32 {
             self.csr.r(utra::engine::POWER)
+        }
+
+        pub fn power_on(&mut self, on: bool) {
+            if on {
+                self.csr.rmwf(utra::engine::POWER_ON, 1);
+            } else {
+                self.csr.rmwf(utra::engine::POWER_ON, 0);
+            }
         }
         pub fn run(&mut self, job: Job) {
             log::trace!("entering run");
             // block any suspends from happening while we set up the engine
             DISALLOW_SUSPEND.store(true, Ordering::Relaxed);
-            log::trace!("power on");
-            self.csr.rmwf(utra::engine::POWER_ON, 1);
 
             log::trace!("extracting windows");
             let window = if let Some(w) = job.window {
@@ -314,12 +321,10 @@ mod implementation {
         pub fn get_result(&mut self) -> JobResult {
             if let Some(clean_resume) = self.clean_resume {
                 if !clean_resume {
-                    self.csr.rmwf(utra::engine::POWER_ON, 0);
                     return JobResult::SuspendError;
                 }
             }
             if self.illegal_opcode {
-                self.csr.rmwf(utra::engine::POWER_ON, 0);
                 return JobResult::IllegalOpcodeException;
             }
             log::debug!("power: {}", self.csr.rf(utra::engine::POWER_ON));
@@ -338,7 +343,6 @@ mod implementation {
                 num += 1;*/
             }
 
-            self.csr.rmwf(utra::engine::POWER_ON, 0);
             JobResult::Result(ret_rf)
         }
     }
@@ -452,6 +456,7 @@ fn xmain() -> ! {
                     log::trace!("waiting for suspend to finish");
                     xous::yield_slice();
                 }
+                engine25519.power_on(true);
 
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let job = buffer.to_original::<Job, _>().unwrap();
@@ -466,17 +471,18 @@ fn xmain() -> ! {
                         // just let the caller know we started a job, but don't return any results
                         JobResult::Started
                     } else {
-                        log::trace!("running sync job {:?}", job);
+                        // log::trace!("running sync job {:?}", job);
                         // sync job
                         // start the job, which should set RUN_IN_PROGRESS to true
                         engine25519.run(job);
                         while RUN_IN_PROGRESS.load(Ordering::Relaxed) {
-                            log::debug!("power reg: 0x{:x}", engine25519.power_dbg());
                             // block until the job is done
                             xous::yield_slice();
                         }
-                        engine25519.get_result() // return the result
-                     }
+                        let result = engine25519.get_result(); // return the result
+                        engine25519.power_on(false);
+                        result
+                    }
                 } else {
                     JobResult::EngineUnavailable
                 };
@@ -500,6 +506,7 @@ fn xmain() -> ! {
                 } else {
                     log::error!("illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??");
                 }
+                engine25519.power_on(false);
             },
             Some(Opcode::IllegalOpcode) => {
                 if let Some(cid) = client_cid {
@@ -508,9 +515,11 @@ fn xmain() -> ! {
                 } else {
                     log::error!("illegal state: got a result, but no client was registered. Did we forget to disable interrupts on a synchronous call??");
                 }
+                engine25519.power_on(false);
             }
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting!");
+                engine25519.power_on(false);
                 break;
             }
             None => {
