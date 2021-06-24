@@ -59,9 +59,6 @@ impl<'a> StringBuffer<'a> {
         )
         .expect("Buffer: error in new()/map_memory");
 
-        let mut valid = new_mem;
-        valid.size = MemorySize::new(capacity + remainder).unwrap();
-
         StringBuffer {
             bytes: Some(unsafe {
                 core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), capacity + remainder)

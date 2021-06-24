@@ -1041,8 +1041,8 @@ impl Server {
                 self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
-                msg.buf.addr.get(),
-                msg.buf.size.get(),
+                msg.buf.as_ptr() as _,
+                msg.buf.len(),
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
@@ -1052,8 +1052,8 @@ impl Server {
                 self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
-                msg.buf.addr.get(),
-                msg.buf.size.get(),
+                msg.buf.as_ptr() as _,
+                msg.buf.len(),
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
@@ -1063,8 +1063,8 @@ impl Server {
                 self.tail_generation,
                 original_address.map(|x| x.get()).unwrap_or(0),
                 msg.id,
-                msg.buf.addr.get(),
-                msg.buf.size.get(),
+                msg.buf.as_ptr() as _,
+                msg.buf.len(),
                 msg.offset.map(|x| x.get()).unwrap_or(0) as usize,
                 msg.valid.map(|x| x.get()).unwrap_or(0) as usize,
             ),
@@ -1118,8 +1118,8 @@ impl Server {
                 )
             }
             xous_kernel::Message::Move(msg) => {
-                let server_address = msg.buf.addr.get();
-                let len = msg.buf.size.get();
+                let server_address = msg.buf.as_ptr() as _;
+                let len = msg.buf.len();
                 QueuedMessage::WaitingForget(
                     pid.get() as _,
                     tid as _,
@@ -1130,8 +1130,8 @@ impl Server {
                 )
             }
             xous_kernel::Message::MutableBorrow(msg) | xous_kernel::Message::Borrow(msg) => {
-                let server_address = msg.buf.addr.get();
-                let len = msg.buf.size.get();
+                let server_address = msg.buf.as_ptr() as _;
+                let len = msg.buf.len();
                 QueuedMessage::WaitingReturnMemory(
                     pid.get() as _,
                     tid as _,

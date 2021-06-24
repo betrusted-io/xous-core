@@ -56,7 +56,7 @@ impl Uart {
         unsafe {
             DEFAULT_UART_ADDR = uart.as_mut_ptr() as _;
         }
-        println!("Mapped UART @ {:08x}", uart.addr.get());
+        println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
         // core::mem::forget(uart);
 
         println!("Allocating IRQ...");

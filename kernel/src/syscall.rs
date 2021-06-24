@@ -80,7 +80,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         let client_address = match &message {
             Message::Scalar(_) | Message::BlockingScalar(_) => None,
             Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
-                Some(msg.buf.addr)
+                MemoryAddress::new(msg.buf.as_ptr() as _)
             }
         };
 
@@ -312,8 +312,8 @@ fn return_memory(
             WaitingMessage::ForgetMemory(range) => {
                 return MemoryManager::with_mut(|mm| {
                     let mut result = Ok(xous_kernel::Result::Ok);
-                    let virt = range.addr.get();
-                    let size = range.size.get();
+                    let virt = range.as_ptr() as usize;
+                    let size = range.len();
                     if cfg!(baremetal) && virt & 0xfff != 0 {
                         klog!("VIRT NOT DIVISIBLE BY 4: {:08x}", virt);
                         return Err(xous_kernel::Error::BadAlignment);
@@ -350,7 +350,7 @@ fn return_memory(
         #[cfg(baremetal)]
         let src_virt = _server_addr.get() as _;
         #[cfg(not(baremetal))]
-        let src_virt = buf.addr.get() as _;
+        let src_virt = buf.as_ptr() as _;
 
         // Return the memory to the calling process
         ss.return_memory(
@@ -662,18 +662,18 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     if mm.is_main_memory(phys_ptr) {
                         println!(
                             "Going to zero out {} bytes @ {:08x}",
-                            range.size.get(),
-                            range.addr.get()
+                            range.len(),
+                            range.as_ptr() as usize,
                         );
                         unsafe {
                             range
                                 .as_mut_ptr()
-                                .write_bytes(0, range.size.get() / mem::size_of::<usize>())
+                                .write_bytes(0, range.len() / mem::size_of::<usize>())
                         };
                         // println!("Done zeroing out");
                     }
                     for offset in
-                        (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
+                        (range.as_ptr() as usize..(range.as_ptr() as usize + range.len())).step_by(PAGE_SIZE)
                     {
                         // println!("Handing page to user");
                         crate::arch::mem::hand_page_to_user(offset as *mut u8)
