@@ -228,14 +228,13 @@ fn handle_connection(
                                             sliced_data.len(),
                                             msg.buf.len()
                                         );
-                                        msg.buf.addr =
-                                            match MemoryAddress::new(Box::into_raw(sliced_data)
-                                                as *mut u8
-                                                as usize)
-                                            {
-                                                Some(a) => a,
-                                                _ => unreachable!(),
-                                            };
+                                        msg.buf = unsafe {
+                                            xous_kernel::MemoryRange::new(
+                                                Box::into_raw(sliced_data) as *mut u8 as usize,
+                                                msg.buf.len(),
+                                            )
+                                            .unwrap()
+                                        };
                                     }
                                     xous_kernel::Message::Scalar(_)
                                     | xous_kernel::Message::BlockingScalar(_) => (),
@@ -255,12 +254,12 @@ fn handle_connection(
                                     sliced_data.len(),
                                     buf.len()
                                 );
-                                buf.addr = match MemoryAddress::new(Box::into_raw(sliced_data)
-                                    as *mut u8
-                                    as usize)
-                                {
-                                    Some(a) => a,
-                                    _ => unreachable!(),
+                                *buf = unsafe {
+                                    xous_kernel::MemoryRange::new(
+                                        Box::into_raw(sliced_data) as *mut u8 as usize,
+                                        buf.len(),
+                                    )
+                                    .unwrap()
                                 };
                             }
                             _ => panic!("unsupported message type"),
