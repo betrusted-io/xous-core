@@ -47,7 +47,7 @@ impl Default for ThreadInit {
     fn default() -> Self {
         ThreadInit {
             call: 1,
-            stack: MemoryRange::new(4, 4).unwrap(),
+            stack: unsafe { MemoryRange::new(4, 4).unwrap() },
             arg1: 0,
             arg2: 0,
             arg3: 0,
@@ -103,7 +103,7 @@ pub fn args_to_thread(
 ) -> core::result::Result<ThreadInit, crate::Error> {
     Ok(ThreadInit {
         call: a1,
-        stack: MemoryRange::new(a2, a3).map_err(|_| crate::Error::InvalidSyscall)?,
+        stack: unsafe { MemoryRange::new(a2, a3).map_err(|_| crate::Error::InvalidSyscall) }?,
         arg1: a4,
         arg2: a5,
         arg3: a6,

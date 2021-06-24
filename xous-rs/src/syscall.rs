@@ -767,9 +767,9 @@ impl SysCall {
                 MemoryAddress::new(a3).ok_or(Error::InvalidSyscall)?,
                 crate::from_bits(a4).ok_or(Error::InvalidSyscall)?,
             ),
-            SysCallNumber::UnmapMemory => {
-                SysCall::UnmapMemory(MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))?)
-            }
+            SysCallNumber::UnmapMemory => SysCall::UnmapMemory(unsafe {
+                MemoryRange::new(a1, a2).or(Err(Error::InvalidSyscall))
+            }?),
             SysCallNumber::Yield => SysCall::Yield,
             SysCallNumber::WaitEvent => SysCall::WaitEvent,
             SysCallNumber::ReceiveMessage => {
@@ -815,7 +815,7 @@ impl SysCall {
                 .unwrap_or_else(|_| SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7)),
             SysCallNumber::ReturnMemory => SysCall::ReturnMemory(
                 MessageSender::from_usize(a1),
-                MemoryRange::new(a2, a3)?,
+                unsafe { MemoryRange::new(a2, a3) }?,
                 MemorySize::new(a4),
                 MemorySize::new(a5),
             ),
@@ -835,7 +835,7 @@ impl SysCall {
                     a1 as u32,
                     Message::MutableBorrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
+                        buf: unsafe { MemoryRange::new(a4, a5) }?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -844,7 +844,7 @@ impl SysCall {
                     a1 as u32,
                     Message::Borrow(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
+                        buf: unsafe { MemoryRange::new(a4, a5) }?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -853,7 +853,7 @@ impl SysCall {
                     a1 as u32,
                     Message::Move(MemoryMessage {
                         id: a3,
-                        buf: MemoryRange::new(a4, a5)?,
+                        buf: unsafe { MemoryRange::new(a4, a5) }?,
                         offset: MemoryAddress::new(a6),
                         valid: MemorySize::new(a7),
                     }),
@@ -968,7 +968,7 @@ impl SysCall {
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
         if let SysCall::TrySendMessage(_cid, msg) = self {
-            return ! msg.is_blocking();
+            return !msg.is_blocking();
         }
         matches!(
             self,

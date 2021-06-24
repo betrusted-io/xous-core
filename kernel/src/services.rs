@@ -337,7 +337,9 @@ impl SystemServices {
             } else {
                 process.state = ProcessState::Setup(ThreadInit::new(
                     unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
-                    MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap(),
+                    unsafe {
+                        MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap()
+                    },
                     pid,
                     0,
                     0,
@@ -465,8 +467,8 @@ impl SystemServices {
                 // This can happen when the process handles a debug interrupt.
                 ProcessState::Debug(_) => {
                     crate::syscall::reset_switchto_caller();
-                    return self.switch_to_thread(ppid, None)
-                },
+                    return self.switch_to_thread(ppid, None);
+                }
                 other => panic!(
                     "process {} was in an invalid state {:?} -- thread {} not available to run",
                     pid, other, tid
@@ -1407,8 +1409,8 @@ impl SystemServices {
         len: usize,
         // buf: MemoryRange,
     ) -> Result<*mut usize, xous_kernel::Error> {
-        let buf = MemoryRange::new(src_virt as usize, len)?;
-        let buf = unsafe { core::slice::from_raw_parts(buf.as_ptr(), buf.len()) };
+        let buf = unsafe { MemoryRange::new(src_virt as usize, len) }?;
+        let buf = buf.as_slice();
         let current_pid = self.current_pid();
         {
             let target_process = self.get_process(dest_pid)?;
@@ -1586,7 +1588,7 @@ impl SystemServices {
             if entry == &None {
                 #[cfg(baremetal)]
                 // Allocate a single page for the server queue
-                let backing = crate::mem::MemoryManager::with_mut(|mm| {
+                let backing = crate::mem::MemoryManager::with_mut(|mm| unsafe {
                     MemoryRange::new(
                         mm.map_zeroed_page(pid, false)? as _,
                         crate::arch::mem::PAGE_SIZE,

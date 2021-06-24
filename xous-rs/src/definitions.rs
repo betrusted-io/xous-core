@@ -512,19 +512,19 @@ impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
         match value.0 {
             1 => Ok(Message::MutableBorrow(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
             2 => Ok(Message::Borrow(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
             3 => Ok(Message::Move(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
@@ -605,7 +605,7 @@ impl Drop for MessageEnvelope {
 }
 
 impl MemoryRange {
-    pub fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
+    pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         assert!(
             addr != 0,
             "tried to construct a memory range with a null pointer"
@@ -617,6 +617,7 @@ impl MemoryRange {
         })
     }
 
+    #[deprecated(since = "0.8.4", note = "Please use `new(addr, size)` instead")]
     pub fn from_parts(addr: MemoryAddress, size: MemorySize) -> MemoryRange {
         MemoryRange { addr, size }
     }

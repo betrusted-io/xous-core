@@ -99,7 +99,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )?;
                 Message::Move(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
@@ -114,7 +114,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )?;
                 Message::MutableBorrow(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
@@ -137,7 +137,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 // );
                 Message::Borrow(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
