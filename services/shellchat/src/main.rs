@@ -237,6 +237,7 @@ impl Repl{
                 break; // we get None on the bounds computed if the text view fell off the top of the screen
             }
         }
+        self.gam.redraw().expect("couldn't redraw screen");
         // self.gam.request_ime_redraw().expect("couldn't redraw the IME area");
         Ok(())
     }
