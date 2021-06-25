@@ -487,6 +487,8 @@ cpu: CPU.VexRiscv @ sysbus
 
 fn print_footer<U: Write>(out: &mut U) -> std::io::Result<()> {
     let s = r####"
+abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
+
 sysbus:
     init:
         ApplySVD @soc/renode.svd
@@ -541,6 +543,7 @@ fn print_peripherals<U: Write>(
     known_peripherals.insert("uart", "UART.LiteX_UART");
     known_peripherals.insert("app_uart", "UART.LiteX_UART");
     known_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
+    known_peripherals.insert("i2c", "I2C.BetrustedI2C");
 
     known_peripherals.insert("memlcd", "Video.BetrustedLCD");
     known_peripherals.insert("keyboard", "Input.BetrustedKbd");
