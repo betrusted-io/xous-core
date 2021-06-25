@@ -279,6 +279,7 @@ namespace Antmicro.Renode.Peripherals.Input
 
             {KeyScanCode.KeypadEnter, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
             {KeyScanCode.OemPipe, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
+            {KeyScanCode.Home, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
         };
 
         private readonly Machine machine;
