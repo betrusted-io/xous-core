@@ -41,7 +41,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
         if magic_number != 0x5645_4354 {
             break;
         }
-        log::debug!("vector at 0x{:x}", test_offset);
+        log::debug!("test suite at 0x{:x}", test_offset);
         test_offset += 1;
 
         let load_addr = (vector_read(test_offset) >> 16) & 0xFFFF;
@@ -70,6 +70,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
 
         // copy in the arguments
         for vector in 0..num_vectors {
+            // a test suite can have numerous vectors against a common code base
             for argcnt in 0..num_args {
                 for word in 0..8 {
                     job.rf[(/*window * 32 * 8 +*/ argcnt * 8 + word) as usize] = vector_read(test_offset);
@@ -78,7 +79,7 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
             }
 
             let mut passed = true;
-            log::debug!("spawning job");
+            log::trace!("spawning job");
             match engine.spawn_job(job) {
                 Ok(rf_result) => {
                     for word in 0..8 {
@@ -91,21 +92,28 @@ fn run_vectors(engine: &mut Engine25519) -> (usize, usize) {
                         }
                     }
                 },
-                _ => {
-                    log::error!("system error in running test vector: {}/0x{:x}", vector, test_offset);
+                Err(e) => {
+                    log::error!("system error {:?} in running test vector: {}/0x{:x}", e, vector, test_offset);
+                    passed = false;
                 }
             }
 
             if passed {
                 passes += 1;
             } else {
+                log::error!("arithmetic or system error in running test vector: {}/0x{:x}", vector, test_offset);
                 fails += 1;
-                log::error!("arithmetic error in running test vector: {}/0x{:x}", vector, test_offset);
             }
         }
     }
     (passes, fails)
 }
+/*
+benchmark notes:
+
++59mA +/-1mA current draw off fully charged battery when running the benchmark
+1246-1261ms/check vector iteration (10 iters total, 1450 vectors total)
+*/
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     let xns = xous_names::XousNames::new().unwrap();
@@ -226,7 +234,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
         xous::msg_scalar_unpack!(msg, passes, fails, _, _, {
             let end = env.ticktimer.elapsed_ms();
             let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / TEST_ITERS as f64;
-            write!(ret, "{}ms/iter; In total, Engine passed {} vectors, failed {} vectors", elapsed, passes, fails).unwrap();
+            write!(ret, "{}ms/check_iter; In total, Engine passed {} vectors, failed {} vectors", elapsed, passes, fails).unwrap();
         });
         Ok(Some(ret))
     }

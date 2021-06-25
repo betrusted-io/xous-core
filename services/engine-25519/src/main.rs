@@ -299,7 +299,7 @@ mod implementation {
             self.csr.wfo(utra::engine::MPSTART_MPSTART, job.uc_start);
             self.csr.wfo(utra::engine::MPLEN_MPLEN, job.uc_len);
 
-            log::debug!("sanity check uc{:08x}, rf{:08x}", self.ucode_hw[0], self.rf_hw[0]);
+            log::trace!("sanity check uc{:08x}, rf{:08x}", self.ucode_hw[0], self.rf_hw[0]);
 
             // determine if this a sync or async call
             if job.id.is_some() {
@@ -327,7 +327,6 @@ mod implementation {
             if self.illegal_opcode {
                 return JobResult::IllegalOpcodeException;
             }
-            log::debug!("power: {}", self.csr.rf(utra::engine::POWER_ON));
 
             let mut ret_rf: [u32; RF_SIZE_IN_U32] = [0; RF_SIZE_IN_U32];
             let window = self.csr.rf(utra::engine::WINDOW_WINDOW) as usize;

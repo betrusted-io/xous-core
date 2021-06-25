@@ -23,6 +23,7 @@ pub struct Engine25519 {
 impl Engine25519 {
     // this is used to set up a system with async callbacks
     pub fn new_async(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
         let sid = xous::create_server().unwrap();
@@ -37,6 +38,7 @@ impl Engine25519 {
     }
     // typically, we just want synchronous callbacks. This integrates more nicely into single-threaded code.
     pub fn new() -> Self {
+        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let xns = xous_names::XousNames::new().unwrap();
         let conn = xns.request_connection_blocking(api::SERVER_NAME_ENGINE25519).expect("Can't connect to Engine25519 server");
 
@@ -70,33 +72,51 @@ impl Engine25519 {
     /// if the engine is busy, it will return an EngineUnavailable result.
     pub fn spawn_job(&mut self, job: Job) -> Result<[u32; RF_SIZE_IN_U32], xous::Error> {
         if job.id.is_some() {
+            log::error!("spawn sync job: don't set a job id if you want a synchronous job!");
             return Err(xous::Error::InvalidSyscall) // the job.id should be None for a sync job. Do not set it to Some, even as a joke.
         }
-        let mut buf = Buffer::into_buf(job).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::RunJob.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let mut buf = Buffer::into_buf(job).or(Err(xous::Error::OutOfMemory))?;
+        match buf.lend_mut(self.conn, Opcode::RunJob.to_u32().unwrap()) {
+            Ok(_) => (),
+            Err(e) => {
+                if e == xous::Error::ServerNotFound {
+                    log::error!("Looks like another thread called disconnect() on us while we weren't looking: {:?}", e);
+                } else {
+                    log::error!("couldn't lend buffer: {:?}", e);
+                }
+                return Err(e);
+            }
+        }
 
         match buf.to_original().unwrap() {
             JobResult::Result(rf) => {
                 Ok(rf)
             },
             JobResult::EngineUnavailable => {
+                log::debug!("spawn job: engine unavailable");
                 Err(xous::Error::ServerQueueFull)
             },
             JobResult::IllegalOpcodeException => {
+                log::error!("spawn job: illegal opcode");
                 Err(xous::Error::InvalidString)
             },
             _ => {
-                Err(xous::Error::InternalError)
+                log::error!("spawn job: other error");
+                Err(xous::Error::UnknownError)
             }
         }
     }
 }
 
+use core::sync::atomic::{AtomicU32, Ordering};
+static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Engine25519 {
     fn drop(&mut self) {
-        // disconnect from the main server
-        unsafe{xous::disconnect(self.conn).unwrap();}
-        // disconnect and destroy the callback server
+        // disconnect from the main server, only if there are no more instances active
+        if REFCOUNT.load(Ordering::Relaxed) == 0 {
+            unsafe{xous::disconnect(self.conn).unwrap();}
+        }
+        // disconnect and destroy the callback server that is specific to this instance
         if let Some(cb_sid) = self.cb_sid {
             let cid = xous::connect(xous::SID::from_array(cb_sid)).unwrap();
             xous::send_message(cid,
