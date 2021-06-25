@@ -8,6 +8,8 @@ using sysbus
 
 # Add peripherals that are defined in C#.  You must restart Renode
 # if you modify these files.
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedI2C.cs
 i @peripherals/keyboard.cs
 i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
@@ -27,14 +29,15 @@ showAnalyzer memlcd
 
 sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
 
-# Silence WDT
-sysbus SilenceRange <0xF001F000, 0xF001FFFF>
-
-# Silence I2C
-sysbus SilenceRange <0xF000D000, 0xF000DFFF>
-
 # logLevel -1 keyboard
 # logLevel -1 ticktimer
+logLevel -1 i2c
+logLevel -1 abracom_rtc
+
+# Silence COM and WDT and WFI
+sysbus SilenceRange <0xF000D000, 0xF000DFFF>
+sysbus SilenceRange <0xF0021000, 0xF0021FFF>
+sysbus SilenceRange <0xF0023000, 0xF0023FFF>
 
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset

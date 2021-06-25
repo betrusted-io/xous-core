@@ -32,7 +32,8 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
 
 // Unrecognized peripheral: com
 
-// Unrecognized peripheral: i2c
+i2c: I2C.BetrustedI2C @ sysbus 0xf000e000
+    -> cpu @ 1006
 
 // Unrecognized peripheral: btevents
 
@@ -112,6 +113,8 @@ engine: Memory.MappedMemory @ sysbus 0xe0020000
     size: 0x00020000
 
 
+
+abracom_rtc: Sensors.ABRTCMC @ i2c 0x68
 
 sysbus:
     init:
