@@ -501,7 +501,6 @@ dependencies = [
  "digest",
  "engine-25519",
  "engine25519-as",
- "rand 0.7.3",
  "rand_core 0.5.1",
  "subtle",
  "zeroize",
@@ -596,6 +595,7 @@ dependencies = [
 [[package]]
 name = "engine25519-as"
 version = "0.1.0"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3#6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
 
 [[package]]
 name = "enum_dispatch"

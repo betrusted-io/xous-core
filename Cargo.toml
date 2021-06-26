@@ -90,4 +90,6 @@ lto = "fat"
 [patch.crates-io]
 xous = {path = "xous-rs"}
 xous-macros = {path = "macros"}
+
+[patch."https://github.com/betrusted-io/xous-engine-25519.git"]
 engine-25519 = {path = "services/engine-25519"}

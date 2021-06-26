@@ -8,6 +8,10 @@ use num_traits::*;
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
 
+// these vectors come from running `cargo test field::test::make_vectors` inside
+// https://github.com/betrusted-io/curve25519-dalek. The output file is originally called `test_vectors.bin`.
+// a portion of this vector set involves random numbers in addition to deterministic corner cases,
+// therefore, every invocation will create a slightly different set of vectors
 #[export_name = "engine_vectors"]
 pub static ENGINE_VECTORS: &[u8; 15652] = include_bytes!("engine25519_vectors.bin");
 

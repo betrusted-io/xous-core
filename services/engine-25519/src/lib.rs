@@ -149,24 +149,3 @@ fn engine_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     }
     xous::destroy_server(sid).unwrap();
 }
-
-
-impl XousEngine25519 for Engine25519 {
-    fn new() -> Self {
-        Engine25519::new()
-    }
-    fn run_job(&mut self, job: Job) -> Result<[u32; RF_SIZE_IN_U32], EngineError> {
-        match self.spawn_job(job) {
-            Ok(r) => Ok(r),
-            Err(e) => match e {
-                xous::Error::InternalError => Err(EngineError::InternalError),
-                xous::Error::InvalidSyscall => Err(EngineError::UnsupportedFeature),
-                xous::Error::ServerNotFound => Err(EngineError::ServerNotFound),
-                xous::Error::ServerQueueFull => Err(EngineError::EngineBusy),
-                xous::Error::InvalidString => Err(EngineError::IllegalOpcode),
-                _ => Err(EngineError::UnknownError),
-            }
-        }
-    }
-}
-
