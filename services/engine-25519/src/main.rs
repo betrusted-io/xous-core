@@ -350,13 +350,13 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use log::info;
+    use crate::api::*;
 
     pub struct Engine25519Hw {
     }
 
     impl Engine25519Hw {
-        pub fn new() -> Engine25519Hw {
+        pub fn new(_handler_conn: xous::CID) -> Engine25519Hw {
             Engine25519Hw {
             }
         }
@@ -368,6 +368,8 @@ mod implementation {
         }
         pub fn get_result(&mut self) -> JobResult {
             JobResult::IllegalOpcodeException
+        }
+        pub fn power_on(&mut self, _on: bool) {
         }
     }
 }

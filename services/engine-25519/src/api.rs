@@ -20,8 +20,10 @@ pub(crate) const RF_TOTAL_U8_SIZE: usize = 0x4000;
 
 pub(crate) const NUM_REGS: usize = 32;
 pub(crate) const BITWIDTH: usize = 256;
+#[allow(dead_code)] // not used in hosted
 pub(crate) const NUM_WINDOWS: usize = 16;
 pub const RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32); // 32 registers, 256 bits/register/32 bits per u32
+#[allow(dead_code)] // not used in hosted
 pub const TOTAL_RF_SIZE_IN_U32: usize = NUM_REGS*(BITWIDTH/32)*NUM_WINDOWS; // 32 registers, 256 bits/register/32 bits per u32, times 16 windows
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
