@@ -25,6 +25,7 @@ default-members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/engine-25519",
   "services/aes",
 ]
 members = [
@@ -64,6 +65,7 @@ members = [
   "services/susres",
   "services/codec",
   "services/engine-sha512",
+  "services/engine-25519",
   "services/aes",
 ]
 resolver = "2"
@@ -88,3 +90,6 @@ lto = "fat"
 [patch.crates-io]
 xous = {path = "xous-rs"}
 xous-macros = {path = "macros"}
+
+[patch."https://github.com/betrusted-io/xous-engine-25519.git"]
+engine-25519 = {path = "services/engine-25519"}

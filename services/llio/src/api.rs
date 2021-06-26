@@ -1,10 +1,13 @@
 /////////////////////// UART TYPE
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[allow(dead_code)]  // we actually use this constant, but clippy insists that we don't
+pub(crate) const BOOT_UART: u32 = UartType::Log as u32;
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
 pub enum UartType {
-    Kernel,
-    Log,
-    Application,
-    Invalid,
+    Kernel = 0,
+    Log = 1,
+    Application = 2,
+    Invalid = 3,
 }
 // from/to for Xous messages
 impl From<usize> for UartType {

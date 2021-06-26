@@ -84,7 +84,7 @@ mod implementation {
                 )
                 .expect("couldn't claim irq");
                 // note: we can't use a "susres" manager here because this block has un-suspendable state
-                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon in
+                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
                 engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
             }
             engine512

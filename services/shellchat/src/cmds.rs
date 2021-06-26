@@ -36,7 +36,7 @@ macro_rules! cmd_api {
     };
 }
 
-
+use trng::*;
 /////////////////////////// Command shell integration
 #[derive(Debug)]
 pub struct CommonEnv {
@@ -45,7 +45,7 @@ pub struct CommonEnv {
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
     cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
-    trng: trng::Trng,
+    trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
@@ -93,9 +93,11 @@ mod sha;      use sha::*;
 mod ecup;     use ecup::*;
 mod aes;      use aes::*;
 mod trng_cmd; use trng_cmd::*;
+mod engine;   use engine::*;
+mod console;  use console::*;
 
-mod fcc;      use fcc::*;
-mod pds; // dependency of the FCC file
+//mod fcc;      use fcc::*;
+//mod pds; // dependency of the FCC file
 
 #[derive(Debug)]
 pub struct CmdEnv {
@@ -114,8 +116,9 @@ pub struct CmdEnv {
     ecup_cmd: EcUpdate,
     aes_cmd: Aes,
     trng_cmd: TrngCmd,
+    engine_cmd: Engine,
 
-    fcc_cmd: Fcc,
+    //fcc_cmd: Fcc,
 }
 impl CmdEnv {
     pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
@@ -126,13 +129,25 @@ impl CmdEnv {
             ticktimer: ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             cb_registrations: FnvIndexMap::new(),
-            trng: trng::Trng::new(&xns).unwrap(),
+            trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
-        let fcc = Fcc::new(&mut common);
+        //let fcc = Fcc::new(&mut common);
         let sha = Sha::new(&xns, &mut common);
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
+        let engine = Engine::new(&xns, &mut common);
+
+        // print our version info
+        let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
+        log::info!("SoC git rev {}.{}.{}+{} commit {:x}", maj, min, rev, extra, gitrev);
+        log::info!("SoC DNA: 0x{:x}", common.llio.soc_dna().unwrap());
+        let (rev, dirty) = common.com.get_ec_git_rev().unwrap();
+        let dirtystr = if dirty { "dirty" } else { "clean" };
+        log::info!("EC git commit: {:x}, {}", rev, dirtystr);
+        let (maj, min, rev) = common.com.get_wf200_fw_rev().unwrap();
+        log::info!("WF200 fw rev {}.{}.{}", maj, min, rev);
+
         CmdEnv {
             common_env: common,
             lastverb: String::<256>::new(),
@@ -149,8 +164,9 @@ impl CmdEnv {
             ecup_cmd: ecup,
             aes_cmd: aes,
             trng_cmd: TrngCmd::new(),
+            engine_cmd: engine,
 
-            fcc_cmd: fcc,
+            //fcc_cmd: fcc,
         }
     }
 
@@ -161,6 +177,7 @@ impl CmdEnv {
         let mut ver_cmd = Ver{};
         let mut backlight_cmd = Backlight{};
         let mut accel_cmd = Accel{};
+        let mut console_cmd = Console{};
         let commands: &mut [& mut dyn ShellCmdApi] = &mut [
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
@@ -179,8 +196,10 @@ impl CmdEnv {
             &mut self.ecup_cmd,
             &mut self.aes_cmd,
             &mut self.trng_cmd,
+            &mut self.engine_cmd,
+            &mut console_cmd,
 
-            &mut self.fcc_cmd,
+            //&mut self.fcc_cmd,
         ];
 
         if let Some(cmdline) = maybe_cmdline {
