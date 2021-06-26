@@ -214,6 +214,28 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     self.susres.initiate_suspend().unwrap();
                     write!(ret, "Interrupted Engine hardware benchmark with a suspend/resume").unwrap();
                 }
+                "dh" => {
+                    use x25519_dalek::{EphemeralSecret, PublicKey};
+                    let alice_secret = EphemeralSecret::new(&mut env.trng);
+                    let alice_public = PublicKey::from(&alice_secret);
+                    let bob_secret = EphemeralSecret::new(&mut env.trng);
+                    let bob_public = PublicKey::from(&bob_secret);
+                    let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
+                    let bob_shared_secret = bob_secret.diffie_hellman(&alice_public);
+                    let mut pass = true;
+                    for (&alice, &bob) in alice_shared_secret.as_bytes().iter().zip(bob_shared_secret.as_bytes().iter()) {
+                        if alice != bob {
+                            pass = false;
+                        }
+                    }
+                    log::info!("alice: {:?}", alice_shared_secret.as_bytes());
+                    log::info!("bob: {:?}", bob_shared_secret.as_bytes());
+                    if pass {
+                        write!(ret, "x25519 key exchange pass").unwrap();
+                    } else {
+                        write!(ret, "x25519 key exchange fail").unwrap();
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }

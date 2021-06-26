@@ -36,7 +36,7 @@ macro_rules! cmd_api {
     };
 }
 
-
+use trng::*;
 /////////////////////////// Command shell integration
 #[derive(Debug)]
 pub struct CommonEnv {
@@ -45,7 +45,7 @@ pub struct CommonEnv {
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
     cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
-    trng: trng::Trng,
+    trng: Trng,
     xns: xous_names::XousNames,
 }
 impl CommonEnv {
@@ -129,7 +129,7 @@ impl CmdEnv {
             ticktimer: ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             cb_registrations: FnvIndexMap::new(),
-            trng: trng::Trng::new(&xns).unwrap(),
+            trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
         //let fcc = Fcc::new(&mut common);

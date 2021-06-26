@@ -41,6 +41,25 @@ pub struct Job {
     pub window: Option<u8>,
 }
 
+pub enum EngineError {
+    InternalError,
+    UnsupportedFeature,
+    ServerNotFound,
+    EngineBusy,
+    IllegalOpcode,
+    UnknownError,
+}
+
+// a trait for plugging into external crates
+// mainly, this just wraps xous::Error into something more informative, and is
+// a vestige of an attempt to do a differnt type of integration to the Dalek
+// crates that did not work out very well, but it seemed a shame to throw
+// away the more descriptive custom error types.
+pub trait XousEngine25519 {
+    fn new() -> Self;
+    fn run_job(&mut self, job: Job) -> Result<[u32; RF_SIZE_IN_U32], EngineError>;
+}
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Runs a job, if the server is not already occupied

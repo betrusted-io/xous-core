@@ -19,10 +19,6 @@ num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
-#curve25519-dalek = {git = "https://github.com/betrusted-io/curve25519-dalek.git", rev = "2ea17d554a54066efb3bc4895bee92e5b2e1bd50"}
-#curve25519-dalek-hw = {path = "../../../curve25519-dalek"}
-#curve25519-dalek = "3.1.0"
-
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
