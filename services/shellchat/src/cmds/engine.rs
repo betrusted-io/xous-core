@@ -18,15 +18,18 @@ pub static ENGINE_VECTORS: &[u8; 15652] = include_bytes!("engine25519_vectors.bi
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum BenchOp {
     StartEngine,
+    StartDh,
     Quit,
 }
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum BenchResult {
     EngineDone,
+    DhDone,
 }
 
 const TEST_ITERS: usize = 10;
+const TEST_ITERS_DH: usize = 200;
 
 fn vector_read(word_offset: usize) -> u32 {
     let mut bytes: [u8; 4] = [0; 4];
@@ -125,6 +128,8 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     let mut engine = engine_25519::Engine25519::new();
 
+    let mut trng = trng::Trng::new(&xns).unwrap();
+
     loop {
         let msg = xous::receive_message(sid).unwrap();
         log::debug!("benchmark got msg {:?}", msg);
@@ -142,9 +147,47 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                     passes as usize,
                     fails as usize,
-                    0, 0)
+                    BenchResult::EngineDone.to_usize().unwrap(), TEST_ITERS as usize)
                 ).unwrap();
             },
+            /*
+                2xop => each iteration has 2x DH ops in it (one for alice, one for bob)
+                202ms/2xop (10 x 10 iters - sw)
+                40.5ms/2xop (10 x 10 iters - hw)
+                33ms/2xop (200 iters - hw)
+                190ms/2xop (200 iters - sw)
+            */
+            Some(BenchOp::StartDh) => {
+                let mut passes = 0;
+                let mut fails = 0;
+
+                use x25519_dalek::{StaticSecret, PublicKey};
+                let alice_secret = StaticSecret::new(&mut trng);
+                let alice_public = PublicKey::from(&alice_secret);
+                let bob_secret = StaticSecret::new(&mut trng);
+                let bob_public = PublicKey::from(&bob_secret);
+                for _ in 0..TEST_ITERS_DH {
+                    let alice_shared_secret = alice_secret.diffie_hellman(&bob_public);
+                    let bob_shared_secret = bob_secret.diffie_hellman(&alice_public);
+                    let mut pass = true;
+                    for (&alice, &bob) in alice_shared_secret.as_bytes().iter().zip(bob_shared_secret.as_bytes().iter()) {
+                        if alice != bob {
+                            pass = false;
+                        }
+                    }
+                    if pass {
+                        passes += 2; // 2 diffie_hellman ops / iter
+                    } else {
+                        fails += 2;
+                    }
+                }
+                xous::send_message(callback_conn,
+                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                    passes as usize,
+                    fails as usize,
+                    BenchResult::DhDone.to_usize().unwrap(), TEST_ITERS_DH as usize)
+                ).unwrap();
+            }
             Some(BenchOp::Quit) => {
                 log::info!("quitting benchmark thread");
                 break;
@@ -186,7 +229,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "engine [check] [bench] [susres]";
+        let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -206,6 +249,14 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         xous::Message::new_scalar(BenchOp::StartEngine.to_usize().unwrap(), 0, 0, 0, 0)
                     ).unwrap();
                     write!(ret, "Starting Engine hardware benchmark with {} iters", TEST_ITERS).unwrap();
+                }
+                "benchdh" => {
+                    let start = env.ticktimer.elapsed_ms();
+                    self.start_time = Some(start);
+                    xous::send_message(self.benchmark_cid,
+                        xous::Message::new_scalar(BenchOp::StartDh.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                    write!(ret, "Starting DH hardware benchmark").unwrap();
                 }
                 "susres" => {
                     let start = env.ticktimer.elapsed_ms();
@@ -232,12 +283,57 @@ impl<'a> ShellCmdApi<'a> for Engine {
                             pass = false;
                         }
                     }
-                    log::info!("alice: {:?}", alice_shared_secret.as_bytes());
-                    log::info!("bob: {:?}", bob_shared_secret.as_bytes());
+                    log::info!("alice: {:02x?}", alice_shared_secret.as_bytes());
+                    log::info!("bob: {:02x?}", bob_shared_secret.as_bytes());
                     if pass {
                         write!(ret, "x25519 key exchange pass").unwrap();
                     } else {
                         write!(ret, "x25519 key exchange fail").unwrap();
+                    }
+                }
+                "ed" => {
+                    use ed25519_dalek::*;
+                    use ed25519::signature::Signature as _;
+                    use hex::FromHex;
+                    let secret_key: &[u8] = b"833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42";
+                    let public_key: &[u8] = b"ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf";
+                    let message: &[u8] = b"616263";
+                    let signature: &[u8] = b"98a70222f0b8121aa9d30f813d683f809e462b469c7ff87639499bb94e6dae4131f85042463c2a355a2003d062adf5aaa10b8c61e636062aaad11c2a26083406";
+
+                    let sec_bytes = <[u8; 32]>::from_hex(secret_key).unwrap();
+                    let pub_bytes = <[u8; 32]>::from_hex(public_key).unwrap();
+                    let msg_bytes = <[u8; 3]>::from_hex(message).unwrap();
+                    let sig_bytes = <[u8; 64]>::from_hex(signature).unwrap();
+
+                    let secret: SecretKey = SecretKey::from_bytes(&sec_bytes[..SECRET_KEY_LENGTH]).unwrap();
+                    let public: PublicKey = PublicKey::from_bytes(&pub_bytes[..PUBLIC_KEY_LENGTH]).unwrap();
+                    let keypair: Keypair  = Keypair{ secret: secret, public: public };
+                    let sig1: Signature = Signature::from_bytes(&sig_bytes[..]).unwrap();
+
+                    let mut prehash_for_signing = engine_sha512::Sha512::default(); // this defaults to Hw then Sw strategy
+                    let mut prehash_for_verifying = engine_sha512::Sha512::default();
+
+                    prehash_for_signing.update(&msg_bytes[..]);
+                    prehash_for_verifying.update(&msg_bytes[..]);
+
+                    let sig2: Signature = keypair.sign_prehashed(prehash_for_signing, None).unwrap();
+
+                    log::info!("original: {:02x?}", sig1);
+                    log::info!("produced: {:02x?}", sig2);
+                    let mut pass = true;
+                    if sig1 != sig2 {
+                        pass = false;
+                        write!(ret,
+                            "Original signature from test vectors doesn't equal signature produced:\
+                            \noriginal:\n{:?}\nproduced:\n{:?}", sig1, sig2).unwrap();
+                    }
+                    if keypair.verify_prehashed(prehash_for_verifying, None, &sig2).is_err() {
+                        pass = false;
+                        write!(ret,
+                            "Could not verify ed25519ph signature!").unwrap();
+                    }
+                    if pass {
+                        write!(ret, "Passed ed25519 simple check").unwrap();
                     }
                 }
                 _ => {
@@ -257,10 +353,20 @@ impl<'a> ShellCmdApi<'a> for Engine {
         log::debug!("benchmark callback");
         let mut ret = String::<1024>::new();
 
-        xous::msg_scalar_unpack!(msg, passes, fails, _, _, {
+        xous::msg_scalar_unpack!(msg, passes, fails, result_type, iters, {
             let end = env.ticktimer.elapsed_ms();
-            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / TEST_ITERS as f64;
-            write!(ret, "{}ms/check_iter; In total, Engine passed {} vectors, failed {} vectors", elapsed, passes, fails).unwrap();
+            let elapsed: f64 = ((end - self.start_time.unwrap()) as f64) / iters as f64;
+            match FromPrimitive::from_usize(result_type) {
+                Some(BenchResult::EngineDone) => {
+                    write!(ret, "{}ms/check_iter; In total, Engine passed {} vectors, failed {} vectors", elapsed, passes, fails).unwrap();
+                },
+                Some(BenchResult::DhDone) => {
+                    write!(ret, "{}ms/DH_iter; Passed {} ops, failed {} ops", elapsed, passes, fails).unwrap();
+                },
+                _ => {
+                    write!(ret, "Engine bench callback with unknown bench type").unwrap();
+                }
+            }
         });
         Ok(Some(ret))
     }

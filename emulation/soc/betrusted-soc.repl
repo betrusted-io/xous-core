@@ -86,7 +86,7 @@ trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001c000
 
 // Physical base addresses of memory regions
 rom: Memory.MappedMemory @ sysbus 0x00000000
-    size: 0x00008000
+    size: 0x00001000
 
 sram: Memory.MappedMemory @ sysbus 0x10000000
     size: 0x00020000
