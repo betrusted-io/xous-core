@@ -201,7 +201,7 @@ impl Sha512 {
             FallbackStrategy::HardwareThenSoftware
         };
         Sha512 {
-            use_soft: true,
+            use_soft: false,
             strategy,
             engine: Engine512::new(&H512),
             in_progress: false,
@@ -344,7 +344,7 @@ impl Sha512Trunc256 {
             FallbackStrategy::HardwareThenSoftware
         };
         Sha512Trunc256 {
-            use_soft: true,
+            use_soft: false,
             strategy,
             engine: Engine512::new(&H512_TRUNC_256),
             in_progress: false,

@@ -447,11 +447,16 @@ fn xmain() -> ! {
     xous::create_thread_1(susres_thread, (&mut engine25519) as *mut Engine25519Hw as usize).expect("couldn't start susres handler thread");
 
     let mut client_cid: Option<xous::CID> = None;
+    let mut job_count = 0;
     loop {
         let mut msg = xous::receive_message(engine25519_sid).unwrap();
         log::trace!("Message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::RunJob) => {
+                if job_count % 100 == 0 {
+                    log::info!("engine job {}", job_count); // leave this here for now so we can confirm that HW acceleration is being selected when we think it is!
+                }
+                job_count += 1;
                 // don't start a new job if a suspend is in progress
                 while SUSPEND_IN_PROGRESS.load(Ordering::Relaxed) {
                     log::trace!("waiting for suspend to finish");
