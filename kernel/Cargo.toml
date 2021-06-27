@@ -7,8 +7,9 @@ version = "0.8.2"
 
 [dependencies]
 bitflags = "1.2.1"
-gdbstub = {git = "https://github.com/daniel5151/gdbstub.git", branch = "feature/state-machine-recv-packet", optional = true, default_features = false}
-gdbstub_arch = {git = "https://github.com/daniel5151/gdbstub.git", branch = "feature/state-machine-recv-packet", optional = true}
+# gdbstub branch "dev/0.6"
+gdbstub = {git = "https://github.com/daniel5151/gdbstub.git", optional = true, default_features = false, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8"}
+gdbstub_arch = {git = "https://github.com/daniel5151/gdbstub.git", optional = true, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8"}
 sha3 = {default-features = false, version = "0.8.2"}
 stats_alloc = {version = "0.1.8", optional = true}
 xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages"]}
