@@ -95,6 +95,7 @@ sha2 = {path = "services/engine-sha512", package = "engine-sha512"}
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"
 branch="main"
+#path = "../curve25519-dalek"
 default-features = false
 features = ["u32_backend", "betrusted"]
 
