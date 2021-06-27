@@ -38,6 +38,9 @@ impl Target for XousTarget {
     fn base_ops(&mut self) -> BaseOps<Self::Arch, Self::Error> {
         BaseOps::MultiThread(self)
     }
+    fn breakpoints(&mut self) -> Option<gdbstub::target::ext::breakpoints::BreakpointsOps<Self>> {
+        Some(self)
+    }
 }
 
 impl MultiThreadOps for XousTarget {
@@ -64,8 +67,13 @@ impl MultiThreadOps for XousTarget {
         Ok(())
     }
 
-    fn set_resume_action(&mut self, _tid: Tid, _action: ResumeAction) -> Result<(), Self::Error> {
-        Ok(())
+    fn set_resume_action(&mut self, _tid: Tid, action: ResumeAction) -> Result<(), Self::Error> {
+        match action {
+            ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
+                Err("single-stepping resume action not supported")
+            }
+            ResumeAction::Continue | ResumeAction::ContinueWithSignal(_) => Ok(()),
+        }
     }
 
     fn read_registers(
@@ -75,8 +83,6 @@ impl MultiThreadOps for XousTarget {
     ) -> TargetResult<(), Self> {
         crate::services::SystemServices::with(|system_services| {
             let current_pid = system_services.current_pid();
-            // gprintln!("Getting registers for thread {}", tid);
-
             // Actiavte the debugging process and iterate through it,
             // noting down each active thread.
             let debugging_pid = self.pid.unwrap();
@@ -238,6 +244,26 @@ impl MultiThreadOps for XousTarget {
     }
 }
 
+impl gdbstub::target::ext::breakpoints::Breakpoints for XousTarget {
+    fn hw_breakpoint(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::breakpoints::HwBreakpointOps<Self>> {
+        Some(self)
+    }
+}
+
+impl gdbstub::target::ext::breakpoints::HwBreakpoint for XousTarget {
+    #[inline(never)]
+    fn add_hw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+        Ok(false)
+    }
+
+    #[inline(never)]
+    fn remove_hw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
+        Ok(false)
+    }
+}
+
 pub fn handle(b: u8) -> bool {
     if let Some(XousDebugState {
         mut target,
@@ -258,23 +284,23 @@ pub fn handle(b: u8) -> bool {
                     gdb
                 }
                 Ok((_, Some(_disconnect_reason))) => {
-                    // match disconnect_reason {
-                    //     DisconnectReason::Disconnect => gprintln!("GDB Disconnected"),
-                    //     DisconnectReason::TargetExited(_) => gprintln!("Target exited"),
-                    //     DisconnectReason::TargetTerminated(_) => unreachable!(),
-                    //     DisconnectReason::Kill => gprintln!("GDB sent a kill command"),
-                    // }
                     cleanup();
+                    match _disconnect_reason {
+                        DisconnectReason::Disconnect => println!("GDB Disconnected"),
+                        DisconnectReason::TargetExited(_) => println!("Target exited"),
+                        DisconnectReason::TargetTerminated(_) => unreachable!(),
+                        DisconnectReason::Kill => println!("GDB sent a kill command"),
+                    }
                     return true;
                 }
                 Err(GdbStubError::TargetError(e)) => {
-                    println!("Target raised a fatal error: {}", e);
                     cleanup();
+                    println!("Target raised a fatal error: {}", e);
                     return true;
                 }
                 Err(e) => {
-                    println!("gdbstub internal error: {}", e);
                     cleanup();
+                    println!("gdbstub internal error: {}", e);
                     return true;
                 }
                 Ok((gdb, None)) => gdb,
@@ -291,13 +317,13 @@ pub fn handle(b: u8) -> bool {
                         gdb
                     }
                     Ok((_, Some(disconnect_reason))) => {
-                        println!("client disconnected: {:?}", disconnect_reason);
                         cleanup();
+                        println!("client disconnected: {:?}", disconnect_reason);
                         return true;
                     }
                     Err(e) => {
-                        println!("deferred_stop_reason_error: {:?}", e);
                         cleanup();
+                        println!("deferred_stop_reason_error: {:?}", e);
                         return true;
                     }
                 }
