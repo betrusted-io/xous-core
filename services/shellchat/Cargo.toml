@@ -53,8 +53,8 @@ default-features = false
 features = ["u32_backend"]
 
 [dependencies.ed25519-dalek]
-#version = "1.0.1"
-path = "../../../ed25519-dalek"
+version = "1.0.1"
+#path = "../../../ed25519-dalek"
 default-features = false
 features = ["u32_backend"]
 
