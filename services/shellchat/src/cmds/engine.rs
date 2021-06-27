@@ -291,6 +291,35 @@ impl<'a> ShellCmdApi<'a> for Engine {
                         write!(ret, "x25519 key exchange fail").unwrap();
                     }
                 }
+                "ed2" => {
+                    use ed25519_dalek::{Keypair, Signature, Signer};
+                    let keypair: Keypair;
+                    let good_sig: Signature;
+                    let bad_sig:  Signature;
+
+                    let good: &[u8] = "test message".as_bytes();
+                    let bad:  &[u8] = "wrong message".as_bytes();
+
+                    keypair  = Keypair::generate(&mut env.trng);
+                    good_sig = keypair.sign(&good);
+                    bad_sig  = keypair.sign(&bad);
+
+                    if keypair.verify(&good, &good_sig).is_ok() {
+                        write!(ret, "Verification of valid signtaure passed!\n").unwrap();
+                    } else {
+                        write!(ret, "Verification of valid signtaure failed!\n").unwrap();
+                    }
+                    if keypair.verify(&good, &bad_sig).is_err() {
+                        write!(ret, "Verification of a signature on a different message failed, as expected.\n").unwrap();
+                    } else {
+                        write!(ret, "Verification of a signature on a different message passed (this is unexpected)!\n").unwrap();
+                    }
+                    if keypair.verify(&bad,  &good_sig).is_err() {
+                        write!(ret, "Verification of a signature on a different message failed, as expected.\n").unwrap();
+                    } else {
+                        write!(ret, "Verification of a signature on a different message passed (this is unexpected)!\n").unwrap();
+                    }
+                }
                 "ed" => {
                     use ed25519_dalek::*;
                     use ed25519::signature::Signature as _;

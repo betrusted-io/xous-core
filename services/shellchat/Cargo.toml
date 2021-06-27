@@ -56,7 +56,7 @@ features = ["u32_backend"]
 version = "1.0.1"
 #path = "../../../ed25519-dalek"
 default-features = false
-features = ["u32_backend"]
+features = ["u32_backend", "rand"]
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
