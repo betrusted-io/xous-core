@@ -96,7 +96,7 @@ namespace Antmicro.Renode.Peripherals.Input
 
             Registers.EV_ENABLE.Define32(this)
                 .WithFlag(0, out irqKeyPressedEnabled, name: "KEYPRESSED", changeCallback: (_, __) => UpdateInterrupts())
-                .WithFlag(1, out irqKeyPressedEnabled, name: "INJECT", changeCallback: (_, __) => UpdateInterrupts())
+                .WithFlag(1, out irqInjectEnabled, name: "INJECT", changeCallback: (_, __) => UpdateInterrupts())
             ;
             Registers.ROWCHANGE.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return this.rowChange; })
