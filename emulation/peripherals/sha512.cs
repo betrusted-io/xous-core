@@ -140,6 +140,10 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                             this.sha512.TransformFinalBlock(dummy, 0, 0);
                             this.sha512.Hash.CopyTo(this.hash, 0);
                         }
+
+                        sha512DoneStatus = true;
+                        UpdateInterrupts();
+                        sha512DoneStatus = false;
                     }
                 })
             ;
