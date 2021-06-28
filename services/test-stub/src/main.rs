@@ -121,6 +121,25 @@ fn xmain() -> ! {
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
+    // let test_x: [u64; 5] = [3670528585167682493, 5751548057121892975, 14440402437776689254, 997049197504491580, 0];
+    let mut test_x: [u64; 5] = [0u64; 5];
+    LittleEndian::read_u64_into(&[189, 59, 214, 8, 77, 86, 240, 50, 111, 170, 86, 37, 124, 154, 209, 79, 102, 72, 93, 53, 130, 157, 102, 200, 60, 240, 215, 104, 246, 58, 214, 13], &mut test_x[0..4]);
+
+    let mut dummy: u64 = 0;
+    let mut bit_idx = 0;
+    for i in 0..4 {
+        let bit_buf: u64;
+        if i < 2 {
+            bit_buf = test_x[i] >> bit_idx;
+        } else {
+            bit_buf = (test_x[i] >> bit_idx) | (test_x[i+1] << (64 - bit_idx));
+        }
+        dummy += bit_buf;
+        bit_idx += 8;
+        log::info!("bit_buf: {:x}", bit_buf);
+    }
+    log::info!("dummy: {:x}", dummy);
+
     let scalar = Scalar {
         bytes: [189, 59, 214, 8, 77, 86, 240, 50, 111, 170, 86, 37, 124, 154, 209, 79, 102, 72, 93, 53, 130, 157, 102, 200, 60, 240, 215, 104, 246, 58, 214, 13],
     };
