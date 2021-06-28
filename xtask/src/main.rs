@@ -109,7 +109,7 @@ fn try_main() -> Result<(), DynError> {
     let mut args = env::args();
     let task = args.nth(1);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false, &hw_pkgs)?,
+        Some("renode-image") => renode_image(false, &minimal_pkgs)?,
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
         Some("libstd-test") => renode_image_extra(false, &base_pkgs, args.collect())?,
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,

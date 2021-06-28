@@ -52,6 +52,8 @@ impl Scalar {
         let mut x_u64 = [0u64; 5];
         LittleEndian::read_u64_into(&self.bytes, &mut x_u64[0..4]);
 
+        log::info!("x_u64: {:x?}", x_u64);
+
         let width = 1 << w;
         let window_mask = width - 1;
 
@@ -66,7 +68,14 @@ impl Scalar {
             let bit_buf: u64;
             if bit_idx < 64 - w {
                 // This window's bits are contained in a single u64
-                bit_buf = x_u64[u64_idx] >> bit_idx;
+                /*
+                let mut lower = x_u64[u64_idx] as u32;
+                let upper = (x_u64[u64_idx] >> 32) as u32;
+                lower >>= bit_idx;
+                lower |= upper << (32 - bit_idx);
+                bit_buf = ((upper >> bit_idx) as u64) << 32 | lower as u64;*/
+                bit_buf = x_u64[u64_idx] >> bit_idx;   /////////////////////////////// <----------- culprit
+                log::info!("bit_buf: {:x}", bit_buf);
             } else {
                 // Combine the current u64's bits with the bits from the next u64
                 bit_buf = (x_u64[u64_idx] >> bit_idx) | (x_u64[1+u64_idx] << (64 - bit_idx));
@@ -85,9 +94,15 @@ impl Scalar {
             }
 
             if window < width/2 {
+                log::info!("carry 0 width {} naf[{}] = {}; c.{} bb.{:x} wm.{} idx64.{} idxbit.{} xu64[0].{:x}", width, pos, window,
+                    carry, bit_buf, window_mask, u64_idx, bit_idx, x_u64[0],
+                );
                 carry = 0;
                 naf[pos] = window as i8;
             } else {
+                log::info!("carry 1 width {} naf[{}] = {}/{}; c.{} bb.{:x} wm.{} idx64.{} idxbit.{} xu64[0].{:x}", width, pos, window, (window as i8).wrapping_sub(width as i8),
+                    carry, bit_buf, window_mask, u64_idx, bit_idx, x_u64[0]
+                );
                 carry = 1;
                 naf[pos] = (window as i8).wrapping_sub(width as i8);
             }
@@ -99,6 +114,7 @@ impl Scalar {
     }
 }
 
+// see https://godbolt.org/z/K8MK1v6f9 for the compiler explorer version of this
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
