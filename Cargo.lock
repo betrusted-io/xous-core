@@ -505,7 +505,6 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek"
 version = "3.1.0"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#1a79b76e90d49366b47eb98398a6104678686c15"
 dependencies = [
  "byteorder",
  "digest",
@@ -544,11 +543,10 @@ dependencies = [
 [[package]]
 name = "ed25519-dalek"
 version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "log",
  "rand 0.7.3",
  "sha2",
  "zeroize",
