@@ -69,7 +69,8 @@ trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001c000
 
 // Unrecognized peripheral: trng
 
-// Unrecognized peripheral: sha512
+sha512: Miscellaneous.Sha512 @ sysbus 0xf001e000
+    -> cpu @ 1015
 
 // Unrecognized peripheral: engine
 
@@ -85,31 +86,31 @@ trng_server: Miscellaneous.BetrustedRNGServer @ sysbus 0xf001c000
 
 
 // Physical base addresses of memory regions
-rom: Memory.MappedMemory @ sysbus 0x00000000
+mem_rom: Memory.MappedMemory @ sysbus 0x00000000
     size: 0x00001000
 
-sram: Memory.MappedMemory @ sysbus 0x10000000
+mem_sram: Memory.MappedMemory @ sysbus 0x10000000
     size: 0x00020000
 
-vexriscv_debug: Memory.MappedMemory @ sysbus 0xefff0000
+mem_vexriscv_debug: Memory.MappedMemory @ sysbus 0xefff0000
     size: 0x00001000
 
-sram_ext: Memory.MappedMemory @ sysbus 0x40000000
+mem_sram_ext: Memory.MappedMemory @ sysbus 0x40000000
     size: 0x01000000
 
-fbmem: Memory.MappedMemory @ sysbus 0xb0000000
+mem_memlcd: Memory.MappedMemory @ sysbus 0xb0000000
     size: 0x00006000
 
-spiflash: Memory.MappedMemory @ sysbus 0x20000000
+mem_spiflash: Memory.MappedMemory @ sysbus 0x20000000
     size: 0x08000000
 
-audio: Memory.MappedMemory @ sysbus 0xe0000000
+mem_audio: Memory.MappedMemory @ sysbus 0xe0000000
     size: 0x00001000
 
-sha512: Memory.MappedMemory @ sysbus 0xe0002000
+mem_sha512: Memory.MappedMemory @ sysbus 0xe0002000
     size: 0x00001000
 
-engine: Memory.MappedMemory @ sysbus 0xe0020000
+mem_engine: Memory.MappedMemory @ sysbus 0xe0020000
     size: 0x00020000
 
 

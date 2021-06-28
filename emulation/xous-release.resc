@@ -13,6 +13,7 @@ i @peripherals/BetrustedI2C.cs
 i @peripherals/keyboard.cs
 i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
+i @peripherals/sha512.cs
 i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs

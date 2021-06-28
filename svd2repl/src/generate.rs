@@ -499,7 +499,7 @@ sysbus:
 fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std::io::Result<()> {
     writeln!(out, "// Physical base addresses of memory regions")?;
     for region in regions {
-        let mut region_name = region.name.to_lowercase();
+        let region_name = region.name.to_lowercase();
         let region_size = if region.size < 4096 {
             4096
         } else {
@@ -515,14 +515,9 @@ fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std:
             continue;
         }
 
-        // The current design doubles-up on this identifier, so bodge in a new name.
-        if region_name == "memlcd" {
-            region_name = "fbmem".to_string();
-        }
-
         writeln!(
             out,
-            "{}: Memory.MappedMemory @ sysbus 0x{:08x}",
+            "mem_{}: Memory.MappedMemory @ sysbus 0x{:08x}",
             region_name, region.base
         )?;
         writeln!(out, "    size: 0x{:08x}", region_size)?;
@@ -544,9 +539,9 @@ fn print_peripherals<U: Write>(
     known_peripherals.insert("app_uart", "UART.LiteX_UART");
     known_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
     known_peripherals.insert("i2c", "I2C.BetrustedI2C");
-
-    known_peripherals.insert("memlcd", "Video.BetrustedLCD");
     known_peripherals.insert("keyboard", "Input.BetrustedKbd");
+    known_peripherals.insert("memlcd", "Video.BetrustedLCD");
+    known_peripherals.insert("sha512", "Miscellaneous.Sha512");
     known_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
     known_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
     known_peripherals.insert("ticktimer", "Timers.TickTimer");
