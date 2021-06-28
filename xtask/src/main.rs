@@ -74,8 +74,9 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "trng",
         "llio",
-        "rkyv-test-client",
-        "rkyv-test-server",
+//        "rkyv-test-client",
+//        "rkyv-test-server",
+        "test-stub",
         "susres",
         "com",
     ];

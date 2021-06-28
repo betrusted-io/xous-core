@@ -419,8 +419,10 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     let keypair: Keypair  = Keypair{ secret: secret, public: public };
                     let sig1: Signature = Signature::from_bytes(&sig_bytes[..]).unwrap();
 
-                    let mut prehash_for_signing = engine_sha512::Sha512::default(); // this defaults to Hw then Sw strategy
-                    let mut prehash_for_verifying = engine_sha512::Sha512::default();
+                    //let mut prehash_for_signing = engine_sha512::Sha512::default(); // this defaults to Hw then Sw strategy
+                    //let mut prehash_for_verifying = engine_sha512::Sha512::default();
+                    let mut prehash_for_signing = sha2::Sha512::default(); // this defaults to Hw then Sw strategy
+                    let mut prehash_for_verifying = sha2::Sha512::default();
 
                     prehash_for_signing.update(&msg_bytes[..]);
                     prehash_for_verifying.update(&msg_bytes[..]);

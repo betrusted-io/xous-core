@@ -508,9 +508,20 @@ version = "3.1.0"
 dependencies = [
  "byteorder",
  "digest",
- "engine-25519",
- "engine25519-as",
  "log",
+ "rand_core 0.5.1",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "639891fde0dbea823fc3d798a0fdf9d2f9440a42d64a78ab3488b0ca025117b3"
+dependencies = [
+ "byteorder",
+ "digest",
  "rand_core 0.5.1",
  "subtle",
  "zeroize",
@@ -544,7 +555,7 @@ dependencies = [
 name = "ed25519-dalek"
 version = "1.0.1"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 3.1.0",
  "ed25519",
  "log",
  "rand 0.7.3",
@@ -1616,7 +1627,7 @@ dependencies = [
  "codec",
  "com",
  "content-plugin-api",
- "curve25519-dalek",
+ "curve25519-dalek 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "digest",
  "ed25519-dalek",
  "engine-25519",
@@ -1636,6 +1647,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv 0.4.3",
  "rtc",
+ "sha2",
  "susres",
  "ticktimer-server",
  "trng",
@@ -1783,6 +1795,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "test-stub"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]
@@ -2085,7 +2112,7 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a0c105152107e3b96f6a00a65e86ce82d9b125230e1c4302940eca58ff71f4f"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand_core 0.5.1",
  "zeroize",
 ]
