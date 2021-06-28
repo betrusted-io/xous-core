@@ -505,7 +505,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek"
 version = "3.1.0"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#41cc7c4ab3ccc9e42f8894d96924585bafc23074"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#1a79b76e90d49366b47eb98398a6104678686c15"
 dependencies = [
  "byteorder",
  "digest",
@@ -577,6 +577,7 @@ dependencies = [
 name = "engine-25519"
 version = "0.1.0"
 dependencies = [
+ "engine25519-as",
  "llio",
  "log",
  "log-server",

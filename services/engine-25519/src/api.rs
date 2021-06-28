@@ -43,10 +43,23 @@ pub struct Job {
     pub window: Option<u8>,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
+pub struct MontgomeryJob {
+    pub x0_u: [u8; 32],
+    pub x0_w: [u8; 32],
+    pub x1_u: [u8; 32],
+    pub x1_w: [u8; 32],
+    pub affine_u: [u8; 32],
+    pub scalar: [u8; 32],
+}
+
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// Runs a job, if the server is not already occupied
     RunJob,
+
+    /// MontgomeryJob
+    MontgomeryJob,
 
     /// a function that can be polled to determine if the block has been currently acquired
     IsFree,
@@ -75,6 +88,7 @@ pub(crate) enum Return {
 pub enum JobResult {
     /// returns a copy of the entire register file as a result
     Result([u32; RF_SIZE_IN_U32]),
+    SingleResult([u8; 32]),
     Started,
     EngineUnavailable,
     NotAsyncObject, // attempt to run an async job on an object that was setup for sync jobs

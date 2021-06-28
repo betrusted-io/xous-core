@@ -67,6 +67,39 @@ impl Engine25519 {
         }
     }
 
+    pub fn montgomery_job(&mut self, job: MontgomeryJob) -> Result<[u8; 32], xous::Error> {
+        let mut buf = Buffer::into_buf(job).or(Err(xous::Error::OutOfMemory))?;
+        match buf.lend_mut(self.conn, Opcode::MontgomeryJob.to_u32().unwrap()) {
+            Ok(_) => (),
+            Err(e) => {
+                if e == xous::Error::ServerNotFound {
+                    log::error!("Looks like another thread called disconnect() on us while we weren't looking: {:?}", e);
+                } else {
+                    log::error!("couldn't lend buffer: {:?}", e);
+                }
+                return Err(e);
+            }
+        }
+
+        match buf.to_original().unwrap() {
+            JobResult::SingleResult(r) => {
+                Ok(r)
+            },
+            JobResult::EngineUnavailable => {
+                log::debug!("spawn job: engine unavailable");
+                Err(xous::Error::ServerQueueFull)
+            },
+            JobResult::IllegalOpcodeException => {
+                log::error!("spawn job: illegal opcode");
+                Err(xous::Error::InvalidString)
+            },
+            _ => {
+                log::error!("spawn job: other error");
+                Err(xous::Error::UnknownError)
+            }
+        }
+    }
+
     /// this is a blocking version of spawn_async_job.
     /// if the engine is free, it will block until a result is returned
     /// if the engine is busy, it will return an EngineUnavailable result.

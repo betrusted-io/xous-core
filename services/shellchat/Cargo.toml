@@ -41,6 +41,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 rand_core = "0.5"
 hex = {version = "0.4.3", default-features = false, features = []}
 [dependencies.curve25519-dalek]
+# don't forget the Cargo.toml patch.crates.io file to patch over third-party dependencies as well!
 git="https://github.com/betrusted-io/curve25519-dalek.git"
 branch="main"
 #path = "../../../curve25519-dalek"
