@@ -1,6 +1,7 @@
 REM  a crappy starter script to help with builds under Windows environments. ymmv.
 
 cargo xtask hw-image precursors/soc.svd
+REM cargo xtask minimal precursors/soc.svd
 
 CertUtil -hashfile precursors/soc_csr.bin MD5
 CertUtil -hashfile target/riscv32imac-unknown-none-elf/release/loader.bin MD5

@@ -40,11 +40,9 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 rand_core = "0.5"
 hex = {version = "0.4.3", default-features = false, features = []}
+sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
-# don't forget the Cargo.toml patch.crates.io file to patch over third-party dependencies as well!
-git="https://github.com/betrusted-io/curve25519-dalek.git"
-branch="main"
-#path = "../../../curve25519-dalek"
+version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
 default-features = false
 features = ["u32_backend", "betrusted"]
 

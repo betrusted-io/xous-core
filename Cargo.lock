@@ -505,7 +505,7 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek"
 version = "3.1.0"
-source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#1a79b76e90d49366b47eb98398a6104678686c15"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#b8f968b6e45816d3f5148eb3fb9e10803fedd3f9"
 dependencies = [
  "byteorder",
  "digest",
@@ -1638,6 +1638,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv 0.4.3",
  "rtc",
+ "sha2",
  "susres",
  "ticktimer-server",
  "trng",
@@ -1785,6 +1786,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "test-stub"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]

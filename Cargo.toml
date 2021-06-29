@@ -27,6 +27,7 @@ default-members = [
   "services/engine-sha512",
   "services/engine-25519",
   "services/aes",
+  "services/test-stub",
 ]
 members = [
   "xous-ipc",
@@ -67,6 +68,7 @@ members = [
   "services/engine-sha512",
   "services/engine-25519",
   "services/aes",
+  "services/test-stub",
 ]
 resolver = "2"
 
@@ -92,10 +94,11 @@ xous = {path = "xous-rs"}
 xous-macros = {path = "macros"}
 # prefer hardware-accelerated versions of services
 sha2 = {path = "services/engine-sha512", package = "engine-sha512"}
+
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"
 branch="main"
-#path = "../curve25519-dalek"
+#path = "../curve25519-dalek"  # when doing local dev work
 default-features = false
 features = ["u32_backend", "betrusted"]
 
