@@ -93,14 +93,14 @@ lto = "fat"
 xous = {path = "xous-rs"}
 xous-macros = {path = "macros"}
 # prefer hardware-accelerated versions of services
-#sha2 = {path = "services/engine-sha512", package = "engine-sha512"}
+sha2 = {path = "services/engine-sha512", package = "engine-sha512"}
 
-#[patch.crates-io.curve25519-dalek]
-#git="https://github.com/betrusted-io/curve25519-dalek.git"
-#branch="main"
-#path = "../curve25519-dalek"
-#default-features = false
-#features = ["u32_backend", "betrusted"]
+[patch.crates-io.curve25519-dalek]
+git="https://github.com/betrusted-io/curve25519-dalek.git"
+branch="main"
+#path = "../curve25519-dalek"  # when doing local dev work
+default-features = false
+features = ["u32_backend", "betrusted"]
 
 [patch."https://github.com/betrusted-io/xous-engine-25519.git"]
 engine-25519 = {path = "services/engine-25519"}
