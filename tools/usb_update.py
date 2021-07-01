@@ -344,13 +344,13 @@ def auto_int(x):
 def main():
     parser = argparse.ArgumentParser(description="Update/upload to a Precursor device running Xous 0.8/0.9")
     parser.add_argument(
-        "-s", "--soc", required=False, help="SoC gateware", type=str, nargs='?', metavar=('SoC gateware file'), const='soc_csr.bin'
+        "-s", "--soc", required=False, help="SoC gateware", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
-        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='loader.bin'
+        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
     )
     parser.add_argument(
-        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='xous.img'
+        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-none-elf/release/xous.img'
     )
     parser.add_argument(
         "-e", "--ec", required=False, help="EC gateware", type=str, nargs='?', metavar=('EC gateware package'), const='ec_fw.bin'
