@@ -48,7 +48,7 @@ class PrecursorUsb:
 
         read_data = int.from_bytes(data.tobytes(), byteorder='little', signed=False)
         if display == True:
-            print("0x{:08x}".format(read_data))
+            sys.stderr.write("0x{:08x}\n".format(read_data))
         return read_data
 
     def poke(self, addr, wdata, check=False, display=False):
@@ -56,24 +56,25 @@ class PrecursorUsb:
             _dummy_s = '\x00'.encode('utf-8')
             data = array.array('B', _dummy_s * 4)
 
-            for attempt in range(10):
-                try:
-                    numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
-                    wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
-                    data_or_wLength=data, timeout=500)
-                except Exception as e:
-                    self.dev.reset()
-                    time.sleep(2)
-                else:
-                    break
+            numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
+                wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
+                data_or_wLength=data, timeout=500)
 
             read_data = int.from_bytes(data.tobytes(), byteorder='little', signed=False)
-            print("before poke: 0x{:08x}".format(read_data))
+            sys.stderr.write("before poke: 0x{:08x}\n".format(read_data))
 
         data = array.array('B', wdata.to_bytes(4, 'little'))
-        numwritten = self.dev.ctrl_transfer(bmRequestType=(0x00 | 0x43), bRequest=0,
-            wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
-            data_or_wLength=data, timeout=500)
+        for attempt in range(10):
+            try:
+                numwritten = self.dev.ctrl_transfer(bmRequestType=(0x00 | 0x43), bRequest=0,
+                    wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
+                    data_or_wLength=data, timeout=500)
+            except Exception as e:
+                sys.stderr.write("error; resetting device\n")
+                self.dev.reset()
+                time.sleep(2)
+            else:
+                break
 
         if check == True:
             _dummy_s = '\x00'.encode('utf-8')
@@ -84,9 +85,9 @@ class PrecursorUsb:
             data_or_wLength=data, timeout=500)
 
             read_data = int.from_bytes(data.tobytes(), byteorder='little', signed=False)
-            print("after poke: 0x{:08x}".format(read_data))
+            sys.stderr.write("after poke: 0x{:08x}\n".format(read_data))
         if display == True:
-            print("wrote 0x{:08x} to 0x{:08x}".format(wdata, addr))
+            sys.stderr.write("wrote 0x{:08x} to 0x{:08x}\n".format(wdata, addr))
 
     def burst_read(self, addr, len):
         _dummy_s = '\x00'.encode('utf-8')
@@ -99,7 +100,7 @@ class PrecursorUsb:
 
         time.sleep(0.2) # this improves system stability, somehow
         for pkt_num in range(packet_count):
-            # print('.', end='')
+            # sys.stderr.write('.', end='')
             cur_addr = addr + pkt_num * maxlen
             if pkt_num == packet_count - 1:
                 if len % maxlen != 0:
@@ -120,16 +121,17 @@ class PrecursorUsb:
                     if self.vexdbg_addr != None:
                         self.poke(self.vexdbg_addr, 0x02000000)
                 except Exception as e:
+                    sys.stderr.write("error; resetting device\n")
                     self.dev.reset()
                     time.sleep(2)
                 else:
                     break
             else:
-                sys.stderr.write("Burst read failed")
+                sys.stderr.write("Burst read failed\n")
                 exit(1)
 
             if numread != bufsize:
-                sys.stderr.write("Burst read error: {} bytes requested, {} bytes read at 0x{:08x}".format(bufsize, numread, cur_addr))
+                sys.stderr.write("Burst read error: {} bytes requested, {} bytes read at 0x{:08x}\n".format(bufsize, numread, cur_addr))
             else:
                 ret = ret + data
 
@@ -160,7 +162,7 @@ class PrecursorUsb:
                 data_or_wLength=wdata, timeout=500)
 
             if numwritten != bufsize:
-                print("Burst write error: {} bytes requested, {} bytes written at 0x{:08x}".format(bufsize, numwritten, cur_addr))
+                sys.stderr.write("Burst write error: {} bytes requested, {} bytes written at 0x{:08x}".format(bufsize, numwritten, cur_addr))
                 exit(1)
 
     def ping_wdt(self):
@@ -175,7 +177,7 @@ class PrecursorUsb:
         hasher.update(csr_data[:0x7FC0])
         digest = hasher.digest()
         if digest != csr_data[0x7fc0:]:
-            print("Could not find a valid csr.csv descriptor on the device, aborting!")
+            sys.stderr.write("Could not find a valid csr.csv descriptor on the device, aborting!\n")
             exit(1)
 
         csr_len = int.from_bytes(csr_data[:4], 'little')
@@ -196,7 +198,7 @@ class PrecursorUsb:
                     self.regions[row[1]] = [row[2], row[3]]
                 if 'git_rev' in row[0]:
                     self.gitrev = row[1]
-        print("Using SoC {} registers".format(self.gitrev))
+        sys.stderr.write("Using SoC {} registers\n".format(self.gitrev))
 
 def auto_int(x):
     return int(x, 0)
@@ -225,13 +227,14 @@ def main():
     dev.set_configuration()
     if args.config:
         cfg = dev.get_active_configuration()
-        print(cfg)
+        sys.stderr.write(str(cfg))
+        sys.stderr.write("\n")
 
     pc_usb = PrecursorUsb(dev)
 
     if args.peek:
         pc_usb.peek(args.peek, display=True)
-        # print(burst_read(dev, args.peek, 256).hex())
+        # sys.stderr.write(burst_read(dev, args.peek, 256).hex())
         exit(0)
 
     if args.poke:
@@ -241,11 +244,11 @@ def main():
         # d = bytearray(os.urandom(8000))
         # burst_write(dev, addr, d)
         # r = burst_read(dev, addr, 8000)
-        # print(r.hex())
+        # sys.stderr.write(r.hex())
         # if d != r:
-        #     print("mismatch")
+        #     sys.stderr.write("mismatch")
         # else:
-        #     print("match")
+        #     sys.stderr.write("match")
         exit(0)
 
     pc_usb.load_csrs() # prime the CSR values
@@ -263,13 +266,13 @@ def main():
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
     else:
-        print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
+        sys.stderr.write("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
 
     vexdbg_addr = int(pc_usb.regions['vexriscv_debug'][0], 0)
     pc_usb.vexdbg_addr = vexdbg_addr
     #pc_usb.ping_wdt()
-    #print("Halting CPU.")
+    #sys.stderr.write("Halting CPU.")
     #pc_usb.poke(vexdbg_addr, 0x00020000)
 
     messible2_in = pc_usb.register('messible2_in')
@@ -280,46 +283,64 @@ def main():
     TIMEOUT = 30.0
 
     phase = 0
+    last_phase = 0
     blocks = 0
     while True:
         start_time = time.time()
-        #sys.stderr.write("at phase, {} waiting for next buffer\n".format(phase))
+        sys.stderr.write("at phase {}, waiting for next buffer\n".format(phase))
         while True:
             remote_phase = pc_usb.peek(messible_out)
             if remote_phase > phase:
                 break
             time.sleep(0.5)
             if time.time() > (start_time + TIMEOUT):
-                sys.stderr.write("timeout\n")
+                try:
+                    pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
+                except usb.core.USBError:
+                    pass # we expect an error because we reset the SOC and that includes the USB core
+                time.sleep(2.0)
+                dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
+                dev.set_configuration()
+                pc_usb = PrecursorUsb(dev)
+                pc_usb.load_csrs() # prime the CSR values
+                #pc_usb.poke(vexdbg_addr, 0x02000000) # maybe the CPU is still halted, try resuming it
+                sys.stderr.write("timeout & reset\n")
+                phase = 0
+                last_phase = 0
+                remote_phase = pc_usb.peek(messible_out)
                 break
 
         phase = remote_phase
         pc_usb.poke(messible2_in, phase)
 
-        if (phase % 2) == 1:
-            #sys.stderr.write("phase {} fetching RAM_A\n".format(phase))
-            page = pc_usb.burst_read(RAM_A, BURST_LEN)
-            sys.stdout.buffer.write(page)
-            #sys.stderr.write("got page A {}\n".format(len(page)))
+        if last_phase != phase:
+            if (phase % 2) == 1:
+                sys.stderr.write("phase {} fetching RAM_A\n".format(phase))
+                page = pc_usb.burst_read(RAM_A, BURST_LEN)
+                sys.stdout.buffer.write(page)
+                sys.stderr.write("got page A {}\n".format(len(page)))
+            else:
+                sys.stderr.write("phase {} fetching RAM_B\n".format(phase))
+                page = pc_usb.burst_read(RAM_B, BURST_LEN)
+                sys.stdout.buffer.write(page)
+                sys.stderr.write("got page B {}\n".format(len(page)))
+
+            blocks += 1
         else:
-            #sys.stderr.write("phase {} fetching RAM_B\n".format(phase))
-            page = pc_usb.burst_read(RAM_B, BURST_LEN)
-            sys.stdout.buffer.write(page)
-            #sys.stderr.write("got page B {}\n".format(len(page)))
+            sys.stderr.write("phase didn't increment, not transferring identical block")
 
-        blocks += 1
+        sys.stderr.write("at block {}".format(blocks))
 
-
-    #print("Resuming CPU.")
+    #sys.stderr.write("Resuming CPU.")
     #pc_usb.poke(vexdbg_addr, 0x02000000)
 
-    #print("Resetting SOC...")
+    #sys.stderr.write("Resetting SOC...")
     #try:
     #    pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
     #except usb.core.USBError:
     #    pass # we expect an error because we reset the SOC and that includes the USB core
 
-    # print("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
+    # sys.stderr.write("If you need to run more commands, please unplug and re-plug your device in, as the Precursor USB core was just reset")
 
 if __name__ == "__main__":
     main()
