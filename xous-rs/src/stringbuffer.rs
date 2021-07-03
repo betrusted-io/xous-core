@@ -59,9 +59,6 @@ impl<'a> StringBuffer<'a> {
         )
         .expect("Buffer: error in new()/map_memory");
 
-        let mut valid = new_mem;
-        valid.size = MemorySize::new(capacity + remainder).unwrap();
-
         StringBuffer {
             bytes: Some(unsafe {
                 core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), capacity + remainder)
@@ -117,7 +114,8 @@ impl<'a> StringBuffer<'a> {
         if let Some(old_slice) = self.bytes.take() {
             let old_addr = old_slice.as_ptr();
             let old_length = old_slice.len();
-            unmap_memory(MemoryRange::new(old_addr as usize, old_length).unwrap()).unwrap();
+            unmap_memory(unsafe { MemoryRange::new(old_addr as usize, old_length).unwrap() })
+                .unwrap();
         }
         self.bytes = new_slice;
 
@@ -199,7 +197,8 @@ impl<'a> StringBuffer<'a> {
 
     fn create_memory_message(&self, id: u32) -> MemoryMessage {
         if let Some(bytes) = &self.bytes {
-            let backing_store = MemoryRange::new(bytes.as_ptr() as _, bytes.len()).unwrap();
+            let backing_store =
+                unsafe { MemoryRange::new(bytes.as_ptr() as _, bytes.len()).unwrap() };
             MemoryMessage {
                 id: id as usize,
                 buf: backing_store,
@@ -316,8 +315,9 @@ impl<'a> Eq for StringBuffer<'a> {}
 impl<'a> Drop for StringBuffer<'a> {
     fn drop(&mut self) {
         if self.should_free && self.as_bytes().len() != 0 {
-            let range =
-                MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap();
+            let range = unsafe {
+                MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap()
+            };
             unmap_memory(range).expect("Buffer: failed to drop memory");
         }
     }

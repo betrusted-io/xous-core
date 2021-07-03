@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-06-21 19:10:58]]></description>
+    <description><![CDATA[Litex SoC 2021-07-03 18:21:53]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1222,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``efa48933``, so this value is 4020537651, which should be enough to check out
+``977355ba``, so this value is 2540918202, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xefa48933</resetValue>
+                    <resetValue>0x977355ba</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1242,7 +1242,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x1d</resetValue>
+                    <resetValue>0x26</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1487,10 +1487,26 @@ register to disable individual events.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>DEVBOOT</name>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>devboot</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[When set to ``1``, permanently add a strike-through on the top of the screen.
+Cannot be cleared, except by a full reset.]]></description>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x18</size>
+                <size>0x1c</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -3451,7 +3467,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x33e603a3</resetValue>
+                    <resetValue>0x698bb704</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3466,7 +3482,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0xf1d9b09</resetValue>
+                    <resetValue>0x5d2ea7df</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -6406,8 +6422,23 @@ microcode instructions starting at mpstart]]></description>
                     </fields>
                 </register>
                 <register>
-                    <name>POWER</name>
+                    <name>MPRESUME</name>
                     <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>mpresume</name>
+                            <msb>9</msb>
+                            <bitRange>[9:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Where to resume execution after a pause]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>POWER</name>
+                    <addressOffset>0x0014</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6433,7 +6464,7 @@ pause has happened. Used to interrupt flow for suspend/resume.]]></description>
                 </register>
                 <register>
                     <name>STATUS</name>
-                    <addressOffset>0x0014</addressOffset>
+                    <addressOffset>0x0018</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6465,7 +6496,7 @@ be read out for suspend/resume]]></description>
                 <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x0018</addressOffset>
+                    <addressOffset>0x001c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6488,7 +6519,7 @@ be read out for suspend/resume]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x001c</addressOffset>
+                    <addressOffset>0x0020</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6511,7 +6542,7 @@ be read out for suspend/resume]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[Illegal opcode encountered]]></description>
-                    <addressOffset>0x0020</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6535,7 +6566,7 @@ be read out for suspend/resume]]></description>
                     <name>INSTRUCTION</name>
                     <description><![CDATA[Current instruction being executed by the engine. The format of this register
 exactly reflects the binary layout of an Engine instruction.]]></description>
-                    <addressOffset>0x0024</addressOffset>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -6593,7 +6624,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x28</size>
+                <size>0x2c</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>

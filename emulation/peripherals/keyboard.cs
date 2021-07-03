@@ -96,7 +96,7 @@ namespace Antmicro.Renode.Peripherals.Input
 
             Registers.EV_ENABLE.Define32(this)
                 .WithFlag(0, out irqKeyPressedEnabled, name: "KEYPRESSED", changeCallback: (_, __) => UpdateInterrupts())
-                .WithFlag(1, out irqKeyPressedEnabled, name: "INJECT", changeCallback: (_, __) => UpdateInterrupts())
+                .WithFlag(1, out irqInjectEnabled, name: "INJECT", changeCallback: (_, __) => UpdateInterrupts())
             ;
             Registers.ROWCHANGE.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return this.rowChange; })
@@ -273,11 +273,13 @@ namespace Antmicro.Renode.Peripherals.Input
             {KeyScanCode.F3, new KeyMap(0, 0, 0, 1<<8, 0, 0, 0, 0, 0)},
             {KeyScanCode.F4, new KeyMap(0, 0, 0, 1<<9, 0, 0, 0, 0, 0)},
             {KeyScanCode.Up, new KeyMap(0, 0, 0, 0, 0, 0, 1<<4, 0, 0)},
-            {KeyScanCode.Down, new KeyMap(0, 0, 0, 0, 0, 0, 0, 1<<2, 0)},
-            {KeyScanCode.Left, new KeyMap(0, 0, 0, 0, 0, 0, 0, 1<<2, 0)},
+            {KeyScanCode.Down, new KeyMap(0, 0, 0, 0, 0, 0, 0, 0, 1<<2)},
+            {KeyScanCode.Left, new KeyMap(0, 0, 0, 0, 0, 0, 0, 0, 1<<3)},
             {KeyScanCode.Right, new KeyMap(0, 0, 0, 1<<6, 0, 0, 0, 0, 0)},
 
             {KeyScanCode.KeypadEnter, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
+            {KeyScanCode.OemPipe, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
+            {KeyScanCode.Home, new KeyMap(0, 0, 0, 0, 0, 1<<2, 0, 0, 0)},
         };
 
         private readonly Machine machine;

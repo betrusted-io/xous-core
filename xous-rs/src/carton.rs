@@ -1,7 +1,7 @@
 //! A Carton is an object that wraps another object for shipping across the kernel
 //! boundary. Structs that are stored in Cartons can be sent as messages.
 
-use crate::{Error, MemoryMessage, MemoryRange, MemorySize, Message, CID};
+use crate::{Error, MemoryMessage, MemoryRange, Message, CID};
 
 #[derive(Debug)]
 pub struct Carton<'a> {
@@ -30,8 +30,8 @@ impl<'a> Carton<'a> {
         unsafe {
             core::ptr::copy(src_mem, new_mem.as_mut_ptr(), bytes.len());
         };
-        let mut valid = new_mem;
-        valid.size = MemorySize::new(bytes.len()).unwrap();
+        let valid =
+            unsafe { MemoryRange::new(new_mem.as_mut_ptr() as usize, bytes.len()).unwrap() };
         Carton {
             range: new_mem,
             slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), bytes.len()) },

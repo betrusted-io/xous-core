@@ -119,3 +119,74 @@ fn error_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     }
     xous::destroy_server(sid).unwrap();
 }
+
+use rand_core::{impls, CryptoRng, RngCore};
+impl CryptoRng for Trng {}
+impl RngCore for Trng {
+    fn next_u32(&mut self) -> u32 {
+        self.get_u32().expect("couldn't get random u32 from server")
+    }
+    fn next_u64(&mut self) -> u64 {
+        self.get_u64().expect("couldn't get random u64 from server")
+    }
+    fn fill_bytes(&mut self, dest: &mut[u8]) {
+        // smaller than 64 bytes (512 bits), just use 8x next_u64 calls to fill.
+        if dest.len() < 64 {
+            return impls::fill_bytes_via_next(self, dest);
+        }
+        // one page is the max size we can do with the fill_buf() API
+        let chunks_page =
+            dest.chunks_exact_mut(4096);
+        for chunks in chunks_page.into_iter() {
+            let mut data: [u32; 4096/4] = [0; 4096/4];
+            self.fill_buf(&mut data).expect("couldn't fill page-sized TRNG buffer");
+            for(&src, dst) in data.iter().zip(chunks.chunks_exact_mut(4)) {
+                for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
+                    *dst_byte = src_byte;
+                }
+            }
+        }
+        // a mid-sized chunk to span the gap between page and our smallest granularity
+        let chunks_512 =
+            dest.chunks_exact_mut(4096)
+            .into_remainder()
+            .chunks_exact_mut(512);
+        for chunks in chunks_512.into_iter() {
+            let mut data: [u32; 512/4] = [0; 512/4];
+            self.fill_buf(&mut data).expect("couldn't fill mid-sized TRNG buffer");
+            for(&src, dst) in data.iter().zip(chunks.chunks_exact_mut(4)) {
+                for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
+                    *dst_byte = src_byte;
+                }
+            }
+        }
+        // our smallest-sized "standard" chunk
+        let chunks_smallest =
+            dest.chunks_exact_mut(4096)
+            .into_remainder()
+            .chunks_exact_mut(512)
+            .into_remainder()
+            .chunks_exact_mut(64);
+        for chunks in chunks_smallest.into_iter() {
+            let mut data: [u32; 64/4] = [0; 64/4];
+            self.fill_buf(&mut data).expect("couldn't fill small-sized TRNG buffer");
+            for(&src, dst) in data.iter().zip(chunks.chunks_exact_mut(4)) {
+                for (&src_byte, dst_byte) in src.to_le_bytes().iter().zip(dst.iter_mut()) {
+                    *dst_byte = src_byte;
+                }
+            }
+        }
+        // any leftover bytes
+        let leftovers =
+            dest.chunks_exact_mut(4096)
+            .into_remainder()
+            .chunks_exact_mut(512)
+            .into_remainder()
+            .chunks_exact_mut(64)
+            .into_remainder();
+        impls::fill_bytes_via_next(self, leftovers);
+    }
+    fn try_fill_bytes(&mut self, dest: &mut[u8]) -> Result<(), rand_core::Error> {
+        Ok(self.fill_bytes(dest))
+    }
+}

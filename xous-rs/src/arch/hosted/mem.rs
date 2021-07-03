@@ -21,8 +21,7 @@ pub fn map_memory_post(
 ) -> core::result::Result<MemoryRange, Error> {
     let layout = Layout::from_size_align(range.len(), 4096).unwrap();
     let new_mem = MemoryAddress::new(unsafe { alloc(layout) } as usize).ok_or(Error::BadAddress)?;
-    range.addr = new_mem;
-    Ok(range)
+    Ok(unsafe { MemoryRange::new(new_mem.get(), range.len()).unwrap() })
 }
 
 pub fn unmap_memory_pre(_range: &MemoryRange) -> core::result::Result<(), Error> {

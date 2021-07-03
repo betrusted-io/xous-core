@@ -84,6 +84,9 @@ pub(crate) enum Opcode {
     /// sets whether a sleep note should be rendered or not on suspend
     SetSleepNote,
 
+    /// permanently turns on the Devboot mark
+    Devboot,
+
     /// SuspendResume callback
     SuspendResume,
 

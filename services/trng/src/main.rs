@@ -432,8 +432,8 @@ mod implementation {
         pub fn wait_full(&self) { }
 
         pub fn get_buf(&mut self, len: u16) -> TrngBuf {
-            if self.msgcount < 10 {
-                log::info!("hosted mode TRNG is *not* random, it is an LFSR");
+            if self.msgcount < 3 {
+                log::info!("hosted mode TRNG is *not* random, it is a deterministic LFSR");
             }
             self.msgcount += 1;
             let mut tb = TrngBuf {data: [0; 1024], len};
@@ -445,8 +445,8 @@ mod implementation {
         }
 
         pub fn get_trng(&mut self, _count: usize) -> [u32; 2] {
-            if self.msgcount < 10 {
-                log::info!("hosted mode TRNG is *not* random, it is an LFSR");
+            if self.msgcount < 3 {
+                log::info!("hosted mode TRNG is *not* random, it is a deterministic LFSR");
             }
             self.msgcount += 1;
             let mut ret: [u32; 2] = [0; 2];

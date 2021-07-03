@@ -114,7 +114,7 @@ impl<const N: usize> RegManager::<N> where ManagedReg: core::marker::Copy {
         }
         panic!("Ran out of space pushing to suspend/resume manager structure. Please increase the allocated size!");
     }
-    // push registers into the manager in the order you want them suspended
+    // push registers into the manager in the order that you would normally initialized them
     pub fn push(&mut self, mr: RegOrField, mask_override: Option<usize>) {
         let mrt = ManagedReg {
             item: mr,

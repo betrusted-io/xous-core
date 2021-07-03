@@ -4,8 +4,10 @@ are intended to be bundled into the final distribution. Developers
 who want to use this for testing will need to manually stage and load
 these samples into the correct location in the FLASH. See 
 https://github.com/betrusted-io/xous-core/blob/master/docs/flash.md
-for the locations of the samples, and the betrusted-scripts repo
-for any helper scripts to do this.
+for the locations of the samples.
+
+`tools/usb_update.py` can provision the "long_8khz.wav" sample that is used
+by the latest demo of audio playback in xous-core.
 
 The track samples included here are from "Midwinter", by
 Jackalope (https://soundcloud.com/tokyojackalope)

@@ -3,6 +3,7 @@
 /loader/target
 **/*.rs.bk
 /emulation/peripherals.csproj
+/emulation/obj
 
 *.map
 

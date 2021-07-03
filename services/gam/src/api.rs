@@ -147,6 +147,9 @@ pub(crate) enum Opcode {
     /// raise a context menu
     RaiseMenu,
 
+    /// Turn on Devboot Flag
+    Devboot,
+
     Quit,
 }
 

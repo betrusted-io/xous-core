@@ -129,7 +129,7 @@ This documents their location in FLASH. The samples are shorter than the allocat
 + 2633_FFFF |   16-bit stereo PCM ~16s long          |
 +-----------+----------------------------------------+
 + 2634_0000 |   8khz short sample (WAV/<28,928kiB)   |
-+ 2707_FFFF |   16-bit stereo PCM ~330s long         |
++ 27F7_FFFF |   16-bit stereo PCM ~330s long         |
 +-----------+----------------------------------------+
 + 27F8_0000 |   Start of EC region (do not use)      |
 +-----------+----------------------------------------+

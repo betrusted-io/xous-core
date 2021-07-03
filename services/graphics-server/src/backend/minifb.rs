@@ -18,6 +18,7 @@ pub struct XousDisplay {
     native_buffer: Vec<u32>, //[u32; WIDTH * HEIGHT],
     emulated_buffer: [u32; FB_SIZE],
     window: Window,
+    devboot: bool,
 }
 
 struct XousKeyboardHandler {
@@ -65,7 +66,14 @@ impl XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
+            devboot: false,
         }
+    }
+    pub fn set_devboot(&mut self, ena: bool) {
+        if ena {
+            self.devboot = true;
+        }
+        // ignore attempts to turn off devboot
     }
     pub fn suspend(&self, _flag: bool) {}
     pub fn resume(&self, _flag: bool) {}
@@ -110,6 +118,8 @@ impl XousDisplay {
     }
 
     fn emulated_to_native(&mut self) {
+        const DEVBOOT_LINE: usize = 12;
+        let mut row = 0;
         for (dest_row, src_row) in self
             .native_buffer
             .chunks_mut(WIDTH as _)
@@ -117,13 +127,18 @@ impl XousDisplay {
         {
             for (dest_cell, src_cell) in dest_row.chunks_mut(32).zip(src_row) {
                 for (bit, dest) in dest_cell.iter_mut().enumerate() {
-                    *dest = if src_cell & (1 << bit) != 0 {
-                        DARK_COLOUR
+                    if self.devboot && ((bit >> 1) % 2) == 0 && (row == DEVBOOT_LINE) { // try to render the devboot defile somewhat accurately
+                        *dest = LIGHT_COLOUR
                     } else {
-                        LIGHT_COLOUR
-                    };
+                        *dest = if src_cell & (1 << bit) != 0 {
+                            DARK_COLOUR
+                        } else {
+                            LIGHT_COLOUR
+                        };
+                    }
                 }
             }
+            row += 1;
         }
     }
 }

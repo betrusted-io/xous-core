@@ -84,7 +84,7 @@ mod implementation {
                 )
                 .expect("couldn't claim irq");
                 // note: we can't use a "susres" manager here because this block has un-suspendable state
-                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon in
+                // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
                 engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
             }
             engine512
@@ -350,7 +350,7 @@ fn xmain() -> ! {
 
     let mut client_id: Option<[u32; 3]> = None;
     let mut mode: Option<Sha2Config> = None;
-
+    let mut job_count = 0;
     loop {
         let mut msg = xous::receive_message(engine512_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
@@ -401,6 +401,10 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::Finalize) => {
+                if job_count % 100 == 0 {
+                    log::info!("sha512 job {}", job_count); // leave this here for now so we can confirm HW accel is being used when we think it is!
+                }
+                job_count += 1;
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut finalized = buffer.to_original::<Sha2Finalize, _>().unwrap();
                 match client_id {

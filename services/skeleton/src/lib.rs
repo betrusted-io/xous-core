@@ -21,9 +21,13 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for Codec {
     fn drop(&mut self) {
-        // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
+        // the connection to the server side must be reference counted, so that multiple instances of this object within
+        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
+        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
+        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
+        // de-allocate those items here. They don't need a reference count because they are object-specific
     }
 }

@@ -208,4 +208,12 @@ impl XousDisplay {
     fn busy(&self) -> bool {
         self.csr.rf(utra::memlcd::BUSY_BUSY) == 1
     }
+
+    pub fn set_devboot(&mut self, ena: bool) {
+        if ena {
+            self.csr.wfo(utra::memlcd::DEVBOOT_DEVBOOT, 1);
+        } else {
+            self.csr.wfo(utra::memlcd::DEVBOOT_DEVBOOT, 0);
+        }
+    }
 }

@@ -344,19 +344,22 @@ def auto_int(x):
 def main():
     parser = argparse.ArgumentParser(description="Update/upload to a Precursor device running Xous 0.8/0.9")
     parser.add_argument(
-        "-s", "--soc", required=False, help="SoC gateware", type=str, nargs='?', metavar=('SoC gateware file'), const='soc_csr.bin'
+        "-s", "--soc", required=False, help="SoC gateware", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
-        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='loader.bin'
+        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
     )
     parser.add_argument(
-        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='xous.img'
+        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-none-elf/release/xous.img'
     )
     parser.add_argument(
         "-e", "--ec", required=False, help="EC gateware", type=str, nargs='?', metavar=('EC gateware package'), const='ec_fw.bin'
     )
     parser.add_argument(
         "-w", "--wf200", required=False, help="WF200 firmware", type=str, nargs='?', metavar=('WF200 firmware package'), const='wf200_fw.bin'
+    )
+    parser.add_argument(
+        "--audiotest", required=False, help="Test audio clip (must be 8kHz WAV)", type=str, nargs='?', metavar=('Test audio clip'), const="testaudio.wav"
     )
     parser.add_argument(
         "--peek", required=False, help="Inspect an address", type=auto_int, metavar=('ADDR')
@@ -428,6 +431,8 @@ def main():
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
     elif args.force == True:
         # try the v0.8 offsets
         LOC_SOC    = 0x00000000
@@ -435,6 +440,8 @@ def main():
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
     else:
         print("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)
@@ -481,6 +488,15 @@ def main():
         with open(args.soc, "rb") as f:
             image = f.read()
             pc_usb.flash_program(LOC_SOC, image)
+
+    if args.audiotest != None:
+        print("Loading audio test clip {}".format(args.audiotest))
+        with open(args.audiotest, "rb") as f:
+            image = f.read()
+            if len(image) >= LEN_AUDIO:
+                print("audio file is too long, aborting audio burn!")
+            else:
+                pc_usb.flash_program(LOC_AUDIO, image)
 
     print("Resuming CPU.")
     pc_usb.poke(vexdbg_addr, 0x02000000)

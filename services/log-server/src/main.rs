@@ -128,7 +128,7 @@ mod implementation {
             )
             .expect("couldn't map serial port");
             unsafe { crate::debug::DEFAULT_UART_ADDR = uart.as_mut_ptr() as _ };
-            println!("Mapped UART @ {:08x}", uart.addr.get());
+            println!("Mapped UART @ {:08x}", uart.as_ptr() as usize);
 
             println!("Process: map success!");
             crate::debug::DEFAULT.enable_rx();

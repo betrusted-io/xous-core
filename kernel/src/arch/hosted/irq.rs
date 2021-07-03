@@ -3,6 +3,10 @@
 
 use xous_kernel::{PID, TID};
 
+pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
+    None
+}
+
 pub fn enable_irq(_irq_no: usize) {
     unimplemented!()
 }

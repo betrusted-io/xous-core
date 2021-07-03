@@ -16,12 +16,32 @@ impl Test {
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
-    fn process(&mut self, _args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
         self.state += 1;
         let mut ret = String::<1024>::new();
-        write!(ret, "Test has run {} times.", self.state).unwrap();
+        write!(ret, "Test has run {} times.\n", self.state).unwrap();
+
+        let mut tokens = args.as_str().unwrap().split(' ');
+
+        if let Some(sub_cmd) = tokens.next() {
+            match sub_cmd {
+                "devboot" => {
+                    env.gam.set_devboot(true).unwrap();
+                    write!(ret, "devboot on").unwrap();
+                }
+                "devbootoff" => {
+                    env.gam.set_devboot(false).unwrap();
+                    write!(ret, "devboot off").unwrap();
+                }
+                _ => {
+                    () // do nothing
+                }
+            }
+
+        }
         Ok(Some(ret))
+
     }
 }

@@ -40,14 +40,14 @@ fn map_fonts() {
         fontlen as usize,
         xous::MemoryFlags::R,
     ).expect("couldn't map fonts");
-    log::info!("font base at virtual 0x{:08x}, len of 0x{:08x}", usize::from(fontregion.addr), usize::from(fontregion.size));
+    log::info!("font base at virtual 0x{:08x}, len of 0x{:08x}", fontregion.as_ptr() as usize, usize::from(fontregion.len()));
 
-    log::trace!("mapping regular font to 0x{:08x}", usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET as usize);
-    blitstr::map_font(blitstr::GlyphData::Emoji((usize::from(fontregion.addr) + fontmap::EMOJI_OFFSET) as usize));
-    blitstr::map_font(blitstr::GlyphData::Hanzi((usize::from(fontregion.addr) + fontmap::HANZI_OFFSET) as usize));
-    blitstr::map_font(blitstr::GlyphData::Regular((usize::from(fontregion.addr) + fontmap::REGULAR_OFFSET) as usize));
-    blitstr::map_font(blitstr::GlyphData::Small((usize::from(fontregion.addr) + fontmap::SMALL_OFFSET) as usize));
-    blitstr::map_font(blitstr::GlyphData::Bold((usize::from(fontregion.addr) + fontmap::BOLD_OFFSET) as usize));
+    log::trace!("mapping regular font to 0x{:08x}", fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET as usize);
+    blitstr::map_font(blitstr::GlyphData::Emoji((fontregion.as_ptr() as usize + fontmap::EMOJI_OFFSET) as usize));
+    blitstr::map_font(blitstr::GlyphData::Hanzi((fontregion.as_ptr() as usize + fontmap::HANZI_OFFSET) as usize));
+    blitstr::map_font(blitstr::GlyphData::Regular((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET) as usize));
+    blitstr::map_font(blitstr::GlyphData::Small((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET) as usize));
+    blitstr::map_font(blitstr::GlyphData::Bold((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize));
 }
 
 #[cfg(not(target_os = "none"))]
@@ -392,6 +392,10 @@ fn xmain() -> ! {
                 display.blit_screen(logo::LOGO_MAP);
                 display.update();
                 display.redraw();
+            }),
+            Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
+                if ena != 0 { display.set_devboot(true); }
+                else { display.set_devboot(false); }
             }),
             Some(Opcode::Quit) => break,
             None => {log::error!("received opcode scalar that is not handled");}

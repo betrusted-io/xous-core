@@ -80,7 +80,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
         let client_address = match &message {
             Message::Scalar(_) | Message::BlockingScalar(_) => None,
             Message::Move(msg) | Message::MutableBorrow(msg) | Message::Borrow(msg) => {
-                Some(msg.buf.addr)
+                MemoryAddress::new(msg.buf.as_ptr() as _)
             }
         };
 
@@ -99,7 +99,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )?;
                 Message::Move(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
@@ -114,7 +114,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 )?;
                 Message::MutableBorrow(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
@@ -137,7 +137,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 // );
                 Message::Borrow(MemoryMessage {
                     id: msg.id,
-                    buf: MemoryRange::new(new_virt as usize, msg.buf.len())?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
@@ -146,11 +146,10 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
 
         // If the server has an available thread to receive the message,
         // transfer it right away.
-        if let Some(server_tid) = ss
+        let server = ss
             .server_from_sidx_mut(sidx)
-            .expect("server couldn't be located")
-            .take_available_thread()
-        {
+            .expect("server couldn't be located");
+        if let Some(server_tid) = server.take_available_thread() {
             // klog!(
             //     "there are threads available in PID {} to handle this message -- marking as Ready",
             //     server_pid
@@ -188,11 +187,31 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 e
             })?;
 
-            if blocking && cfg!(baremetal) {
-                klog!("Activating Server context and switching away from Client");
-                ss.activate_process_thread(thread, server_pid, server_tid, false)
-                    .map(|_| Ok(xous_kernel::Result::Message(envelope)))
-                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            let runnable = ss
+                .runnable(server_pid, Some(server_tid))
+                .expect("server doesn't exist");
+            // --- NOTE: Returning this value //
+            return if blocking && cfg!(baremetal) {
+                if !runnable {
+                    // If it's not runnable (e.g. it's being debugged), switch to the parent.
+                    let (ppid, ptid) = unsafe { SWITCHTO_CALLER.take().unwrap() };
+                    klog!("Activating Server parent process (server is blocked) and switching away from Client");
+                    ss.set_thread_result(
+                        server_pid,
+                        server_tid,
+                        xous_kernel::Result::Message(envelope),
+                    )
+                    .expect("couldn't set result for server thread");
+                    ss.activate_process_thread(thread, ppid, ptid, false)
+                        .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                } else {
+                    // Switch to the server, since it's in a state to be run.
+                    klog!("Activating Server context and switching away from Client");
+                    ss.activate_process_thread(thread, server_pid, server_tid, false)
+                        .map(|_| Ok(xous_kernel::Result::Message(envelope)))
+                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+                }
             } else if blocking && !cfg!(baremetal) {
                 klog!("Blocking client, since it sent a blocking message");
                 ss.switch_from_thread(pid, thread)?;
@@ -226,36 +245,35 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     xous_kernel::Result::Message(envelope),
                 )
                 .map(|_| xous_kernel::Result::Ok)
+            };
+        }
+        klog!(
+            "no threads available in PID {} to handle this message, so queueing",
+            server_pid
+        );
+        // Add this message to the queue.  If the queue is full, this
+        // returns an error.
+        let _queue_idx = ss.queue_server_message(sidx, pid, thread, message, client_address)?;
+        klog!("queued into index {:x}", _queue_idx);
+
+        // Park this context if it's blocking.  This is roughly
+        // equivalent to a "Yield".
+        if blocking {
+            if cfg!(baremetal) {
+                // println!("Returning to parent");
+                let process = ss.get_process(pid).expect("Can't get current process");
+                let ppid = process.ppid;
+                unsafe { SWITCHTO_CALLER = None };
+                ss.activate_process_thread(thread, ppid, 0, false)
+                    .map(|_| Ok(xous_kernel::Result::ResumeProcess))
+                    .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
+            } else {
+                ss.switch_from_thread(pid, thread)?;
+                Ok(xous_kernel::Result::BlockedProcess)
             }
         } else {
-            klog!(
-                "no threads available in PID {} to handle this message, so queueing",
-                server_pid
-            );
-            // Add this message to the queue.  If the queue is full, this
-            // returns an error.
-            let _queue_idx = ss.queue_server_message(sidx, pid, thread, message, client_address)?;
-            klog!("queued into index {:x}", _queue_idx);
-
-            // Park this context if it's blocking.  This is roughly
-            // equivalent to a "Yield".
-            if blocking {
-                if cfg!(baremetal) {
-                    // println!("Returning to parent");
-                    let process = ss.get_process(pid).expect("Can't get current process");
-                    let ppid = process.ppid;
-                    unsafe { SWITCHTO_CALLER = None };
-                    ss.activate_process_thread(thread, ppid, 0, false)
-                        .map(|_| Ok(xous_kernel::Result::ResumeProcess))
-                        .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
-                } else {
-                    ss.switch_from_thread(pid, thread)?;
-                    Ok(xous_kernel::Result::BlockedProcess)
-                }
-            } else {
-                // println!("Returning to Client with Ok result");
-                Ok(xous_kernel::Result::Ok)
-            }
+            // println!("Returning to Client with Ok result");
+            Ok(xous_kernel::Result::Ok)
         }
     })
 }
@@ -294,8 +312,8 @@ fn return_memory(
             WaitingMessage::ForgetMemory(range) => {
                 return MemoryManager::with_mut(|mm| {
                     let mut result = Ok(xous_kernel::Result::Ok);
-                    let virt = range.addr.get();
-                    let size = range.size.get();
+                    let virt = range.as_ptr() as usize;
+                    let size = range.len();
                     if cfg!(baremetal) && virt & 0xfff != 0 {
                         klog!("VIRT NOT DIVISIBLE BY 4: {:08x}", virt);
                         return Err(xous_kernel::Error::BadAlignment);
@@ -332,7 +350,7 @@ fn return_memory(
         #[cfg(baremetal)]
         let src_virt = _server_addr.get() as _;
         #[cfg(not(baremetal))]
-        let src_virt = buf.addr.get() as _;
+        let src_virt = buf.as_ptr() as _;
 
         // Return the memory to the calling process
         ss.return_memory(
@@ -343,11 +361,14 @@ fn return_memory(
             len.get(),
         )?;
 
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
         // Unblock the client context to allow it to continue.
-        if !cfg!(baremetal) || in_irq {
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // Send a message to the client, in order to wake it up
             // print!(" [waking up PID {}:{}]", client_pid, client_tid);
             ss.ready_thread(client_pid, client_tid)?;
+            #[cfg(not(baremetal))]
             ss.switch_to_thread(client_pid, Some(client_tid))?;
             ss.set_thread_result(
                 client_pid,
@@ -414,7 +435,9 @@ fn return_scalar(
             }
         };
 
-        if !cfg!(baremetal) || in_irq {
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -422,7 +445,7 @@ fn return_scalar(
             // In a baremetal environment, the opposite is true -- we instruct
             // the server to resume and return to the client.
             ss.set_thread_result(client_pid, client_tid, xous_kernel::Result::Scalar1(arg))?;
-            if in_irq {
+            if cfg!(baremetal) {
                 ss.ready_thread(client_pid, client_tid)?;
             }
             Ok(xous_kernel::Result::Ok)
@@ -483,7 +506,9 @@ fn return_scalar2(
             }
         };
 
-        if !cfg!(baremetal) || in_irq {
+        let client_is_runnable = ss.runnable(client_pid, Some(client_tid))?;
+
+        if !cfg!(baremetal) || in_irq || !client_is_runnable {
             // In a hosted environment, `switch_to_thread()` doesn't continue
             // execution from the new thread. Instead it continues in the old
             // thread. Therefore, we need to instruct the client to resume, and
@@ -495,7 +520,7 @@ fn return_scalar2(
                 client_tid,
                 xous_kernel::Result::Scalar2(arg1, arg2),
             )?;
-            if in_irq {
+            if cfg!(baremetal) {
                 ss.ready_thread(client_pid, client_tid)?;
             }
             Ok(xous_kernel::Result::Ok)
@@ -637,18 +662,18 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                     if mm.is_main_memory(phys_ptr) {
                         println!(
                             "Going to zero out {} bytes @ {:08x}",
-                            range.size.get(),
-                            range.addr.get()
+                            range.len(),
+                            range.as_ptr() as usize,
                         );
                         unsafe {
                             range
                                 .as_mut_ptr()
-                                .write_bytes(0, range.size.get() / mem::size_of::<usize>())
+                                .write_bytes(0, range.len() / mem::size_of::<usize>())
                         };
                         // println!("Done zeroing out");
                     }
                     for offset in
-                        (range.addr.get()..(range.addr.get() + range.size.get())).step_by(PAGE_SIZE)
+                        (range.as_ptr() as usize..(range.as_ptr() as usize + range.len())).step_by(PAGE_SIZE)
                     {
                         // println!("Handing page to user");
                         crate::arch::mem::hand_page_to_user(offset as *mut u8)

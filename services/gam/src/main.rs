@@ -927,7 +927,11 @@ fn xmain() -> ! {
                 let menu_name = buffer.to_original::<String::<128>, _>().unwrap();
                 log::debug!("got request to raise menu {}", menu_name);
                 context_mgr.raise_menu(menu_name.as_str().unwrap(), &gfx, &mut canvases);
-            }
+            },
+            Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
+                if ena != 0 { gfx.set_devboot(true).expect("couldn't send devboot message"); }
+                else { gfx.set_devboot(false).expect("couldn't send devboot message"); }
+            }),
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}
         }

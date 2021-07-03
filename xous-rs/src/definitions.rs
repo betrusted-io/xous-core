@@ -124,8 +124,8 @@ pub type CpuID = usize;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct MemoryRange {
-    pub addr: MemoryAddress,
-    pub size: MemorySize,
+    addr: MemoryAddress,
+    size: MemorySize,
 }
 
 #[cfg(feature = "bitflags")]
@@ -208,6 +208,7 @@ pub enum Error {
     AccessDenied = 23,
     UseBeforeInit = 24,
     DoubleFree = 25,
+    DebugInProgress = 26,
 }
 
 impl Error {
@@ -239,6 +240,7 @@ impl Error {
             23 => AccessDenied,
             24 => UseBeforeInit,
             25 => DoubleFree,
+            26 => DebugInProgress,
             _ => UnknownError,
         }
     }
@@ -270,6 +272,7 @@ impl Error {
             AccessDenied => 23,
             UseBeforeInit => 24,
             DoubleFree => 25,
+            DebugInProgress => 26,
             UnknownError => usize::MAX,
         }
     }
@@ -509,19 +512,19 @@ impl TryFrom<(usize, usize, usize, usize, usize, usize)> for Message {
         match value.0 {
             1 => Ok(Message::MutableBorrow(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
             2 => Ok(Message::Borrow(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
             3 => Ok(Message::Move(MemoryMessage {
                 id: value.1,
-                buf: MemoryRange::new(value.2, value.3).map_err(|_| ())?,
+                buf: unsafe { MemoryRange::new(value.2, value.3).map_err(|_| ()) }?,
                 offset: MemoryAddress::new(value.4),
                 valid: MemorySize::new(value.5),
             })),
@@ -602,7 +605,7 @@ impl Drop for MessageEnvelope {
 }
 
 impl MemoryRange {
-    pub fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
+    pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         assert!(
             addr != 0,
             "tried to construct a memory range with a null pointer"
@@ -614,6 +617,7 @@ impl MemoryRange {
         })
     }
 
+    #[deprecated(since = "0.8.4", note = "Please use `new(addr, size)` instead")]
     pub fn from_parts(addr: MemoryAddress, size: MemorySize) -> MemoryRange {
         MemoryRange { addr, size }
     }
@@ -632,6 +636,40 @@ impl MemoryRange {
 
     pub fn as_mut_ptr(&self) -> *mut u8 {
         self.addr.get() as *mut u8
+    }
+
+    /// Return this memory as a slice of values. The resulting slice
+    /// will cover the maximum number of elements given the size of `T`.
+    /// For example, if the allocation is 4096 bytes, then the resulting
+    /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
+    /// `&[u32]` would have 1024. Values are rounded down.
+    pub fn as_slice<T>(&self) -> &[T] {
+        // This is safe because the pointer and length are guaranteed to
+        // be valid, as long as the user hasn't already called `as_ptr()`
+        // and done something unsound with the resulting pointer.
+        unsafe {
+            core::slice::from_raw_parts(
+                self.as_ptr() as *const T,
+                self.len() / core::mem::size_of::<T>(),
+            )
+        }
+    }
+
+    /// Return this memory as a slice of mutable values. The resulting slice
+    /// will cover the maximum number of elements given the size of `T`.
+    /// For example, if the allocation is 4096 bytes, then the resulting
+    /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
+    /// `&[u32]` would have 1024. Values are rounded down.
+    pub fn as_slice_mut<T>(&self) -> &mut [T] {
+        // This is safe because the pointer and length are guaranteed to
+        // be valid, as long as the user hasn't already called `as_ptr()`
+        // and done something unsound with the resulting pointer.
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self.as_mut_ptr() as *mut T,
+                self.len() / core::mem::size_of::<T>(),
+            )
+        }
     }
 }
 

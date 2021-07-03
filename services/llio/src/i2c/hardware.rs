@@ -157,8 +157,8 @@ impl I2cStateMachine {
                 self.state = I2cState::Idle;
                 self.index = 0;
                 // reset the block - this resest just the state machine and not the prescaler or interrupt enable configs
-                self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
             }
+            self.i2c_csr.wfo(utra::i2c::CORE_RESET_RESET, 1);
             self.error = false;
             self.timestamp = now;
             self.transaction = transaction.clone();

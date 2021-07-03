@@ -12,11 +12,8 @@ extern crate syn;
 use proc_macro2::Span;
 use rand::Rng;
 use rand::SeedableRng;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use syn::{parse, spanned::Spanned, Ident, ItemFn, ReturnType, Type, Visibility};
-
-static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 use proc_macro::TokenStream;
 
@@ -143,7 +140,7 @@ fn random_ident() -> Ident {
         .unwrap()
         .as_secs();
 
-    let count: u64 = CALL_COUNT.fetch_add(1, Ordering::SeqCst) as u64;
+    let count = 1;
     let mut seed: [u8; 16] = [0; 16];
 
     for (i, v) in seed.iter_mut().take(8).enumerate() {

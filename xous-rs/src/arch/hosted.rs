@@ -691,8 +691,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                     assert_eq!(data.len(), data.capacity());
                     let len = data.len();
                     let addr = data.as_mut_ptr();
-                    memory_message.buf.addr = crate::MemoryAddress::new(addr as _).unwrap();
-                    memory_message.buf.size = crate::MemorySize::new(len).unwrap();
+                    memory_message.buf = unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
                 }
                 _ => (),
             }
