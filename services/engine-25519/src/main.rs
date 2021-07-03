@@ -11,6 +11,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use xous::msg_blocking_scalar_unpack;
 use xous_ipc::Buffer;
 
+#[cfg(target_os = "none")]
 #[macro_use]
 extern crate engine25519_as;
 
@@ -714,6 +715,11 @@ mod implementation {
             JobResult::IllegalOpcodeException
         }
         pub fn power_on(&mut self, _on: bool) {
+        }
+        pub fn montgomery(&mut self, _job: MontgomeryJob) {
+        }
+        pub fn get_single_result(&mut self, _r: usize) -> JobResult {
+            JobResult::EngineUnavailable
         }
     }
 }

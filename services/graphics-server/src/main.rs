@@ -393,6 +393,10 @@ fn xmain() -> ! {
                 display.update();
                 display.redraw();
             }),
+            Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
+                if ena != 0 { display.set_devboot(true); }
+                else { display.set_devboot(false); }
+            }),
             Some(Opcode::Quit) => break,
             None => {log::error!("received opcode scalar that is not handled");}
         }

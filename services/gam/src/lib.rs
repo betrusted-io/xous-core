@@ -273,6 +273,17 @@ impl Gam {
         let buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::RaiseMenu.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
     }
+
+    /// this is a one-way door, once you've set it, you can't unset it.
+    pub fn set_devboot(&self, enable: bool) -> Result<(), xous::Error> {
+        let ena =
+            if enable { 1 }
+            else { 0 };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::Devboot.to_usize().unwrap(),
+            ena, 0, 0, 0,)
+        ).map(|_| ())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
