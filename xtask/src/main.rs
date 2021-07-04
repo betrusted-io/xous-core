@@ -55,6 +55,7 @@ fn try_main() -> Result<(), DynError> {
         "codec",
         "engine-sha512",
         "engine-25519",
+        //"spinor",
     ];
     let benchmark_pkgs = [
         "benchmark",
