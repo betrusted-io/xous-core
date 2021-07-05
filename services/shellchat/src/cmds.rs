@@ -95,6 +95,7 @@ mod aes;      use aes::*;
 mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;
+mod memtest;  use memtest::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -117,6 +118,7 @@ pub struct CmdEnv {
     aes_cmd: Aes,
     trng_cmd: TrngCmd,
     engine_cmd: Engine,
+    memtest_cmd: Memtest,
 
     //fcc_cmd: Fcc,
 }
@@ -137,6 +139,7 @@ impl CmdEnv {
         let aes = Aes::new(&xns, &mut common);
         let ecup = EcUpdate::new(&mut common);
         let engine = Engine::new(&xns, &mut common);
+        let memtest = Memtest::new(&xns, &mut common);
 
         // print our version info
         let (maj, min, rev, extra, gitrev) = common.llio.soc_gitrev().unwrap();
@@ -165,6 +168,7 @@ impl CmdEnv {
             aes_cmd: aes,
             trng_cmd: TrngCmd::new(),
             engine_cmd: engine,
+            memtest_cmd: memtest,
 
             //fcc_cmd: fcc,
         }
@@ -198,6 +202,7 @@ impl CmdEnv {
             &mut self.trng_cmd,
             &mut self.engine_cmd,
             &mut console_cmd,
+            &mut self.memtest_cmd,
 
             //&mut self.fcc_cmd,
         ];
