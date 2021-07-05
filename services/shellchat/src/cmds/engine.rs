@@ -159,6 +159,7 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 26ms/2xop (200 iters -hw) -- affine done in hardware
 
                 13.54ms/2xop (200 iters -hw) -- microcode pre-loaded, minimal registers transferred using MontgomeryJob call
+                12.2ms/2xop (200 iters -hw) -- with L2 cache on
             */
             Some(BenchOp::StartDh) => {
                 let mut passes = 0;

@@ -134,6 +134,10 @@ software: -151mA @ 100% CPU usage, 158.36us/block enc+dec AES128 (500 iters, 819
 
 hardware: -148mA @ 100% CPU usage, 103.73us/block enc+dec AES256 (500 iters, 8192 len)
 software: -149mA @ 100% CPU usage, 217.95us/block enc+dec AES256 (500 iters, 8192 len)
+
+with L2 cache on:
+hardware 92.24us/block enc+dec aes256 (500 iters, 8192 len)
+software 158.48us/block enc+dec aes256 (500 iters, 8192 len)
 */
 pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);

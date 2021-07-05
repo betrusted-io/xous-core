@@ -35,6 +35,9 @@ TEST_MAX_LEN = 1024 (fixed length) / TEST_ITERS = 1000: hw 7.257ms/hash, sw 11.6
 TEST_MAX_LEN = 8192 (random length) / TEST_ITERS = 1000: hw 10.528ms/hash, sw 40.631ms/hash
 TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 17.035ms/hash, sw 78.633ms/hash
 
+with L2 cache on:
+TEST_MAX_LEN = 8192 (fixed length) / TEST_ITERS = 1000: hw 13.798ms/hash, sw 29.034ms/hash
+
 power consumption -
 4.1V system voltage
 159mA nominal

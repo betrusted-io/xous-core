@@ -160,6 +160,9 @@ macro_rules! sha512_comms {
                         panic!("Internal error in AcquireExclusive");
                     }
                 }
+            } else if self.strategy == FallbackStrategy::SoftwareOnly {
+                self.use_soft = true;
+                self.in_progress = true;
             }
         }
         pub(crate) fn reset_hw(&mut self) {
