@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-07-03 18:21:53]]></description>
+    <description><![CDATA[Litex SoC 2021-07-05 15:58:37]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1222,10 +1222,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``977355ba``, so this value is 2540918202, which should be enough to check out
+``afcc1323``, so this value is 2949387043, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x977355ba</resetValue>
+                    <resetValue>0xafcc1323</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1242,7 +1242,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x26</resetValue>
+                    <resetValue>0x2a</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3467,7 +3467,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x698bb704</resetValue>
+                    <resetValue>0x6d48a16e</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3482,7 +3482,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5d2ea7df</resetValue>
+                    <resetValue>0x71a7a0e3</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3535,10 +3535,40 @@ inject too fast.]]></description>
                         </field>
                     </fields>
                 </register>
+                <register>
+                    <name>LOCKADDR</name>
+                    <description><![CDATA[address of the word to lock. Address locked on write, and cannot be undone.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>lockaddr</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>LOCKSTAT</name>
+                    <description><![CDATA[If set, the requested address word is locked and will always return 0.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>lockstat</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x8</size>
+                <size>0x10</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -6973,7 +7003,7 @@ of the PLL]]></description>
             <memoryRegion>
                 <name>SRAM</name>
                 <baseAddress>0x10000000</baseAddress>
-                <size>0x00020000</size>
+                <size>0x00004000</size>
             </memoryRegion>
             <memoryRegion>
                 <name>VEXRISCV_DEBUG</name>

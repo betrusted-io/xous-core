@@ -79,6 +79,14 @@ mod implementation {
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
 
+            // flush the L2 cache by writing 0's to a region of memory that matches the L2 cache size
+            if let Some(cf) = sr.cacheflush {
+                let cf_ptr = cf.as_ptr() as *mut u32;
+                for i in 0..(cf.len() / 4) {
+                    unsafe {cf_ptr.add(i).write_volatile(0); }
+                }
+            }
+
             // power the system down - this should result in an almost immediate loss of power
             sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
 
@@ -103,6 +111,8 @@ mod implementation {
         seed_csr: utralib::CSR<u32>,
         /// we also own the reboot facility
         reboot_csr: utralib::CSR<u32>,
+        /// cache flushing memory raea
+        cacheflush: Option<xous::MemoryRange>,
     }
     impl SusResHw {
         pub fn new() -> Self {
@@ -159,6 +169,7 @@ mod implementation {
                 marker,
                 seed_csr: CSR::new(seed_csr.as_mut_ptr() as *mut u32),
                 reboot_csr: CSR::new(reboot_csr.as_mut_ptr() as *mut u32),
+                cacheflush: None,
             };
 
             // start the OS timer running
@@ -200,6 +211,26 @@ mod implementation {
         }
 
         pub fn do_suspend(&mut self, forced: bool) {
+            // allocate memory for the cache flush
+            if self.cacheflush.is_none() {
+                self.cacheflush = Some (
+                    xous::syscall::map_memory(
+                        None,
+                        None,
+                        128 * 1024, // this matches a 128k L2 cache
+                        xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
+                    ).expect("couldn't allocate RAM for cache flushing")
+                );
+                // the RESERVE flag should pre-allocate the pages, but for good measure
+                // we write all the pages to make sure they are at a defined value
+                if let Some(cf) = self.cacheflush {
+                    let cf_ptr = cf.as_ptr() as *mut u32;
+                    for i in 0..(cf.len() / 4) {
+                        unsafe {cf_ptr.add(i).write_volatile(0); }
+                    }
+                }
+            }
+
             println!("Stopping preemption");
             // stop pre-emption
             self.os_timer.wfo(utra::timer0::EN_EN, 0);
@@ -350,6 +381,11 @@ mod implementation {
             } else {
                 panic!("Can't resume because the ticktimer value was not saved properly before suspend!")
             };
+
+            // de-allocate the cache flush memory
+            if let Some(cf) = self.cacheflush.take() {
+                xous::syscall::unmap_memory(cf).expect("couldn't de-allocate cache flush region");
+            }
 
             if self.csr.rf(utra::susres::STATE_WAS_FORCED) == 0 {
                 false
