@@ -90,7 +90,7 @@ mem_rom: Memory.MappedMemory @ sysbus 0x00000000
     size: 0x00001000
 
 mem_sram: Memory.MappedMemory @ sysbus 0x10000000
-    size: 0x00020000
+    size: 0x00004000
 
 mem_vexriscv_debug: Memory.MappedMemory @ sysbus 0xefff0000
     size: 0x00001000
