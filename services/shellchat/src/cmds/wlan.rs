@@ -22,7 +22,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
     fn process(
         &mut self,
         args: String<1024>,
-        _env: &mut CommonEnv,
+        env: &mut CommonEnv,
     ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
         let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [show]";
@@ -32,35 +32,39 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "on" => {
-                    //env.com.set_wlan_on().unwrap();
+                    env.com.wlan_set_on().unwrap();
                     write!(ret, "wlan on").unwrap();
                 }
                 "off" => {
-                    //env.com.set_wlan_off().unwrap();
+                    env.com.wlan_set_off().unwrap();
                     write!(ret, "wlan off").unwrap();
                 }
                 "setssid" => {
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
-                    //env.com.set_wlan_ssid(&val).unwrap();
-                    write!(ret, "wlan setssid {}", val).unwrap();
+                    let _ = match env.com.wlan_set_ssid(&val) {
+                        Ok(_) => write!(ret, "wlan setssid {}", val),
+                        Err(_) => write!(ret, "Error: ssid max len is 32"),
+                    };
                 }
                 "setpass" => {
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
-                    //env.com.set_wlan_pass(&val).unwrap();
-                    write!(ret, "wlan setpass {}", val).unwrap();
+                    let _ = match env.com.wlan_set_pass(&val) {
+                        Ok(_) => write!(ret, "wlan setpass {}", val),
+                        Err(_) => write!(ret, "Error: pass max len is 63"),
+                    };
                 }
                 "join" => {
-                    //env.com.wlan_join().unwrap();
+                    env.com.wlan_join().unwrap();
                     write!(ret, "wlan join").unwrap();
                 }
                 "leave" => {
-                    //env.com.wlan_leave().unwrap();
+                    env.com.wlan_leave().unwrap();
                     write!(ret, "wlan leave").unwrap();
                 }
                 "show" => {
-                    //env.com.wlan_show().unwrap();
+                    env.com.wlan_show().unwrap();
                     write!(ret, "wlan show").unwrap();
                 }
                 _ => {

@@ -583,6 +583,37 @@ fn xmain() -> ! {
                 }
                 buffer.replace(ssid_str).unwrap();
             }
+            Some(Opcode::WlanOn) => {
+                info!("TODO: implement WlanOn");
+                // com.txrx(ComState::WLAN_ON.verb);
+            }
+            Some(Opcode::WlanOff) => {
+                info!("TODO: implement WlanOff");
+                // com.txrx(ComState::WLAN_OFF.verb);
+            }
+            Some(Opcode::WlanSetSSID) => {
+                info!("TODO: implement WlanSetSSID");
+                // com.txrx(ComState::WLAN_SET_SSID.verb);
+                // ... (?)
+            }
+            Some(Opcode::WlanSetPass) => {
+                info!("TODO: implement WlanSetPass");
+                // com.txrx(ComState::WLAN_SET_PASS.verb);
+                // ... (?)
+            }
+            Some(Opcode::WlanJoin) => {
+                info!("TODO: implement WlanJoin");
+                // com.txrx(ComState::WLAN_JOIN.verb);
+            }
+            Some(Opcode::WlanLeave) => {
+                info!("TODO: implement WlanLeave");
+                // com.txrx(ComState::WLAN_LEAVE.verb);
+            }
+            Some(Opcode::WlanShow) => {
+                info!("TODO: implement WlanShow");
+                // com.txrx(ComState::WLAN_SHOW.verb);
+                // ... (?)
+            }
             None => {error!("unknown opcode"); break},
         }
 

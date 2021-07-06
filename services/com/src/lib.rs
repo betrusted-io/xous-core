@@ -301,6 +301,70 @@ impl Com {
             }
         }
     }
+
+    pub fn wlan_set_on(&mut self) -> Result<xous::Result, xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::WlanOn.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
+    pub fn wlan_set_off(&mut self) -> Result<xous::Result, xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::WlanOff.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
+    pub fn wlan_set_ssid(&mut self, s: &String<1024>) -> Result<xous::Result, xous::Error> {
+        use core::fmt::Write;
+        // Enforce WPA2 length limit before passing strings on to WF200
+        const WPA2_SSID_MAX_LEN: usize = 32;
+        if s.len() > WPA2_SSID_MAX_LEN {
+            return Err(xous::Error::InvalidString);
+        }
+        let mut copy: String::<WPA2_SSID_MAX_LEN> = String::new();
+        let _ = write!(copy, "{}", s);
+        let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::WlanSetSSID.to_u32().unwrap())
+    }
+
+    pub fn wlan_set_pass(&mut self, s: &String<1024>) -> Result<xous::Result, xous::Error> {
+        use core::fmt::Write;
+        // Enforce WPA2 length limit before passing strings on to WF200
+        const WPA2_PASS_MAX_LEN: usize = 63;
+        if s.len() > WPA2_PASS_MAX_LEN {
+            return Err(xous::Error::InvalidString);
+        }
+        let mut copy: String::<WPA2_PASS_MAX_LEN> = String::new();
+        let _ = write!(copy, "{}", s);
+        let buf = Buffer::into_buf(copy).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::WlanSetPass.to_u32().unwrap())
+    }
+
+    pub fn wlan_join(&mut self) -> Result<xous::Result, xous::Error> {
+        // TODO: how to make this return success/fail status from WF200?
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::WlanJoin.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
+    pub fn wlan_leave(&mut self) -> Result<xous::Result, xous::Error> {
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::WlanJoin.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
+    pub fn wlan_show(&mut self) -> Result<xous::Result, xous::Error> {
+        // TODO: how to make this return IP, netmask, gateway, DNS server, and STA MAC?
+        send_message(
+            self.conn,
+            Message::new_scalar(Opcode::WlanShow.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+    }
+
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
