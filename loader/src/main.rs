@@ -222,7 +222,7 @@ impl MiniElf {
         // The load offset is the end of this process.  Shift it down by one page
         // so we get the start of the first page.
         let mut top = load_offset - PAGE_SIZE;
-        let stack_addr = USER_STACK_TOP - 4;
+        let stack_addr = USER_STACK_TOP - 16;
 
         // Allocate a page to handle the top-level memory translation
         let satp_address = allocator.alloc() as usize;
@@ -409,13 +409,13 @@ impl ProgramDescription {
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
         let flag_defaults = FLG_R | FLG_W | if is_kernel { 0 } else { FLG_U };
-        let stack_addr = USER_STACK_TOP - 4;
+        let stack_addr = USER_STACK_TOP - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
             assert!(((self.text_offset + self.text_size) as usize) < EXCEPTION_STACK_TOP);
             assert!(
                 ((self.data_offset + self.data_size + self.bss_size) as usize)
-                    < EXCEPTION_STACK_TOP - 4
+                    < EXCEPTION_STACK_TOP - 16
             );
             assert!(self.data_offset as usize >= KERNEL_LOAD_OFFSET);
         } else {
@@ -463,7 +463,7 @@ impl ProgramDescription {
                 allocator.map_page(
                     satp,
                     sp_page,
-                    (EXCEPTION_STACK_TOP - 4 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    (EXCEPTION_STACK_TOP - 16 - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
                     flag_defaults,
                 );
                 allocator.change_owner(pid as XousPid, sp_page);
