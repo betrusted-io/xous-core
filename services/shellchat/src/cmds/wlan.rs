@@ -42,17 +42,21 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                 "setssid" => {
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
-                    let _ = match env.com.wlan_set_ssid(&val) {
-                        Ok(_) => write!(ret, "wlan setssid {}", val),
-                        Err(_) => write!(ret, "Error: ssid max len is 32"),
-                    };
+                    if val.len() == 0 {
+                        let _ = write!(ret, "Error: SSID too short");
+                    } else {
+                        let _ = match env.com.wlan_set_ssid(&val) {
+                            Ok(_) => write!(ret, "wlan setssid {}", val),
+                            Err(_) => write!(ret, "Error: SSID too long for WPA2"),
+                        };
+                    }
                 }
                 "setpass" => {
                     let mut val = String::<1024>::new();
                     join_tokens(&mut val, &mut tokens);
                     let _ = match env.com.wlan_set_pass(&val) {
                         Ok(_) => write!(ret, "wlan setpass {}", val),
-                        Err(_) => write!(ret, "Error: pass max len is 63"),
+                        Err(_) => write!(ret, "Error: passphrase too long for WPA2"),
                     };
                 }
                 "join" => {
