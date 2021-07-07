@@ -585,34 +585,87 @@ fn xmain() -> ! {
             }
             Some(Opcode::WlanOn) => {
                 info!("TODO: implement WlanOn");
-                // com.txrx(ComState::WLAN_ON.verb);
+                com.txrx(ComState::WLAN_ON.verb);
             }
             Some(Opcode::WlanOff) => {
                 info!("TODO: implement WlanOff");
-                // com.txrx(ComState::WLAN_OFF.verb);
+                com.txrx(ComState::WLAN_OFF.verb);
             }
             Some(Opcode::WlanSetSSID) => {
-                info!("TODO: implement WlanSetSSID");
-                // com.txrx(ComState::WLAN_SET_SSID.verb);
-                // ... (?)
+                const WF200_SSID_LEN: usize = 32;
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let ssid = buffer.to_original::<String::<WF200_SSID_LEN>, _>().unwrap();
+                info!("WlanSetSSID: {}", ssid);
+                let ssid_bytes = ssid.as_bytes();
+                let length = ssid.len();
+                com.txrx(ComState::WLAN_SET_SSID.verb);
+                // Always send fixed size message of 1 length word + WF200_SSID_LEN/2 ssid words
+                com.txrx(length as u16);
+                for i in 0..WF200_SSID_LEN/2 {
+                    let n = i * 2;
+                    let word: u16 = match 0 {
+                        _ if n + 1 < length => (ssid_bytes[n] as u16) | ((ssid_bytes[n + 1] as u16) << 8),
+                        _ if n < length => ssid_bytes[n] as u16,
+                        _ => 0 as u16,
+                    };
+                    com.txrx(word);
+                }
             }
             Some(Opcode::WlanSetPass) => {
-                info!("TODO: implement WlanSetPass");
-                // com.txrx(ComState::WLAN_SET_PASS.verb);
-                // ... (?)
+                const WF200_PASS_LEN: usize = 64;
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let pass = buffer.to_original::<String::<WF200_PASS_LEN>, _>().unwrap();
+                info!("WlanSetPass: {}", pass);
+                let pass_bytes = pass.as_bytes();
+                let length = pass.len();
+                com.txrx(ComState::WLAN_SET_PASS.verb);
+                // Always send fixed size message of 1 length word + WF200_PASS_LEN/2 ssid words
+                com.txrx(length as u16);
+                for i in 0..WF200_PASS_LEN/2 {
+                    let n = i * 2;
+                    let word: u16 = match 0 {
+                        _ if n + 1 < length => (pass_bytes[n] as u16) | ((pass_bytes[n + 1] as u16) << 8),
+                        _ if n < length => pass_bytes[n] as u16,
+                        _ => 0 as u16,
+                    };
+                    com.txrx(word);
+                }
             }
             Some(Opcode::WlanJoin) => {
                 info!("TODO: implement WlanJoin");
-                // com.txrx(ComState::WLAN_JOIN.verb);
+                com.txrx(ComState::WLAN_JOIN.verb);
             }
             Some(Opcode::WlanLeave) => {
                 info!("TODO: implement WlanLeave");
-                // com.txrx(ComState::WLAN_LEAVE.verb);
+                com.txrx(ComState::WLAN_LEAVE.verb);
             }
-            Some(Opcode::WlanShow) => {
-                info!("TODO: implement WlanShow");
-                // com.txrx(ComState::WLAN_SHOW.verb);
-                // ... (?)
+            Some(Opcode::WlanStatus) => {
+                const STATUS_MAX_LEN: usize = 160;
+                const RX_WORD_LEN: usize = STATUS_MAX_LEN/2;
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                let mut rx: [u8; RX_WORD_LEN*2] = [0; RX_WORD_LEN*2];
+                com.txrx(ComState::WLAN_STATUS.verb);
+                let size = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as usize;
+                let size = if size > STATUS_MAX_LEN { STATUS_MAX_LEN } else { size as usize };
+                for i in 0..RX_WORD_LEN {
+                    let w = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
+                    let n = i * 2;
+                    let (lsb, msb) = match 0 {
+                        _ if n + 1 < size => ((w & 0xff) as u8, (w >> 8) as u8),
+                        _ if n < size => ((w & 0xff) as u8, 0u8),
+                        _ => (0u8, 0u8),
+                    };
+                    rx[n] = lsb;
+                    rx[n+1] = msb;
+                }
+                info!("size: {}", size);
+                info!("rx[0]: {}", rx[0] as u8);
+                let status = core::str::from_utf8(&rx[0..size])
+                    .unwrap_or("COM bus error:\nutf8 decode failed");
+                let status_str = String::<STATUS_MAX_LEN>::from_str(&status);
+                let _ = buffer.replace(status_str);
             }
             None => {error!("unknown opcode"); break},
         }

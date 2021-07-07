@@ -155,8 +155,8 @@ pub(crate) enum Opcode {
     /// wlan: disconnect from AP
     WlanLeave,
 
-    /// wlan: get AP connection info (SSID, BSSID, signal strength)
-    WlanShow,
+    /// wlan: get wlan radio status (power state? connected? AP info?)
+    WlanStatus,
 }
 
 /// These enums indicate what kind of callback type we're sending.

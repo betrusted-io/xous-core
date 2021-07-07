@@ -357,12 +357,14 @@ impl Com {
         )
     }
 
-    pub fn wlan_show(&mut self) -> Result<xous::Result, xous::Error> {
+    pub fn wlan_status(&mut self) -> Result<String<160>, xous::Error> {
         // TODO: how to make this return IP, netmask, gateway, DNS server, and STA MAC?
-        send_message(
-            self.conn,
-            Message::new_scalar(Opcode::WlanShow.to_usize().unwrap(), 0, 0, 0, 0),
-        )
+        const STATUS_MAX_LEN: usize = 160;
+        let status = xous_ipc::String::<STATUS_MAX_LEN>::new();
+        let mut buf = Buffer::into_buf(status).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
+        Ok(response)
     }
 
 }

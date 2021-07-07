@@ -14,7 +14,7 @@ wlan shell command:
 - join: if disconnected, connect by WPA2 personal with previously set SSID
         and password, otherwise NOP
 - leave: if joined, disconnect from AP
-- show: show AP connection info (SSID, signal strength)
+- status: get wlan radio status (power state? connected? AP info?)
 */
 impl<'a> ShellCmdApi<'a> for Wlan {
     cmd_api!(wlan); // inserts boilerplate for command API
@@ -25,19 +25,23 @@ impl<'a> ShellCmdApi<'a> for Wlan {
         env: &mut CommonEnv,
     ) -> Result<Option<String<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [show]";
+        let helpstring = "wlan [on] [off] [setssid ...] [setpass ...] [join] [leave] [status]";
         let mut show_help = false;
 
         let mut tokens = args.as_str().unwrap().split(' ');
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
                 "on" => {
-                    env.com.wlan_set_on().unwrap();
-                    write!(ret, "wlan on").unwrap();
+                    let _ = match env.com.wlan_set_on() {
+                        Ok(_) => write!(ret, "wlan on"),
+                        Err(e) => write!(ret, "Error: {:?}", e),
+                    };
                 }
                 "off" => {
-                    env.com.wlan_set_off().unwrap();
-                    write!(ret, "wlan off").unwrap();
+                    let _ = match env.com.wlan_set_off() {
+                        Ok(_) => write!(ret, "wlan off"),
+                        Err(e) => write!(ret, "Error: {:?}", e),
+                    };
                 }
                 "setssid" => {
                     let mut val = String::<1024>::new();
@@ -47,7 +51,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     } else {
                         let _ = match env.com.wlan_set_ssid(&val) {
                             Ok(_) => write!(ret, "wlan setssid {}", val),
-                            Err(_) => write!(ret, "Error: SSID too long for WPA2"),
+                            Err(_) => write!(ret, "Error: SSID too long for WF200"),
                         };
                     }
                 }
@@ -56,20 +60,26 @@ impl<'a> ShellCmdApi<'a> for Wlan {
                     join_tokens(&mut val, &mut tokens);
                     let _ = match env.com.wlan_set_pass(&val) {
                         Ok(_) => write!(ret, "wlan setpass {}", val),
-                        Err(_) => write!(ret, "Error: passphrase too long for WPA2"),
+                        Err(_) => write!(ret, "Error: passphrase too long for WF200"),
                     };
                 }
                 "join" => {
-                    env.com.wlan_join().unwrap();
-                    write!(ret, "wlan join").unwrap();
+                    let _ = match env.com.wlan_join() {
+                        Ok(_) => write!(ret, "wlan join"),
+                        Err(e) => write!(ret, "Error: {:?}", e),
+                    };
                 }
                 "leave" => {
-                    env.com.wlan_leave().unwrap();
-                    write!(ret, "wlan leave").unwrap();
+                    let _ = match env.com.wlan_leave() {
+                        Ok(_) => write!(ret, "wlan leave"),
+                        Err(e) => write!(ret, "Error: {:?}", e),
+                    };
                 }
-                "show" => {
-                    env.com.wlan_show().unwrap();
-                    write!(ret, "wlan show").unwrap();
+                "status" => {
+                    let _ = match env.com.wlan_status() {
+                        Ok(msg) => write!(ret, "{}", msg),
+                        Err(e) => write!(ret, "Error: {:?}", e),
+                    };
                 }
                 _ => {
                     show_help = true;
@@ -79,7 +89,7 @@ impl<'a> ShellCmdApi<'a> for Wlan {
             show_help = true;
         }
         if show_help {
-            write!(ret, "{}", helpstring).unwrap();
+            let _ = write!(ret, "{}", helpstring);
         }
         Ok(Some(ret))
     }
