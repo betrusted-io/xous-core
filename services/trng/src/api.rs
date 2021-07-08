@@ -8,7 +8,7 @@ pub struct ExcursionTest {
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub struct MiniRunsTest {
-    pub run_count: [u16; 5],
+    pub run_count: [u16; 4],
     pub fresh: bool,
 }
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]

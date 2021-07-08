@@ -279,7 +279,7 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT2) as u16,
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT3) as u16,
                             self.csr.r(utra::trng_server::RO_RUN0_COUNT4) as u16,
-                            self.csr.r(utra::trng_server::RO_RUN0_COUNT5) as u16,
+                            //self.csr.r(utra::trng_server::RO_RUN0_COUNT5) as u16,
                         ],
                     },
                     MiniRunsTest {
@@ -289,7 +289,7 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT2) as u16,
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT3) as u16,
                             self.csr.r(utra::trng_server::RO_RUN1_COUNT4) as u16,
-                            self.csr.r(utra::trng_server::RO_RUN1_COUNT5) as u16,
+                            //self.csr.r(utra::trng_server::RO_RUN1_COUNT5) as u16,
                         ],
                     },
                     MiniRunsTest {
@@ -299,7 +299,7 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT2) as u16,
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT3) as u16,
                             self.csr.r(utra::trng_server::RO_RUN2_COUNT4) as u16,
-                            self.csr.r(utra::trng_server::RO_RUN2_COUNT5) as u16,
+                            //self.csr.r(utra::trng_server::RO_RUN2_COUNT5) as u16,
                         ],
                     },
                     MiniRunsTest {
@@ -309,7 +309,7 @@ mod implementation {
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT2) as u16,
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT3) as u16,
                             self.csr.r(utra::trng_server::RO_RUN3_COUNT4) as u16,
-                            self.csr.r(utra::trng_server::RO_RUN3_COUNT5) as u16,
+                            //self.csr.r(utra::trng_server::RO_RUN3_COUNT5) as u16,
                         ],
                     },
                 ],
