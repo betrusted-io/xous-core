@@ -43,6 +43,8 @@ mod debug;
 
 mod fonts;
 
+use ed25519_dalek::*;
+
 // Install a panic handler when not running tests.
 #[cfg(not(test))]
 mod panic_handler {
@@ -1245,7 +1247,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         // so that attempts to mess with the args during a resume can't lead to overwriting
         // critical parameters like these kernel arguments.
         unsafe {
-            let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
+            let backup_args: *mut [u32; 7] = 0x40FF_E000 as *mut[u32; 7];
             (*backup_args)[0] = arg_offset as u32;
             (*backup_args)[1] = ip_offset as u32;
             (*backup_args)[2] = rpt_offset as u32;
@@ -1275,7 +1277,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
         }
     } else {
         unsafe {
-            let backup_args: *mut [u32; 7] = 0x40FF_F000 as *mut[u32; 7];
+            let backup_args: *mut [u32; 7] = 0x40FF_E000 as *mut[u32; 7];
             #[cfg(feature="debug-print")]
             {
                 println!("Using backed up kernel args:");
@@ -1313,7 +1315,7 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     const NUM_SECTORS: usize = 8;
     const WORDS_PER_PAGE: usize = PAGE_SIZE / 4;
 
-    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 2;
+    let suspend_marker = cfg.sram_start as usize + cfg.sram_size - PAGE_SIZE * 3;
     let marker: *mut[u32; WORDS_PER_PAGE] = suspend_marker as *mut[u32; WORDS_PER_PAGE];
 
     let boot_seed = CSR::new(utra::seed::HW_SEED_BASE as *mut u32);
@@ -1395,13 +1397,14 @@ fn phase_1(cfg: &mut BootConfig) {
     // Mark all pages as in-use by the kernel.
     // NOTE: This causes the .text section to be owned by the kernel!  This
     // will require us to transfer ownership in `stage3`.
-    // Note also that we skip the first index, causing the stack to be
+    // Note also that we skip the first four indices, causing the stack to be
     // returned to the process pool.
-    // We also skip the second index as that is the clean suspend page. This
+
+    // We also skip the an additional index as that is the clean suspend page. This
     // needs to be claimed by the susres server before the kernel allocates it.
     // Lower numbered indices corresponding to higher address pages.
     println!("Marking pages as in-use");
-    for i in 3..(cfg.init_size / PAGE_SIZE) {
+    for i in 4..(cfg.init_size / PAGE_SIZE) {
         cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - i] = 1;
     }
 }
@@ -1481,5 +1484,6 @@ pub fn phase_2(cfg: &mut BootConfig) {
     );
     // mark pages used by suspend/resume according to their needs
     cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 1] = 1; // claim the loader stack -- do not allow tampering, as it contains backup kernel args
-    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 0; // allow clean suspend page to be mapped in Xous
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 2] = 1; // 8k in total (to allow for digital signatures to be computed)
+    cfg.runtime_page_tracker[cfg.sram_size / PAGE_SIZE - 3] = 0; // allow clean suspend page to be mapped in Xous
 }

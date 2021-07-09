@@ -5,6 +5,11 @@ use std::{
     path::{Path, PathBuf, MAIN_SEPARATOR},
     process::Command,
 };
+/*
+extern crate ed25519_dalek;
+extern crate pem;
+use ed25519_dalek::{Keypair, Signature, PublicKey, PrivateKey};
+*/
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -109,6 +114,8 @@ fn try_main() -> Result<(), DynError> {
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
     let mut args = env::args();
     let task = args.nth(1);
+    let lkey = args.nth(3);
+    let kkey = args.nth(4);
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
@@ -116,29 +123,32 @@ fn try_main() -> Result<(), DynError> {
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
-        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, None)?,
-        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, None)?,
-        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, None)?,
-        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, None)?,
+        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None)?,
+        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, lkey, kkey, None)?,
+        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, lkey, kkey, None)?,
+        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, lkey, kkey, None)?,
         Some("trng-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
+            lkey, kkey,
             Some(&["--features", "urandomtest"]),
         )?,
         Some("ro-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
+            lkey, kkey,
             Some(&["--features", "ringosctest"]),
         )?,
         Some("av-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
+            lkey, kkey,
             Some(&["--features", "avalanchetest"]),
         )?,
-        Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, None)?,
+        Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None)?,
         Some("debug") => run(true, &hw_pkgs)?,
         Some("burn-kernel") => update_usb(true, false, false)?,
         Some("burn-loader") => update_usb(false, true, false)?,
@@ -156,7 +166,7 @@ renode-test             builds a test image for renode
 renode-image-debug      builds a test image for renode in debug mode
 libstd-test [pkg1] [..] builds a test image that includes the minimum packages, plus those
                         specified on the command line (e.g. built externally)
-hw-image [soc.svd]      builds an image for real hardware
+hw-image [soc.svd] [loader.key] [kernel.key]   builds an image for real hardware
 run                     runs a release build using a hosted environment
 debug                   runs a debug build using a hosted environment
 benchmark [soc.svd]     builds a benchmarking image for real hardware
@@ -235,6 +245,8 @@ fn build_hw_image(
     debug: bool,
     svd: Option<String>,
     packages: &[&str],
+    lkey: Option<String>,
+    kkey: Option<String>,
     extra_args: Option<&[&str]>,
 ) -> Result<(), DynError> {
     let svd_file = match svd {
@@ -250,7 +262,24 @@ fn build_hw_image(
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
 
-    // std::fs::copy(path, std::path::Path::new("emulation/soc/renode.svd"))?;
+    // extract key file names; replace with defaults if not specified
+    let loaderkey_file = if let Some(lkf) = lkey {
+        lkf
+    } else {
+        String::from("../devkey/dev.key")
+    };
+    let kernelkey_file = if let Some(kkf) = kkey {
+        kkf
+    } else {
+        String::from("../devkey/dev.key")
+    };
+    /*
+    let mut lkf = File::open(loaderkey_file)?;
+    let mut lk_str = Vec::<u8>::new();
+    lkf.read_to_end(&mut lk_str);
+    let lk_pems = pem::parse(lk_str);
+    println!("lk_pems: {:?}", lk_pems);
+    */
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -278,6 +307,8 @@ fn build_hw_image(
 
     let mut loader_bin = output_bundle.parent().unwrap().to_owned();
     loader_bin.push("loader.bin");
+    let mut loader_presign = output_bundle.parent().unwrap().to_owned();
+    loader_presign.push("loader_presign.bin");
     let status = Command::new(cargo())
         .current_dir(project_root())
         .args(&[
@@ -288,12 +319,28 @@ fn build_hw_image(
             "copy-object",
             "--",
             loader.as_os_str().to_str().unwrap(),
-            loader_bin.as_os_str().to_str().unwrap(),
+            loader_presign.as_os_str().to_str().unwrap(),
         ])
         .status()?;
     if !status.success() {
         return Err("cargo build failed".into());
     }
+    // sign_loader(loader_presign, loader_bin, loader_signing_key)?;
+    let status = Command::new("python3")
+        .current_dir(project_root().join("tools"))
+        .args(&[
+            "sign_image.py",
+            "--loader-image",
+            loader_presign.to_str().unwrap(),
+            "--loader-key",
+            loaderkey_file.as_str(),
+            "--loader-output",
+            loader_bin.to_str().unwrap(),
+        ]).status()?;
+    if !status.success() {
+        return Err("loader image sign failed".into())
+    }
+    println!("Signed loader at {}", loader_bin.to_str().unwrap());
 
     let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
     xous_img_path.push("xous.img");
@@ -312,6 +359,17 @@ fn build_hw_image(
 
     Ok(())
 }
+
+/*
+fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
+    let mut in_file = File::open(in_path)?;
+    let mut out_file = File::open(out_path)?;
+
+    let mut loader = Vec::<u8>::new();
+    in_file.read_to_end(&mut loader);
+
+
+}*/
 
 fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     let path = std::path::Path::new("emulation/soc/renode.svd");

@@ -7,8 +7,8 @@ _start:
     csrw        medeleg, t0
 
     // Place the stack pointer at the end of RAM
-    lw          t0, 16(a0) // SRAM start
-    lw          t1, 20(a0) // SRAM length
+    li          t0, 0x40000000 // SRAM start   hard-coded into loader -- don't trust kernel boot args to tell us where RAM is, we haven't validated them yet!
+    li          t1, 0x01000000 // SRAM length
     add         sp, t0, t1
 
     // Install a machine mode trap handler
