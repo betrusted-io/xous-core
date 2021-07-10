@@ -14,6 +14,9 @@ from source.  It consists of the following projects:
 * **emulation**: Renode scripts used to emulate Xous
 * **xous-rs**: userspace library
 
+## Dependencies
+There's some Python scripts to help deal with firmware signing. Ensure the following python packages are available in your environment: `pycryptodome` (signing - PEM read), `cryptography` (signind - x509 read), `pynacl` (signing - ed25519 signatures). If you plan on doing USB firmware updates, you'll also need `progressbar2` (updates), `pyusb` (updates).
+
 ## Quickstart using Hosted Mode
 
 You can try out Xous in a "hosted mode" wherein programs are compiled
