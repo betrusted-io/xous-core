@@ -372,11 +372,15 @@ impl Process {
         let pid = self.pid.get();
         let thread = self.thread_mut(new_tid);
         // println!("Setting up thread {}, pid {}", new_tid, pid);
+        let sp = setup.stack.as_ptr() as usize + setup.stack.len();
+        if sp <= 16 {
+            Err(xous_kernel::Error::BadAddress)?;
+        }
         crate::arch::syscall::invoke(
             thread,
             pid == 1,
             entrypoint,
-            setup.stack.as_ptr() as usize + setup.stack.len(),
+            (sp - 16) & !0xf,
             EXIT_THREAD,
             &[setup.arg1, setup.arg2, setup.arg3, setup.arg4],
         );

@@ -74,15 +74,23 @@ namespace Antmicro.Renode.Peripherals.Video
                 {
                     for (int x = 0; x < Width; x++)
                     {
-                        if (((newbuf[(x + y * 44 * 8) / 8] >> (x % 8)) & 1) > 0)
+                        if ((devBoot) && (y == devBootLine) && ((x >> 1) & 2) != 0)
                         {
-                            buffer[2 * (x + y * Width)] = 0xFF;
-                            buffer[2 * (x + y * Width) + 1] = 0xFF;
+                            buffer[2 * (x + y * Width)] = 0x00;
+                            buffer[2 * (x + y * Width) + 1] = 0x00;
                         }
                         else
                         {
-                            buffer[2 * (x + y * Width)] = 0x0;
-                            buffer[2 * (x + y * Width) + 1] = 0x0;
+                            if (((newbuf[(x + y * 44 * 8) / 8] >> (x % 8)) & 1) > 0)
+                            {
+                                buffer[2 * (x + y * Width)] = 0xFF;
+                                buffer[2 * (x + y * Width) + 1] = 0xFF;
+                            }
+                            else
+                            {
+                                buffer[2 * (x + y * Width)] = 0x0;
+                                buffer[2 * (x + y * Width) + 1] = 0x0;
+                            }
                         }
                     }
                 }
@@ -105,8 +113,13 @@ namespace Antmicro.Renode.Peripherals.Video
             Registers.PRESCALER.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return 0; })
             ;
+            Registers.DEVBOOT.Define(this)
+                .WithFlag(0, name: "DEVBOOT", valueProviderCallback: _ => { return devBoot; }, changeCallback: (_, val) => { if (val) { devBoot = true; } })
+            ;
         }
 
+        private const int devBootLine = 12;
+        private bool devBoot = false;
         private bool updateDirty = false;
         private bool updateAll = false;
 
@@ -119,6 +132,7 @@ namespace Antmicro.Renode.Peripherals.Video
             COMMAND = 0x0,
             BUSY = 0x04,
             PRESCALER = 0x08,
+            DEVBOOT = 0x18,
         }
     }
 }

@@ -44,8 +44,8 @@ of wear leveling, however.
 + 2028_0000 |   Reserved for backup bitstream        |
 + 204F_FFFF |                                        |
 +-----------+----------------------------------------+
-+ 2050_0000 |   loader.bin - Xous loader             |
-+ 2050_FFFF |                                        |
++ 2050_0000 |  top 0x1000 is signature record        |
++ 2050_FFFF |  0x2050_1000: loader.bin - Xous loader |
 +-----------+----------------------------------------+
 + 2051_0000 |   Font planes                          |
 + 2097_FFFF |                                        |
