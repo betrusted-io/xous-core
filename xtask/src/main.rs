@@ -268,12 +268,14 @@ fn build_hw_image(
     } else {
         String::from("../devkey/dev.key")
     };
-    let kernelkey_file = if let Some(kkf) = kkey {
+    // placeholder for future signing of the kernel
+    let _kernelkey_file = if let Some(kkf) = kkey {
         kkf
     } else {
         String::from("../devkey/dev.key")
     };
-    /*
+    /* aborted effort to do signing in Rust -- config in xtask conflicts with config in kernel :-/
+    // use a python helper script instead
     let mut lkf = File::open(loaderkey_file)?;
     let mut lk_str = Vec::<u8>::new();
     lkf.read_to_end(&mut lk_str);
