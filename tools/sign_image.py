@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 import argparse
 import sys
-from Crypto.IO import PEM  # counter-intuitively, this is from pycryptodome: `pip3 install pycryptodome`
+from Crypto.IO import PEM  # counter-intuitively, this is from pycryptodome: `pip3 install pycryptodome` (ubuntu) `pip install pycryptodome` (maybe others?)
 from nacl.signing import SigningKey # from pynacl package: `pip3 install pynacl`
 from nacl.encoding import RawEncoder
 import os.path
