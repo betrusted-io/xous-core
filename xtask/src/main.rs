@@ -5,11 +5,6 @@ use std::{
     path::{Path, PathBuf, MAIN_SEPARATOR},
     process::Command,
 };
-/*
-extern crate ed25519_dalek;
-extern crate pem;
-use ed25519_dalek::{Keypair, Signature, PublicKey, PrivateKey};
-*/
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -268,20 +263,11 @@ fn build_hw_image(
     } else {
         String::from("../devkey/dev.key")
     };
-    // placeholder for future signing of the kernel
-    let _kernelkey_file = if let Some(kkf) = kkey {
+    let kernelkey_file = if let Some(kkf) = kkey {
         kkf
     } else {
         String::from("../devkey/dev.key")
     };
-    /* aborted effort to do signing in Rust -- config in xtask conflicts with config in kernel :-/
-    // use a python helper script instead
-    let mut lkf = File::open(loaderkey_file)?;
-    let mut lk_str = Vec::<u8>::new();
-    lkf.read_to_end(&mut lk_str);
-    let lk_pems = pem::parse(lk_str);
-    println!("lk_pems: {:?}", lk_pems);
-    */
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -327,7 +313,7 @@ fn build_hw_image(
     if !status.success() {
         return Err("cargo build failed".into());
     }
-    // sign_loader(loader_presign, loader_bin, loader_signing_key)?;
+
     let status = Command::new("python3")
         .current_dir(project_root().join("tools"))
         .args(&[
@@ -342,11 +328,12 @@ fn build_hw_image(
     if !status.success() {
         return Err("loader image sign failed".into())
     }
-    println!("Signed loader at {}", loader_bin.to_str().unwrap());
 
     let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
+    let mut xous_img_presign_path = xous_img_path.clone();
     xous_img_path.push("xous.img");
-    let mut xous_img = std::fs::File::create(&xous_img_path).expect("couldn't create xous.img");
+    xous_img_presign_path.push("xous_presign.img");
+    let mut xous_img = std::fs::File::create(&xous_img_presign_path).expect("couldn't create xous.img");
     let mut bundle_file = std::fs::File::open(output_bundle).expect("couldn't open output bundle");
     let mut buf = vec![];
     bundle_file
@@ -355,9 +342,26 @@ fn build_hw_image(
     xous_img
         .write_all(&buf)
         .expect("couldn't write bundle file to xous.img");
+    println!("Bundled image file created at {}", xous_img_path.display());
+
+    let status = Command::new("python3")
+    .current_dir(project_root().join("tools"))
+    .args(&[
+        "sign_image.py",
+        "--kernel-image",
+        xous_img_presign_path.to_str().unwrap(),
+        "--kernel-key",
+        kernelkey_file.as_str(),
+        "--kernel-output",
+        xous_img_path.to_str().unwrap(),
+    ]).status()?;
+    if !status.success() {
+        return Err("kernel image sign failed".into())
+    }
 
     println!();
-    println!("Bundled image file created at {}", xous_img_path.display());
+    println!("Signed loader at {}", loader_bin.to_str().unwrap());
+    println!("Signed kernel at {}", xous_img_path.to_str().unwrap());
 
     Ok(())
 }

@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-07-11 04:33:17]]></description>
+    <description><![CDATA[Litex SoC 2021-07-11 19:07:33]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1499,14 +1499,32 @@ register to disable individual events.]]></description>
                             <bitRange>[0:0]</bitRange>
                             <lsb>0</lsb>
                             <description><![CDATA[When set to ``1``, permanently add a strike-through on the top of the screen.
-Cannot be cleared, except by a full reset.]]></description>
+Cannot be cleared, except by a full reset. Do not rely on this register to
+determine if a devboot has happened; the *register* may be cleared, but the
+internal hardware bit cannot be.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>DEVSTATUS</name>
+                    <description><![CDATA[Reads back as ``1`` if a devboot was set anywhere along the boot chain. This is
+a read-only register and reflects ground truth.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>devstatus</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
                         </field>
                     </fields>
                 </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x1c</size>
+                <size>0x20</size>
                 <usage>registers</usage>
             </addressBlock>
         </peripheral>
@@ -3467,7 +3485,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x657b4b20</resetValue>
+                    <resetValue>0x6a195bb8</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3482,7 +3500,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x4ba4def0</resetValue>
+                    <resetValue>0xde8898d</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

@@ -43,7 +43,8 @@ mod debug;
 
 mod fonts;
 
-use ed25519_dalek::*;
+mod secboot;
+use secboot::SIGBLOCK_SIZE;
 
 // Install a panic handler when not running tests.
 #[cfg(not(test))]
@@ -1065,7 +1066,21 @@ pub fn copy_args(cfg: &mut BootConfig) {
 ///
 /// This function is safe to call exactly once.
 #[export_name = "rust_entry"]
-pub unsafe extern "C" fn rust_entry(arg_buffer: *const usize, signature: u32) -> ! {
+pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32) -> ! {
+    // initially validate the whole image on disk (including kernel args)
+    // kernel args must be validated because tampering with them can change critical assumptions about
+    // how data is loaded into memory
+    if !secboot::validate_xous_img(signed_buffer as *const u32) {
+        loop {}
+    };
+    // the kernel arg buffer is SIG_BLOCK_SIZE into the signed region
+    let arg_buffer = (signed_buffer as u32 + SIGBLOCK_SIZE as u32) as *const usize;
+
+    // perhaps later on in these sequences, individual sub-images may be validated
+    // against sub-signatures; or the images may need to be re-validated after loading
+    // into RAM, if we have concerns about RAM glitching as an attack surface (I don't think we do...).
+    // But for now, the basic "validate everything as a blob" is perhaps good enough to
+    // armor code-at-rest against front-line patching attacks.
     let kab = KernelArguments::new(arg_buffer);
     boot_sequence(kab, signature);
 }

@@ -11,13 +11,13 @@ import os.path
 import binascii
 
 DEVKEY_PATH='../devkey/dev.key'
-LOADER_VERSION=1
+SIGNER_VERSION=1
 
-def loader_sign(source, output, key, defile=False):
-    global LOADER_VERSION
+def blob_sign(source, output, key, defile=False):
+    global SIGNER_VERSION
     with open(source, "rb") as source_f:
         source = list(source_f.read())
-        source += int(LOADER_VERSION).to_bytes(4, 'little') # protect the version number
+        source += int(SIGNER_VERSION).to_bytes(4, 'little') # protect the version number
         source += len(source).to_bytes(4, 'little') # append the length to the image, and sign that
 
         # NOTE NOTE NOTE
@@ -28,13 +28,13 @@ def loader_sign(source, output, key, defile=False):
 
         with open(output, "wb") as output_f:
             written = 0
-            written += output_f.write(int(LOADER_VERSION).to_bytes(4, 'little')) # version number record - mirrored inside the signed data, too
+            written += output_f.write(int(SIGNER_VERSION).to_bytes(4, 'little')) # version number record - mirrored inside the signed data, too
             written += output_f.write(len(source).to_bytes(4, 'little')) # record the length of the final signed record (which /also/ includes a length)
             written += output_f.write(signature.signature)
             output_f.write(bytearray([0] * (4096 - written))) # pad out to one page beyond
             message = bytearray(signature.message)
             if defile is True:
-                print("WARNING: defiling the loader image. This corrupts the binary and should cause it to fail the signature check.")
+                print("WARNING: defiling the image. This corrupts the binary and should cause it to fail the signature check.")
                 message[16778] ^= 0x1 # flip one bit at some random offset
             output_f.write(message) # the actual signed message
 
@@ -56,6 +56,9 @@ def main():
     )
     parser.add_argument(
         "--loader-output", required=False, help="loader output image", type=str, nargs='?', metavar=('loader output image'),  const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
+    )
+    parser.add_argument(
+        "--kernel-output", required=False, help="kernel output image", type=str, nargs='?', metavar=('kernel output image'),  const='../target/riscv32imac-unknown-none-elf/release/xous.img'
     )
     parser.add_argument(
         "--defile", help="patch the resulting image, to create a test file to catch signature failure", default=False, action="store_true"
@@ -91,22 +94,26 @@ def main():
         loader_pkey = None
 
     if loader_pkey != None:
-        loader_sign(args.loader_image, loader_output, loader_pkey, defile=args.defile)
+        blob_sign(args.loader_image, loader_output, loader_pkey, defile=args.defile)
 
-
-
-
+    # for now, the kernel signing path is just signing a blob that is the overall binary
+    # however, there is some aspiration to sign individual binaries, and to incorporate
+    # signatures into the kernel tags. leave this path separate so there's an on-ramp
+    # to add these features
     if args.kernel_image and (args.kernel_key is None):
         kernel_key = DEVKEY_PATH
     else:
         kernel_key = args.kernel_key
+    if args.kernel_image and (args.kernel_output is None):
+        kernel_output = '../target/riscv32imac-unknown-none-elf/release/xous.img'
+    else:
+        kernel_output = args.kernel_output
 
     if kernel_key is not None and kernel_key is not DEVKEY_PATH:
-        kernel_pass = input("Enter loader key passphrase, enter if none: ")
         with open(kernel_key) as kernel_f:
             kernel_pem = kernel_f.read()
             try:
-                pem = PEM.decode(kernel_pem, kernel_pass)
+                pem = PEM.decode(kernel_pem, None)
             except:
                 passphrase = input("Enter kernel key passphrase: ")
                 pem = PEM.decode(kernel_pem, passphrase)
@@ -117,6 +124,9 @@ def main():
                 exit(1)
     else:
         kernel_pkey = None
+
+    if kernel_pkey != None:
+        blob_sign(args.kernel_image, kernel_output, kernel_pkey, defile=args.defile)
 
 if __name__ == "__main__":
     main()
