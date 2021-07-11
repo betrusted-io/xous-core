@@ -2,6 +2,8 @@
 import argparse
 import sys
 from Crypto.IO import PEM  # counter-intuitively, this is from pycryptodome: `pip3 install pycryptodome` (ubuntu) `pip install pycryptodome` (maybe others?)
+# note: if you did the sensible thing and tried to install the crypto or pycrypto libraries first when you hit this error
+# you have to uninstall those before putting in pycryptodome.
 from nacl.signing import SigningKey # from pynacl package: `pip3 install pynacl`
 from nacl.encoding import RawEncoder
 import os.path
