@@ -25,8 +25,8 @@ lazy_static = "1.4.0"
 [features]
 debug-print = []
 earlyprintk = []
-default = ["debug-print"]
-#default = []
+#default = ["debug-print"]
+default = []
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations

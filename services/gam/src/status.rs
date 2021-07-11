@@ -131,7 +131,8 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     let llio = llio::Llio::new(&xns).unwrap();
 
     log::debug!("usb unlock notice...");
-    let mut debug_unlocked = llio.debug_usb_unlocked().unwrap();
+    let (dl, _) = llio.debug_usb(None).unwrap();
+    let mut debug_locked = dl;
     // build security status textview
     let mut security_tv = TextView::new(status_gid,
         TextBounds::BoundingBox(Rectangle::new(Point::new(0,screensize.y / 2),
@@ -182,13 +183,14 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 needs_redraw = true;
             }),
             Some(StatusOpcode::Pump) => {
-                if debug_unlocked != llio.debug_usb_unlocked().unwrap() {
-                    debug_unlocked = llio.debug_usb_unlocked().unwrap();
+                let (is_locked, force_update) = llio.debug_usb(None).unwrap();
+                if (debug_locked != is_locked) || force_update {
+                    debug_locked = is_locked;
                     security_tv.clear_str();
-                    if debug_unlocked {
-                        write!(&mut security_tv, " USB unlocked").unwrap();
-                    } else {
+                    if debug_locked {
                         write!(&mut security_tv, " USB secured").unwrap();
+                    } else {
+                        write!(&mut security_tv, " USB unlocked").unwrap();
                     }
                     // only post the view if something has actually changed
                     gam.post_textview(&mut security_tv).unwrap();

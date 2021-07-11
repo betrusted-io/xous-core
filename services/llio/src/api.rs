@@ -171,13 +171,13 @@ pub(crate) enum Opcode {
     GpioIntAsFalling, //(u32),
     GpioIntPending,
     GpioIntEna, //(u32),
-    GpioIntSubscribe, //(String<64>), // TODO
+    GpioIntSubscribe, //(String<64>), //
     GpioIntHappened,
 
     /// set UART mux
     UartMux, //(UartType),
 
-    //TODO InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
+    // InfoLitexId, //(String<64>), // TODO: returns the ASCII string baked into the FPGA that describes the FPGA build, inside Registration
     InfoDna,
     InfoGit,
     InfoPlatform,
@@ -225,6 +225,9 @@ pub(crate) enum Opcode {
     EventComHappened,
     EventRtcHappened,
     EventUsbHappened,
+
+    /// debug USB status
+    DebugUsbOp,
 
     /// SuspendResume callback
     SuspendResume,
