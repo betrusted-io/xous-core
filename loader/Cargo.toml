@@ -8,10 +8,18 @@ description = "Initial kernel loader for Xous"
 [dependencies]
 utralib = {path = "../utralib"}
 
+[dependencies.com_rs]
+git="https://github.com/betrusted-io/com_rs"
+branch="main"
+
 [dependencies.curve25519-dalek]
+git="https://github.com/betrusted-io/curve25519-dalek.git"
+branch="main"
+#path = "../../curve25519-dalek"
+package = "curve25519-dalek"
 version = "3.1.0"
 default-features = false
-features = ["u32_backend"]
+features = ["u32e_backend"]
 
 [dependencies.ed25519-dalek]
 version="1.0.1"
@@ -35,3 +43,12 @@ lto = "fat"
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
 utralib = { path = "../utralib"}
+
+# patch key references into our local name space
+[patch.crates-io.sha2]
+path = "./sha2"
+package = "sha2"
+default-features = false
+
+[patch.crates-io.utralib]
+path = "../utralib"

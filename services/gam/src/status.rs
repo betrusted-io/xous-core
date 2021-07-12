@@ -242,7 +242,8 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                         });
                     }
                 }
-                if (stats_phase % stats_interval == 0) && ((stats_phase % (stats_interval * 2)) == stats_interval) && datetime.is_some() {
+                // date/time only redraws once every stats_interval period; but if needs_redraw is triggered (e.g. due to resume), force a redraw
+                if (needs_redraw || ((stats_phase % stats_interval == 0) && ((stats_phase % (stats_interval * 2)) == stats_interval))) && datetime.is_some() {
                     let dt = datetime.unwrap();
                     let day = match dt.weekday {
                         rtc::Weekday::Monday => "Mon",

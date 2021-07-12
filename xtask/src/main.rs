@@ -354,6 +354,7 @@ fn build_hw_image(
         kernelkey_file.as_str(),
         "--kernel-output",
         xous_img_path.to_str().unwrap(),
+        // "--defile",
     ]).status()?;
     if !status.success() {
         return Err("kernel image sign failed".into())

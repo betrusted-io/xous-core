@@ -1,19 +1,11 @@
-#![cfg_attr(target_os = "none", no_std)]
-#![cfg_attr(target_os = "none", no_main)]
-
-#![allow(unreachable_code)] // allow debugging of failures to jump out of the bootloader
+use crate::println;
 
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 
 const VERSION_STR: &'static str = "Xous OS Loader v0.9.0\n\r";
 
-////// TODO: derive this from boot args
-const KERNEL_DATA_OFFSET: u32 = 0x2098_1000;
-const KERNEL_SIG_OFFSET: u32 = 0x2098_0000;
-
-
-const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
-const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
+pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
+pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
 
 use utralib::generated::*;
 
@@ -52,6 +44,7 @@ impl<'a> Gfx {
     pub fn init(&mut self, clk_mhz: u32) {
         self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
+    #[allow(dead_code)]
     pub fn update_all(&mut self) {
         self.csr.wfo(utra::memlcd::COMMAND_UPDATEALL, 1);
     }
@@ -63,6 +56,14 @@ impl<'a> Gfx {
             true
         } else {
             false
+        }
+    }
+    pub fn flush(&mut self) {
+        self.update_dirty();
+        while self.busy() {}
+        // clear the dirty bits
+        for lines in 0..FB_LINES {
+            self.fb[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] &= 0x0000_FFFF;
         }
     }
     pub fn set_devboot(&mut self) {
@@ -169,8 +170,7 @@ impl<'a> Gfx {
             }
         }
         pos.x += x_update;
-        self.update_dirty();
-        while self.busy() {}
+        self.flush();
     }
     pub fn draw_pixel(&mut self, pix: Point, color: Color) {
         let mut clip_y: usize = pix.y as usize;
@@ -242,6 +242,134 @@ impl Keyrom {
 
 // returns true if the kernel is valid
 // side-effects the "devboot" register in the gfx engine if devkeys were detected
-pub fn validate_xous_img(_xous_img_offset: *const u32) -> bool {
+pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
+    // conjure the signature struct directly out of memory. super unsafe.
+    let sig_ptr = xous_img_offset as *const SignatureInFlash;
+    let sig: &SignatureInFlash = unsafe{sig_ptr.as_ref().unwrap()};
+    let mut cursor = Point {x: LEFT_MARGIN, y: (FB_LINES as i16 / 2) + 10}; // draw on bottom half
+
+    // clear screen to all black
+    let mut gfx = Gfx {
+        csr: CSR::new(utra::memlcd::HW_MEMLCD_BASE as *mut u32),
+        fb: unsafe{core::slice::from_raw_parts_mut(utralib::HW_MEMLCD_MEM as *mut u32, FB_SIZE)},
+    };
+    gfx.init(100_000_000);
+
+    // extract the second half of the frame buffer with .chunks_mut(len()/2).skip(1).next().unwrap()
+    // then iterate through each word, along with an index .iter_mut().enumerate()
+    // then insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
+    // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every other bit
+    for (i, word) in
+    gfx.fb.chunks_mut(gfx.fb.len() / 2).skip(1).next().unwrap()
+    .iter_mut().enumerate() {
+        if i % 2 == 0 {
+            *word = 0xAAAA_AAAA;
+        } else {
+            *word = 0x5555_5555;
+        }
+    }
+    gfx.flush();
+
+    // now characters should actually be able to print
+    gfx.msg(VERSION_STR, &mut cursor);
+    println!("{}", VERSION_STR);
+
+    // init the curve25519 engine
+    let mut engine = utralib::CSR::new(utra::engine::HW_ENGINE_BASE as *mut u32);
+    engine.wfo(utra::engine::POWER_ON, 1);
+    engine.wfo(utra::engine::WINDOW_WINDOW, 0);
+    engine.wfo(utra::engine::MPSTART_MPSTART, 0);
+
+    // select the public key
+    let mut keyrom = Keyrom::new();
+    let keyloc =
+        if !keyrom.key_is_zero(KeyLoc::SelfSignPub) { // self-signing key takes priority
+            if keyrom.key_is_dev(KeyLoc::SelfSignPub) {
+                println!("Self-signed key slot, but with developer public key.");
+                gfx.msg("DEVELOPER KEY DETECTED\n\r", &mut cursor);
+                gfx.set_devboot();
+            }
+            println!("Using self-signed public key");
+            KeyLoc::SelfSignPub
+        } else if !keyrom.key_is_zero(KeyLoc::ThirdPartyPub) { // third party key is second in line
+            if keyrom.key_is_dev(KeyLoc::ThirdPartyPub) {
+                println!("Third party public key slot, but with developer public key.");
+                gfx.msg("DEVELOPER KEY DETECTED\n\r", &mut cursor);
+                gfx.set_devboot();
+            }
+            println!("Using third-party public key");
+            KeyLoc::ThirdPartyPub
+        } else {
+            if keyrom.key_is_zero(KeyLoc::DevPub) {
+                gfx.msg("Can't boot: No valid keys!", &mut cursor);
+                loop {}
+            }
+            gfx.msg("DEVELOPER KEY DETECTED\n\r", &mut cursor);
+            println!("Using developer public key");
+            gfx.set_devboot();
+            KeyLoc::DevPub
+        };
+    let pubkey = keyrom.read_ed25519(keyloc);
+
+    println!("Public key bytes: {:x?}", pubkey.as_bytes());
+
+    if sig.version != 1 {
+        println!("Warning: mismatch on signature record version numbering. Ignoring and moving on...")
+    }
+    let signed_len = sig.signed_len;
+    let image: &[u8] = unsafe{core::slice::from_raw_parts((xous_img_offset as usize + SIGBLOCK_SIZE) as *const u8, signed_len as usize)};
+    let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
+
+    use ed25519_dalek::Verifier;
+    if pubkey.verify(image, &ed25519_signature).is_ok() {
+        gfx.msg("Signature check passed\n\r", &mut cursor);
+        println!("Signature check passed");
+    } else {
+        gfx.msg("Signature check failed, powering down\n\r", &mut cursor);
+        println!("Signature check failed");
+        let ticktimer = CSR::new(utra::ticktimer::HW_TICKTIMER_BASE as *mut u32);
+        let mut power = CSR::new(utra::power::HW_POWER_BASE as *mut u32);
+        let mut com = CSR::new(utra::com::HW_COM_BASE as *mut u32);
+        let mut start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+        loop {
+            // every 15 seconds, attempt to send a power down command
+            // any attempt to re-flash the system must halt the CPU before we time-out to this point!
+            if ticktimer.rf(utra::ticktimer::TIME0_TIME) - start > 15_000 {
+                println!("Powering down...");
+                power.rmwf(utra::power::POWER_STATE, 0);
+                power.rmwf(utra::power::POWER_SELF, 0);
+
+                // ship mode is the safest mode -- suitable for long-term storage (~years)
+                com.wfo(utra::com::TX_TX, com_rs::ComState::POWER_SHIPMODE.verb as u32);
+                while com.rf(utra::com::STATUS_TIP) == 1 {}
+                let _ = com.rf(utra::com::RX_RX); // discard the RX result
+                start = ticktimer.rf(utra::ticktimer::TIME0_TIME);
+            }
+        }
+    }
+
+    // check the stack usage
+    let stack: &[u32] = unsafe{core::slice::from_raw_parts(STACK_TOP as *const u32, (STACK_LEN as usize / core::mem::size_of::<u32>()) as usize)};
+    let mut unused_stack_words = 0;
+    for &word in stack.iter() {
+        if word != 0xACE0BACE {
+            break;
+        }
+        unused_stack_words += 1;
+    }
+    println!("Free stack after signature check: {} bytes", unused_stack_words * 4);
+    gfx.msg("Free stack after sigcheck: 0x", &mut cursor);
+    gfx.hex_word(unused_stack_words * 4, &mut cursor);
+
+    gfx.msg("\n\r\n\rLoading kernel...\n\r", &mut cursor);
+    println!("Everything checks out, loading to kernel...");
+
+    let mut sha_csr = CSR::new(utra::sha512::HW_SHA512_BASE as *mut u32);
+    sha_csr.wfo(utra::sha512::POWER_ON, 0); // cut power to the SHA block; this is the expected default state after the bootloader is done.
+    let mut engine_csr = CSR::new(utra::engine::HW_ENGINE_BASE as *mut u32);
+    engine_csr.wfo(utra::engine::POWER_ON, 0); // cut power to the engine block; this is the expected default state after the bootloader is done.
+    // note that removing power does *not* clear the RF or microcode state -- data can leak from the bootloader
+    // into other areas because of this! (but I think it's OK because we just mess around with public keys here)
+
     true
 }

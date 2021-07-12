@@ -1180,6 +1180,8 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     // where in heap this memory will go.
     #[allow(clippy::cast_ptr_alignment)] // This test only works on 32-bit systems
     if false {
+        // note: memtest is "destructive" -- can't do a resume after suspend with memtest enabled
+        // use this mainly to trace down e.g. hardware issues with timing to the RAM.
         memtest();
     }
     let mut cfg = BootConfig {

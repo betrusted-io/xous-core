@@ -5,7 +5,7 @@ MEMORY
   MEMLCD: ORIGIN = 0xB0000000, LENGTH = 32k
 }
 /*
-Fonts go from 0x2051_0000 to 0x2098_0000
+Fonts go from 0x2052_0000 to 0x2098_0000
 */
 
 REGION_ALIAS("REGION_TEXT", FLASH);
@@ -90,7 +90,7 @@ SECTIONS
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
 
-  .fonts ALIGN(65536) : SUBALIGN(65536)
+  .fonts ALIGN(131072) : SUBALIGN(131072)
   {
       KEEP(*(.fontdata));
   } > REGION_RODATA

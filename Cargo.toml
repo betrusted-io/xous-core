@@ -78,8 +78,8 @@ resolver = "2"
 # Keep them out of the main workspace.
 exclude = [
   "kernel",
-  "loader", # Exclude UTRA, since it is machine-generated.
-  "utralib",
+  "loader",
+  "utralib",  # Exclude UTRA, since it is machine-generated.
 ]
 
 [profile.release]

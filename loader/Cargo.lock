@@ -48,12 +48,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "cfg-if"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
 name = "clap"
 version = "2.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,19 +63,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "com_rs"
+version = "0.1.0"
+source = "git+https://github.com/betrusted-io/com_rs?branch=main#4b45a42ad2d932550566d6c32ec1e1dd60e93c67"
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "cpufeatures"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66c99696f6c9dd7f35d486b9d04d7e6e202aa3e8c40d553f2fdf5e7e0c6a71ef"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "curve25519-dalek"
@@ -93,6 +83,20 @@ dependencies = [
  "digest",
  "rand_core",
  "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek"
+version = "3.1.0"
+source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#c0ee5bf18c606b51bbffb02fde5801ac129b4e7d"
+dependencies = [
+ "byteorder",
+ "digest",
+ "engine25519-as",
+ "rand_core",
+ "subtle",
+ "utralib",
  "zeroize",
 ]
 
@@ -120,11 +124,16 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ed25519",
  "sha2",
  "zeroize",
 ]
+
+[[package]]
+name = "engine25519-as"
+version = "0.1.0"
+source = "git+https://github.com/betrusted-io/engine25519-as.git?rev=6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3#6681e73c1fdc4a460b5ef9f9c7c91aef546d00f3"
 
 [[package]]
 name = "generic-array"
@@ -161,7 +170,8 @@ checksum = "12b8adadd720df158f4d70dfe7ccc6adb0472d7c55ca83445f6a5ab3e36f8fb6"
 name = "loader"
 version = "0.1.0"
 dependencies = [
- "curve25519-dalek",
+ "com_rs",
+ "curve25519-dalek 3.1.0 (git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main)",
  "ed25519-dalek",
  "lazy_static",
  "utralib",
@@ -215,14 +225,11 @@ checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
 [[package]]
 name = "sha2"
 version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b362ae5752fd2137731f9fa25fd4d9058af34666ca1966fb969119cc35719f12"
 dependencies = [
  "block-buffer",
- "cfg-if",
- "cpufeatures",
  "digest",
  "opaque-debug",
+ "utralib",
 ]
 
 [[package]]
