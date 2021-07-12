@@ -2,7 +2,9 @@ use crate::println;
 
 pub const SIGBLOCK_SIZE: usize = 0x1000;
 
-const VERSION_STR: &'static str = "Xous OS Loader v0.9.0\n\r";
+const VERSION_STR: &'static str = "Xous OS Loader v0.9.1\n\r";
+// v0.9.0 -- initial version
+// v0.9.1 -- booting with hw acceleration, and "simplest signature" check on the entire xous.img blob
 
 pub const STACK_LEN: u32 = 8192 - (7 * 4); // 7 words for backup kernel args
 pub const STACK_TOP: u32 = 0x4100_0000 - STACK_LEN;
@@ -243,6 +245,11 @@ impl Keyrom {
 // returns true if the kernel is valid
 // side-effects the "devboot" register in the gfx engine if devkeys were detected
 pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
+    // reset the SHA block, in case we're coming out of a warm reset
+    let mut sha = CSR::new(utra::sha512::HW_SHA512_BASE as *mut u32);
+    sha.wfo(utra::sha512::POWER_ON, 1);
+    sha.wfo(utra::sha512::CONFIG_RESET, 1); // this reset takes ~32 CPU cycles before we can use the SHA block. not a problem.
+
     // conjure the signature struct directly out of memory. super unsafe.
     let sig_ptr = xous_img_offset as *const SignatureInFlash;
     let sig: &SignatureInFlash = unsafe{sig_ptr.as_ref().unwrap()};
@@ -255,13 +262,10 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
     };
     gfx.init(100_000_000);
 
-    // extract the second half of the frame buffer with .chunks_mut(len()/2).skip(1).next().unwrap()
-    // then iterate through each word, along with an index .iter_mut().enumerate()
-    // then insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
+    // insert a pattern of alternating 0101/1010 to create a "gray effect" on the bottom half of the fb
     // note that the gray has "stripes" every 32 bits but it's visually easier to look at than stripes every other bit
-    for (i, word) in
-    gfx.fb.chunks_mut(gfx.fb.len() / 2).skip(1).next().unwrap()
-    .iter_mut().enumerate() {
+    let (_top, bottom) = gfx.fb.split_at_mut(gfx.fb.len() / 2);
+    for (i, word) in bottom.iter_mut().enumerate() {
         if i % 2 == 0 {
             *word = 0xAAAA_AAAA;
         } else {

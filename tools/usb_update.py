@@ -382,6 +382,9 @@ def main():
     parser.add_argument(
         "-f", "--force", help="Ignore gitrev version on SoC and try to burn an image anyways", action="store_true"
     )
+    parser.add_argument(
+        "--bounce", help="cycle the device through a reset", action="store_true"
+    )
     args = parser.parse_args()
 
     if not len(sys.argv) > 1:

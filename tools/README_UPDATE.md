@@ -58,8 +58,8 @@ The updater encodes the offsets of every binary location in the script. When the
 then the updater script should no longer be used for a given Precursor revision.
 
 ```
-usage: usb_update.py [-h] [-s [SoC gateware file]] [-l [loader file]] [-k [kernel file]] [-e [EC gateware package]]
-                     [-w [WF200 firmware package]] [--peek ADDR] [--poke ADDR DATA] [--check-poke] [--config]
+usage: usb_update.py [-h] [-s [SoC gateware file]] [-l [loader file]] [-k [kernel file]] [-e [EC gateware package]] [-w [WF200 firmware package]] [--audiotest [Test audio clip]] [--peek ADDR] [--poke ADDR DATA] [--check-poke]
+                     [--config] [-i IMAGEFILE ADDR] [-n] [-f] [--bounce]
 
 Update/upload to a Precursor device running Xous 0.8/0.9
 
@@ -75,10 +75,17 @@ optional arguments:
                         EC gateware
   -w [WF200 firmware package], --wf200 [WF200 firmware package]
                         WF200 firmware
+  --audiotest [Test audio clip]
+                        Test audio clip (must be 8kHz WAV)
   --peek ADDR           Inspect an address
   --poke ADDR DATA      Write to an address
   --check-poke          Read data before and after the poke
   --config              Print the descriptor
+  -i IMAGEFILE ADDR, --image IMAGEFILE ADDR
+                        Manually specify an image and address. Offset is relative to bottom of flash.
+  -n, --no-verify       Skip readback verification (may be necessary for large files to avoid WDT timeout). Only honored with -i.
+  -f, --force           Ignore gitrev version on SoC and try to burn an image anyways
+  --bounce              cycle the device through a reset
 ```
 
 You can try reading the first word out of the ROM to see if `usb_update.py` is working correctly.

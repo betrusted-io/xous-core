@@ -206,6 +206,7 @@ mod implementation {
             xl.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
             xl.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
             xl.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::USBDISABLE), None);
 
             xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
             xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
@@ -446,6 +447,20 @@ mod implementation {
             let value = if ena {1} else {0};
             self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
         }
+        pub fn get_usb_disable(&self) -> bool {
+            if self.gpio_csr.rf(utra::gpio::USBDISABLE_USBDISABLE) != 0 {
+                true
+            } else {
+                false
+            }
+        }
+        pub fn set_usb_disable(&mut self, state: bool) {
+            if state {
+                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 1);
+            } else {
+                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 0);
+            }
+        }
     }
 }
 
@@ -538,6 +553,13 @@ mod implementation {
         }
         pub fn wfi_override(&mut self, _override_: bool) {
         }
+
+        pub fn get_usb_disable(&self) -> bool {
+            false
+        }
+        pub fn set_usb_disable(&mut self, _state: bool) {
+        }
+
     }
 }
 
@@ -861,15 +883,23 @@ fn xmain() -> ! {
                 log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
                 xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
             }),
-            Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, _new_state, _, _, {
+            Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
                 if update_req != 0 {
-                    // do something with new_state: this has yet to be implemented
-                    // if new_state is true, then try to lock the USB port
+                    // if new_state is true (not 0), then try to lock the USB port
                     // if false, try to unlock the USB port
+                    if new_state != 0 {
+                        llio.set_usb_disable(true);
+                    } else {
+                        llio.set_usb_disable(false);
+                    }
                 }
                 // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
                 // a real hardware value and not the requested value. for now, always false.
-                let is_locked = 0; // for now, always 0
+                let is_locked = if llio.get_usb_disable() {
+                    1
+                } else {
+                    0
+                };
 
                 // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
                 // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,

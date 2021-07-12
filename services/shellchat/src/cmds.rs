@@ -96,6 +96,7 @@ mod trng_cmd; use trng_cmd::*;
 mod engine;   use engine::*;
 mod console;  use console::*;
 mod memtest;  use memtest::*;
+mod keys;     use keys::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -119,6 +120,7 @@ pub struct CmdEnv {
     trng_cmd: TrngCmd,
     engine_cmd: Engine,
     memtest_cmd: Memtest,
+    keys_cmd: Keys,
 
     //fcc_cmd: Fcc,
 }
@@ -169,6 +171,7 @@ impl CmdEnv {
             trng_cmd: TrngCmd::new(),
             engine_cmd: engine,
             memtest_cmd: memtest,
+            keys_cmd: Keys::new(),
 
             //fcc_cmd: fcc,
         }
@@ -203,6 +206,7 @@ impl CmdEnv {
             &mut self.engine_cmd,
             &mut console_cmd,
             &mut self.memtest_cmd,
+            &mut self.keys_cmd,
 
             //&mut self.fcc_cmd,
         ];

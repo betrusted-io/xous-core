@@ -32,6 +32,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "devboot on").unwrap();
                 }
                 "devbootoff" => {
+                    // this should do nothing if devboot was already set
                     env.gam.set_devboot(false).unwrap();
                     write!(ret, "devboot off").unwrap();
                 }

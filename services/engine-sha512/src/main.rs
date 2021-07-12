@@ -65,7 +65,7 @@ mod implementation {
             .expect("couldn't map Engine512 CSR range");
 
             #[cfg(not(feature = "event_wait"))]
-            let engine512 = Engine512 {
+            let mut engine512 = Engine512 {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 fifo,
             };
@@ -87,6 +87,13 @@ mod implementation {
                 // instead, we rely on every usage of this mechanism to explicitly set this enable bit before relying upon it
                 engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
             }
+            // reset the block on boot
+            // we don't save this as part of the susres set because
+            // on a "proper" resume, the block was already reset by the secure boot process
+            // the code path where this really becomes necessary is if we have a WDT reset or
+            // some sort of server-restart.
+            engine512.csr.wfo(utra::sha512::CONFIG_RESET, 1); // takes ~32 cycles to complete
+
             engine512
         }
 
@@ -206,33 +213,10 @@ mod implementation {
 
         pub(crate) fn reset(&mut self) {
             self.csr.wfo(utra::sha512::POWER_ON, 1);
-            if self.csr.rf(utra::sha512::FIFO_RUNNING) != 0 {
-                // if it's running, call digest, then reset
-                let sha = self.fifo.as_mut_ptr() as *mut u32;
-                unsafe { sha.write_volatile(0x0); } // stuff a dummy byte, in case the hash was empty
-                #[cfg(feature = "event_wait")]
-                {
-                    engine512.csr.wfo(utra::sha512::EV_ENABLE_SHA512_DONE, 1);
-                    self.done = false;
-                    self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
-                    while !self.done {
-                        log::trace!("waiting for sha512_done (reset)");
-                        xous::wait_event();
-                    }
-                    log::trace!("moving on (reset)");
-                }
-                #[cfg(not(feature = "event_wait"))]
-                {
-                    self.csr.wfo(utra::sha512::COMMAND_HASH_PROCESS, 1);
-                    while self.csr.rf(utra::sha512::EV_PENDING_SHA512_DONE) == 0 {
-                        xous::yield_slice();
-                    }
-                }
-            } else {
-                // engine is already stopped, just clear the pending bits and reset the config
-            }
+            self.csr.wfo(utra::sha512::CONFIG_RESET, 1);
             self.csr.wfo(utra::sha512::EV_PENDING_SHA512_DONE, 1);
             self.csr.wo(utra::sha512::CONFIG, 0);  // clear all config bits, including EN, which resets the unit
+            while self.csr.rf(utra::sha512::FIFO_RESET_STATUS) == 1 { } // wait for the reset block to finish, if it's not already done by now
             self.csr.wfo(utra::sha512::POWER_ON, 0);
         }
 
