@@ -206,6 +206,7 @@ mod implementation {
             xl.gpio_susres.push_fixed_value(RegOrField::Reg(utra::gpio::EV_PENDING), 0xFFFF_FFFF);
             xl.gpio_susres.push(RegOrField::Reg(utra::gpio::EV_ENABLE), None);
             xl.gpio_susres.push(RegOrField::Field(utra::gpio::UARTSEL_UARTSEL), None);
+            xl.gpio_susres.push(RegOrField::Reg(utra::gpio::USBDISABLE), None);
 
             xl.event_susres.push_fixed_value(RegOrField::Reg(utra::btevents::EV_PENDING), 0xFFFF_FFFF);
             xl.event_susres.push(RegOrField::Reg(utra::btevents::EV_ENABLE), None);
@@ -446,6 +447,20 @@ mod implementation {
             let value = if ena {1} else {0};
             self.power_csr.rmwf(utra::power::EV_PENDING_USB_ATTACH, value);
         }
+        pub fn get_usb_disable(&self) -> bool {
+            if self.gpio_csr.rf(utra::gpio::USBDISABLE_USBDISABLE) != 0 {
+                true
+            } else {
+                false
+            }
+        }
+        pub fn set_usb_disable(&mut self, state: bool) {
+            if state {
+                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 1);
+            } else {
+                self.gpio_csr.wfo(utra::gpio::USBDISABLE_USBDISABLE, 0);
+            }
+        }
     }
 }
 
@@ -538,6 +553,13 @@ mod implementation {
         }
         pub fn wfi_override(&mut self, _override_: bool) {
         }
+
+        pub fn get_usb_disable(&self) -> bool {
+            false
+        }
+        pub fn set_usb_disable(&mut self, _state: bool) {
+        }
+
     }
 }
 
@@ -643,6 +665,8 @@ fn xmain() -> ! {
     let mut rtc_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     let mut gpio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
 
+    let mut lockstatus_force_update = true; // some state to track if we've been through a susupend/resume, to help out the status thread with its UX update after a restart-from-cold
+
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(llio_sid).unwrap();
@@ -652,6 +676,7 @@ fn xmain() -> ! {
                 llio.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 llio.resume();
+                lockstatus_force_update = true; // notify the status bar that yes, it does need to redraw the lock status, even if the value hasn't changed since the last read
             }),
             Some(Opcode::CrgMode) => msg_scalar_unpack!(msg, _mode, _, _, _, {
                 todo!("CrgMode opcode not yet implemented.");
@@ -857,6 +882,36 @@ fn xmain() -> ! {
                 let period = llio.activity_get_period() as u32;
                 log::debug!("activity/period: {}/{}, {:.2}%", latest_activity, period, (latest_activity as f32 / period as f32) * 100.0);
                 xous::return_scalar2(msg.sender, latest_activity as usize, period as usize).expect("couldn't return activity");
+            }),
+            Some(Opcode::DebugUsbOp) => msg_blocking_scalar_unpack!(msg, update_req, new_state, _, _, {
+                if update_req != 0 {
+                    // if new_state is true (not 0), then try to lock the USB port
+                    // if false, try to unlock the USB port
+                    if new_state != 0 {
+                        llio.set_usb_disable(true);
+                    } else {
+                        llio.set_usb_disable(false);
+                    }
+                }
+                // at this point, *read back* the new state -- don't assume it "took". The readback is always based on
+                // a real hardware value and not the requested value. for now, always false.
+                let is_locked = if llio.get_usb_disable() {
+                    1
+                } else {
+                    0
+                };
+
+                // this is a performance optimization. we could always redraw the status, but, instead we only redraw when
+                // the status has changed. However, there is an edge case: on a resume from suspend, the status needs a redraw,
+                // even if nothing has changed. Thus, we have this separate boolean we send back to force an update in the
+                // case that we have just come out of a suspend.
+                let force_update = if lockstatus_force_update {
+                    1
+                } else {
+                    0
+                };
+                xous::return_scalar2(msg.sender, is_locked, force_update).expect("couldn't return status");
+                lockstatus_force_update = false;
             }),
             Some(Opcode::Quit) => {
                 log::info!("Received quit opcode, exiting.");
