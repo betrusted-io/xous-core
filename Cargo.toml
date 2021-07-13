@@ -28,6 +28,7 @@ default-members = [
   "services/engine-25519",
   "services/aes",
   "services/test-stub",
+  "services/spinor",
 ]
 members = [
   "xous-ipc",
@@ -69,6 +70,7 @@ members = [
   "services/engine-25519",
   "services/aes",
   "services/test-stub",
+  "services/spinor",
 ]
 resolver = "2"
 

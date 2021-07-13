@@ -11,9 +11,13 @@ log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
 log = "0.4"
+susres = {path = "../susres"}
+trng = { path = "../trng" }
+
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+xous-ipc = { path = "../../xous-ipc" }
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
-susres = {path = "../susres"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
