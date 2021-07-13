@@ -16,50 +16,101 @@ using Antmicro.Renode.Peripherals.CPU;
 
 namespace Antmicro.Renode.Peripherals.Miscellaneous
 {
+    public class Sha512Writer : IDoubleWordPeripheral, IBytePeripheral, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IKnownSize
+    {
+        public Sha512Writer(Machine machine, Sha512 sha512)
+        {
+            this.machine = machine;
+            this.sha512 = sha512;
+        }
+
+        private Machine machine;
+        private Sha512 sha512;
+        public long Size { get { return 4096; } }
+
+        public void WriteDoubleWord(long address, uint value)
+        {
+            //             machine.SystemBus.AddWatchpointHook(this.bufferAddress, SysbusAccessWidth.DoubleWord, Access.Write, (cpu, encounteredAddress, width, encounteredValue) =>
+            // {
+            if (address != 0)
+            {
+                this.Log(LogLevel.Error, "Adding word 0x{0:X} (at address 0x{1:X}) to hash", value, address);
+            }
+            this.sha512.addToHash(value, (uint)address);
+            // RegistersCollection.Write(address, value);
+        }
+
+        public uint ReadDoubleWord(long offset)
+        {
+            return RegistersCollection.Read(offset);
+        }
+
+        public byte ReadByte(long offset)
+        {
+            this.Log(LogLevel.Error, "Reading byte from 0x{0:X}", offset);
+            return 0;
+        }
+
+        public void WriteByte(long offset, byte value)
+        {
+            this.Log(LogLevel.Error, "Writing byte value 0x{0:X} to 0x{0:X}", value, offset);
+        }
+
+        public DoubleWordRegisterCollection RegistersCollection { get; private set; }
+
+        public void Reset()
+        {
+        }
+
+    }
     public class Sha512 : IDoubleWordPeripheral, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IKnownSize
     {
         public Sha512(Machine machine)
         {
             this.machine = machine;
-            machine.SystemBus.AddWatchpointHook(this.bufferAddress, SysbusAccessWidth.DoubleWord, Access.Write, (cpu, encounteredAddress, width, encounteredValue) =>
-            {
-                this.Log(LogLevel.Error, "Adding word 0x{0:X} (at address 0x{1:X}) to hash", encounteredValue, encounteredAddress);
-                var inputBuffer = new byte[4];
-                if (this.inputIsSwapped.Value)
-                {
-                    inputBuffer[3] = (byte)(encounteredValue >> 0);
-                    inputBuffer[2] = (byte)(encounteredValue >> 8);
-                    inputBuffer[1] = (byte)(encounteredValue >> 16);
-                    inputBuffer[0] = (byte)(encounteredValue >> 24);
-                }
-                else
-                {
-                    inputBuffer[0] = (byte)(encounteredValue >> 0);
-                    inputBuffer[1] = (byte)(encounteredValue >> 8);
-                    inputBuffer[2] = (byte)(encounteredValue >> 16);
-                    inputBuffer[3] = (byte)(encounteredValue >> 24);
-                    if (this.usingSha256.Value)
-                    {
-                        this.sha256.TransformBlock(inputBuffer, 0, 4, this.hash, 0);
-                    }
-                    else
-                    {
-                        this.sha512.TransformBlock(inputBuffer, 0, 4, this.hash, 0);
-                    }
-                }
-                this.digestedLength += 8;
-            });
+            var sha512Writer = new Sha512Writer(machine, this);
+            // machine.SystemBus.UnmapMemory(this.bufferAddress, 4096);
+            machine.SystemBus.Register(sha512Writer, new BusRangeRegistration(this.bufferAddress, 4096));
+
             RegistersCollection = new DoubleWordRegisterCollection(this);
             this.IRQ = new GPIO();
             this.sha512 = new SHA512Managed();
             this.sha256 = new SHA256Managed();
-            this.hash = new byte[64];
             Reset();
             DefineRegisters();
         }
 
+        public void addToHash(uint encounteredValue, uint address)
+        {
+            var inputBuffer = new byte[4];
+            if (!this.inputIsSwapped.Value)
+            {
+                inputBuffer[3] = (byte)(encounteredValue >> 0);
+                inputBuffer[2] = (byte)(encounteredValue >> 8);
+                inputBuffer[1] = (byte)(encounteredValue >> 16);
+                inputBuffer[0] = (byte)(encounteredValue >> 24);
+            }
+            else
+            {
+                inputBuffer[0] = (byte)(encounteredValue >> 0);
+                inputBuffer[1] = (byte)(encounteredValue >> 8);
+                inputBuffer[2] = (byte)(encounteredValue >> 16);
+                inputBuffer[3] = (byte)(encounteredValue >> 24);
+                if (this.usingSha256.Value)
+                {
+                    this.sha256.TransformBlock(inputBuffer, 0, inputBuffer.Length, null, 0);
+                }
+                else
+                {
+                    this.sha512.TransformBlock(inputBuffer, 0, inputBuffer.Length, null, 0);
+                }
+            }
+            this.digestedLength += 4;
+        }
+
         private uint ResultAtOffset(int offset)
         {
+            // this.Log(LogLevel.Error, "Hash is: {0}  Offset[{1}]: 0x{2:X}", this.sha512, offset, this.sha512.Hash[offset + 0]);
             if (usingSha256.Value && offset >= 32)
             {
                 offset -= 32;
@@ -107,6 +158,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                 .WithFlag(1, out inputIsSwapped, FieldMode.Read | FieldMode.Write, name: "ENDIAN_SWAP")
                 .WithFlag(2, out outputIsSwapped, FieldMode.Read | FieldMode.Write, name: "DIGEST_SWAP")
                 .WithFlag(3, out usingSha256, FieldMode.Read | FieldMode.Write, name: "DIGEST_SWAP")
+                .WithFlag(4, FieldMode.Write, name: "RESET", writeCallback: (_, doit) => { Reset(); })
             ;
 
             Registers.COMMAND.Define(this)
@@ -133,12 +185,10 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                         if (usingSha256.Value)
                         {
                             this.sha256.TransformFinalBlock(dummy, 0, 0);
-                            this.sha256.Hash.CopyTo(this.hash, 0);
                         }
                         else
                         {
                             this.sha512.TransformFinalBlock(dummy, 0, 0);
-                            this.sha512.Hash.CopyTo(this.hash, 0);
                         }
 
                         sha512DoneStatus = true;
@@ -148,53 +198,53 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                 })
             ;
 
-            Registers.DIGEST01.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(4); })
-            ;
             Registers.DIGEST00.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(0); })
             ;
-            Registers.DIGEST11.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(12); })
+            Registers.DIGEST01.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(4); })
             ;
             Registers.DIGEST10.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(8); })
             ;
-            Registers.DIGEST21.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(20); })
+            Registers.DIGEST11.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(12); })
             ;
             Registers.DIGEST20.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(16); })
             ;
-            Registers.DIGEST31.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(28); })
+            Registers.DIGEST21.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(20); })
             ;
             Registers.DIGEST30.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(24); })
             ;
-            Registers.DIGEST41.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(36); })
+            Registers.DIGEST31.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(28); })
             ;
             Registers.DIGEST40.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(32); })
             ;
-            Registers.DIGEST51.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(44); })
+            Registers.DIGEST41.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(36); })
             ;
             Registers.DIGEST50.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(40); })
             ;
-            Registers.DIGEST61.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(52); })
+            Registers.DIGEST51.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(44); })
             ;
             Registers.DIGEST60.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(48); })
             ;
-            Registers.DIGEST71.Define(this)
-                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(60); })
+            Registers.DIGEST61.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(52); })
             ;
             Registers.DIGEST70.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(56); })
+            ;
+            Registers.DIGEST71.Define(this)
+                .WithValueField(0, 32, valueProviderCallback: _ => { return ResultAtOffset(60); })
             ;
             Registers.MSG_LENGTH1.Define(this)
                 .WithValueField(0, 32, valueProviderCallback: _ => { return (uint)(this.digestedLength >> 32); })
@@ -228,15 +278,15 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
         private void UpdateInterrupts()
         {
-            if (this.errValidStatus && this.errValidEnabled.Value)
+            if (this.errValidStatus)
             {
                 this.errValidPending.Value = true;
             }
-            if (this.fifoFullStatus && this.fifoFullEnabled.Value)
+            if (this.fifoFullStatus)
             {
                 this.fifoFullPending.Value = true;
             }
-            if (this.sha512DoneStatus && this.sha512DoneEnabled.Value)
+            if (this.sha512DoneStatus)
             {
                 this.sha512DonePending.Value = true;
             }
@@ -269,7 +319,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
         private SHA512Managed sha512;
         private SHA256Managed sha256;
-        private byte[] hash;
+        // private byte[] hash;
         public GPIO IRQ { get; private set; }
 
         private IFlagRegisterField powerIsOn;
