@@ -76,19 +76,6 @@ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 [[package]]
 name = "curve25519-dalek"
 version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "639891fde0dbea823fc3d798a0fdf9d2f9440a42d64a78ab3488b0ca025117b3"
-dependencies = [
- "byteorder",
- "digest",
- "rand_core",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
-version = "3.1.0"
 source = "git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main#c0ee5bf18c606b51bbffb02fde5801ac129b4e7d"
 dependencies = [
  "byteorder",
@@ -124,7 +111,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
- "curve25519-dalek 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "curve25519-dalek",
  "ed25519",
  "sha2",
  "zeroize",
@@ -171,7 +158,7 @@ name = "loader"
 version = "0.1.0"
 dependencies = [
  "com_rs",
- "curve25519-dalek 3.1.0 (git+https://github.com/betrusted-io/curve25519-dalek.git?branch=main)",
+ "curve25519-dalek",
  "ed25519-dalek",
  "lazy_static",
  "utralib",
