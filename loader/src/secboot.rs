@@ -229,7 +229,7 @@ impl Keyrom {
         }
         true
     }
-    fn read_ed25519(&mut self, key_base: KeyLoc) -> ed25519_dalek::PublicKey {
+    fn read_ed25519(&mut self, key_base: KeyLoc) -> Result<ed25519_dalek::PublicKey, &'static str> {
         let mut pk_bytes: [u8; 32] = [0; 32];
         for (offset, pk_word) in pk_bytes.chunks_exact_mut(4).enumerate() {
             self.csr.wfo(utra::keyrom::ADDRESS_ADDRESS, key_base as u32 + offset as u32);
@@ -238,7 +238,7 @@ impl Keyrom {
                 *dst_byte = src_byte;
             }
         }
-        ed25519_dalek::PublicKey::from_bytes(&pk_bytes).unwrap()
+        ed25519_dalek::PublicKey::from_bytes(&pk_bytes).or(Err("invalid public key"))
     }
 }
 
@@ -313,7 +313,12 @@ pub fn validate_xous_img(xous_img_offset: *const u32) -> bool {
             gfx.set_devboot();
             KeyLoc::DevPub
         };
-    let pubkey = keyrom.read_ed25519(keyloc);
+    let pubkey = keyrom.read_ed25519(keyloc).unwrap_or_else(|e| {
+        gfx.msg("Unable to read key: ", &mut cursor);
+        gfx.msg(e, &mut cursor);
+        gfx.msg("\n\r", &mut cursor);
+        panic!("Unable to read key: {}", e)
+    });
 
     println!("Public key bytes: {:x?}", pubkey.as_bytes());
 
