@@ -36,6 +36,10 @@ impl RowColVec {
             iter: 0
         }
     }
+    pub fn clear(&mut self) {
+        self.storage = [None; MAX_KEYS];
+        self.iter = 0;
+    }
     pub fn len(&self) -> usize {
         return MAX_KEYS
     }
