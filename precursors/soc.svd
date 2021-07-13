@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-07-13 22:02:21]]></description>
+    <description><![CDATA[Litex SoC 2021-07-13 23:50:14]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1238,10 +1238,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``ab8658b6``, so this value is 2877708470, which should be enough to check out
+``09bbc7a6``, so this value is 163301286, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0xab8658b6</resetValue>
+                    <resetValue>0x9bbc7a6</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -1258,7 +1258,7 @@ the exact git version used to build this firmware.]]></description>
 is ``1``, then the repository this was built from has one additional commit
 beyond the tag indicated in `MAJOR`, `MINOR`, and `REVISION`.]]></description>
                     <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x3e</resetValue>
+                    <resetValue>0x40</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3276,6 +3276,10 @@ checked]]></description>
                 <size>0x34</size>
                 <usage>registers</usage>
             </addressBlock>
+            <interrupt>
+                <name>spinor</name>
+                <value>12</value>
+            </interrupt>
         </peripheral>
         <peripheral>
             <name>KEYBOARD</name>
@@ -3532,7 +3536,7 @@ again until the interrupt is serviced.]]></description>
             </addressBlock>
             <interrupt>
                 <name>keyboard</name>
-                <value>12</value>
+                <value>13</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -3580,7 +3584,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x4b40c4ec</resetValue>
+                    <resetValue>0x2b76913c</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3595,7 +3599,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x3e6e25f8</resetValue>
+                    <resetValue>0x4c088e50</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -4054,7 +4058,7 @@ I2S_FORMAT.I2S_STANDARD is I2S standard]]></description>
             </addressBlock>
             <interrupt>
                 <name>audio</name>
-                <value>13</value>
+                <value>14</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -4225,7 +4229,7 @@ want to use this.]]></description>
             </addressBlock>
             <interrupt>
                 <name>trng_kernel</name>
-                <value>14</value>
+                <value>15</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -5588,7 +5592,7 @@ case in testing. Not harmful in production, just wasteful.]]></description>
             </addressBlock>
             <interrupt>
                 <name>trng_server</name>
-                <value>15</value>
+                <value>16</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -6426,7 +6430,7 @@ in bits]]></description>
             </addressBlock>
             <interrupt>
                 <name>sha512</name>
-                <value>16</value>
+                <value>17</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -6704,7 +6708,7 @@ exactly reflects the binary layout of an Engine instruction.]]></description>
             </addressBlock>
             <interrupt>
                 <name>engine</name>
-                <value>17</value>
+                <value>18</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -6922,7 +6926,7 @@ register to disable individual events.]]></description>
             </addressBlock>
             <interrupt>
                 <name>wdt</name>
-                <value>18</value>
+                <value>19</value>
             </interrupt>
         </peripheral>
         <peripheral>
@@ -7100,24 +7104,25 @@ of the PLL]]></description>
             <constant name="CONFIG_BUS_DATA_WIDTH" value="32" />
             <constant name="CONFIG_BUS_ADDRESS_WIDTH" value="32" />
             <constant name="APP_UART_INTERRUPT" value="4" />
-            <constant name="AUDIO_INTERRUPT" value="13" />
+            <constant name="AUDIO_INTERRUPT" value="14" />
             <constant name="BTEVENTS_INTERRUPT" value="7" />
             <constant name="COM_INTERRUPT" value="5" />
             <constant name="CONSOLE_INTERRUPT" value="3" />
-            <constant name="ENGINE_INTERRUPT" value="17" />
+            <constant name="ENGINE_INTERRUPT" value="18" />
             <constant name="GPIO_INTERRUPT" value="1" />
             <constant name="I2C_INTERRUPT" value="6" />
-            <constant name="KEYBOARD_INTERRUPT" value="12" />
+            <constant name="KEYBOARD_INTERRUPT" value="13" />
             <constant name="POWER_INTERRUPT" value="10" />
-            <constant name="SHA512_INTERRUPT" value="16" />
+            <constant name="SHA512_INTERRUPT" value="17" />
+            <constant name="SPINOR_INTERRUPT" value="12" />
             <constant name="SPINOR_SOFT_INT_INTERRUPT" value="11" />
             <constant name="SUSRES_INTERRUPT" value="9" />
             <constant name="TICKTIMER_INTERRUPT" value="8" />
             <constant name="TIMER0_INTERRUPT" value="0" />
-            <constant name="TRNG_KERNEL_INTERRUPT" value="14" />
-            <constant name="TRNG_SERVER_INTERRUPT" value="15" />
+            <constant name="TRNG_KERNEL_INTERRUPT" value="15" />
+            <constant name="TRNG_SERVER_INTERRUPT" value="16" />
             <constant name="UART_INTERRUPT" value="2" />
-            <constant name="WDT_INTERRUPT" value="18" />
+            <constant name="WDT_INTERRUPT" value="19" />
         </constants>
     </vendorExtensions>
 </device>

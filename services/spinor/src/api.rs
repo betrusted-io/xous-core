@@ -16,6 +16,9 @@ pub(crate) enum Opcode {
     /// allow the susres manager to prevent new ops from happening during a suspend
     AcquireSuspendLock,
     ReleaseSuspendLock,
+
+    /// internal interrupt handler ops
+    EccError,
 }
 // Erase/Write are uninterruptable operations. Split suspend/resume
 // into a separate server to asynchronously manage this.

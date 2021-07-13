@@ -18,14 +18,36 @@ mod implementation {
     use log::info;
     use susres::{RegManager, RegOrField, SuspendResume};
 
+    /// TODO: figure out how to make spinor calls "safe"
+    fn spinor_safe_context(_irq_no: usize, arg: *mut usize) {
+        let spinor = unsafe { &mut *(arg as *mut Spinor) };
+
+        spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
+    }
+
+    /// TODO: write ECC error handler on the other side
+    fn ecc_handler(_irq_no: usize, arg: *mut usize) {
+        let spinor = unsafe { &mut *(arg as *mut Spinor) };
+
+        xous::try_send_message(spinor.handler_conn,
+            xous::Message::new_scalar(Opcode::EccError.to_usize().unwrap(),
+                spinor.csr.rf(utra::spinor::ECC_ADDRESS_ECC_ADDRESS) as usize,
+                spinor.csr.rf(utra::spinor::ECC_STATUS_ECC_OVERFLOW) as usize,
+                0, 0)).map(|_|()).unwrap();
+
+        spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
+    }
+
     pub struct Spinor {
+        handler_conn: xous::CID,
         csr: utralib::CSR<u32>,
-        susres_manager: RegManager::<{utra::spinor::SPINOR_NUMREGS}>,
+        susres: RegManager::<{utra::spinor::SPINOR_NUMREGS}>,
+        softirq: utralib::CSR<u32>,
         ops_count: u32, // tracks total ops done; also serves as a delay to ensure that the WIP bit updates before being polled
     }
 
     impl Spinor {
-        pub fn new() -> Spinor {
+        pub fn new(handler_conn: xous::CID) -> Spinor {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::spinor::HW_SPINOR_BASE),
                 None,
@@ -33,12 +55,41 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map SPINOR CSR range");
+            let softirq = xous::syscall::map_memory(
+                xous::MemoryAddress::new(utra::spinor_soft_int::HW_SPINOR_SOFT_INT_BASE),
+                None,
+                4096,
+                xous::MemoryFlags::R | xous::MemoryFlags::W,
+            )
+            .expect("couldn't map SPINOR soft interrupt CSR range");
 
             let mut spinor = Spinor {
+                handler_conn,
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
+                softirq: CSR::new(softirq.as_mut_ptr() as *mut u32),
+                susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
                 ops_count: 0,
             };
+
+            xous::claim_interrupt(
+                utra::spinor_soft_int::SPINOR_SOFT_INT_IRQ,
+                spinor_safe_context,
+                (&mut spinor) as *mut Spinor as *mut usize,
+            )
+            .expect("couldn't claim SPINOR irq");
+            spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
+            spinor.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
+
+            xous::claim_interrupt(
+                utra::spinor::SPINOR_IRQ,
+                ecc_handler,
+                (&mut spinor) as *mut Spinor as *mut usize,
+            )
+            .expect("couldn't claim SPINOR irq");
+            spinor.softirq.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
+            spinor.softirq.wfo(utra::spinor::EV_ENABLE_ECC_ERROR, 1);
+            spinor.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
+            spinor.susres.push(RegOrField::Reg(utra::spinor::EV_ENABLE), None);
 
             spinor
         }
@@ -48,7 +99,7 @@ mod implementation {
                 wr.result = Some(SpinorError::InvalidRequest);
                 return;
             }
-            
+
         }
         pub fn erase_region(&mut self, start_adr: u32, num_u8: u32) -> SpinorError {
 
@@ -59,17 +110,19 @@ mod implementation {
         }
         pub fn resume(&mut self) {
             self.susres_manager.resume();
+            self.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
+            self.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
         }
 
         fn flash_rdsr(&mut self, lock_reads: u32) -> u32 {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-                | self.csr.ms(spinor::COMMAND_LOCK_READS, lock_reads)
-                | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x05) // RDSR
-                | self.csr.ms(spinor::COMMAND_DUMMY_CYCLES, 4)
-                | self.csr.ms(spinor::COMMAND_DATA_WORDS, 1)
-                | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+                | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, lock_reads)
+                | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x05) // RDSR
+                | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+                | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+                | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
             );
             self.ops_count += 1; // count number of ops performed; also delays polling of WIP to ensure the command machine has time to respond
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -79,12 +132,12 @@ mod implementation {
         fn flash_rdscur(&mut self) -> u32 {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
             self.csr.wo(utra::spinor::COMMAND,
-                  self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-                | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
-                | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x2B) // RDSCUR
-                | self.csr.ms(spinor::COMMAND_DUMMY_CYCLES, 4)
-                | self.csr.ms(spinor::COMMAND_DATA_WORDS, 1)
-                | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
+                  self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+                | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+                | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x2B) // RDSCUR
+                | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+                | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+                | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -94,11 +147,11 @@ mod implementation {
         fn flash_rdid(&mut self, offset: u32) -> u32 {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x9f)  // RDID
-              | self.csr.ms(spinor::COMMAND_DUMMY_CYCLES, 4)
-              | self.csr.ms(spinor::COMMAND_DATA_WORDS, offset) // 2 -> 0x3b3b8080, // 1 -> 0x8080c2c2
-              | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x9f)  // RDID
+              | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+              | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, offset) // 2 -> 0x3b3b8080, // 1 -> 0x8080c2c2
+              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -108,9 +161,9 @@ mod implementation {
         fn flash_wren(&mut self) {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x06)  // WREN
-              | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x06)  // WREN
+              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -119,9 +172,9 @@ mod implementation {
         fn flash_wrdi(&mut self) {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x04)  // WRDI
-              | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x04)  // WRDI
+              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -130,10 +183,10 @@ mod implementation {
         fn flash_se4b(&mut self, sector_address: u32) {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, sector_address);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x21)  // SE4B
-              | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x21)  // SE4B
+              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -142,10 +195,10 @@ mod implementation {
         fn flash_be4b(&mut self, block_address: u32) {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0xdc)  // BE4B
-              | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0xdc)  // BE4B
+              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -154,11 +207,11 @@ mod implementation {
         fn flash_pp4b(&mut self, address: u32, data_bytes: u32) {
             self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, address);
             self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
-              | self.csr.ms(spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(spinor::COMMAND_DATA_WORDS, data_bytes / 2)
-              | self.csr.ms(spinor::COMMAND_LOCK_READS, 1)
+                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
+              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+              | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_bytes / 2)
+              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
             );
             self.ops_count += 1;
             while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
