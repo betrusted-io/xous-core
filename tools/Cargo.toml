@@ -1,9 +1,9 @@
 [package]
+authors = ["Sean Cross <sean@xobs.io>"]
+default-run = "create-image"
+edition = "2018"
 name = "tools"
 version = "0.1.0"
-authors = ["Sean Cross <sean@xobs.io>"]
-edition = "2018"
-default-run = "create-image"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,10 +12,12 @@ bitflags = "1.2.1"
 clap = "2.33"
 crc = "1.8.1"
 csv = "1.1"
+ring = "0.16.20"
 env_logger = "0.7"
 log = "0.4"
+pem = "0.8"
+svd2utra = {path = "../svd2utra"}
 xmas-elf = "0.7.0"
-svd2utra = { path = "../svd2utra" }
 
 [[bin]]
 name = "copy-object"
@@ -28,3 +30,6 @@ name = "make-tags"
 
 [[bin]]
 name = "read-tags"
+
+[[bin]]
+name = "sign-image"
