@@ -515,6 +515,11 @@ fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std:
             continue;
         }
 
+        // Also ignore the sha512 region, since it's handled with the sha512 block
+        if region_name == "sha512" {
+            continue;
+        }
+
         writeln!(
             out,
             "mem_{}: Memory.MappedMemory @ sysbus 0x{:08x}",
@@ -533,19 +538,22 @@ fn print_peripherals<U: Write>(
     out: &mut U,
 ) -> std::io::Result<()> {
     use std::collections::HashMap;
-    let mut known_peripherals = HashMap::new();
-    known_peripherals.insert("console", "UART.LiteX_UART");
-    known_peripherals.insert("uart", "UART.LiteX_UART");
-    known_peripherals.insert("app_uart", "UART.LiteX_UART");
-    known_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
-    known_peripherals.insert("i2c", "I2C.BetrustedI2C");
-    known_peripherals.insert("keyboard", "Input.BetrustedKbd");
-    known_peripherals.insert("memlcd", "Video.BetrustedLCD");
-    known_peripherals.insert("sha512", "Miscellaneous.Sha512");
-    known_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
-    known_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
-    known_peripherals.insert("ticktimer", "Timers.TickTimer");
+    let mut cs_peripherals = HashMap::new();
+    cs_peripherals.insert("app_uart", "UART.LiteX_UART");
+    cs_peripherals.insert("console", "UART.LiteX_UART");
+    cs_peripherals.insert("engine", "Miscellaneous.Engine");
+    cs_peripherals.insert("i2c", "I2C.BetrustedI2C");
+    cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
+    cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
+    cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
+    cs_peripherals.insert("sha512", "Miscellaneous.Sha512");
+    cs_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
+    cs_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
+    cs_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
+    cs_peripherals.insert("ticktimer", "Timers.TickTimer");
+    cs_peripherals.insert("uart", "UART.LiteX_UART");
     writeln!(out, "// Platform Peripherals")?;
+
     for peripheral in peripherals {
         let lc_name = peripheral.name.to_lowercase();
         // let peripheral_size = if peripheral.size < 4096 {
@@ -553,7 +561,7 @@ fn print_peripherals<U: Write>(
         // } else {
         //     peripheral.size
         // };
-        if let Some(renode_device) = known_peripherals.get(lc_name.as_str()) {
+        if let Some(renode_device) = cs_peripherals.get(lc_name.as_str()) {
             writeln!(
                 out,
                 "{}: {} @ sysbus 0x{:08x}",
