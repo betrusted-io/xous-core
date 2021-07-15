@@ -1,5 +1,4 @@
 use std::{
-    convert::TryInto,
     env,
     io::{Read, Write},
     path::{Path, PathBuf, MAIN_SEPARATOR},
@@ -426,7 +425,7 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         Err("Unable to regenerate Renode platform file")?;
     }
     build_hw_image(
-        false,
+        debug,
         Some("emulation/soc/renode.svd".to_owned()),
         packages,
         None,
