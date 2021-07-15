@@ -13,6 +13,7 @@ xous-names = { path = "../xous-names" }
 log = "0.4"
 susres = {path = "../susres"}
 trng = { path = "../trng" }
+com = { path = "../com" }
 
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 xous-ipc = { path = "../../xous-ipc" }

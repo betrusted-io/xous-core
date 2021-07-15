@@ -38,6 +38,12 @@ impl Ticktimer {
                  0, 0, 0)
         ).map(|_| ())
     }
+
+    pub fn ping_wdt(&self) {
+        send_message(self.conn,
+            xous::Message::new_scalar(api::Opcode::PingWdt.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("Couldn't send WDT ping");
+    }
 }
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);

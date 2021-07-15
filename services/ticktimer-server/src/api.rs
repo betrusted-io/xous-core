@@ -11,4 +11,7 @@ pub(crate) enum Opcode {
 
     /// Suspend/resume callback
     SuspendResume = 3,
+
+    /// force a WDT update
+    PingWdt = 4,
 }

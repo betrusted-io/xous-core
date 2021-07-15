@@ -551,6 +551,9 @@ fn xmain() -> ! {
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 ticktimer.resume();
             }),
+            Some(api::Opcode::PingWdt) => {
+                ticktimer.reset_wdt();
+            },
             None => {
                 error!("couldn't convert opcode");
                 break

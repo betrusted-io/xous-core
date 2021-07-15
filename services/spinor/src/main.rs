@@ -4,28 +4,73 @@
 mod api;
 use api::*;
 
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::*;
 use xous_ipc::Buffer;
-use xous::msg_blocking_scalar_unpack;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
+/*
+OK, we have two approaches to doing this block.
+
+1. we own all the read pages, and third party blocks send
+requests to us to patch areas
+
+2. we own nothing, and we can only patch areas that are pre-aligned
+to word boundaries
+
+We should do (2). Owning everything sucks for everything else.
+However, the lib.rs side would be able to take a &[u8] that
+represents the readable area, and then another &[u8] that represents
+the data we want patched. And then it can format the requests to the
+spinor block such that everything is aligned.
+
+*/
 
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
-    use log::info;
     use susres::{RegManager, RegOrField, SuspendResume};
+    use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use num_traits::*;
 
-    /// TODO: figure out how to make spinor calls "safe"
+    enum FlashOp {
+        EraseSector(u32), // 4k sector
+        WritePage(u32, [u8; 256], u8), // page, data, len
+        ReadId,
+    }
+
+    static SPINOR_RUNNING: AtomicBool = AtomicBool::new(false);
+    static SPINOR_RESULT: AtomicU32 = AtomicU32::new(0);
     fn spinor_safe_context(_irq_no: usize, arg: *mut usize) {
         let spinor = unsafe { &mut *(arg as *mut Spinor) };
 
+        let mut result = 0;
+        match spinor.cur_op {
+            Some(FlashOp::EraseSector(sector)) => {
+
+            },
+            Some(FlashOp::WritePage(page, data, len)) => {
+
+            },
+            Some(FlashOp::ReadId) => {
+                let upper = flash_rdid(&mut spinor.csr, 2);
+                let lower = flash_rdid(&mut spinor.csr, 1);
+                // re-assemble the ID word from the duplicated bytes read
+                result = (lower & 0xFF) | ((lower >> 8) & 0xFF00) | (upper & 0xFF_0000);
+            },
+            None => {
+                panic!("Improper entry to SPINOR safe context.");
+            }
+        }
+
+        spinor.cur_op = None;
+        SPINOR_RESULT.store(result, Ordering::Relaxed);
         spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
+        SPINOR_RUNNING.store(false, Ordering::Relaxed);
     }
 
-    /// TODO: write ECC error handler on the other side
     fn ecc_handler(_irq_no: usize, arg: *mut usize) {
         let spinor = unsafe { &mut *(arg as *mut Spinor) };
 
@@ -38,12 +83,110 @@ mod implementation {
         spinor.csr.wfo(utra::spinor::EV_PENDING_ECC_ERROR, 1);
     }
 
+    fn flash_rdsr(csr: &mut utralib::CSR<u32>, lock_reads: u32) -> u32 {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+            | csr.ms(utra::spinor::COMMAND_LOCK_READS, lock_reads)
+            | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x05) // RDSR
+            | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+            | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+        csr.r(utra::spinor::CMD_RBK_DATA)
+    }
+
+    fn flash_rdscur(csr: &mut utralib::CSR<u32>) -> u32 {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
+        csr.wo(utra::spinor::COMMAND,
+              csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+            | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+            | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x2B) // RDSCUR
+            | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+            | csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
+            | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+        csr.r(utra::spinor::CMD_RBK_DATA)
+    }
+
+    fn flash_rdid(csr: &mut utralib::CSR<u32>, offset: u32) -> u32 {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x9f)  // RDID
+          | csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
+          | csr.ms(utra::spinor::COMMAND_DATA_WORDS, offset) // 2 -> 0x3b3b8080, // 1 -> 0x8080c2c2
+          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+        csr.r(utra::spinor::CMD_RBK_DATA)
+    }
+
+    fn flash_wren(csr: &mut utralib::CSR<u32>) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x06)  // WREN
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+    }
+
+    fn flash_wrdi(csr: &mut utralib::CSR<u32>) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x04)  // WRDI
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+    }
+
+    fn flash_se4b(csr: &mut utralib::CSR<u32>, sector_address: u32) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, sector_address);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x21)  // SE4B
+          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+    }
+
+    fn flash_be4b(csr: &mut utralib::CSR<u32>, block_address: u32) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0xdc)  // BE4B
+          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+    }
+
+    fn flash_pp4b(csr: &mut utralib::CSR<u32>, address: u32, data_bytes: u32) {
+        csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, address);
+        csr.wo(utra::spinor::COMMAND,
+            csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
+          | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
+          | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
+          | csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_bytes / 2)
+          | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
+        );
+        while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
+    }
+
     pub struct Spinor {
+        id: u32,
         handler_conn: xous::CID,
         csr: utralib::CSR<u32>,
         susres: RegManager::<{utra::spinor::SPINOR_NUMREGS}>,
         softirq: utralib::CSR<u32>,
-        ops_count: u32, // tracks total ops done; also serves as a delay to ensure that the WIP bit updates before being polled
+        cur_op: Option<FlashOp>,
+        ticktimer: ticktimer_server::Ticktimer,
+        // TODO: refactor ecup command to use spinor to operate the reads
     }
 
     impl Spinor {
@@ -64,11 +207,13 @@ mod implementation {
             .expect("couldn't map SPINOR soft interrupt CSR range");
 
             let mut spinor = Spinor {
+                id: 0,
                 handler_conn,
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 softirq: CSR::new(softirq.as_mut_ptr() as *mut u32),
                 susres: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                ops_count: 0,
+                cur_op: None,
+                ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
             };
 
             xous::claim_interrupt(
@@ -91,7 +236,33 @@ mod implementation {
             spinor.susres.push_fixed_value(RegOrField::Reg(utra::spinor::EV_PENDING), 0xFFFF_FFFF);
             spinor.susres.push(RegOrField::Reg(utra::spinor::EV_ENABLE), None);
 
+            // now populate the id field
+            spinor.cur_op = Some(FlashOp::ReadId);
+            SPINOR_RUNNING.store(true, Ordering::Relaxed);
+            spinor.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
+            while SPINOR_RUNNING.load(Ordering::Relaxed) {}
+            spinor.id = SPINOR_RESULT.load(Ordering::Relaxed);
+
             spinor
+        }
+
+        /// changes into the spinor interrupt handler context, which is "safe" for ROM operations because we guarantee
+        /// we don't touch the SPINOR block inside that interrupt context
+        fn change_context(&mut self) -> u32 {
+            if self.cur_op.is_none() {
+                log::error!("change_context called with no spinor op set. This is an internal error...panicing!");
+                panic!("change_context called with no spinor op set.");
+            }
+            self.ticktimer.ping_wdt();
+            SPINOR_RUNNING.store(true, Ordering::Relaxed);
+            self.softirq.wfo(utra::spinor_soft_int::SOFTINT_SOFTINT, 1);
+            while SPINOR_RUNNING.load(Ordering::Relaxed) {
+                // there is no timeout condition that makes sense. If we're in a very long flash op -- and they can take hundreds of ms --
+                // simply timing out and trying to move on could lead to hardware damage as we'd be accessing a ROM that is in progress.
+                // in other words: if the flash memory is broke, you're broke too, ain't nobody got time for that.
+            }
+            self.ticktimer.ping_wdt();
+            SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
         pub fn write_region(&mut self, wr: &mut WriteRegion) {
@@ -102,119 +273,66 @@ mod implementation {
 
         }
         pub fn erase_region(&mut self, start_adr: u32, num_u8: u32) -> SpinorError {
+            let mut erased = 0;
 
+            let blocksize;
+            if num_u8 - erased > 4096 {
+                blocksize = 4096;
+            } else {
+                blocksize = 65536;
+            }
+
+            loop {
+                flash_wren()?;
+                let status = flash_rdsr(1)?;
+                // println!("WREN: FLASH status register: 0x{:08x}", status);
+                if status & 0x02 != 0 {
+                    break;
+                }
+            }
+
+            if blocksize <= 4096 {
+                flash_se4b(addr + erased as u32)?;
+            } else {
+                flash_be4b(addr + erased as u32)?;
+            }
+            erased += blocksize;
+
+            loop {
+                let status = flash_rdsr(1)?;
+                // println!("BE4B: FLASH status register: 0x{:08x}", status);
+                if status & 0x01 == 0 {
+                    break;
+                }
+            }
+
+            let result = flash_rdscur()?;
+            // println!("erase result: 0x{:08x}", result);
+            if result & 0x60 != 0 {
+                error!("E_FAIL/P_FAIL set, programming may have failed.")
+            }
+
+            if flash_rdsr(1)? & 0x02 != 0 {
+                flash_wrdi()?;
+                loop {
+                    let status = flash_rdsr(1)?;
+                    // println!("WRDI: FLASH status register: 0x{:08x}", status);
+                    if status & 0x02 == 0 {
+                        break;
+                    }
+                }
+            }
+
+            SpinorError::NoError
         }
 
         pub fn suspend(&mut self) {
-            self.susres_manager.suspend();
+            self.susres.suspend();
         }
         pub fn resume(&mut self) {
-            self.susres_manager.resume();
+            self.susres.resume();
             self.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
             self.softirq.wfo(utra::spinor_soft_int::EV_ENABLE_SPINOR_INT, 1);
-        }
-
-        fn flash_rdsr(&mut self, lock_reads: u32) -> u32 {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-                | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, lock_reads)
-                | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x05) // RDSR
-                | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
-                | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-                | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-            );
-            self.ops_count += 1; // count number of ops performed; also delays polling of WIP to ensure the command machine has time to respond
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-            self.csr.r(utra::spinor::CMD_RBK_DATA)
-        }
-
-        fn flash_rdscur(&mut self) -> u32 {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-            self.csr.wo(utra::spinor::COMMAND,
-                  self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-                | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-                | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x2B) // RDSCUR
-                | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
-                | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, 1)
-                | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-            self.csr.r(utra::spinor::CMD_RBK_DATA)
-        }
-
-        fn flash_rdid(&mut self, offset: u32) -> u32 {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x9f)  // RDID
-              | self.csr.ms(utra::spinor::COMMAND_DUMMY_CYCLES, 4)
-              | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, offset) // 2 -> 0x3b3b8080, // 1 -> 0x8080c2c2
-              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-            self.csr.r(utra::spinor::CMD_RBK_DATA)
-        }
-
-        fn flash_wren(&mut self) {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x06)  // WREN
-              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-        }
-
-        fn flash_wrdi(&mut self) {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, 0);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x04)  // WRDI
-              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-        }
-
-        fn flash_se4b(&mut self, sector_address: u32) {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, sector_address);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x21)  // SE4B
-              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-        }
-
-        fn flash_be4b(&mut self, block_address: u32) {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0xdc)  // BE4B
-              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
-        }
-
-        fn flash_pp4b(&mut self, address: u32, data_bytes: u32) {
-            self.csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, address);
-            self.csr.wo(utra::spinor::COMMAND,
-                self.csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
-              | self.csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
-              | self.csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-              | self.csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_bytes / 2)
-              | self.csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
-            );
-            self.ops_count += 1;
-            while self.csr.rf(utra::spinor::STATUS_WIP) != 0 {}
         }
     }
 }
@@ -303,7 +421,8 @@ fn xmain() -> ! {
     let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
-    let mut spinor = Spinor::new();
+    let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
+    let mut spinor = Spinor::new(handler_conn);
 
     log::trace!("ready to accept requests");
 
@@ -314,6 +433,7 @@ fn xmain() -> ! {
     xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
 
     let mut client_id: Option<[u32; 4]> = None;
+    let mut ecc_errors: [Option<u32>; 4] = [None, None, None, None]; // just record the first few errors, until we can get `std` and a convenient Vec/Queue
 
     loop {
         let mut msg = xous::receive_message(spinor_sid).unwrap();
@@ -365,6 +485,23 @@ fn xmain() -> ! {
                 }
                 buffer.replace(wr).expect("couldn't return response code to WriteRegion");
             },
+            Some(Opcode::EccError) => msg_scalar_unpack!(msg, address, _overflow, _, _, {
+                // just some stand-in code -- should probably do something more clever, e.g. a rolling log
+                // plus some error handling callback. But this is in the distant future once we have enough
+                // of a system to eventually create such errors...
+                log::error!("ECC error reported at 0x{:x}", address);
+                let mut saved = false;
+                for item in ecc_errors.iter_mut() {
+                    if item.is_none() {
+                        *item = Some(address as u32);
+                        saved = true;
+                        break;
+                    }
+                }
+                if !saved {
+                    log::error!("ran out of slots to record ECC errors");
+                }
+            }),
             None => {
                 log::error!("couldn't convert opcode");
                 break

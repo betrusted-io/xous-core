@@ -11,10 +11,27 @@ pub type Connection = usize;
 
 pub const MAX_CID: usize = 34;
 
+pub const SOC_REGION_LOC:     u32 = 0x2000_0000;
+pub const SOC_MAIN_GW_LOC:    u32 = 0x2000_0000;
+pub const SOC_MAIN_GW_LEN:    u32 = 0x0028_0000;
+pub const SOC_SEC_GW_LOC:     u32 = 0x2028_0000;
+pub const SOC_SEC_GW_LEN:     u32 = 0x0028_0000;
+pub const LOADER_LOC:         u32 = 0x2050_0000;
+pub const LOADER_LEN:         u32 = 0x0048_0000;
+pub const KERNEL_LOC:         u32 = 0x2098_0000;
+pub const KERNEL_LEN:         u32 = 0x0038_0000;
+pub const SOC_REGION_LEN:     u32 = 0x00D0_0000;
+
+pub const PDDB_LOC:           u32 = 0x20D0_0000;
+pub const PDDB_LEN:           u32 = 0x0530_0000; // this reserves space for testing structures
+// pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
+
+pub const EC_REGION_LOC:    u32 = 0x27F8_0000;
 pub const EC_WF200_PKG_LOC: u32 = 0x27F8_0000;
-pub const EC_WF200_PKG_LEN: u32 = 0x4_E000;
-pub const EC_FW_PKG_LOC: u32 = 0x27FC_E000;
-pub const EC_FW_PKG_LEN: u32 = 0x3_2000;
+pub const EC_WF200_PKG_LEN: u32 = 0x0004_E000;
+pub const EC_FW_PKG_LOC:    u32 = 0x27FC_E000;
+pub const EC_FW_PKG_LEN:    u32 = 0x0003_2000;
+pub const EC_REGION_LEN:    u32 = 0x0008_0000;
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
@@ -620,6 +637,14 @@ impl MemoryRange {
     #[deprecated(since = "0.8.4", note = "Please use `new(addr, size)` instead")]
     pub fn from_parts(addr: MemoryAddress, size: MemorySize) -> MemoryRange {
         MemoryRange { addr, size }
+    }
+
+    pub fn addr_in_range(&self, addr: usize) -> bool {
+        if (addr >= self.addr) && (add < (self.addr + self.size)) {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn len(&self) -> usize {

@@ -1,6 +1,7 @@
 pub(crate) const SERVER_NAME_SPINOR: &str     = "_SPINOR Hardware Interface Server_";
 
-pub const SPINOR_SIZE_BYTES: u32 = (128 * 1024 * 1024);
+pub const SPINOR_SIZE_BYTES: u32 = 128 * 1024 * 1024; // physical size of the device, used for hardware sanity checks on requests
+// note: logical lengths of regions are in xous::definitions
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -51,10 +52,11 @@ pub struct WriteRegion {
     /// length of data to write
     pub len: u32,
     /// return code
-    pub result: Option<SpinorResult>,
+    pub result: Option<SpinorError>,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum SpinorError {
     NoError,
     AbortNotErased,

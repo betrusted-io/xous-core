@@ -4,7 +4,8 @@ pub mod api;
 pub use api::*;
 
 use xous::{CID, send_message, Message};
-use num_traits::ToPrimitive;
+use num_traits::*;
+use xous_ipc::Buffer;
 
 pub struct Spinor {
     conn: CID,
@@ -53,20 +54,22 @@ impl Spinor {
         let mut buf = Buffer::into_buf(wr).or(Err(SpinorError::IpcError))?;
         buf.lend_mut(self.conn, Opcode::WriteRegion.to_u32().unwrap()).or(Err(SpinorError::IpcError))?;
 
-        match buf.to_original() {
-            Some(wr) => {
+        match buf.to_original::<WriteRegion, _>() {
+            Ok(wr) => {
                 if let Some(res) = wr.result {
                     match res {
                         SpinorError::NoError => Ok(()),
                         _ => Err(res)
                     }
                 } else {
-                    SpinorError::ImplementationError
+                    Err(SpinorError::ImplementationError)
                 }
             }
-            _ => SpinorError::ImplementationError
+            _ => Err(SpinorError::ImplementationError)
         }
     }
+
+    /// REWORK THIS to take the source data, the patch data, and the offset.
 
     /// note: this implementation will write precisely the slice of u8 contained
     /// in data starting from start_addr. If the request is not aligned, the
@@ -97,28 +100,28 @@ impl Spinor {
             let u8_to_alignment = self.erase_alignment() - (req_addr & align_mask);
             if u8_to_alignment < self.erase_alignment() {
                 // can't align anything, data is smaller than a page
-                ret = write_page(data, req_addr);
+                ret = self.write_page(data, req_addr);
             } else {
                 // issue one mis-aligned request first; this will trigger a partial erase and re-write
-                write_page(data[0..u8_to_alignment as usize], req_addr)?;
+                self.write_page(&data[0..u8_to_alignment as usize], req_addr)?;
                 req_addr += u8_to_alignment;
                 // now send the rest as aligned; this is much more efficient than streaming a bunch of mis-aligned pages
-                for page in &data[u8_to_alignment as usize..].chunks(self.erase_alignment() as usize) {
-                    write_data(page, req_addr)?;
+                for page in data[u8_to_alignment as usize..].chunks(self.erase_alignment() as usize).into_iter() {
+                    self.write_page(page, req_addr)?;
                     req_addr += self.erase_alignment();
                 }
             }
         } else {
             // the request is aligned, just issue it; the last page, if mis-aligned, might be a little ugly, but nothing we can do about it.
             for page in data.chunks(self.erase_alignment() as usize) {
-                write_data(page, req_addr)?;
+                self.write_page(page, req_addr)?;
                 req_addr += self.erase_alignment();
             }
         }
 
         // release the write lock before exiting
         let _ = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::ReleaseExclusive, 0, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't send ReleaseExclusive message");
         ret
     }
@@ -127,21 +130,24 @@ impl Spinor {
     /// at start_addr; if this is not naturally aligned to an erase block, the operation
     /// is "expensive" in that it will make a copy of the misaligned sector, erase the
     /// sector, and then re-write the data that was not meant to be erased!
-    pub fn erase(&mut self, start_addr: u32, num_u8: u32) -> SpinorResult {
+    pub fn erase(&mut self, start_addr: u32, num_u8: u32) -> SpinorError {
+        if start_addr & (self.erase_alignment() - 1) != 0 {
+
+        }
         let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::Erase.to_usize().unwrap(), start_addr as usize, num_u8 as usize, 0, 0)
+            Message::new_blocking_scalar(Opcode::EraseRegion.to_usize().unwrap(), start_addr as usize, num_u8 as usize, 0, 0)
             ).expect("Couldn't send erase command");
         if let xous::Result::Scalar1(result) = response {
             match FromPrimitive::from_usize(result) {
                 Some(r) => r,
                 None => {
                     log::error!("Couldn't transform return enum: {:?}", result);
-                    SpinorResult::InternalError
+                    SpinorError::ImplementationError
                 },
             }
         } else {
             log::error!("unexpected return structure: {:#?}", response);
-            SpinorResult::InternalError
+            SpinorError::ImplementationError
         }
     }
 
