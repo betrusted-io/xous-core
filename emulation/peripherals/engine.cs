@@ -480,15 +480,15 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private void DefineRegisters()
         {
             Registers.WINDOW.Define(this)
-                .WithValueField(0, 4, name: "WINDOW", valueProviderCallback: (_) => this.window, changeCallback: (_, value) => this.window = (byte)(value & 0xf))
+                .WithValueField(0, 4, name: "WINDOW", valueProviderCallback: (_) => this.window, writeCallback: (_, value) => this.window = (byte)(value & 0xf))
             ;
 
             Registers.MPSTART.Define(this)
-                .WithValueField(0, 11, name: "MPSTART", valueProviderCallback: (_) => this.mpstart, changeCallback: (_, value) => this.mpstart = (UInt16)(value & 0x7ff))
+                .WithValueField(0, 11, name: "MPSTART", valueProviderCallback: (_) => this.mpstart, writeCallback: (_, value) => this.mpstart = (UInt16)(value & 0x7ff))
             ;
 
             Registers.MPLEN.Define(this)
-                .WithValueField(0, 11, name: "MPLEN", valueProviderCallback: _ => this.mplen, changeCallback: (_, value) => this.mplen = (UInt16)(value & 0x7ff))
+                .WithValueField(0, 11, name: "MPLEN", valueProviderCallback: _ => this.mplen, writeCallback: (_, value) => this.mplen = (UInt16)(value & 0x7ff))
             ;
 
             Registers.CONTROL.Define(this)
@@ -510,7 +510,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                 ;
 
             Registers.MPRESUME.Define(this)
-                .WithValueField(0, 11, name: "MPRESUME", valueProviderCallback: _ => this.mpresume, changeCallback: (_, value) => { this.mpresume = (UInt16)(value & 0x7ff); })
+                .WithValueField(0, 11, name: "MPRESUME", valueProviderCallback: _ => this.mpresume, writeCallback: (_, value) => { this.mpresume = (UInt16)(value & 0x7ff); })
             ;
 
             Registers.POWER.Define(this)
@@ -578,6 +578,12 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             this.mplen = 0;
             this.mpresume = 0;
             this.mpc = 0;
+            if (this.engineExecution != null) {
+                if (this.engineExecution.IsAlive) {
+                    this.engineExecution.Abort();
+                }
+                this.engineExecution = null;
+            }
             if (this.powerIsOn != null)
             {
                 this.powerIsOn.Value = false;
