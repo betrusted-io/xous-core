@@ -293,6 +293,19 @@ mod implementation {
         }
         pub fn resume(&mut self) {
             self.susres.resume();
+
+            // clear the keyboard state vectors -- actually, if a key was being pressed at the time of suspend
+            // it's not really relevant anymore; let's throw everything away and start from a clean slate.
+            self.new_state.clear();
+            self.last_state.clear();
+            self.shift_down = false;
+            self.shift_up = false;
+            self.alt_down = false;
+            self.alt_up = false;
+            self.repeating_key = None;
+            self.chord_captured = false;
+            self.chord_active = 0;
+            self.chord = [[false; KBD_COLS]; KBD_ROWS];
         }
 
         pub fn set_map(&mut self, map: KeyMap) {

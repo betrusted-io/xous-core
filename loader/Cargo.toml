@@ -24,7 +24,7 @@ features = ["u32e_backend"]
 [dependencies.ed25519-dalek]
 version="1.0.1"
 default-features = false
-features = ["u32_backend"]
+#features = ["u32_backend"]
 
 [dev-dependencies]
 lazy_static = "1.4.0"
@@ -52,3 +52,11 @@ default-features = false
 
 [patch.crates-io.utralib]
 path = "../utralib"
+
+[patch.crates-io.curve25519-dalek]
+git="https://github.com/betrusted-io/curve25519-dalek.git"
+branch="main"
+package = "curve25519-dalek"
+version = "3.1.0"
+default-features = false
+features = ["u32e_backend"]
