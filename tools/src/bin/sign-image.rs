@@ -7,7 +7,7 @@ use ring::signature::Ed25519KeyPair;
 const DEVKEY_PATH: &str = "devkey/dev.key";
 const LOADER_VERSION: u32 = 1;
 
-fn loader_sign<S, T>(
+fn image_sign<S, T>(
     input: &S,
     output: &T,
     private_key: &pem::Pem,
@@ -100,6 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .arg(
             Arg::with_name("kernel-key")
+                .long("kernel-key")
                 .takes_value(true)
                 .required(true)
                 .help("kernel signing key")
@@ -108,11 +109,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .arg(
             Arg::with_name("loader-output")
+                .long("loader-output")
                 .takes_value(true)
-                .required(true)
                 .value_name("loader output image")
-                .help("loader output image")
-                .default_value("target/riscv32imac-unknown-none-elf/release/loader.bin"),
+                .help("loader output image"),
+        )
+        .arg(
+            Arg::with_name("kernel-output")
+                .long("kernel-output")
+                .takes_value(true)
+                .value_name("kernel output image")
+                .help("kernel output image"),
         )
         .arg(
             Arg::with_name("defile").help(
@@ -121,27 +128,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .get_matches();
 
-    let loader_key = matches
-        .value_of("loader-key")
-        .expect("no loader key specified");
-    let loader_output = matches
-        .value_of("loader-output")
-        .expect("no output specified");
-    let loader_image = matches
-        .value_of("loader-image")
-        .expect("no loader image specified");
+    // Sign the loader, if an output file was specified
+    if let Some(loader_output) = matches.value_of("loader-output") {
+        let loader_key = matches
+            .value_of("loader-key")
+            .expect("no loader key specified");
+        let loader_image = matches
+            .value_of("loader-image")
+            .expect("no loader image specified");
 
-    let loader_pkey = load_pem(loader_key)?;
-    if loader_pkey.tag != "PRIVATE KEY" {
-        println!("Loader key was a {}, not a PRIVATE KEY", loader_pkey.tag);
-        Err("invalid pkey type")?;
+        let loader_pkey = load_pem(loader_key)?;
+        if loader_pkey.tag != "PRIVATE KEY" {
+            println!("Loader key was a {}, not a PRIVATE KEY", loader_pkey.tag);
+            Err("invalid loader private key type")?;
+        }
+        println!("Signing loader");
+        image_sign(
+            &loader_image,
+            &loader_output,
+            &loader_pkey,
+            matches.is_present("defile"),
+        )?;
     }
 
-    loader_sign(
-        &loader_image,
-        &loader_output,
-        &loader_pkey,
-        matches.is_present("defile"),
-    )?;
+    if let Some(kernel_output) = matches.value_of("kernel-output") {
+        let kernel_key = matches
+            .value_of("kernel-key")
+            .expect("no kernel key specified");
+        let kernel_image = matches
+            .value_of("kernel-image")
+            .expect("no kernel image specified");
+
+        let kernel_pkey = load_pem(kernel_key)?;
+        if kernel_pkey.tag != "PRIVATE KEY" {
+            println!("Kernel key was a {}, not a PRIVATE KEY", kernel_pkey.tag);
+            Err("invalid kernel private key type")?;
+        }
+        println!("Signing kernel");
+        image_sign(
+            &kernel_image,
+            &kernel_output,
+            &kernel_pkey,
+            matches.is_present("defile"),
+        )?;
+    }
     Ok(())
 }
