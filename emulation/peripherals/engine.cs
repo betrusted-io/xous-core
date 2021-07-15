@@ -294,8 +294,6 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
             this.RegistersCollection = new DoubleWordRegisterCollection(this);
             this.IRQ = new GPIO();
-            this.shouldEndExecution = false;
-            this.startExecution = new SemaphoreSlim(0, 1);
             Reset();
             DefineRegisters();
         }
@@ -310,7 +308,6 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
         private void EngineThread()
         {
-            bool shouldLog = false;
             try
             {
                 // this.Log(LogLevel.Error, "ENGINE: Beginning execution. Current MPC: 0x{0:X}", this.mpc);
@@ -564,7 +561,6 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private UInt16 mpc;
         private IFlagRegisterField powerIsOn;
         private IFlagRegisterField pauseRequest;
-        private readonly uint bufferAddress = 0xE0020000;
 
         private IFlagRegisterField illegalOpcodeEnabled;
         private IFlagRegisterField illegalOpcodePending;
@@ -575,8 +571,6 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private bool finishedStatus;
 
         private Thread engineExecution;
-        private bool shouldEndExecution;
-        private SemaphoreSlim startExecution;
 
         private EngineRam engineRam;
 
