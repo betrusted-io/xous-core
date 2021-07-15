@@ -28,35 +28,56 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             this.data = new UInt32[size / 4];
             this.FIELD_MAX = BigInteger.Pow(2, 255) - 19;
             this.UINT_MAX = BigInteger.Pow(2, 256) - 1;
-            this.c0 = new BigInteger(0);
-            this.c1 = new BigInteger(1);
+            this.ZERO = new BigInteger(0);
+            this.ONE = new BigInteger(1);
 
-            this.c2 = new BigInteger(121665); // (A-2)/4
-            this.c3 = this.FIELD_MAX;
-            this.c4 = new BigInteger(121666); // (A+2)/4
-            this.c5 = new BigInteger(5);
-            this.c6 = new BigInteger(10);
-            this.c7 = new BigInteger(20);
-            this.c8 = new BigInteger(50);
-            this.c9 = new BigInteger(100);
+            this.AM24 = new BigInteger(121665); // (A-2)/4
+            this.AP24 = new BigInteger(121666); // (A+2)/4
+            this.FIVE = new BigInteger(5);
+            this.TEN = new BigInteger(10);
+            this.TWENTY = new BigInteger(20);
+            this.FIFTY = new BigInteger(50);
+            this.ONE_HUNDRED = new BigInteger(100);
+            this.registers = new BigInteger[32];
+            for (var i = 0; i < this.registers.Length; i++)
+            {
+                this.registers[i] = this.ZERO;
+            }
         }
 
+        public void SyncRegistersFromRam(ulong rf)
+        {
+            for (var i = 0; i < this.registers.Length; i++)
+            {
+                this.registers[i] = ReadRegisterFromRam(rf, (ulong)i);
+            }
+        }
+
+        public void SyncRegistersToRam(ulong rf)
+        {
+            for (var i = 0; i < this.registers.Length; i++)
+            {
+                WriteRegisterToRam(rf, (ulong)i, this.registers[i]);
+            }
+        }
+
+        public BigInteger UINT_MAX;
+        public BigInteger ZERO;
+        public BigInteger ONE;
+        public BigInteger AM24;
         public BigInteger FIELD_MAX;
-        private BigInteger UINT_MAX;
-        private BigInteger c0;
-        private BigInteger c1;
-        private BigInteger c2;
-        private BigInteger c3;
-        private BigInteger c4;
-        private BigInteger c5;
-        private BigInteger c6;
-        private BigInteger c7;
-        private BigInteger c8;
-        private BigInteger c9;
+        public BigInteger AP24;
+        public BigInteger FIVE;
+        public BigInteger TEN;
+        public BigInteger TWENTY;
+        public BigInteger FIFTY;
+        public BigInteger ONE_HUNDRED;
+
         private Machine machine;
         private Engine engine;
         private long size;
         public UInt32[] data;
+        public BigInteger[] registers;
         public long Size { get { return size; } }
 
         public void WriteDoubleWord(long address, uint value)
@@ -69,32 +90,36 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             return this.data[offset / 4];
         }
 
-        public BigInteger ReadRegister(ulong rf, ulong register, bool constant)
+        public BigInteger ReadRegister(ulong register, bool constant)
         {
             // this.Log(LogLevel.Error, "Reading register {0} (const? {1}) from rf {2}", register, constant, rf);
             if (constant)
             {
                 switch (register)
                 {
-                    case 0: return this.c0;
-                    case 1: return this.c1;
-                    case 2: return this.c2;
-                    case 3: return this.c3;
-                    case 4: return this.c4;
-                    case 5: return this.c5;
-                    case 6: return this.c6;
-                    case 7: return this.c7;
-                    case 8: return this.c8;
-                    case 9: return this.c9;
-                    default: return new BigInteger(0);
+                    case 0: return this.ZERO;
+                    case 1: return this.ONE;
+                    case 2: return this.AM24;
+                    case 3: return this.FIELD_MAX;
+                    case 4: return this.AP24;
+                    case 5: return this.FIVE;
+                    case 6: return this.TEN;
+                    case 7: return this.TWENTY;
+                    case 8: return this.FIFTY;
+                    case 9: return this.ONE_HUNDRED;
+                    default: return this.ZERO;
                 }
             }
+            return this.registers[register];
+        }
+        public BigInteger ReadRegisterFromRam(ulong rf, ulong register)
+        {
             var src_bytes = new byte[33]; // Keep leading byte 0 to force unsigned
 
-            if ((rf >= 16) || (register >= 32))
-            {
-                throw new Exception(String.Format("Register #{0} or RegisterFile {1} is out of range", register, rf));
-            }
+            // if ((rf >= 16) || (register >= 32))
+            // {
+            //     throw new Exception(String.Format("Register #{0} or RegisterFile {1} is out of range", register, rf));
+            // }
 
             for (ulong i = 0; i < 32; i += 4)
             {
@@ -117,14 +142,14 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             return new BigInteger(src_bytes);
         }
 
-        public void WriteRegister(long rf, long register, BigInteger value)
+        public void WriteRegisterToRam(ulong rf, ulong register, BigInteger value)
         {
-            if ((rf >= 16) || (register >= 32))
-            {
-                throw new Exception(String.Format("Register #{0} or RegisterFile {1} is out of range", register, rf));
-            }
+            // if ((rf >= 16) || (register >= 32))
+            // {
+            //     throw new Exception(String.Format("Register #{0} or RegisterFile {1} is out of range", register, rf));
+            // }
 
-            var bytes = (value & this.UINT_MAX).ToByteArray();
+            var bytes = value.ToByteArray();
             if (bytes.Length < 32)
             {
                 bytes = bytes.Concat(new byte[32 - bytes.Length]);
@@ -138,6 +163,11 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                                             | (((uint)bytes[i + 2]) << 16)
                                             | ((uint)(bytes[i + 3]) << 24);
             }
+        }
+
+        public void WriteRegister(ulong register, BigInteger value)
+        {
+            this.registers[register] = value & this.UINT_MAX;
         }
 
         public String FormatValue(BigInteger value)
@@ -308,10 +338,13 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
         private void EngineThread()
         {
+            // this.Log(LogLevel.Error, "ENGINE: Beginning execution. Current MPC: 0x{0:X}", this.mpstart);
             try
             {
-                // this.Log(LogLevel.Error, "ENGINE: Beginning execution. Current MPC: 0x{0:X}", this.mpc);
+                // Interlocked.Exchange(ref this.mpc, this.mpstart);
                 this.mpc = this.mpstart;
+                var window = this.window;
+                this.engineRam.SyncRegistersFromRam(window);
 
                 while (true)
                 {
@@ -326,74 +359,75 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                     switch (op.Op)
                     {
                         case 0: // PSA
-                            this.engineRam.WriteRegister(this.window, op.Wd, this.engineRam.ReadRegister(this.window, op.Ra, op.Ca));
+                            // this.engineRam.WriteRegister(op.Wd, this.engineRam.ReadRegister(op.Ra, op.Ca));
+                            this.engineRam.WriteRegister(op.Wd, this.engineRam.ReadRegister(op.Ra, op.Ca));
                             break;
 
                         case 1: // PSB
-                            this.engineRam.WriteRegister(this.window, op.Wd, this.engineRam.ReadRegister(this.window, op.Rb, op.Cb));
+                            this.engineRam.WriteRegister(op.Wd, this.engineRam.ReadRegister(op.Rb, op.Cb));
                             break;
 
                         case 2: // MSK
-                            if ((this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) & 1) != 0)
+                            if ((this.engineRam.ReadRegister(op.Ra, op.Ca) & 1) != 0)
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, this.engineRam.ReadRegister(this.window, op.Rb, op.Cb));
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.ReadRegister(op.Rb, op.Cb));
                             }
                             else
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, new BigInteger(0));
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.ZERO);
                             }
                             break;
 
                         case 3: // XOR
-                            this.engineRam.WriteRegister(this.window, op.Wd,
-                                (BigInteger.Pow(2, 256) | this.engineRam.ReadRegister(this.window, op.Ra, op.Ca)) ^ this.engineRam.ReadRegister(this.window, op.Rb, op.Cb));
+                            this.engineRam.WriteRegister(op.Wd,
+                                (BigInteger.Pow(2, 256) | this.engineRam.ReadRegister(op.Ra, op.Ca)) ^ this.engineRam.ReadRegister(op.Rb, op.Cb));
                             break;
 
                         case 4: // NOT
-                            this.engineRam.WriteRegister(this.window, op.Wd,
-                                ~(this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) | BigInteger.Pow(2, 256)));
+                            this.engineRam.WriteRegister(op.Wd,
+                                ~(this.engineRam.ReadRegister(op.Ra, op.Ca) | BigInteger.Pow(2, 256)));
                             break;
 
                         case 5: // ADD
-                            this.engineRam.WriteRegister(this.window, op.Wd,
-                                this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) + this.engineRam.ReadRegister(this.window, op.Rb, op.Cb));
+                            this.engineRam.WriteRegister(op.Wd,
+                                this.engineRam.ReadRegister(op.Ra, op.Ca) + this.engineRam.ReadRegister(op.Rb, op.Cb));
                             break;
 
                         case 6: // SUB
                             {
-                                var left = this.engineRam.ReadRegister(this.window, op.Ra, op.Ca);
-                                var right = this.engineRam.ReadRegister(this.window, op.Rb, op.Cb);
+                                var left = this.engineRam.ReadRegister(op.Ra, op.Ca);
+                                var right = this.engineRam.ReadRegister(op.Rb, op.Cb);
                                 var result = left - right;
                                 // Wrap integer
                                 if (result < 0)
                                 {
                                     result = BigInteger.Pow(2, 256) - result;
                                 }
-                                this.engineRam.WriteRegister(this.window, op.Wd, result);
+                                this.engineRam.WriteRegister(op.Wd, result);
                             }
                             break;
 
                         case 7: // MUL
-                            this.engineRam.WriteRegister(this.window, op.Wd,
-                                (this.engineRam.ReadRegister(this.window, op.Ra, op.Ca)
-                                * this.engineRam.ReadRegister(this.window, op.Rb, op.Cb))
+                            this.engineRam.WriteRegister(op.Wd,
+                                (this.engineRam.ReadRegister(op.Ra, op.Ca)
+                                * this.engineRam.ReadRegister(op.Rb, op.Cb))
                                     % this.engineRam.FIELD_MAX
                                 );
                             break;
 
                         case 8: // TRD
-                            if (this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) >= this.engineRam.FIELD_MAX)
+                            if (this.engineRam.ReadRegister(op.Ra, op.Ca) >= this.engineRam.FIELD_MAX)
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, this.engineRam.FIELD_MAX);
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.FIELD_MAX);
                             }
                             else
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, new BigInteger(0));
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.ZERO);
                             }
                             break;
 
                         case 9: // BRZ
-                            if (this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) == 0)
+                            if (this.engineRam.ReadRegister(op.Ra, op.Ca) == 0)
                             {
                                 this.mpc = (ushort)((int)this.mpc + op.Immediate);
                             }
@@ -403,18 +437,17 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                             break;
 
                         case 11: // SHL
-                            this.engineRam.WriteRegister(this.window, op.Wd,
-                                this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) << 1);
+                            this.engineRam.WriteRegister(op.Wd, this.engineRam.ReadRegister(op.Ra, op.Ca) << 1);
                             break;
 
                         case 12: // XBT
-                            if ((this.engineRam.ReadRegister(this.window, op.Ra, op.Ca) & (new BigInteger(1) << 254)) != 0)
+                            if ((this.engineRam.ReadRegister(op.Ra, op.Ca) & (this.engineRam.ONE << 254)) != 0)
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, new BigInteger(1));
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.ONE);
                             }
                             else
                             {
-                                this.engineRam.WriteRegister(this.window, op.Wd, new BigInteger(0));
+                                this.engineRam.WriteRegister(op.Wd, this.engineRam.ZERO);
                             }
                             break;
 
@@ -422,12 +455,13 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                             this.illegalOpcodeStatus = true;
                             throw new Exception("Unhandled opcode");
                     }
+                    // Interlocked.Increment(ref this.mpc);
                     this.mpc += 1;
                     if (op.Op == 10)
                     {
                         break;
                     }
-                    // this.Log(LogLevel.Error, "    (Result) {0}", this.engineRam.FormatValue(this.engineRam.ReadRegister(this.window, op.Wd, false)));
+                    // this.Log(LogLevel.Error, "    (Result) {0}", this.engineRam.FormatValue(this.engineRam.ReadRegister(op.Wd, false)));
                 }
             }
             catch (Exception e)
@@ -435,7 +469,8 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                 this.Log(LogLevel.Error, "ENGINE execution exception {0}", e);
             }
             this.finishedStatus = true;
-            this.engineExecution = null;
+            // this.engineExecution = null;
+            this.engineRam.SyncRegistersToRam(window);
             this.UpdateInterrupts();
             this.finishedStatus = false;
             this.illegalOpcodeStatus = false;
@@ -467,8 +502,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                         }
                         else
                         {
-                            this.engineExecution = new Thread(new ThreadStart(this.EngineThread));
-                            this.engineExecution.IsBackground = true;
+                            this.engineExecution = new Thread(this.EngineThread) { Name = "Engine Execution", IsBackground = true };
                             this.engineExecution.Start();
                         }
                     }
@@ -486,7 +520,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
 
             Registers.STATUS.Define(this)
                 .WithFlag(0, name: "RUNNING", valueProviderCallback: (_) => this.engineExecution.IsAlive)
-                .WithValueField(1, 10, name: "MPC", valueProviderCallback: (_) => 0)
+                .WithValueField(1, 10, name: "MPC", valueProviderCallback: (_) => (uint)this.mpc)
                 .WithFlag(11, name: "PAUSE_GNT", valueProviderCallback: (_) => false)
             ;
 
@@ -558,7 +592,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private UInt16 mpstart;
         private UInt16 mplen;
         private UInt16 mpresume;
-        private UInt16 mpc;
+        private int mpc;
         private IFlagRegisterField powerIsOn;
         private IFlagRegisterField pauseRequest;
 
