@@ -9,24 +9,6 @@ use xous_ipc::Buffer;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 
 use core::sync::atomic::{AtomicBool, Ordering};
-
-/*
-OK, we have two approaches to doing this block.
-
-1. we own all the read pages, and third party blocks send
-requests to us to patch areas
-
-2. we own nothing, and we can only patch areas that are pre-aligned
-to word boundaries
-
-We should do (2). Owning everything sucks for everything else.
-However, the lib.rs side would be able to take a &[u8] that
-represents the readable area, and then another &[u8] that represents
-the data we want patched. And then it can format the requests to the
-spinor block such that everything is aligned.
-
-*/
-
 #[cfg(target_os = "none")]
 mod implementation {
     use utralib::generated::*;
@@ -37,7 +19,7 @@ mod implementation {
 
     enum FlashOp {
         EraseSector(u32), // 4k sector
-        WritePage(u32, [u8; 256], u8), // page, data, len
+        WritePages(u32, [u8; 4096], usize), // page address, data, len
         ReadId,
     }
 
@@ -48,11 +30,89 @@ mod implementation {
 
         let mut result = 0;
         match spinor.cur_op {
-            Some(FlashOp::EraseSector(sector)) => {
-
+            Some(FlashOp::EraseSector(sector_address)) => {
+                // enable writes: set wren mode
+                loop {
+                    flash_wren(&mut spinor.csr);
+                    let status = flash_rdsr(&mut spinor.csr, 1);
+                    if status & 0x02 != 0 {
+                        break;
+                    }
+                }
+                // issue erase command
+                flash_se4b(&mut spinor.csr, sector_address);
+                // wait for WIP bit to drop
+                loop {
+                    let status = flash_rdsr(&mut spinor.csr, 1);
+                    if status & 0x01 == 0 {
+                        break;
+                    }
+                }
+                // get the success code for return
+                result = flash_rdscur(&mut spinor.csr);
+                // disable writes: send wrdi
+                if flash_rdsr(&mut spinor.csr, 1) & 0x02 != 0 {
+                    loop {
+                        flash_wrdi(&mut spinor.csr);
+                        let status = flash_rdsr(&mut spinor.csr, 1);
+                        if status & 0x02 == 0 {
+                            break;
+                        }
+                    }
+                }
+                flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
             },
-            Some(FlashOp::WritePage(page, data, len)) => {
+            Some(FlashOp::WritePages(start_addr, data, len)) => {
+                // assumption: data being written to is already erased (set to 0xFF)
+                assert!(len <= 4096, "data len is too large");
+                assert!((len % 2) == 0, "data is not a multiple of 2 in length: the SPI DDR interface always requires two bytes per transfer");
+                let mut cur_addr = start_addr;
+                for page in data[..len].chunks(256) {
+                    // pre-fill the page fifo
+                    let mut blank = true;
+                    for word in page.chunks(2) {
+                        let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                        if wdata != 0xFFFF {
+                            blank = false;
+                        }
+                        spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
+                    }
+                    if blank {
+                        // skip over pages that are entirely blank
+                        continue;
+                    }
+                    // enable writes: set wren mode
+                    loop {
+                        flash_wren(&mut spinor.csr);
+                        let status = flash_rdsr(&mut spinor.csr, 1);
+                        if status & 0x02 != 0 {
+                            break;
+                        }
+                    }
+                    // send the data to be programmed
+                    flash_pp4b(&mut spinor.csr, cur_addr, page.len() as u32);
+                    cur_addr += page.len() as u32;
 
+                    while (flash_rdsr(&mut spinor.csr, 1) & 0x01) != 0 {
+                        // wait while WIP is set
+                    }
+                    // get the success code for return
+                    result = flash_rdscur(&mut spinor.csr);
+                    if result & 0x20 != 0 {
+                        break; // abort if error
+                    }
+                }
+                // disable writes: send wrdi
+                if flash_rdsr(&mut spinor.csr, 1) & 0x02 != 0 {
+                    loop {
+                        flash_wrdi(&mut spinor.csr);
+                        let status = flash_rdsr(&mut spinor.csr, 1);
+                        if status & 0x02 == 0 {
+                            break;
+                        }
+                    }
+                }
+                flash_rdsr(&mut spinor.csr, 0); // dummy read to clear the "read lock" bit
             },
             Some(FlashOp::ReadId) => {
                 let upper = flash_rdid(&mut spinor.csr, 2);
@@ -155,6 +215,7 @@ mod implementation {
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
     }
 
+    #[allow(dead_code)]
     fn flash_be4b(csr: &mut utralib::CSR<u32>, block_address: u32) {
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, block_address);
         csr.wo(utra::spinor::COMMAND,
@@ -248,10 +309,11 @@ mod implementation {
 
         /// changes into the spinor interrupt handler context, which is "safe" for ROM operations because we guarantee
         /// we don't touch the SPINOR block inside that interrupt context
-        fn change_context(&mut self) -> u32 {
+        /// we name it with _blocking suffix to remind ourselves that this op should full-block Xous, no exceptions, until the flash op is done.
+        fn call_spinor_context_blocking(&mut self) -> u32 {
             if self.cur_op.is_none() {
-                log::error!("change_context called with no spinor op set. This is an internal error...panicing!");
-                panic!("change_context called with no spinor op set.");
+                log::error!("called with no spinor op set. This is an internal error...panicing!");
+                panic!("called with no spinor op set.");
             }
             self.ticktimer.ping_wdt();
             SPINOR_RUNNING.store(true, Ordering::Relaxed);
@@ -265,65 +327,49 @@ mod implementation {
             SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
-        pub fn write_region(&mut self, wr: &mut WriteRegion) {
-            if wr.start + wr.len > SPINOR_SIZE_BYTES {
-                wr.result = Some(SpinorError::InvalidRequest);
-                return;
+        pub fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
+            if wr.start + wr.len > SPINOR_SIZE_BYTES { // basic security check. this is necessary so we don't have wrap-around attacks on the SoC gateware region
+                return SpinorError::InvalidRequest;
             }
 
-        }
-        pub fn erase_region(&mut self, start_adr: u32, num_u8: u32) -> SpinorError {
-            let mut erased = 0;
+            if !wr.clean_patch {
+                // the `lib.rs` side has ostensibly already done the following checks for us:
+                //   - made sure there is some "dirty" data in this page
+                //   - provided us with a copy of any existing data we want to replace after the patch within the given page
+                //   - ensured that the request is aligned with an erase sector
+                let alignment_mask = SPINOR_ERASE_SIZE - 1;
+                if (wr.start & alignment_mask) != 0 {
+                    return SpinorError::AlignmentError;
+                }
+                self.cur_op = Some(FlashOp::EraseSector(wr.start));
+                let erase_result = self.call_spinor_context_blocking();
+                if erase_result & 0x40 != 0 {
+                    log::error!("E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}", erase_result, wr.start);
+                    return SpinorError::EraseFailed;
+                }
 
-            let blocksize;
-            if num_u8 - erased > 4096 {
-                blocksize = 4096;
+                // now write the data sector
+                self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
+                let write_result = self.call_spinor_context_blocking();
+                if write_result & 0x20 != 0 {
+                    log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
+                    return SpinorError::WriteFailed;
+                }
+                SpinorError::NoError
             } else {
-                blocksize = 65536;
-            }
-
-            loop {
-                flash_wren()?;
-                let status = flash_rdsr(1)?;
-                // println!("WREN: FLASH status register: 0x{:08x}", status);
-                if status & 0x02 != 0 {
-                    break;
+                // clean patch path:
+                // we're just patching sectors -- the caller PROMISES the data has been erased already
+                // this function has no way of knowing, because we don't have read priveledges...
+                // here, almost any data alignment and length is acceptable -- we can patch even just two bytes using
+                // this call.
+                self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
+                let write_result = self.call_spinor_context_blocking();
+                if write_result & 0x20 != 0 {
+                    log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
+                    return SpinorError::WriteFailed;
                 }
+                SpinorError::NoError
             }
-
-            if blocksize <= 4096 {
-                flash_se4b(addr + erased as u32)?;
-            } else {
-                flash_be4b(addr + erased as u32)?;
-            }
-            erased += blocksize;
-
-            loop {
-                let status = flash_rdsr(1)?;
-                // println!("BE4B: FLASH status register: 0x{:08x}", status);
-                if status & 0x01 == 0 {
-                    break;
-                }
-            }
-
-            let result = flash_rdscur()?;
-            // println!("erase result: 0x{:08x}", result);
-            if result & 0x60 != 0 {
-                error!("E_FAIL/P_FAIL set, programming may have failed.")
-            }
-
-            if flash_rdsr(1)? & 0x02 != 0 {
-                flash_wrdi()?;
-                loop {
-                    let status = flash_rdsr(1)?;
-                    // println!("WRDI: FLASH status register: 0x{:08x}", status);
-                    if status & 0x02 == 0 {
-                        break;
-                    }
-                }
-            }
-
-            SpinorError::NoError
         }
 
         pub fn suspend(&mut self) {
@@ -370,6 +416,8 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sr_cid = xous::connect(susres_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, api::SusResOps::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let main_cid = xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("couldn't connect to our main thread for susres coordination");
+
     log::trace!("starting SPINOR suspend/resume manager loop");
     loop {
         let msg = xous::receive_message(susres_sid).unwrap();
@@ -380,11 +428,15 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                 while OP_IN_PROGRESS.load(Ordering::Relaxed) {
                     xous::yield_slice();
                 }
+                xous::send_message(main_cid,
+                    xous::Message::new_blocking_scalar(Opcode::SuspendInner.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send suspend message");
                 if susres.suspend_until_resume(token).expect("couldn't execute suspend/resume") == false {
                     SUSPEND_FAILURE.store(true, Ordering::Relaxed);
                 } else {
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
                 }
+                xous::send_message(main_cid,
+                    xous::Message::new_blocking_scalar(Opcode::ResumeInner.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send suspend message");
                 SUSPEND_PENDING.store(false, Ordering::Relaxed);
             }),
             Some(SusResOps::Quit) => {
@@ -433,13 +485,36 @@ fn xmain() -> ! {
     xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
 
     let mut client_id: Option<[u32; 4]> = None;
+    let mut soc_token: Option<[u32; 4]> = None;
     let mut ecc_errors: [Option<u32>; 4] = [None, None, None, None]; // just record the first few errors, until we can get `std` and a convenient Vec/Queue
 
     loop {
         let mut msg = xous::receive_message(spinor_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendInner) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                spinor.suspend();
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }),
+            Some(Opcode::ResumeInner) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                spinor.resume();
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }),
+            Some(Opcode::RegisterSocToken) => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
+                // only the first process to claim it can have it!
+                // make sure to do it correctly at boot: this must be done extremely early in the
+                // boot process; any attempt to access this unit for functional ops before this is registered shall panic
+                // this is to mitigate a DoS attack on the legitimate registrar that gives way for the incorrect
+                // process to grab this token
+                if soc_token.is_none() {
+                    soc_token = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
+                }
+            }),
             Some(Opcode::AcquireExclusive) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
+                if soc_token.is_none() { // reject any ops until a soc token is registered
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
                 if client_id.is_none() && !SUSPEND_PENDING.load(Ordering::Relaxed) {
+                    OP_IN_PROGRESS.store(true, Ordering::Relaxed); // lock out suspends when the exclusive lock is acquired
                     client_id = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
                     log::trace!("giving {:x?} an exclusive lock", client_id);
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
@@ -450,10 +525,11 @@ fn xmain() -> ! {
             }),
             Some(Opcode::ReleaseExclusive) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 client_id = None;
+                OP_IN_PROGRESS.store(false, Ordering::Relaxed);
                 xous::return_scalar(msg.sender, 1).unwrap();
             }),
             Some(Opcode::AcquireSuspendLock) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                if client_id.is_none() {
+                if client_id.is_none() && !OP_IN_PROGRESS.load(Ordering::Relaxed) {
                     SUSPEND_PENDING.store(true, Ordering::Relaxed);
                     xous::return_scalar(msg.sender, 1).expect("couldn't ack AcquireSuspendLock");
                 } else {
@@ -464,23 +540,38 @@ fn xmain() -> ! {
                 SUSPEND_PENDING.store(false, Ordering::Relaxed);
                 xous::return_scalar(msg.sender, 1).expect("couldn't ack ReleaseSuspendLock");
             }),
-            Some(Opcode::EraseRegion) => msg_blocking_scalar_unpack!(msg, start_adr, num_u8, _, _, {
-                let ret = spinor.erase_region(start_adr as u32, num_u8 as u32);
-                xous::return_scalar(msg.sender, ret.to_usize().unwrap()).expect("couldn't return EraseRegion response");
-            }),
             Some(Opcode::WriteRegion) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut wr = buffer.to_original::<WriteRegion, _>().unwrap();
-                match client_id {
-                    Some(id) => {
-                        if wr.id == id {
-                            spinor.write_region(&mut wr);
-                        } else {
-                            wr.result = Some(SpinorError::IdMismatch);
+                let mut authorized = true;
+                if let Some(st) = soc_token {
+                    if (wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC) {
+                        // if only the holder of the ID that matches the SoC token can write to the SOC flash area
+                        // other areas are not as strictly controlled because signature checks ostensibly should catch
+                        // attempts to modify them. However, access to the gateware definition would allow one to rewrite
+                        // the boot ROM, which would then change the trust root. Therefore, we check this region specifically.
+                        if st != wr.id {
+                            wr.result = Some(SpinorError::AccessDenied);
+                            authorized = false;
                         }
-                    },
-                    _ => {
-                        wr.result = Some(SpinorError::NoId);
+                    }
+                } else {
+                    // the soc token MUST be initialized early on, if not, something bad has happened.
+                    wr.result = Some(SpinorError::AccessDenied);
+                    authorized = false;
+                }
+                if authorized {
+                    match client_id {
+                        Some(id) => {
+                            if wr.id == id {
+                                wr.result = Some(spinor.write_region(&mut wr)); // note: this must reject out-of-bound length requests for security reasons
+                            } else {
+                                wr.result = Some(SpinorError::IdMismatch);
+                            }
+                        },
+                        _ => {
+                            wr.result = Some(SpinorError::NoId);
+                        }
                     }
                 }
                 buffer.replace(wr).expect("couldn't return response code to WriteRegion");

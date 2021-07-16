@@ -1,22 +1,26 @@
 pub(crate) const SERVER_NAME_SPINOR: &str     = "_SPINOR Hardware Interface Server_";
 
 pub const SPINOR_SIZE_BYTES: u32 = 128 * 1024 * 1024; // physical size of the device, used for hardware sanity checks on requests
+pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size. 64k sectors also exist, but this implementation does not use them.
 // note: logical lengths of regions are in xous::definitions
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    /// erase a region. The whole op is atomic, so no exclusivity is required.
-    EraseRegion,
-
     /// writes are split into multiple transactions. Must acquire exclusive rights before initiation
     AcquireExclusive,
     ReleaseExclusive,
-    /// program a region
+    /// a special token is reserved for writing to the SoC region, only one service is allowed to do that
+    RegisterSocToken,
+    /// program a region. Erase is accomplished by calling WriteRegion with all 0xFF's as data.
     WriteRegion,
 
     /// allow the susres manager to prevent new ops from happening during a suspend
     AcquireSuspendLock,
     ReleaseSuspendLock,
+
+    /// intra-thread messages for suspend and resume
+    SuspendInner,
+    ResumeInner,
 
     /// internal interrupt handler ops
     EccError,
@@ -45,8 +49,8 @@ pub struct WriteRegion {
     pub id: [u32; 4],
     /// start address for the write; address 0 is start of FLASH.
     pub start: u32,
-    /// if true, erase the region to write if not already erased; otherwise, if not erased, the routine will error out
-    pub autoerase: bool,
+    /// set if the sector was checked to be erased already
+    pub clean_patch: bool,
     /// data to write - up to one page
     pub data: [u8; 4096],
     /// length of data to write
@@ -65,8 +69,10 @@ pub enum SpinorError {
     VerifyFailed,
     InvalidRequest,
     ImplementationError,
+    AlignmentError,
     IpcError,
     BusyTryAgain,
     IdMismatch,
     NoId,
+    AccessDenied,
 }
