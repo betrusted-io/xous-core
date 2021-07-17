@@ -1672,10 +1672,12 @@ name = "spinor"
 version = "0.1.0"
 dependencies = [
  "com",
+ "lazy_static",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
+ "rand 0.8.3",
  "rkyv 0.4.3",
  "susres",
  "ticktimer-server",

@@ -23,5 +23,16 @@ num-traits = {version = "0.2", default-features = false}
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}
 
+[dev-dependencies]
+lazy_static = "1.4.0"
+rand = "0.8"
+
 [features]
 default = []
+
+[lib]
+test = true
+
+[[bin]]
+name = "spinor"
+test = false

@@ -1,4 +1,16 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(all(target_os = "none", not(test)), no_std)]
+
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
+#[cfg(test)]
+use std::sync::Mutex;
+
+// build a "fake" flash area for tests
+#[cfg(test)]
+lazy_static! {
+    static ref EMU_FLASH: Mutex<Vec<u8>> = Mutex::new(vec![]);
+}
 
 pub mod api;
 pub use api::*;
@@ -12,6 +24,12 @@ pub struct Spinor {
     token: [u32; 4],
 }
 impl Spinor {
+    #[cfg(test)]
+    pub fn new() -> Self {
+        Spinor { conn: 0, token: [0, 0, 0, 0] }
+    }
+
+    #[cfg(not(test))]
     pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_SPINOR).expect("Can't connect to Spinor server");
@@ -48,6 +66,7 @@ impl Spinor {
         )).map(|_| ())
     }
 
+    #[cfg(not(test))]
     fn send_write_region(&mut self, wr: &WriteRegion) -> Result<(), SpinorError> {
         let mut buf = Buffer::into_buf(*wr).or(Err(SpinorError::IpcError))?;
         buf.lend_mut(self.conn, Opcode::WriteRegion.to_u32().unwrap()).or(Err(SpinorError::IpcError))?;
@@ -67,16 +86,22 @@ impl Spinor {
         }
     }
 
-    /*
-    cases to check:
-       - mis-aligned start address
-       - mis-aligned end address
-       - mis-aligned start and end address
-       - aligned start and end address
-
-       - patch of data into a mostly pre-erased sector with existing data, but into the already-erased section
-       - the above, but where the patch length goes beyond the length of a single sector
-     */
+    #[cfg(test)]
+    fn send_write_region(&mut self, wr: &WriteRegion) -> Result<(), SpinorError> {
+        let mut i = 0;
+        if !wr.clean_patch {
+            assert!((wr.start & 0xFFF) == 0, "erasing is required, but start address is not erase-sector aligned");
+            for addr in wr.start..wr.start + 4096 {
+                EMU_FLASH.lock().unwrap()[addr as usize] = 0xFF;
+            }
+        }
+        for addr in wr.start..wr.start + wr.len {
+            assert!(EMU_FLASH.lock().unwrap()[addr as usize] == 0xFF, "attempt to write memory that's not erased");
+            EMU_FLASH.lock().unwrap()[addr as usize] = wr.data[i];
+            i += 1;
+        }
+        Ok(())
+    }
 
     /// `patch` is an extremely low-level function that can patch data on FLASH. Access control must be enforced by higher level
     ///     abstractions. However, there is a single sanity check on the server side that prevents rogue writes to the SoC gateware area.
@@ -104,17 +129,20 @@ impl Spinor {
             return Err(SpinorError::AlignmentError);
         }
         // acquire a write lock on the unit
-        let response = send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
-                self.token[0] as usize,
-                self.token[1] as usize,
-                self.token[2] as usize,
-                self.token[3] as usize,
-            )
-        ).expect("couldn't send AcquireExclusive message to Sha2 hardware!");
-        if let xous::Result::Scalar1(result) = response {
-            if result == 0 {
-                return Err(SpinorError::BusyTryAgain)
+        #[cfg(not(test))]
+        {
+            let response = send_message(self.conn,
+                Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                    self.token[0] as usize,
+                    self.token[1] as usize,
+                    self.token[2] as usize,
+                    self.token[3] as usize,
+                )
+            ).expect("couldn't send AcquireExclusive message to Sha2 hardware!");
+            if let xous::Result::Scalar1(result) = response {
+                if result == 0 {
+                    return Err(SpinorError::BusyTryAgain)
+                }
             }
         }
 
@@ -224,6 +252,7 @@ impl Spinor {
         }
 
         // release the write lock before exiting
+        #[cfg(not(test))]
         let _ = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::ReleaseExclusive.to_usize().unwrap(), 0, 0, 0, 0)
         ).expect("couldn't send ReleaseExclusive message");
@@ -256,6 +285,7 @@ impl Spinor {
 
 use core::{sync::atomic::{AtomicU32, Ordering}, u8};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
+#[cfg(not(test))]
 impl Drop for Spinor {
     fn drop(&mut self) {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
@@ -266,5 +296,146 @@ impl Drop for Spinor {
         }
         // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
         // de-allocate those items here. They don't need a reference count because they are object-specific
+    }
+}
+
+// run with `cargo test -- --nocapture` to see the print output inside services/spinor
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_construction() {
+        let spinor = Spinor::new();
+        assert!(spinor.erase_alignment() == SPINOR_ERASE_SIZE);
+    }
+
+    #[test]
+    fn test_send_write_region() {
+        // test that the basic flash emulation layer does what we expect it to do
+        init_emu_flash(5);
+
+        // check "clean patching"
+        let mut wr = WriteRegion {
+            id: [0, 0, 0, 0],
+            start: 8,
+            clean_patch: true,
+            data: [0; 4096],
+            len: 4,
+            result: None
+        };
+        wr.data[0] = 0xAA;
+        wr.data[1] = 0xBB;
+        wr.data[2] = 0xCC;
+        wr.data[3] = 0xDD;
+        let mut spinor = Spinor::new();
+        spinor.send_write_region(&wr);
+
+        for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {
+            // we should see 0xAA 0xBB 0xCC 0xDD from addresses 8-12, everyhing else as 0xFF
+            if addr < 8 || addr >= 12 {
+                assert!(byte == 0xFF, "non-erased byte when erasure expected: {:08x} : {:02x}", addr, byte);
+            } else {
+                match addr {
+                    8 => assert!(byte == 0xAA, "wrong patch value, expected 0xAA got {:02x}", byte),
+                    9 => assert!(byte == 0xBB, "wrong patch value, expected 0xBB got {:02x}", byte),
+                    10 => assert!(byte == 0xCC, "wrong patch value, expected 0xCC got {:02x}", byte),
+                    11 => assert!(byte == 0xDD, "wrong patch value, expected 0xDD got {:02x}", byte),
+                    _ => assert!(false, "test is constructed incorrectly, should not reach this statement"),
+                }
+            }
+        }
+
+        // now check erasing-then-writing
+        wr.clean_patch = false;
+        wr.start = 0;
+        for d in wr.data.iter_mut() {
+            *d = 0xFF;
+        }
+        wr.data[6] = 0x1;
+        wr.data[7] = 0x2;
+        wr.data[8] = 0x3;
+        wr.data[9] = 0x4;
+        wr.len = 10;
+        spinor.send_write_region(&wr);
+
+        for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {
+            // we should see 1, 2, 3, 4 from addresses 6-10, everyhing else as 0xFF
+            if addr < 6 || addr >= 10 {
+                assert!(byte == 0xFF, "non-erased byte when erasure expected: {:08x} : {:02x}", addr, byte);
+            } else {
+                match addr {
+                    6 => assert!(byte == 1, "wrong patch value, expected 1 got {:02x}", byte),
+                    7 => assert!(byte == 2, "wrong patch value, expected 2 got {:02x}", byte),
+                    8 => assert!(byte == 3, "wrong patch value, expected 3 got {:02x}", byte),
+                    9 => assert!(byte == 4, "wrong patch value, expected 4 got {:02x}", byte),
+                    _ => assert!(false, "test is constructed incorrectly, should not reach this statement"),
+                }
+            }
+        }
+    }
+
+    fn init_emu_flash(sectors: usize) {
+        EMU_FLASH.lock().unwrap().clear();
+        for _ in 0..sectors * 4096 {
+            EMU_FLASH.lock().unwrap().push(0xFF);
+        }
+    }
+    fn flash_fill_rand() {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        for byte in EMU_FLASH.lock().unwrap().iter_mut() {
+            *byte = rng.gen::<u8>();
+        }
+    }
+
+    /*
+    ALL RIGHT! i came to chew gum and write some tests, and they don't allow chewing gum in Singapore. So let's DO EEEEET!!!
+    */
+    /*
+    cases to check:
+       - mis-aligned start address
+       - mis-aligned end address
+       - mis-aligned start and end address
+       - aligned start and end address
+
+       - patch of data into a mostly pre-erased sector with existing data, but into the already-erased section
+       - the above, but where the patch length goes beyond the length of a single sector
+     */
+    //     pub fn patch(&mut self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) -> Result<(), SpinorError> {
+
+    #[test]
+    fn test_aligned_start_aligned_end() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // exactly one word of patch data
+        let mut patch: [u8; 4096] = [0; 4096];
+        for (i, p) in patch.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+
+        // patch region base + index = 0x2000 with 0x1000 of data
+        let result = spinor.patch(region, region_base, &patch, 0x1000);
+        assert!(result.is_ok(), "patch threw an error");
+
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            // we should see a repeating pattern of 0, 1, 2... from 0x2000-0x3000
+            if addr < 0x2000 || addr >= 0x3000 {
+                assert!(patched == orig, "data disturbed: {:08x} : e{:02x} a{:02x}", addr, orig, patched); // e = expected, a = actual
+            } else {
+                assert!(patched == addr as u8, "data was not patched: {:08x} : e{:02x} a{:02x}", addr, addr as u8, patched);
+            }
+        }
     }
 }
