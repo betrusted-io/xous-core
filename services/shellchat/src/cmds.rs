@@ -171,7 +171,7 @@ impl CmdEnv {
             trng_cmd: TrngCmd::new(),
             engine_cmd: engine,
             memtest_cmd: memtest,
-            keys_cmd: Keys::new(),
+            keys_cmd: Keys::new(&xns),
 
             //fcc_cmd: fcc,
         }

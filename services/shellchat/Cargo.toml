@@ -28,6 +28,7 @@ digest = "0.9"
 aes-xous={path="../aes"}
 cipher = "0.3"
 engine-25519 = {path="../engine-25519"}
+spinor = {path="../spinor"}
 
 heapless = "0.7"
 trng = {path = "../trng"}

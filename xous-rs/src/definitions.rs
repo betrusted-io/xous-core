@@ -11,6 +11,7 @@ pub type Connection = usize;
 
 pub const MAX_CID: usize = 34;
 
+pub const FLASH_PHYS_BASE:    u32 = 0x2000_0000;
 pub const SOC_REGION_LOC:     u32 = 0x0000_0000;
 pub const SOC_MAIN_GW_LOC:    u32 = 0x0000_0000;
 pub const SOC_MAIN_GW_LEN:    u32 = 0x0028_0000;

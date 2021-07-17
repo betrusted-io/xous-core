@@ -188,14 +188,14 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
 
     #[cfg(target_os = "none")]
     let ec_package = xous::syscall::map_memory(
-        xous::MemoryAddress::new(xous::EC_FW_PKG_LOC as usize),
+        xous::MemoryAddress::new((xous::EC_FW_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
     #[cfg(target_os = "none")]
     let wf_package = xous::syscall::map_memory(
-        xous::MemoryAddress::new(xous::EC_WF200_PKG_LOC as usize),
+        xous::MemoryAddress::new((xous::EC_WF200_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,

@@ -76,8 +76,8 @@ mod implementation {
                     //   - excess data would "wrap around" and program bytes at the beginning of the page, which is incorrect behavior
                     pre_align = 0x100 - (cur_addr & 0xFF);
 
-                    if pre_align >= len {
-                        pre_align = len;
+                    if pre_align >= len as u32 {
+                        pre_align = len as u32;
                         more_aligned_pages = false;
                     }
 
@@ -97,7 +97,7 @@ mod implementation {
                             let wdata = word[0] as u32 | ((word[1] as u32) << 8);
                             spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
                         }
-                            // enable writes: set wren mode
+                        // enable writes: set wren mode
                         loop {
                             flash_wren(&mut spinor.csr);
                             let status = flash_rdsr(&mut spinor.csr, 1);
@@ -384,7 +384,8 @@ mod implementation {
             SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
-        pub fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
+        pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
+            log::trace!("processing write_region with {:x?}", wr);
             if wr.start + wr.len > SPINOR_SIZE_BYTES { // basic security check. this is necessary so we don't have wrap-around attacks on the SoC gateware region
                 return SpinorError::InvalidRequest;
             }
@@ -515,7 +516,7 @@ fn xmain() -> ! {
     use crate::implementation::Spinor;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -540,6 +541,8 @@ fn xmain() -> ! {
     let susres_mgr_sid = xous::create_server().unwrap();
     let (sid0, sid1, sid2, sid3) = susres_mgr_sid.to_u32();
     xous::create_thread_4(susres_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start susres handler thread");
+
+    let llio = llio::Llio::new(&xns).expect("couldn't connect to LLIO");
 
     let mut client_id: Option<[u32; 4]> = None;
     let mut soc_token: Option<[u32; 4]> = None;
@@ -572,6 +575,7 @@ fn xmain() -> ! {
                 }
                 if client_id.is_none() && !SUSPEND_PENDING.load(Ordering::Relaxed) {
                     OP_IN_PROGRESS.store(true, Ordering::Relaxed); // lock out suspends when the exclusive lock is acquired
+                    llio.wfi_override(true).expect("couldn't shut off WFI");
                     client_id = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
                     log::trace!("giving {:x?} an exclusive lock", client_id);
                     SUSPEND_FAILURE.store(false, Ordering::Relaxed);
@@ -583,6 +587,7 @@ fn xmain() -> ! {
             Some(Opcode::ReleaseExclusive) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 client_id = None;
                 OP_IN_PROGRESS.store(false, Ordering::Relaxed);
+                llio.wfi_override(false).expect("couldn't restore WFI");
                 xous::return_scalar(msg.sender, 1).unwrap();
             }),
             Some(Opcode::AcquireSuspendLock) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {

@@ -36,27 +36,19 @@ pub(crate) enum SusResOps {
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
-pub struct EraseRegion {
-    /// start location for the erase
-    pub start: u32,
-    /// length of the region to erase
-    pub len: u32,
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Copy)]
-pub struct WriteRegion {
+pub(crate) struct WriteRegion {
     /// the exclusive access ID
     pub id: [u32; 4],
     /// start address for the write; address 0 is start of FLASH.
     pub start: u32,
     /// set if the sector was checked to be erased already
     pub clean_patch: bool,
-    /// data to write - up to one page
-    pub data: [u8; 4096],
     /// length of data to write
     pub len: u32,
     /// return code
     pub result: Option<SpinorError>,
+    /// data to write - up to one page
+    pub data: [u8; 4096],
 }
 
 

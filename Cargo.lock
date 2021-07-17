@@ -1639,6 +1639,7 @@ dependencies = [
  "rkyv 0.4.3",
  "rtc",
  "sha2",
+ "spinor",
  "susres",
  "ticktimer-server",
  "trng",
@@ -1673,6 +1674,7 @@ version = "0.1.0"
 dependencies = [
  "com",
  "lazy_static",
+ "llio",
  "log",
  "log-server",
  "num-derive",

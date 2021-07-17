@@ -19,6 +19,7 @@ use xous::{CID, send_message, Message};
 use num_traits::*;
 use xous_ipc::Buffer;
 
+#[derive(Debug)]
 pub struct Spinor {
     conn: CID,
     token: [u32; 4],
@@ -128,6 +129,9 @@ impl Spinor {
         if patch_data.len() % 2 != 0 {
             return Err(SpinorError::AlignmentError);
         }
+        if patch_index % 2 != 0 { // seems in DDR mode, the alignment must be to 16-bit boundaries
+            return Err(SpinorError::AlignmentError);
+        }
         // acquire a write lock on the unit
         #[cfg(not(test))]
         {
@@ -173,15 +177,17 @@ impl Spinor {
             // we get chunks instead of chunks_exact() as we /want/ to catch errors in computing alignments
             assert!(sector.len() as u32 == self.erase_alignment(), "alignment masks not computed correctly");
 
-            // check to see if the region we're writing is already erased; if so, just send the data that needs patching
-            let mut check_index = cur_index;
-            let mut check_patch_index = cur_patch_index;
+            // check to see if we can just write, without having to erase:
+            //   - visit every value in the region to be patched, and if it's not already 0xFF, short-circuit and move to the erase-then-write implementation
+            //   - as we check every value, copy them to the write buffer; we may end up discarding that, though, if we come across an unerased value. that's ok, still faster than always doing an erase then write on average
+            let mut check_index = cur_index; // copy the writing index to a temporary checking index
+            let mut check_patch_index = cur_patch_index; // copy the patching index to a temporary patch checking index
             let mut data_index = 0;
             let mut erased = true;
             let mut patch_start: Option<u32> = None;
             let mut patch_dirty = false;
             for &rom_byte in sector.iter() {
-                if !((check_index < check_patch_index) || (check_index >= (check_patch_index + patch_data.len() as u32))) {
+                if !((check_index < patch_index) || (check_index >= (patch_index + patch_data.len() as u32))) {
                     if rom_byte != patch_data[check_patch_index as usize] {
                         patch_dirty = true;
                     }
@@ -211,13 +217,12 @@ impl Spinor {
                 cur_index = check_index;
                 cur_patch_index = check_patch_index;
             } else {
-                // the sector needs erasing first, assemble the primitives accordingly
-
-                wr.start = cur_index + region_base;
+                // the sector needs erasing first, assemble the primitives accordingly:
                 // load WriteRegion with one sector of data:
                 //   - copy from original region for pre-pad data
                 //   - if we're in the patch region, copy the patch_data
                 //   - after the patch region, copy the pre-pad data
+                wr.start = cur_index + region_base;
                 let mut dirty = false;
                 let mut first_patch_addr: Option<u32> = None;
                 for (&src, dst) in sector.iter().zip(wr.data.iter_mut()) {
@@ -447,7 +452,7 @@ mod tests {
     fn test_small_patch() {
         let mut spinor = Spinor::new();
         init_emu_flash(8);
-        flash_fill_rand();
+        // flash_fill_rand();
 
         // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
         // here we bodge it out of the emulated flash space with some rough parameter
@@ -469,7 +474,7 @@ mod tests {
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             match addr {
                 0x2704 => assert!(patched == 0x33, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched),
-                0x2705 => assert!(patched == 0xCC, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched),
+                0x2705 => assert!(patched == 0xCC, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0xCC, patched),
                 _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
             }
         }
