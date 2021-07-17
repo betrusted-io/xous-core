@@ -67,39 +67,96 @@ mod implementation {
                 assert!(len <= 4096, "data len is too large");
                 assert!((len % 2) == 0, "data is not a multiple of 2 in length: the SPI DDR interface always requires two bytes per transfer");
                 let mut cur_addr = start_addr;
-                for page in data[..len].chunks(256) {
+                let mut pre_align = 0;
+                let mut more_aligned_pages = true;
+                if cur_addr & 0xff != 0 {
+                    // do a partial-page program to get us into page alignment:
+                    //   - it's OK to send an address that isn't page-aligned, but:
+                    //   - you can only write data that would program up to the end of the page
+                    //   - excess data would "wrap around" and program bytes at the beginning of the page, which is incorrect behavior
+                    pre_align = 0x100 - (cur_addr & 0xFF);
+
+                    if pre_align >= len {
+                        pre_align = len;
+                        more_aligned_pages = false;
+                    }
+
+                    let partial_page = &data[0..pre_align as usize];
                     // pre-fill the page fifo
                     let mut blank = true;
-                    for word in page.chunks(2) {
+                    for word in partial_page.chunks(2) {
+                        // if the data is blank, don't do a write
                         let wdata = word[0] as u32 | ((word[1] as u32) << 8);
                         if wdata != 0xFFFF {
-                            blank = false;
-                        }
-                        spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
-                    }
-                    if blank {
-                        // skip over pages that are entirely blank
-                        continue;
-                    }
-                    // enable writes: set wren mode
-                    loop {
-                        flash_wren(&mut spinor.csr);
-                        let status = flash_rdsr(&mut spinor.csr, 1);
-                        if status & 0x02 != 0 {
+                            blank = false; // short circuit evaluation if we find anything that's not blank
                             break;
                         }
                     }
-                    // send the data to be programmed
-                    flash_pp4b(&mut spinor.csr, cur_addr, page.len() as u32);
-                    cur_addr += page.len() as u32;
-
-                    while (flash_rdsr(&mut spinor.csr, 1) & 0x01) != 0 {
-                        // wait while WIP is set
+                    if !blank {
+                        for word in partial_page.chunks(2) {
+                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
+                        }
+                            // enable writes: set wren mode
+                        loop {
+                            flash_wren(&mut spinor.csr);
+                            let status = flash_rdsr(&mut spinor.csr, 1);
+                            if status & 0x02 != 0 {
+                                break;
+                            }
+                        }
+                        // send the data to be programmed
+                        flash_pp4b(&mut spinor.csr, cur_addr, partial_page.len() as u32);
+                        while (flash_rdsr(&mut spinor.csr, 1) & 0x01) != 0 {
+                            // wait while WIP is set
+                        }
+                        // get the success code for return
+                        result = flash_rdscur(&mut spinor.csr);
                     }
-                    // get the success code for return
-                    result = flash_rdscur(&mut spinor.csr);
-                    if result & 0x20 != 0 {
-                        break; // abort if error
+                    cur_addr += pre_align; // increment the address, even if we "skipped" the region
+                }
+                if ((result & 0x20) == 0) && more_aligned_pages {
+                    assert!(cur_addr & 0xff == 0, "data is not page-aligned going into the aligned write phase");
+                    // now write the remaining, aligned pages. The last chunk can be short of data,
+                    // that's also fine; the write will not affect bytes that are not transmitted
+                    for page in data[pre_align as usize..len].chunks(256) {
+                        // pre-fill the page fifo
+                        let mut blank = true;
+                        for word in page.chunks(2) {
+                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                            if wdata != 0xFFFF {
+                                blank = false;
+                                break;
+                            }
+                        }
+                        if blank {
+                            // skip over pages that are entirely blank
+                            continue;
+                        }
+                        for word in page.chunks(2) {
+                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
+                        }
+                        // enable writes: set wren mode
+                        loop {
+                            flash_wren(&mut spinor.csr);
+                            let status = flash_rdsr(&mut spinor.csr, 1);
+                            if status & 0x02 != 0 {
+                                break;
+                            }
+                        }
+                        // send the data to be programmed
+                        flash_pp4b(&mut spinor.csr, cur_addr, page.len() as u32);
+                        cur_addr += page.len() as u32;
+
+                        while (flash_rdsr(&mut spinor.csr, 1) & 0x01) != 0 {
+                            // wait while WIP is set
+                        }
+                        // get the success code for return
+                        result = flash_rdscur(&mut spinor.csr);
+                        if result & 0x20 != 0 {
+                            break; // abort if error
+                        }
                     }
                 }
                 // disable writes: send wrdi

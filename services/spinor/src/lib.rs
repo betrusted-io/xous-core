@@ -163,7 +163,7 @@ impl Spinor {
         let mut patch_len_aligned = patch_data.len() as u32 + patch_pre_pad;
         // if the total length is not aligned to an erase block, add the padding up until the next erase block
         if patch_len_aligned & align_mask != 0 {
-            patch_len_aligned += self.erase_alignment() - patch_len_aligned & align_mask;
+            patch_len_aligned += self.erase_alignment() - (patch_len_aligned & align_mask);
         }
 
         let mut cur_index = patch_index_aligned;
@@ -299,7 +299,9 @@ impl Drop for Spinor {
     }
 }
 
-// run with `cargo test -- --nocapture` to see the print output inside services/spinor
+// run with `cargo test -- --nocapture --test-threads=1`:
+//   --nocapture to see the print output (while debugging)
+//   --test-threads=1 because the FLASH ROM is a shared state object
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,7 +331,8 @@ mod tests {
         wr.data[2] = 0xCC;
         wr.data[3] = 0xDD;
         let mut spinor = Spinor::new();
-        spinor.send_write_region(&wr);
+        let ret = spinor.send_write_region(&wr);
+        assert!(ret.is_ok(), "spinor write returned an error");
 
         for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {
             // we should see 0xAA 0xBB 0xCC 0xDD from addresses 8-12, everyhing else as 0xFF
@@ -357,7 +360,8 @@ mod tests {
         wr.data[8] = 0x3;
         wr.data[9] = 0x4;
         wr.len = 10;
-        spinor.send_write_region(&wr);
+        let ret = spinor.send_write_region(&wr);
+        assert!(ret.is_ok(), "spinor write returned an error");
 
         for (addr, &byte) in EMU_FLASH.lock().unwrap().iter().enumerate() {
             // we should see 1, 2, 3, 4 from addresses 6-10, everyhing else as 0xFF
@@ -419,7 +423,7 @@ mod tests {
         let region_len = 0x1000 * 4; // four sectors long, one sector up
         let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
 
-        // exactly one word of patch data
+        // exactly one sector of patch data
         let mut patch: [u8; 4096] = [0; 4096];
         for (i, p) in patch.iter_mut().enumerate() {
             *p = i as u8;
@@ -432,10 +436,192 @@ mod tests {
         for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
             // we should see a repeating pattern of 0, 1, 2... from 0x2000-0x3000
             if addr < 0x2000 || addr >= 0x3000 {
-                assert!(patched == orig, "data disturbed: {:08x} : e{:02x} a{:02x}", addr, orig, patched); // e = expected, a = actual
+                assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched); // e = expected, a = actual
             } else {
-                assert!(patched == addr as u8, "data was not patched: {:08x} : e{:02x} a{:02x}", addr, addr as u8, patched);
+                assert!(patched == addr as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, addr as u8, patched);
             }
         }
     }
+
+    #[test]
+    fn test_small_patch() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // patch two words, the minimum allowed amount
+        let patch: [u8; 2] = [0x33, 0xCC];
+
+        // patch region base + index = 0x2704 with two bytes of data
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x2700..0x2708]);
+        let result = spinor.patch(region, region_base, &patch, 0x1704);
+        assert!(result.is_ok(), "patch threw an error");
+
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            match addr {
+                0x2704 => assert!(patched == 0x33, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched),
+                0x2705 => assert!(patched == 0xCC, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched),
+                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+            }
+        }
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x2700..0x2708]);
+    }
+
+    #[test]
+    fn test_misaligned_start_end_full_sector() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // patch one full page
+        let mut patch: [u8; 4096] = [0; 4096];
+        for (i, p) in patch.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+
+        // patch region base + index = 0x2704 with one full page of data
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x2700..0x2708]);
+        let result = spinor.patch(region, region_base, &patch, 0x1704);
+        assert!(result.is_ok(), "patch threw an error");
+
+        let mut i = 0;
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            if addr < 0x2704 || addr >= 0x3704 {
+                assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched);
+            } else {
+                assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, i as u8, patched);
+                i += 1;
+            }
+        }
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x2700..0x2708]);
+    }
+
+    #[test]
+    fn test_misaligned_start_partial_sector() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // patch over a page boundary, but not a full page
+        let mut patch: [u8; 2304] = [0; 2304];
+        for (i, p) in patch.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+
+        // patch region base + index = 0x2704 with two bytes of data
+        let result = spinor.patch(region, region_base, &patch, 0x1704);
+        assert!(result.is_ok(), "patch threw an error");
+
+        let mut i = 0;
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            match addr {
+                0x2704..=0x3003 => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
+                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+            }
+        }
+    }
+
+    #[test]
+    fn test_aligned_start_partial_sector() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // patch over a page boundary, but not a full page
+        let mut patch: [u8; 578] = [0; 578];
+        for (i, p) in patch.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+
+        // patch region base + index = 0x2000 with 578 bytes of data
+        let result = spinor.patch(region, region_base, &patch, 0x1000);
+        assert!(result.is_ok(), "patch threw an error");
+
+        let mut i = 0;
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            match addr {
+                0x2000..=0x2241 => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
+                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+            }
+        }
+    }
+
+    #[test]
+    fn test_patch_edge() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(8);
+        flash_fill_rand();
+        // poke a small "erased" region for patching in this test: exactly the right size for the anticipated patch of 384 bytes
+        for byte in EMU_FLASH.lock().unwrap()[0x1F00..0x2080].iter_mut() {
+            *byte = 0xFF;
+        }
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x1000; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 4; // four sectors long, one sector up
+        let region = &flash_orig[region_base as usize .. (region_base + region_len) as usize];
+
+        // patch over a page boundary, but not a full page
+        let mut patch: [u8; 384] = [0; 384];
+        for (i, p) in patch.iter_mut().enumerate() {
+            *p = i as u8;
+        }
+
+        // patch region base + index = 0x1F00 with 384 bytes of data (to 0x2080)
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x1EFC..0x1F04]);
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x207C..0x2084]);
+        let result = spinor.patch(region, region_base, &patch, 0xF00);
+        assert!(result.is_ok(), "patch threw an error");
+
+        let mut i = 0;
+        for (addr, (&patched, &orig)) in EMU_FLASH.lock().unwrap().iter().zip(flash_orig.iter()).enumerate() {
+            match addr {
+                0x1F00..=0x207F => {assert!(patched == i as u8, "data was not patched: {:08x} : e.{:02x} a.{:02x}", addr, 0x33, patched); i+= 1;},
+                _ => assert!(patched == orig, "data disturbed: {:08x} : e.{:02x} a.{:02x}", addr, orig, patched),
+            }
+        }
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x1EFC..0x1F04]);
+        print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x207C..0x2084]);
+    }
+
 }
