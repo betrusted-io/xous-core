@@ -21,10 +21,10 @@ where
     let mut source_file = std::fs::File::open(input)?;
     let mut dest_file = std::fs::File::create(output)?;
     source_file.read_to_end(&mut source)?;
-    for b in LOADER_VERSION.to_le_bytes() {
+    for &b in LOADER_VERSION.to_le_bytes().iter() {
         source.push(b);
     }
-    for b in (source.len() as u32).to_le_bytes() {
+    for &b in (source.len() as u32).to_le_bytes().iter() {
         source.push(b);
     }
 
