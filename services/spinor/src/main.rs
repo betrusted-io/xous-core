@@ -17,6 +17,7 @@ mod implementation {
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use num_traits::*;
 
+    #[derive(Debug)]
     enum FlashOp {
         EraseSector(u32), // 4k sector
         WritePages(u32, [u8; 4096], usize), // page address, data, len
@@ -82,7 +83,7 @@ mod implementation {
                     }
 
                     let partial_page = &data[0..pre_align as usize];
-                    // pre-fill the page fifo
+                    // check for blank writes and skip
                     let mut blank = true;
                     for word in partial_page.chunks(2) {
                         // if the data is blank, don't do a write
@@ -93,10 +94,6 @@ mod implementation {
                         }
                     }
                     if !blank {
-                        for word in partial_page.chunks(2) {
-                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
-                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
-                        }
                         // enable writes: set wren mode
                         loop {
                             flash_wren(&mut spinor.csr);
@@ -104,6 +101,11 @@ mod implementation {
                             if status & 0x02 != 0 {
                                 break;
                             }
+                        }
+                        // fill the page fifo
+                        for word in partial_page.chunks(2) {
+                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
                         }
                         // send the data to be programmed
                         flash_pp4b(&mut spinor.csr, cur_addr, partial_page.len() as u32);
@@ -120,7 +122,7 @@ mod implementation {
                     // now write the remaining, aligned pages. The last chunk can be short of data,
                     // that's also fine; the write will not affect bytes that are not transmitted
                     for page in data[pre_align as usize..len].chunks(256) {
-                        // pre-fill the page fifo
+                        // check & skip writes that are blank
                         let mut blank = true;
                         for word in page.chunks(2) {
                             let wdata = word[0] as u32 | ((word[1] as u32) << 8);
@@ -133,10 +135,6 @@ mod implementation {
                             // skip over pages that are entirely blank
                             continue;
                         }
-                        for word in page.chunks(2) {
-                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
-                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
-                        }
                         // enable writes: set wren mode
                         loop {
                             flash_wren(&mut spinor.csr);
@@ -144,6 +142,11 @@ mod implementation {
                             if status & 0x02 != 0 {
                                 break;
                             }
+                        }
+                        // fill the fifo
+                        for word in page.chunks(2) {
+                            let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                            spinor.csr.wfo(utra::spinor::WDATA_WDATA, wdata);
                         }
                         // send the data to be programmed
                         flash_pp4b(&mut spinor.csr, cur_addr, page.len() as u32);
@@ -285,12 +288,14 @@ mod implementation {
     }
 
     fn flash_pp4b(csr: &mut utralib::CSR<u32>, address: u32, data_bytes: u32) {
+        let data_words = data_bytes / 2;
+        assert!(data_words <= 128, "data_words specified is longer than one page!");
         csr.wfo(utra::spinor::CMD_ARG_CMD_ARG, address);
         csr.wo(utra::spinor::COMMAND,
             csr.ms(utra::spinor::COMMAND_EXEC_CMD, 1)
           | csr.ms(utra::spinor::COMMAND_CMD_CODE, 0x12)  // PP4B
           | csr.ms(utra::spinor::COMMAND_HAS_ARG, 1)
-          | csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_bytes / 2)
+          | csr.ms(utra::spinor::COMMAND_DATA_WORDS, data_words)
           | csr.ms(utra::spinor::COMMAND_LOCK_READS, 1)
         );
         while csr.rf(utra::spinor::STATUS_WIP) != 0 {}
@@ -386,7 +391,7 @@ mod implementation {
         }
 
         pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
-            log::trace!("processing write_region with {:x?}", wr);
+            // log::trace!("processing write_region with {:x?}", wr);
             if wr.start + wr.len > SPINOR_SIZE_BYTES { // basic security check. this is necessary so we don't have wrap-around attacks on the SoC gateware region
                 return SpinorError::InvalidRequest;
             }
@@ -401,6 +406,7 @@ mod implementation {
                     return SpinorError::AlignmentError;
                 }
                 self.cur_op = Some(FlashOp::EraseSector(wr.start));
+                log::trace!("erase: {:x?}", self.cur_op);
                 let erase_result = self.call_spinor_context_blocking();
                 if erase_result & 0x40 != 0 {
                     log::error!("E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}", erase_result, wr.start);
@@ -409,6 +415,7 @@ mod implementation {
 
                 // now write the data sector
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
+                log::trace!("write: len:{}, {:x?}", wr.len, self.cur_op);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
                     log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
@@ -422,6 +429,7 @@ mod implementation {
                 // here, almost any data alignment and length is acceptable -- we can patch even just two bytes using
                 // this call.
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
+                log::trace!("clean write: len:{}, {:x?}", wr.len, self.cur_op);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
                     log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
@@ -517,7 +525,7 @@ fn xmain() -> ! {
     use crate::implementation::Spinor;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

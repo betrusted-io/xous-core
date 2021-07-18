@@ -612,6 +612,23 @@ mod tests {
             *p = i as u8;
         }
 
+        /*
+        let mut blank = true;
+        for page in patch[0..patch.len()].chunks(256) {
+            for word in page.chunks(2) {
+                let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                if wdata != 0xFFFF {
+                    blank = false;
+                    break;
+                }
+            }
+            for word in page.chunks(2) {
+                let wdata = word[0] as u32 | ((word[1] as u32) << 8);
+                print!("0x{:04x} ", wdata);
+            }
+            println!("");
+        }
+        */
         // patch region base + index = 0x1F00 with 384 bytes of data (to 0x2080)
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x1EFC..0x1F04]);
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x207C..0x2084]);

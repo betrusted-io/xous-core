@@ -105,13 +105,37 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     let mut errs = 0;
                     for (addr, (&rom, &reference)) in region.iter().zip(reference.iter()).enumerate() {
                         if rom != reference {
-                            if errs < 256 {
+                            if (errs % 256 < 2) || (errs % 256 >= 254) {
                                 log::error!("fill random failed 0x{:08x}: e.{:02x} o.{:02x}", addr, reference, rom);
                             }
                             errs += 1;
                         }
                     }
                     log::debug!("fill random data finished, errs: {}", errs);
+
+                    // test a patch on random data
+                    log::debug!("programmed patch test");
+                    let patch: [u8; 4] = [0xaa, 0xbb, 0xcc, 0xdd];
+                    self.spinor.patch(&region, region_base, &patch, 12).expect("couldn't do smallest patch");
+                    for (addr, (&byte, &reference)) in region.iter().zip(reference.iter()).enumerate() {
+                        match addr {
+                            12 => if byte != 0xaa { log::error!("patch failed e.aa o.{:02x}", byte) },
+                            13 => if byte != 0xbb { log::error!("patch failed e.bb o.{:02x}", byte) },
+                            14 => if byte != 0xcc { log::error!("patch failed e.cc o.{:02x}", byte) },
+                            15 => if byte != 0xdd { log::error!("patch failed e.dd o.{:02x}", byte) },
+                            _ => if byte != reference {
+                                if (errs % 256 < 4) || (errs % 256 >= 252) {
+                                    log::error!("patch failed, erase disturb at region offset 0x{:08x}: e.{:02x} o.{:02x}", addr, reference, byte)
+                                }
+                                errs += 1;
+                            }
+                        }
+                    }
+                    log::debug!("patch test finished, errs {}", errs);
+                    // refresh the reference, otherwise this patch will throw errors
+                    for (&src, dst) in region.iter().zip(reference.iter_mut()) {
+                        *dst = src;
+                    }
 
                     log::debug!("patch across a page boundary");
                     let bigger_patch: [u8; 16] = [0xf0, 0x0d, 0xbe, 0xef, 0xaa, 0x55, 0x99, 0x66, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff];
@@ -123,7 +147,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
                         match addr {
                             0xff8..=0x1007 => {
                                 if rom != bigger_patch[i] {
-                                    if errs < 256 {
+                                    if (errs % 256 < 2) || (errs % 256 >= 254) {
                                         log::error!("bigger patch failed 0x{:08x}: e.{:02x} o.{:02x}", addr, bigger_patch[i], rom);
                                     }
                                     errs += 1;
@@ -132,7 +156,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
                             },
                             _ => {
                                 if rom != reference {
-                                    if errs < 256 {
+                                    if (errs % 256 < 2) || (errs % 256 >= 254) {
                                         log::error!("data disturbed at 0x{:08x}: e.{:02x} o.{:02x}", addr, reference, rom);
                                     }
                                     errs += 1;
