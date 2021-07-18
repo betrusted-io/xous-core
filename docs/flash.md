@@ -41,7 +41,7 @@ of wear leveling, however.
 + 2027_8000 |   csr.csv corresponding to bitstream   |
 + 2027_FFFF |   (32kiB max, see below)               |
 +-----------+----------------------------------------+
-+ 2028_0000 |   Reserved for backup bitstream        |
++ 2028_0000 |   Incoming update bitstream staging    |
 + 204F_FFFF |                                        |
 +-----------+----------------------------------------+
 + 2050_0000 |  top 0x1000 is signature record        |
