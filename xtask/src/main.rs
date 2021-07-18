@@ -1,5 +1,4 @@
 use std::{
-    convert::TryInto,
     env,
     io::{Read, Write},
     path::{Path, PathBuf, MAIN_SEPARATOR},
@@ -75,8 +74,8 @@ fn try_main() -> Result<(), DynError> {
         "xous-names",
         "trng",
         "llio",
-//        "rkyv-test-client",
-//        "rkyv-test-server",
+        //        "rkyv-test-client",
+        //        "rkyv-test-server",
         "test-stub",
         "susres",
         "com",
@@ -114,33 +113,49 @@ fn try_main() -> Result<(), DynError> {
     match task.as_deref() {
         Some("renode-image") => renode_image(false, &hw_pkgs)?,
         Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
-        Some("libstd-test") => renode_image_extra(false, &base_pkgs, args.collect())?,
+        Some("libstd-test") => {
+            let mut pkgs = base_pkgs.to_vec();
+            let args: Vec<String> = args.collect();
+            for program in &args {
+                pkgs.push(&program);
+            }
+            renode_image(false, &pkgs)?;
+        }
         Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
         Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
         Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None)?,
-        Some("benchmark") => build_hw_image(false, env::args().nth(2), &benchmark_pkgs, lkey, kkey, None)?,
-        Some("minimal") => build_hw_image(false, env::args().nth(2), &minimal_pkgs, lkey, kkey, None)?,
-        Some("cbtest") => build_hw_image(false, env::args().nth(2), &cbtest_pkgs, lkey, kkey, None)?,
+        Some("benchmark") => {
+            build_hw_image(false, env::args().nth(2), &benchmark_pkgs, lkey, kkey, None)?
+        }
+        Some("minimal") => {
+            build_hw_image(false, env::args().nth(2), &minimal_pkgs, lkey, kkey, None)?
+        }
+        Some("cbtest") => {
+            build_hw_image(false, env::args().nth(2), &cbtest_pkgs, lkey, kkey, None)?
+        }
         Some("trng-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
-            lkey, kkey,
+            lkey,
+            kkey,
             Some(&["--features", "urandomtest"]),
         )?,
         Some("ro-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
-            lkey, kkey,
+            lkey,
+            kkey,
             Some(&["--features", "ringosctest"]),
         )?,
         Some("av-test") => build_hw_image(
             false,
             env::args().nth(2),
             &hw_pkgs,
-            lkey, kkey,
+            lkey,
+            kkey,
             Some(&["--features", "avalanchetest"]),
         )?,
         Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None)?,
@@ -261,12 +276,12 @@ fn build_hw_image(
     let loaderkey_file = if let Some(lkf) = lkey {
         lkf
     } else {
-        String::from("../devkey/dev.key")
+        String::from("devkey/dev.key")
     };
     let kernelkey_file = if let Some(kkf) = kkey {
         kkf
     } else {
-        String::from("../devkey/dev.key")
+        String::from("devkey/dev.key")
     };
 
     let kernel = build_kernel(debug)?;
@@ -314,26 +329,33 @@ fn build_hw_image(
         return Err("cargo build failed".into());
     }
 
-    let status = Command::new("python3")
-        .current_dir(project_root().join("tools"))
+    let status = Command::new(cargo())
+        .current_dir(project_root())
         .args(&[
-            "sign_image.py",
+            "run",
+            "--package",
+            "tools",
+            "--bin",
+            "sign-image",
+            "--",
             "--loader-image",
             loader_presign.to_str().unwrap(),
             "--loader-key",
             loaderkey_file.as_str(),
             "--loader-output",
             loader_bin.to_str().unwrap(),
-        ]).status()?;
+        ])
+        .status()?;
     if !status.success() {
-        return Err("loader image sign failed".into())
+        return Err("loader image sign failed".into());
     }
 
     let mut xous_img_path = output_bundle.parent().unwrap().to_owned();
     let mut xous_img_presign_path = xous_img_path.clone();
     xous_img_path.push("xous.img");
     xous_img_presign_path.push("xous_presign.img");
-    let mut xous_img = std::fs::File::create(&xous_img_presign_path).expect("couldn't create xous.img");
+    let mut xous_img =
+        std::fs::File::create(&xous_img_presign_path).expect("couldn't create xous.img");
     let mut bundle_file = std::fs::File::open(output_bundle).expect("couldn't open output bundle");
     let mut buf = vec![];
     bundle_file
@@ -344,20 +366,26 @@ fn build_hw_image(
         .expect("couldn't write bundle file to xous.img");
     println!("Bundled image file created at {}", xous_img_path.display());
 
-    let status = Command::new("python3")
-    .current_dir(project_root().join("tools"))
-    .args(&[
-        "sign_image.py",
-        "--kernel-image",
-        xous_img_presign_path.to_str().unwrap(),
-        "--kernel-key",
-        kernelkey_file.as_str(),
-        "--kernel-output",
-        xous_img_path.to_str().unwrap(),
-        // "--defile",
-    ]).status()?;
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "run",
+            "--package",
+            "tools",
+            "--bin",
+            "sign-image",
+            "--",
+            "--kernel-image",
+            xous_img_presign_path.to_str().unwrap(),
+            "--kernel-key",
+            kernelkey_file.as_str(),
+            "--kernel-output",
+            xous_img_path.to_str().unwrap(),
+            // "--defile",
+        ])
+        .status()?;
     if !status.success() {
-        return Err("kernel image sign failed".into())
+        return Err("kernel image sign failed".into());
     }
 
     println!();
@@ -379,31 +407,6 @@ fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
 }*/
 
 fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
-    let path = std::path::Path::new("emulation/soc/renode.svd");
-    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
-    let kernel = build_kernel(debug)?;
-    let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None, None)?;
-    for pkg in packages {
-        let mut pkg_path = base_path.clone();
-        pkg_path.push(pkg);
-        init.push(pkg_path);
-    }
-    build(
-        &["loader"],
-        debug,
-        Some(TARGET),
-        Some("loader".into()),
-        None,
-    )?;
-
-    create_image(
-        &kernel,
-        &init,
-        debug,
-        MemorySpec::SvdFile("emulation/soc/renode.svd".into()),
-    )?;
-
     // Regenerate the Platform file
     let status = Command::new(cargo())
         .current_dir(project_root())
@@ -421,64 +424,14 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
     if !status.success() {
         Err("Unable to regenerate Renode platform file")?;
     }
-
-    Ok(())
-}
-
-/// Create a Renode image, and include the extra init programs specified
-/// on the command line.
-fn renode_image_extra(
-    debug: bool,
-    packages: &[&str],
-    extra_init: Vec<String>,
-) -> Result<(), DynError> {
-    let path = std::path::Path::new("emulation/soc/renode.svd");
-    std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
-    let kernel = build_kernel(debug)?;
-    let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None, None)?;
-    for pkg in packages {
-        let mut pkg_path = base_path.clone();
-        pkg_path.push(pkg);
-        init.push(pkg_path);
-    }
-    for pkg in extra_init {
-        init.push(pkg.try_into().unwrap());
-    }
-    build(
-        &["loader"],
+    build_hw_image(
         debug,
-        Some(TARGET),
-        Some("loader".into()),
+        Some("emulation/soc/renode.svd".to_owned()),
+        packages,
         None,
-    )?;
-
-    create_image(
-        &kernel,
-        &init,
-        debug,
-        MemorySpec::SvdFile("emulation/soc/renode.svd".into()),
-    )?;
-
-    // Regenerate the Platform file
-    let status = Command::new(cargo())
-        .current_dir(project_root())
-        .args(&[
-            "run",
-            "-p",
-            "svd2repl",
-            "--",
-            "-i",
-            "emulation/soc/renode.svd",
-            "-o",
-            "emulation/soc/betrusted-soc.repl",
-        ])
-        .status()?;
-    if !status.success() {
-        Err("Unable to regenerate Renode platform file")?;
-    }
-
-    Ok(())
+        None,
+        None,
+    )
 }
 
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
