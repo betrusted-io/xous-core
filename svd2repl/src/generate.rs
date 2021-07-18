@@ -1,6 +1,8 @@
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
+
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedTag,
@@ -496,7 +498,11 @@ sysbus:
     out.write_all(s.as_bytes())
 }
 
-fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std::io::Result<()> {
+fn print_memory_regions<U: Write>(
+    regions: &[MemoryRegion],
+    cs_peripherals: &HashMap<&str, &str>,
+    out: &mut U,
+) -> std::io::Result<()> {
     writeln!(out, "// Physical base addresses of memory regions")?;
     for region in regions {
         let region_name = region.name.to_lowercase();
@@ -515,9 +521,15 @@ fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std:
             continue;
         }
 
+        // Ignore any memory region with a name that matches a peripheral, since
+        // those regions are handled by the peripheral themselves.
+        if cs_peripherals.contains_key(region_name.as_str()) {
+            continue;
+        }
+
         writeln!(
             out,
-            "mem_{}: Memory.MappedMemory @ sysbus 0x{:08x}",
+            "{}: Memory.MappedMemory @ sysbus 0x{:08x}",
             region_name, region.base
         )?;
         writeln!(out, "    size: 0x{:08x}", region_size)?;
@@ -529,23 +541,13 @@ fn print_memory_regions<U: Write>(regions: &[MemoryRegion], out: &mut U) -> std:
 
 fn print_peripherals<U: Write>(
     peripherals: &[Peripheral],
+    regions: &[MemoryRegion],
+    cs_peripherals: &HashMap<&str, &str>,
     constants: &[Constant],
     out: &mut U,
 ) -> std::io::Result<()> {
-    use std::collections::HashMap;
-    let mut known_peripherals = HashMap::new();
-    known_peripherals.insert("console", "UART.LiteX_UART");
-    known_peripherals.insert("uart", "UART.LiteX_UART");
-    known_peripherals.insert("app_uart", "UART.LiteX_UART");
-    known_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
-    known_peripherals.insert("i2c", "I2C.BetrustedI2C");
-    known_peripherals.insert("keyboard", "Input.BetrustedKbd");
-    known_peripherals.insert("memlcd", "Video.BetrustedLCD");
-    known_peripherals.insert("sha512", "Miscellaneous.Sha512");
-    known_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
-    known_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
-    known_peripherals.insert("ticktimer", "Timers.TickTimer");
     writeln!(out, "// Platform Peripherals")?;
+
     for peripheral in peripherals {
         let lc_name = peripheral.name.to_lowercase();
         // let peripheral_size = if peripheral.size < 4096 {
@@ -553,7 +555,7 @@ fn print_peripherals<U: Write>(
         // } else {
         //     peripheral.size
         // };
-        if let Some(renode_device) = known_peripherals.get(lc_name.as_str()) {
+        if let Some(renode_device) = cs_peripherals.get(lc_name.as_str()) {
             writeln!(
                 out,
                 "{}: {} @ sysbus 0x{:08x}",
@@ -571,6 +573,15 @@ fn print_peripherals<U: Write>(
                 }
                 if !freq_found {
                     panic!("Couldn't discover clock frequency when creating timer0 object");
+                }
+            }
+
+            // If there is a corresponding memory region, add it as parameters.
+            for region in regions.iter() {
+                if region.name.to_lowercase() == lc_name.as_str() {
+                    writeln!(out, "    memAddr: 0x{:x}", region.base)?;
+                    writeln!(out, "    memSize: 0x{:x}", region.size)?;
+                    break;
                 }
             }
 
@@ -618,10 +629,32 @@ pub fn parse_svd<T: Read>(src: T) -> Result<Description, ParseError> {
 pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseError> {
     let description = parse_svd(src)?;
 
+    let mut cs_peripherals = HashMap::new();
+    cs_peripherals.insert("app_uart", "UART.LiteX_UART");
+    cs_peripherals.insert("console", "UART.LiteX_UART");
+    cs_peripherals.insert("engine", "Miscellaneous.Engine");
+    cs_peripherals.insert("i2c", "I2C.BetrustedI2C");
+    cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
+    cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
+    cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
+    cs_peripherals.insert("sha512", "Miscellaneous.Sha512");
+    cs_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
+    cs_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
+    cs_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
+    cs_peripherals.insert("ticktimer", "Timers.TickTimer");
+    cs_peripherals.insert("uart", "UART.LiteX_UART");
+
     print_header(dest).or(Err(ParseError::WriteError))?;
-    print_peripherals(&description.peripherals, &description.constants, dest)
+    print_peripherals(
+        &description.peripherals,
+        &description.memory_regions,
+        &cs_peripherals,
+        &description.constants,
+        dest,
+    )
+    .or(Err(ParseError::WriteError))?;
+    print_memory_regions(&description.memory_regions, &cs_peripherals, dest)
         .or(Err(ParseError::WriteError))?;
-    print_memory_regions(&description.memory_regions, dest).or(Err(ParseError::WriteError))?;
     print_footer(dest).or(Err(ParseError::WriteError))?;
 
     Ok(())

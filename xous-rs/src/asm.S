@@ -98,3 +98,8 @@ vex_aes_dec_id_last_2:
 vex_aes_dec_id_last_3:
     .word       0x36b5050b // vex_aes_dec_id_last a0, a1, a0, #3
     ret
+
+.global riscv_cache_flush
+riscv_cache_flush:
+    fence
+    ret

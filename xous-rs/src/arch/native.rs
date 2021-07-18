@@ -379,3 +379,11 @@ pub fn wait_process(_joiner: ProcessHandle) -> crate::SysCallResult {
         crate::wait_event();
     }
 }
+
+extern "C" {
+    fn riscv_cache_flush();
+}
+
+pub fn cache_flush() {
+    unsafe { riscv_cache_flush() };
+}
