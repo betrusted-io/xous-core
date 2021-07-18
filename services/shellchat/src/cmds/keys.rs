@@ -18,7 +18,7 @@ impl Keys {
             xous::MemoryFlags::R,
         ).expect("couldn't map in testing range");
         #[cfg(not(target_os = "none"))] // just make a dummy mapping to keep things from crashing in hosted mode
-        let sample = xous::syscall::map_memory(
+        let testing_range = xous::syscall::map_memory(
             None,
             None,
             TEST_SIZE,

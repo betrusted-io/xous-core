@@ -453,19 +453,21 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use log::info;
-
+    use crate::api::*;
     pub struct Spinor {
     }
 
     impl Spinor {
-        pub fn new() -> Spinor {
+        pub fn new(_conn: xous::CID) -> Spinor {
             Spinor {
             }
         }
         pub fn suspend(&self) {
         }
         pub fn resume(&self) {
+        }
+        pub(crate) fn write_region(&mut self, _wr: &mut WriteRegion) -> SpinorError {
+            SpinorError::ImplementationError
         }
     }
 }
