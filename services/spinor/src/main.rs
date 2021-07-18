@@ -381,6 +381,7 @@ mod implementation {
                 // in other words: if the flash memory is broke, you're broke too, ain't nobody got time for that.
             }
             self.ticktimer.ping_wdt();
+            xous::arch::cache_flush(); // flush the CPU caches in case the SPINOR call modified memory that's cached
             SPINOR_RESULT.load(Ordering::Relaxed)
         }
 
