@@ -53,12 +53,12 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
             AV_CONFIG = 0xc,
             RO_CONFIG = 0x10,
 
-            READY = 0xd8,
-            EV_STATUS = 0xdc,
-            EV_PENDING = 0xe0,
-            EV_ENABLE = 0xe4,
-            URANDOM = 0xf0,
-            URANDOM_VALID = 0xf4,
+            READY = 0xc4,
+            EV_STATUS = 0xc8,
+            EV_PENDING = 0xcc,
+            EV_ENABLE = 0xd0,
+            URANDOM = 0xdc,
+            URANDOM_VALID = 0xe0,
             TEST = 0xf8,
         }
     }

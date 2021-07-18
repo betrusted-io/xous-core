@@ -14,11 +14,80 @@ using Antmicro.Renode.Peripherals.Bus;
 
 namespace Antmicro.Renode.Peripherals.Video
 {
-    public class BetrustedLCD : AutoRepaintingVideo, IDoubleWordPeripheral, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IKnownSize
+
+    public class VideoRam : IBytePeripheral, IDoubleWordPeripheral, IWordPeripheral, IKnownSize
     {
-        public BetrustedLCD(Machine machine) : base(machine)
+        public VideoRam(Machine machine, BetrustedLCD lcd, long size)
         {
             this.machine = machine;
+            this.lcd = lcd;
+            this.size = size;
+            this.data = new byte[size];
+        }
+
+        private Machine machine;
+        private BetrustedLCD lcd;
+        private long size;
+        public byte[] data;
+        public long Size { get { return size; } }
+
+        public void WriteDoubleWord(long address, uint value)
+        {
+            var bytes = BitConverter.GetBytes(value);
+            var i = 0;
+            for (i = 0; i < bytes.Length; i++)
+            {
+                this.data[address + i] = bytes[i];
+            }
+        }
+
+        public uint ReadDoubleWord(long offset)
+        {
+            return (((uint)this.data[offset]) << 0) | (((uint)this.data[offset + 1]) << 8) | (((uint)this.data[offset + 2]) << 16) | ((uint)(this.data[offset + 3]) << 24);
+        }
+
+        public void WriteWord(long address, ushort value)
+        {
+            var bytes = BitConverter.GetBytes(value);
+            var i = 0;
+            for (i = 0; i < bytes.Length; i++)
+            {
+                this.data[address + i] = bytes[i];
+            }
+        }
+
+        public ushort ReadWord(long address)
+        {
+            return (ushort)((((ushort)this.data[address]) << 0) | (((ushort)this.data[address + 1]) << 8));
+        }
+
+        public byte ReadByte(long offset)
+        {
+            return this.data[offset];
+        }
+
+        public void WriteByte(long offset, byte value)
+        {
+            this.data[offset] = value;
+        }
+
+        public void Reset()
+        {
+            for (var i = 0; i < this.data.Length; i++)
+            {
+                this.data[i] = 0;
+            }
+        }
+    }
+
+    public class BetrustedLCD : AutoRepaintingVideo, IDoubleWordPeripheral, IProvidesRegisterCollection<DoubleWordRegisterCollection>, IKnownSize
+    {
+        public BetrustedLCD(Machine machine, uint memAddr, uint memSize) : base(machine)
+        {
+            this.machine = machine;
+            this.videoRam = new VideoRam(machine, this, memSize);
+            this.bufferAddress = memAddr;
+            machine.SystemBus.Register(this.videoRam, new BusRangeRegistration(memAddr, memSize));
 
             RegistersCollection = new DoubleWordRegisterCollection(this);
             Reconfigure(336, 536, PixelFormat.RGB565, true);
@@ -44,6 +113,7 @@ namespace Antmicro.Renode.Peripherals.Video
         public override void Reset()
         {
             RegistersCollection.Reset();
+            this.videoRam.Reset();
         }
 
         public long Size { get { return 0x1000; } }
@@ -52,7 +122,6 @@ namespace Antmicro.Renode.Peripherals.Video
         protected override void Repaint()
         {
             var newbuf = new Byte[44 * Height];
-            machine.SystemBus.ReadBytes(bufferAddress, newbuf.Length, newbuf, 0);
             for (int y = 0; y < Height; y++)
             {
                 // We should redraw the line if:
@@ -65,7 +134,7 @@ namespace Antmicro.Renode.Peripherals.Video
                     {
                         break;
                     }
-                    if (updateDirty && (newbuf[y * 44 + i] != 0))
+                    if (updateDirty && (this.videoRam.data[y * 44 + i] != 0))
                     {
                         shouldRedrawLine = true;
                     }
@@ -81,7 +150,7 @@ namespace Antmicro.Renode.Peripherals.Video
                         }
                         else
                         {
-                            if (((newbuf[(x + y * 44 * 8) / 8] >> (x % 8)) & 1) > 0)
+                            if (((this.videoRam.data[(x + y * 44 * 8) / 8] >> (x % 8)) & 1) > 0)
                             {
                                 buffer[2 * (x + y * Width)] = 0xFF;
                                 buffer[2 * (x + y * Width) + 1] = 0xFF;
@@ -122,8 +191,9 @@ namespace Antmicro.Renode.Peripherals.Video
         private bool devBoot = false;
         private bool updateDirty = false;
         private bool updateAll = false;
+        private VideoRam videoRam;
 
-        private readonly uint bufferAddress = 0xB0000000;
+        private uint bufferAddress;
 
         private readonly Machine machine;
 

@@ -23,10 +23,9 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
         private void DefineRegisters()
         {
             Registers.STATUS.Define(this) // RDY is set on reset
-                .WithValueField(0, 32, FieldMode.Read, valueProviderCallback: _ =>
-                {
-                    return 3;
-                }, name: "STATUS");
+                .WithFlag(0, name: "ready", valueProviderCallback: _ => true)
+                .WithFlag(1, name: "avail", valueProviderCallback: _ => true)
+            ;
 
             Registers.DATA.Define(this)
                 .WithValueField(0, 32, FieldMode.Read, valueProviderCallback: _ =>
@@ -40,7 +39,7 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                     return (uint)rng.Next();
                 }, name: "URANDOM");
             Registers.URANDOM_VALID.Define(this)
-                .WithFlag(0, FieldMode.Read, valueProviderCallback: _ => { return true; }, name: "URANDOM_VALID");
+                .WithFlag(0, FieldMode.Read, valueProviderCallback: _ => true, name: "URANDOM_VALID");
         }
 
         private readonly PseudorandomNumberGenerator rng = EmulationManager.Instance.CurrentEmulation.RandomGenerator;
