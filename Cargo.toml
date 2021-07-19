@@ -29,6 +29,7 @@ default-members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/keys",
 ]
 members = [
   "xous-ipc",
@@ -71,6 +72,7 @@ members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/keys",
 ]
 resolver = "2"
 
