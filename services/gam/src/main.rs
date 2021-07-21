@@ -214,6 +214,9 @@ impl ContextManager {
                         }
                     }
                 }
+                UxType::Modal => {
+                    // TODO
+                }
             }
         } else {
             // at the moment, we don't allow contexts that are not part of the boot set.

@@ -3,6 +3,9 @@
 pub mod api;
 pub use api::*;
 
+pub mod modal;
+pub use modal::*;
+
 use graphics_server::api::{TextOp, TextView};
 
 use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
@@ -16,6 +19,7 @@ use xous_ipc::{String, Buffer};
 use num_traits::*;
 
 use ime_plugin_api::ImefCallback;
+
 
 #[derive(Debug)]
 pub struct Gam {
@@ -311,7 +315,8 @@ impl Drop for Gam {
 //////////////
 // menu structures
 // couldn't figure out for the life of me how to get this into a file that wasn't lib.rs
-// so here it is.
+// so here it is. The crux of the problem is that the menu thread exists in this crate,
+// so structures need to be referred to in both main.rs and lib.rs.
 
 const MAX_ITEMS: usize = 16;
 

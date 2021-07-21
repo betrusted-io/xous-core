@@ -7,6 +7,8 @@ pub(crate) enum Opcode {
     TryInitKeysWithProgress,
     TryInitKeys,
 
+    TestUx,
+
     /// Suspend/resume callback
     SuspendResume,
 }

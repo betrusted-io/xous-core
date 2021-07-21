@@ -50,6 +50,7 @@ pub struct SwitchToApp {
 pub enum UxType {
     Chat,
     Menu,
+    Modal,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UxRegistration {

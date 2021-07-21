@@ -116,6 +116,12 @@ impl RootKeys {
         unimplemented!();
     }
 
+    pub fn test_ux(&mut self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send test message");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -156,7 +162,7 @@ impl BlockEncrypt for RootKeys {
 
 impl BlockDecrypt for RootKeys {
     fn decrypt_block(&self, block: &mut Block) {
-        
+
     }
     fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
 

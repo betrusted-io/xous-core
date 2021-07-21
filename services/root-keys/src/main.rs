@@ -71,6 +71,9 @@ fn xmain() -> ! {
                 let sid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
                 keys.try_init_keys(Some(sid));
             }),
+            Some(Opcode::TestUx) => {
+                keys.test_ux();
+            },
             None => {
                 log::error!("couldn't convert opcode");
                 break

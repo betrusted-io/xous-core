@@ -1553,6 +1553,7 @@ name = "root-keys"
 version = "0.1.0"
 dependencies = [
  "cipher",
+ "gam",
  "log",
  "log-server",
  "num-derive",

@@ -55,6 +55,7 @@ pub(crate) struct RootKeys {
     password_policy: PasswordRetentionPolicy,
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
+    password_modal: gam::Modal,
 }
 
 impl RootKeys {
@@ -110,6 +111,7 @@ impl RootKeys {
             password_policy: PasswordRetentionPolicy::AlwaysKeep,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
+            password_modal: gam::Modal::new("RootKeys password dialog box"),
         };
 
         keys
@@ -151,7 +153,6 @@ impl RootKeys {
         }
         key
     }
-
 
     pub fn try_init_keys(&mut self, maybe_progress: Option<xous::SID>) {
         let mut step = 0; // current step
@@ -209,5 +210,9 @@ impl RootKeys {
 
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
+    }
+
+    pub fn test_ux(&mut self) {
+
     }
 }
