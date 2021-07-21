@@ -55,7 +55,7 @@ fn try_main() -> Result<(), DynError> {
         "engine-sha512",
         "engine-25519",
         "spinor",
-        "keys",
+        "root-keys",
     ];
     let benchmark_pkgs = [
         "benchmark",

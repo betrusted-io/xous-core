@@ -995,21 +995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keys"
-version = "0.1.0"
-dependencies = [
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "susres",
- "ticktimer-server",
- "utralib",
- "xous",
- "xous-names",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1561,6 +1546,25 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
  "syn 1.0.67",
+]
+
+[[package]]
+name = "root-keys"
+version = "0.1.0"
+dependencies = [
+ "cipher",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "susres",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
 ]
 
 [[package]]

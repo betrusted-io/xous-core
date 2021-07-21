@@ -2,71 +2,25 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
+use api::*;
+use xous::{CID, msg_scalar_unpack, send_message, Message};
 
-use num_traits::FromPrimitive;
-
-use log::info;
-
+use num_traits::*;
 
 #[cfg(target_os = "none")]
-mod implementation {
-    use utralib::generated::*;
-    // use crate::api::*;
-    use log::info;
-    use susres::{RegManager, RegOrField, SuspendResume};
-
-    pub struct Keys {
-        csr: utralib::CSR<u32>,
-        fifo: xous::MemoryRange,
-        susres_manager: RegManager::<{utra::audio::AUDIO_NUMREGS}>,
-    }
-
-    impl Keys {
-        pub fn new() -> Keys {
-            let csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::audio::HW_AUDIO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-            let fifo = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utralib::HW_AUDIO_MEM),
-                None,
-                utralib::HW_AUDIO_MEM_LEN,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-
-            let mut keys = Keys {
-                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                fifo,
-            };
-
-            keys
-        }
-
-        pub fn suspend(&mut self) {
-            self.susres_manager.suspend();
-        }
-        pub fn resume(&mut self) {
-            self.susres_manager.resume();
-        }
-    }
-}
+mod implementation;
+#[cfg(target_os = "none")]
+use implementation::*;
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(target_os = "none"))]
 mod implementation {
-    use log::info;
-
-    pub struct Keys {
+    pub struct RootKeys {
     }
 
-    impl Keys {
-        pub fn new() -> Keys {
-            Keys {
+    impl RootKeys {
+        pub fn new() -> RootKeys {
+            RootKeys {
             }
         }
         pub fn suspend(&self) {
@@ -79,11 +33,11 @@ mod implementation {
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    use crate::implementation::Keys;
+    use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
-    info!("my PID is {}", xous::process::id());
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
     /*
@@ -94,7 +48,7 @@ fn xmain() -> ! {
     let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", keys_sid);
 
-    let mut keys = Keys::new();
+    let mut keys = RootKeys::new(&xns);
 
     log::trace!("ready to accept requests");
 
@@ -105,10 +59,17 @@ fn xmain() -> ! {
     loop {
         let msg = xous::receive_message(keys_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 keys.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 keys.resume();
+            }),
+            Some(Opcode::TryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
+                keys.try_init_keys(None);
+            }),
+            Some(Opcode::TryInitKeysWithProgress) => msg_scalar_unpack!(msg, s0, s1, s2, s3, {
+                let sid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
+                keys.try_init_keys(Some(sid));
             }),
             None => {
                 log::error!("couldn't convert opcode");
