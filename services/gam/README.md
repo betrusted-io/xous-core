@@ -100,6 +100,22 @@ the form of random lines drawn across the defaced area. This allows users
 to still read the text within the defaced area, but makes it more difficult
 to mistake this area for something trusted.
 
+### Trust Level Policy Implementation
+
+The `RegisterUx` opcode in `gam` is responsible for parceling out trust levels.
+
+At boot, there is only a "boot context" -- no user apps are allowed, and all
+contexts are assigned a high trust level. During the boot process, apps
+are registered and claim names out of the `tokens.rs` `EXPECTED_BOOT_CONTEXTS` name space.
+
+**Roadmap** (as of Xous 0.8.x): The idea is that once boot is thought to be completed, both `xous-names` and the `gam`
+are checked to ensure that all the available slots for boot processes are occupied.
+If this check passes, a flag should be set indicating we're
+done, and the max trust level assignable should drop. This process disallows
+future no-boot processes from registering as a trusted context, both in terms of their
+name space and their trust level.
+
+
 ### TextView
 
 A `TextView` object is a heavy data structure that contains both a `xous::String`
