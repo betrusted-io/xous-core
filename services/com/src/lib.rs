@@ -353,7 +353,7 @@ impl Com {
     pub fn wlan_leave(&mut self) -> Result<xous::Result, xous::Error> {
         send_message(
             self.conn,
-            Message::new_scalar(Opcode::WlanJoin.to_usize().unwrap(), 0, 0, 0, 0),
+            Message::new_scalar(Opcode::WlanLeave.to_usize().unwrap(), 0, 0, 0, 0),
         )
     }
 
