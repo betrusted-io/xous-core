@@ -1,6 +1,8 @@
 use core::convert::{TryFrom, TryInto};
 use core::num::{NonZeroU8, NonZeroUsize};
 
+pub const LANG: &'static str = "zh";
+
 pub type MemoryAddress = NonZeroUsize;
 pub type MemorySize = NonZeroUsize;
 pub type StackPointer = usize;
