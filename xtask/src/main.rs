@@ -194,7 +194,7 @@ sr-test [soc.svd]       builds the suspend/resume testing image
 burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
 burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
-generate-locales        only generate the locales include for the language selected in xous-rs/src/definitions::LANG
+generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
