@@ -263,7 +263,7 @@ impl Gam {
         ).map(|_| ())
     }
     /// requests a context switch to a new app. Doesn't have to be obeyed, depending
-    /// upon the GAM's policy. Only the main menu can switch apps, hence the token.
+    /// upon the GAM's policy. Only the certain sources can switch apps, hence the token.
     pub fn switch_to_app(&self, app_name: &str, token: [u32; 4]) -> Result<(), xous::Error> {
         let switchapp = SwitchToApp {
             token,
@@ -277,7 +277,9 @@ impl Gam {
         let buf = Buffer::into_buf(menu_name).or(Err(xous::Error::InternalError))?;
         buf.send(self.conn, Opcode::RaiseMenu.to_u32().unwrap()).or(Err(xous::Error::InternalError)).map(|_|())
     }
-
+    pub fn raise_modal(&self, modal_name: &str) -> Result<(), xous::Error> {
+        self.raise_menu(modal_name)
+    }
     /// this is a one-way door, once you've set it, you can't unset it.
     pub fn set_devboot(&self, enable: bool) -> Result<(), xous::Error> {
         let ena =
@@ -397,6 +399,9 @@ impl Menu {
     }
     // if successful, returns None, otherwise, the menu item
     pub fn add_item(&mut self, new_item: MenuItem) -> Option<MenuItem> {
+        if new_item.name.as_str().unwrap() == "🔇" { // suppress the addition of menu items that are not applicable for a given locale
+            return None;
+        }
         // first, do the insertion.
         // add the menu item to the first free slot
         // any modifications to the menu structure should guarantee that the list is compacted
