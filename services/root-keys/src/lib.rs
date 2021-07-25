@@ -25,6 +25,7 @@ pub enum ImageType {
     Kernel,
 }
 
+#[derive(Debug)] // there is no confidential information in the external structure; it's safe to Debug it
 pub struct RootKeys {
     conn: CID,
     progress_sid: Option<xous::SID>,
@@ -116,10 +117,10 @@ impl RootKeys {
         unimplemented!();
     }
 
-    pub fn test_ux(&mut self) {
+    pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
-            Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
-            0, 0, 0, 0)
+            Message::new_blocking_scalar(Opcode::TestUx.to_usize().unwrap(),
+            arg, 0, 0, 0)
         ).expect("couldn't send test message");
     }
 }
@@ -128,6 +129,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 impl Drop for RootKeys {
     fn drop(&mut self) {
+        log::debug!("dropping rootkeys object");
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
         // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".

@@ -1,4 +1,6 @@
 pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
+pub(crate) const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
+
 
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -11,6 +13,8 @@ pub(crate) enum Opcode {
 
     /// Suspend/resume callback
     SuspendResume,
+
+    Quit
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

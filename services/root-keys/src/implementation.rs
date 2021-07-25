@@ -43,19 +43,25 @@ pub(crate) mod keyrom_config {
     pub const INITIALIZED:         KeyField = KeyField::new(4, 27);
 }
 
+#[repr(C)]
+struct PasswordCache {
+    // this structure is mapped into the password cache page and can be zero-ized at any time
+    canary: u32, // this is 0 if the page was cleared; it is set immediately upon allocation/initialization/update
+}
+
 pub(crate) struct RootKeys {
     keyrom: utralib::CSR<u32>,
     gateware: xous::MemoryRange,
     staging: xous::MemoryRange,
     loader_code: xous::MemoryRange,
     kernel: xous::MemoryRange,
-    /// region of RAM that holds all plaintext passwords and keys. stuck in one well-defined page so we can
+    /// regions of RAM that holds all plaintext passwords, keys, and temp data. stuck in two well-defined page so we can
     /// zero-ize it upon demand, without guessing about stack frames and/or Rust optimizers removing writes
     sensitive_data: xous::MemoryRange,
+    pass_cache: xous::MemoryRange,
     password_policy: PasswordRetentionPolicy,
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
-    password_modal: gam::Modal,
 }
 
 impl RootKeys {
@@ -100,6 +106,12 @@ impl RootKeys {
             0x1000,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
+        let pass_cache = xous::syscall::map_memory(
+            None,
+            None,
+            0x1000,
+            xous::MemoryFlags::R | xous::MemoryFlags::W,
+        ).expect("couldn't map sensitive data page");
 
         let mut keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
@@ -108,10 +120,10 @@ impl RootKeys {
             loader_code,
             kernel,
             sensitive_data,
+            pass_cache,
             password_policy: PasswordRetentionPolicy::AlwaysKeep,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
-            password_modal: gam::Modal::new("RootKeys password dialog box"),
         };
 
         keys
@@ -212,7 +224,7 @@ impl RootKeys {
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }
 
-    pub fn test_ux(&mut self) {
+    pub fn test_ux(&mut self, _arg: usize) {
 
     }
 }

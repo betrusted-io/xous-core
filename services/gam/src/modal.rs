@@ -2,6 +2,7 @@
 /*
   design ideas
 
+Modal for password request:
     ---------------------
     | Password Type: Updater
     | Requester: RootKeys
@@ -10,15 +11,42 @@
     |
     |    *****4f_
     |
-    | [ ] Hide as you type
-    | [x] Display last chars
-    | [ ] Show as you type
-    |
+    |      ← 👁️ 🕶️ * →
+    |--------------------
+
+Item primitives:
+  - text bubble
+  - text entry field (with confidentiality option)
+  - left/right radio select
+  - up/down radio select
+
+Then simple menu prompt after password entry:
+    ---------------------
     | [x] Persist until reboot
     | [ ] Persist until suspend
     | [ ] Use once
     ---------------------
+
+General form for modals:
+
+    [top text]
+
+    [action form]
+
+    [bottom text]
+
+ - "top text" is an optional TextArea
+ - "action form" is a mandatory field that handles interactions
+ - "bottom text" is an optional TextArea
+
+ Action form can be exactly one of the following:
+   - password text field - enter closes the form, has visibility options as left/right arrows; entered text wraps
+   - regular text field - enter closes the form, visibility is always visible; entered text wraps
+   - radio buttons - has an explicit "okay" button to close the modal; up/down arrows + select/enter pick the radio
+   - check boxes - has an explicit "okay" button to close the modal; up/down arrows + select/enter checks boxes
+   - slider - left/right moves the slider, enter/select closes the modal
 */
+use enum_dispatch::enum_dispatch;
 
 use crate::api::*;
 use crate::Gam;
@@ -34,24 +62,90 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
-const MAX_ITEMS: usize = 16;
+const MAX_ITEMS: usize = 8;
 
-#[allow(dead_code)] // here until Memory types are implemented
 #[derive(Debug, Copy, Clone)]
-pub enum ModalPayload {
-    /// memorized scalar payload
-    Scalar([u32; 4]),
-    /// this a nebulous-but-TBD maybe way of bodging in a more complicated record, which would involve
-    /// casting this memorized, static payload into a Buffer and passing it on. Let's not worry too much about it for now, it's mostly apirational...
-    Memory(([u8; 256], usize)),
+pub struct ItemName(String::<64>);
+#[derive(Debug, Copy, Clone)]
+pub struct TextEntryPayload(String::<256>);
+#[derive(Debug, Copy, Clone)]
+pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
+#[derive(Debug, Copy, Clone)]
+pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
+
+#[derive(Debug, Copy, Clone)]
+pub enum TextEntryVisibility {
+    /// text is fully visible
+    Visible,
+    /// only last chars are shown of text entry, the rest obscured with *
+    LastChars,
+    /// all chars hidden as *
+    Hidden,
 }
 #[derive(Debug, Copy, Clone)]
-pub struct ModalItem {
-    pub name: String::<64>,
+pub struct TextEntry {
+    pub is_password: bool,
+    pub visibility: TextEntryVisibility,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
-    pub action_payload: ModalPayload,
-    pub close_on_select: bool,
+    pub action_payload: Option<TextEntryPayload>,
+}
+impl ActionApi for TextEntry {
+    fn height(&self) -> i16 {
+        16  // placeholder
+    }
+}
+#[derive(Debug, Copy, Clone)]
+pub struct RadioButtons {
+    pub items: [Option<ItemName>; MAX_ITEMS],
+    pub action_conn: xous::CID,
+    pub action_opcode: u32,
+    pub action_payload: Option<RadioButtonPayload>,
+}
+impl ActionApi for RadioButtons {
+    fn height(&self) -> i16 {
+        16  // placeholder
+    }
+}
+#[derive(Debug, Copy, Clone)]
+pub struct CheckBoxes {
+    pub items: [Option<ItemName>; MAX_ITEMS],
+    pub action_conn: xous::CID,
+    pub action_opcode: u32,
+    pub action_payload: Option<CheckBoxPayload>,
+}
+impl ActionApi for CheckBoxes {
+    fn height(&self) -> i16 {
+        16  // placeholder
+    }
+}
+#[derive(Debug, Copy, Clone)]
+pub struct Slider {
+    pub min: u32,
+    pub max: u32,
+    pub step: u32,
+    pub action_conn: xous::CID,
+    pub action_opcode: u32,
+    pub action_payload: u32,
+}
+impl ActionApi for Slider {
+    fn height(&self) -> i16 {
+        16  // placeholder
+    }
+}
+
+#[enum_dispatch]
+trait ActionApi {
+    fn height(&self) -> i16 {16} // get the computed height for an action
+}
+
+#[enum_dispatch(ActionApi)]
+#[derive(Debug, Copy, Clone)]
+pub enum ActionType {
+    TextEntry,
+    RadioButtons,
+    CheckBoxes,
+    Slider
 }
 
 #[derive(Debug)]
@@ -59,12 +153,14 @@ pub struct Modal {
     pub sid: xous::SID,
     pub gam: Gam,
     pub xns: xous_names::XousNames,
-    pub items: [Option<ModalItem>; MAX_ITEMS],
-    pub index: usize, // currently selected item
+    pub top_text: Option<TextView>,
+    pub bot_text: Option<TextView>,
+    pub action: ActionType,
+
+    //pub index: usize, // currently selected item
     pub canvas: Gid,
     pub authtoken: [u32; 4],
     pub margin: i16,
-    pub divider_margin: i16,
     pub line_height: i16,
     pub canvas_width: Option<i16>,
 }
@@ -77,7 +173,7 @@ pub enum ModalOpcode {
 }
 
 impl Modal {
-    pub fn new(name: &str) -> Modal {
+    pub fn new(name: &str, action: ActionType, top_text: Option<TextView>, bot_text: Option<TextView>) -> Modal {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private modal message server");
         let gam = Gam::new(&xns).expect("can't connect to GAM");
@@ -97,56 +193,65 @@ impl Modal {
         log::debug!("requesting content canvas for modal");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
         let line_height = gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16;
-        Modal {
+
+        // we now have a canvas that is some minimal height, but with the final width as allowed by the GAM.
+        // compute the final height based upon the contents within.
+        let mut modal = Modal {
             sid,
             gam,
             xns,
-            items: [None; MAX_ITEMS],
-            index: 0,
+            top_text,
+            bot_text,
+            action,
             canvas,
             authtoken: authtoken.unwrap(),
             margin: 4,
-            divider_margin: 20,
             line_height,
             canvas_width: None,
-        }
-    }
-    // if successful, returns None, otherwise, the modal item
-    pub fn add_item(&mut self, new_item: ModalItem) -> Option<ModalItem> {
-        // first, do the insertion.
-        // add the modal item to the first free slot
-        // any modifications to the modal structure should guarantee that the list is compacted
-        // and has no holes, in order for the "selected index" logic to work
-        let mut success = false;
-        for item in self.items.iter_mut() {
-            if item.is_none() {
-                *item = Some(new_item);
-                success = true;
-                break;
+        };
+
+        let mut total_height = modal.margin * 2;
+        // compute height of top_text, if any
+        if let Some(mut text) = modal.top_text {
+            text.dry_run = true;
+            modal.gam.post_textview(&mut text).expect("couldn't simulate top text size");
+            if let Some(bounds) = text.bounds_computed {
+                total_height += bounds.br.y - bounds.tl.y;
+            } else {
+                log::error!("couldn't compute height for modal top_text: {:?}", text);
+                panic!("couldn't compute height for modal top_text");
             }
         }
 
-        if success {
-            // now, recompute the height
-            let mut total_items = self.num_items();
-            if total_items == 0 {
-                total_items = 1; // just so we see a blank modal at least, and have a clue how to debug
-            }
-            let current_bounds = self.gam.get_canvas_bounds(self.canvas).expect("couldn't get current bounds");
-            let mut new_bounds = SetCanvasBoundsRequest {
-                requested: Point::new(current_bounds.x, total_items as i16 * self.line_height + self.margin * 2),
-                granted: None,
-                token_type: TokenType::App,
-                token: self.authtoken,
-            };
-            log::debug!("add_item requesting bounds of {:?}", new_bounds);
-            self.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+        // compute height of action item
+        total_height += modal.action.height();
 
-            None
-        } else {
-            Some(new_item)
+        // compute height of bot_text, if any
+        if let Some(mut text) = modal.bot_text {
+            text.dry_run = true;
+            modal.gam.post_textview(&mut text).expect("couldn't simulate bot text size");
+            if let Some(bounds) = text.bounds_computed {
+                total_height += bounds.br.y - bounds.tl.y;
+            } else {
+                log::error!("couldn't compute height for modal bot_text: {:?}", text);
+                panic!("couldn't compute height for modal bot_text");
+            }
         }
+
+        let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
+        let mut new_bounds = SetCanvasBoundsRequest {
+            requested: Point::new(current_bounds.x, total_height),
+            granted: None,
+            token_type: TokenType::App,
+            token: modal.authtoken,
+        };
+        log::debug!("modal requesting bounds of {:?}", new_bounds);
+        modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+
+        modal
     }
+
+    /*
     pub fn draw_item(&self, index: i16, with_marker: bool) {
         use core::fmt::Write;
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
@@ -185,45 +290,11 @@ impl Modal {
             log::debug!("cant draw divider because our canvas width was not initialized. Ignoring request.");
         }
     }
-    pub fn prev_item(&mut self) {
-        if self.index > 0 {
-            // wipe out the current marker
-            self.draw_item(self.index as i16, false);
-            self.index -= 1;
-            // add the marker to the pervious item
-            self.draw_item(self.index as i16, true);
+    */
 
-            if self.index != 0 {
-                self.draw_divider(self.index as i16);
-            }
-            if self.index < self.num_items() - 1 {
-                self.draw_divider(self.index as i16 + 1);
-            }
-            if self.index < self.num_items() - 2 {
-                self.draw_divider(self.index as i16 + 2);
-            }
-        }
-    }
-    pub fn next_item(&mut self) {
-        if self.index < (self.num_items() - 1) {
-            // wipe out the current marker
-            self.draw_item(self.index as i16, false);
-            self.index += 1;
-            // add the marker to the pervious item
-            self.draw_item(self.index as i16, true);
-
-            if self.index != 1 {
-                self.draw_divider(self.index as i16 - 1);
-            }
-            self.draw_divider(self.index as i16);
-            if self.index < self.num_items() - 1 {
-                self.draw_divider(self.index as i16 + 1);
-            }
-        }
-    }
     pub fn redraw(&mut self) {
         // for now, just draw a black rectangle
-        log::trace!("modal redraw");
+        log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
         self.canvas_width = Some(canvas_size.x);
 
@@ -231,10 +302,10 @@ impl Modal {
         self.gam.draw_rounded_rectangle(self.canvas,
             RoundedRectangle::new(
                 Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                    DrawStyle::new(PixelColor::Light, PixelColor::Dark, 3)
+                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 3)
                 ), 5
             )).unwrap();
-
+        /*
         // draw the line items
         // we require that the items list be in index-order, with no holes: we abort at the first None item
         let mut cur_index: i16 = 0;
@@ -254,24 +325,16 @@ impl Modal {
                 break;
             }
         }
+        */
         self.gam.redraw().unwrap();
     }
-    fn num_items(&self) -> usize {
-        let mut items = 0;
-        for maybe_item in self.items.iter() {
-            if maybe_item.is_some() {
-                items += 1;
-            } else {
-                break;
-            }
-        }
-        items
-    }
+
     pub fn key_event(&mut self, keys: [char; 4]) {
         for &k in keys.iter() {
             log::debug!("got key '{}'", k);
             match k {
                 '∴' => {
+                        /*
                     if let Some(mi) = self.items[self.index] {
                         // give up focus before issuing the command, as some commands conflict with loss of focus...
                         if mi.close_on_select {
@@ -291,6 +354,7 @@ impl Modal {
                         }
                         self.index = 0; // reset the index to 0
                     }
+                    */
                     self.gam.redraw().unwrap();
                 },
                 '←' => {
@@ -302,11 +366,11 @@ impl Modal {
                     log::trace!("got right arrow");
                 }
                 '↑' => {
-                    self.prev_item();
+                    //self.prev_item();
                     self.gam.redraw().unwrap();
                 }
                 '↓' => {
-                    self.next_item();
+                    //self.next_item();
                     self.gam.redraw().unwrap();
                 }
                 _ => {}

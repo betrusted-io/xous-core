@@ -31,6 +31,8 @@ use enum_dispatch::enum_dispatch;
 
 use gam::{MenuItem, MenuPayload, Menu, MenuOpcode};
 
+use locales::t;
+
 //// todo:
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
 
@@ -62,6 +64,7 @@ pub(crate) trait LayoutApi {
 pub(crate) enum UxLayout {
     ChatLayout,
     MenuLayout,
+    ModalLayout,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -91,10 +94,11 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 4;
+const MAX_UX_CONTEXTS: usize = 5;
 pub(crate) const MAX_CANVASES: usize = 32;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const MAIN_MENU_NAME: &'static str = "main menu";
+pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
 /*
@@ -186,7 +190,7 @@ impl ContextManager {
                         trust_level, canvases).expect("couldn't create menu layout");
                     // default to off-screen for all layouts
                     menulayout.set_visibility_state(false, canvases);
-                    log::debug!("debug layout: {:?}", menulayout);
+                    log::debug!("debug menu layout: {:?}", menulayout);
                     let ux_context = UxContext {
                         layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
@@ -215,7 +219,31 @@ impl ContextManager {
                     }
                 }
                 UxType::Modal => {
-                    // TODO
+                    let mut modallayout = ModalLayout::init(&gfx, &trng,
+                        trust_level, canvases).expect("couldn't create modal layout");
+                    // default to off-screen for all layouts
+                    modallayout.set_visibility_state(false, canvases);
+                    log::debug!("debug modal layout: {:?}", modallayout);
+                    let ux_context = UxContext {
+                        layout: UxLayout::ModalLayout(modallayout),
+                        predictor: None,
+                        app_token: token,
+                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        trust_level,
+                        listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
+                        redraw_id: registration.redraw_id,
+                        gotinput_id: None,
+                        audioframe_id: None,
+                        rawkeys_id: registration.rawkeys_id,
+                        vibe: false,
+                    };
+                    for maybe_context in self.contexts.iter_mut() {
+                        if maybe_context.is_none() {
+                            *maybe_context = Some(ux_context);
+                            found_slot = true;
+                            break;
+                        }
+                    }
                 }
             }
         } else {
@@ -228,6 +256,13 @@ impl ContextManager {
         if found_slot {
             maybe_token
         } else {
+            // Note: for the most paranoid modes, you probably want exactly as many UX contexts
+            // as you expect to use. This cap helps prevent rouge processes from registering
+            // UX contexts that it shouldn't.
+            //
+            // That being said, if you are to run "generic apps from the internet" you can't
+            // put a proper bound on this number.
+            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam.rs");
             None
         }
     }
@@ -556,7 +591,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -923,6 +958,12 @@ fn xmain() -> ! {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
                         }
                     }
+                } else if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
+                    if modal_token == switchapp.token {
+                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                        }
+                    }
                 }
             },
             Some(Opcode::RaiseMenu) => {
@@ -962,7 +1003,7 @@ pub fn main_menu_thread() {
     let com = com::Com::new(&xns).unwrap();
 
     let blon_item = MenuItem {
-        name: String::<64>::from_str("Backlight on"),
+        name: String::<64>::from_str(t!("mainmenu.backlighton", xous::LANG)),
         action_conn: com.conn(),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
@@ -971,7 +1012,7 @@ pub fn main_menu_thread() {
     menu.add_item(blon_item);
 
     let bloff_item = MenuItem {
-        name: String::<64>::from_str("Backlight off"),
+        name: String::<64>::from_str(t!("mainmenu.backlightoff", xous::LANG)),
         action_conn: com.conn(),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -980,7 +1021,7 @@ pub fn main_menu_thread() {
     menu.add_item(bloff_item);
 
     let sleep_item = MenuItem {
-        name: String::<64>::from_str("Sleep now"),
+        name: String::<64>::from_str(t!("mainmenu.sleep", xous::LANG)),
         action_conn: susres.conn(),
         action_opcode: susres.getop_suspend(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -989,7 +1030,7 @@ pub fn main_menu_thread() {
     menu.add_item(sleep_item);
 
     let close_item = MenuItem {
-        name: String::<64>::from_str("Close Menu"),
+        name: String::<64>::from_str(t!("mainmenu.closemenu", xous::LANG)),
         action_conn: menu.gam.conn(),
         action_opcode: menu.gam.getop_revert_focus(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

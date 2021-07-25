@@ -137,7 +137,7 @@ impl LayoutApi for ChatLayout {
         self.content
     }
     fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) {
-        log::debug!("chatlayout: set_visibility_state onscreen {}, self.visible {}", onscreen, self.visible);
+        log::debug!("request modal to onscreen {} from self.visible {}", onscreen, self.visible);
         if onscreen == self.visible {
             log::trace!("chatlayout: no change to visibility, moving on");
             // nothing to do

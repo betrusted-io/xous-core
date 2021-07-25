@@ -36,4 +36,4 @@ default = ["bit-flags", "xous-macros"]
 [target.'cfg(any(windows,unix))'.dependencies]
 lazy_static = "1.4"
 hex = "0.4"
-# debug-here = "*"
+debug-here = "*"

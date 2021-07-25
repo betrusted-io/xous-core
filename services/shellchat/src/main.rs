@@ -279,7 +279,7 @@ fn xmain() -> ! {
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
-        log::trace!("got message {:?}", msg);
+        log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -294,7 +294,7 @@ fn xmain() -> ! {
                 repl.redraw().expect("REPL couldn't redraw");
             }
             Some(ShellOpcode::Quit) => {
-                log::trace!("got Quit");
+                log::error!("got Quit");
                 break;
             }
             _ => {
@@ -308,10 +308,10 @@ fn xmain() -> ! {
             repl.update(was_callback).expect("REPL had problems updating");
             update_repl = false;
         }
-        log::trace!("reached bottom of main loop");
+        log::debug!("reached bottom of main loop");
     }
     // clean up our program
-    log::trace!("main loop exit, destroying servers");
+    log::error!("main loop exit, destroying servers");
     xns.unregister_server(shch_sid).unwrap();
     xous::destroy_server(shch_sid).unwrap();
     log::trace!("quitting");
