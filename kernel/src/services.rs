@@ -65,6 +65,10 @@ pub enum ProcessState {
     /// The process is currently being debugged. When it is resumed,
     /// this will turn into `Ready(usize)`
     Debug(usize),
+
+    /// This process is processing an exception. When it is resumed, it will
+    /// turn into `Ready(usize)`.
+    Exception(usize),
 }
 
 impl core::fmt::Debug for ProcessState {
@@ -77,6 +81,7 @@ impl core::fmt::Debug for ProcessState {
             Ready(rt) => write!(fmt, "Ready({:b})", rt),
             Running(rt) => write!(fmt, "Running({:b})", rt),
             Debug(rt) => write!(fmt, "Debug({:b})", rt),
+            Exception(rt) => write!(fmt, "Exception({:b})", rt),
             Sleeping => write!(fmt, "Sleeping"),
         }
     }
@@ -111,6 +116,9 @@ pub struct Process {
     /// The context number that was active before this process was switched
     /// away.
     previous_thread: TID,
+
+    /// When an exception is hit, the kernel will switch to this Thread.
+    exception_thread: Option<TID>,
 }
 
 impl Default for Process {
@@ -230,6 +238,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         current_thread: 0 as TID,
         previous_thread: INITIAL_TID as TID,
+        exception_thread: None,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -245,6 +254,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         current_thread: 0 as TID,
         previous_thread: INITIAL_TID as TID,
+        exception_thread: None,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -538,8 +548,11 @@ impl SystemServices {
         {
             let mut process = self.get_process_mut(pid)?;
             let available_threads = match process.state {
-                ProcessState::Ready(x) | ProcessState::Running(x) => x,
-                ProcessState::Sleeping | ProcessState::Debug(_) => 0,
+                ProcessState::Ready(x)
+                | ProcessState::Running(x)
+                | ProcessState::Debug(x)
+                | ProcessState::Exception(x) => x,
+                ProcessState::Sleeping => 0,
                 ProcessState::Free => panic!("process was not allocated"),
                 ProcessState::Setup(_) | ProcessState::Allocated => {
                     panic!("process hasn't been set up yet")
@@ -649,6 +662,16 @@ impl SystemServices {
             ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Allocated => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Debug(_) => return Err(xous_kernel::Error::DebugInProgress),
+            ProcessState::Exception(x) => {
+                process.activate()?;
+                let mut p = crate::arch::process::Process::current();
+                let tid = process
+                    .exception_thread
+                    .expect("process is in exception state with no handler");
+                p.set_thread(tid)?;
+                process.current_thread = tid as _;
+                ProcessState::Exception(x)
+            }
             ProcessState::Setup(setup) => {
                 // Activate the process, which enables its memory mapping
                 process.activate()?;
@@ -789,6 +812,7 @@ impl SystemServices {
                     ProcessState::Running(0)
                 }
             }
+            ProcessState::Exception(x) => ProcessState::Exception(x),
             ProcessState::Running(x) => {
                 if cfg!(baremetal) {
                     ProcessState::Ready(x)
@@ -885,6 +909,9 @@ impl SystemServices {
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
+                ProcessState::Exception(_) => {
+                    new.current_thread = new.exception_thread.expect("no exception state set");
+                }
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
                     // context.  If that is not runnable, do a round-robin
@@ -950,6 +977,7 @@ impl SystemServices {
                     ProcessState::Running(x & !(1 << new_tid))
                 }
                 ProcessState::Sleeping => ProcessState::Running(0),
+                ProcessState::Exception(x) => ProcessState::Exception(x),
                 ProcessState::Debug(_) => panic!("Process was being debugged"),
             };
             // log_process_update(file!(), line!(), new, old_state);
@@ -2032,6 +2060,7 @@ impl SystemServices {
             ProcessState::Free => ProcessState::Free,
             ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
             ProcessState::Ready(tids) => ProcessState::Debug(tids),
+            ProcessState::Exception(tids) => ProcessState::Exception(tids),
             ProcessState::Sleeping => ProcessState::Debug(0),
             ProcessState::Debug(tids) => ProcessState::Debug(tids),
             ProcessState::Running(tids) => {
@@ -2070,6 +2099,7 @@ impl SystemServices {
             ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
             ProcessState::Ready(tids) => ProcessState::Ready(tids),
             ProcessState::Sleeping => ProcessState::Sleeping,
+            ProcessState::Exception(x) => ProcessState::Ready(x),
             ProcessState::Debug(0) => ProcessState::Sleeping,
             ProcessState::Debug(tids) => ProcessState::Ready(tids),
             ProcessState::Running(tids) => ProcessState::Running(tids),
