@@ -568,6 +568,9 @@ where
     }
     /// Read the contents of this register
     pub fn r(&self, reg: Register) -> T {
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         unsafe { usize_base.add(reg.offset).read_volatile() }
             .try_into()
@@ -575,6 +578,9 @@ where
     }
     /// Read a field from this CSR
     pub fn rf(&self, field: Field) -> T {
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         ((unsafe { usize_base.add(field.register.offset).read_volatile() } >> field.offset)
             & field.mask)
@@ -592,6 +598,8 @@ where
                 .add(field.register.offset)
                 .write_volatile(previous | value_as_usize)
         };
+        // prevent re-ordering
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
     }
     /// Write a given field without reading it first
     pub fn wfo(&mut self, field: Field, value: T) {
@@ -602,12 +610,20 @@ where
                 .add(field.register.offset)
                 .write_volatile(value_as_usize)
         };
+        // Ensure the compiler doesn't re-order the write.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Write the entire contents of a register without reading it first
     pub fn wo(&mut self, reg: Register, value: T) {
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         let value_as_usize: usize = value.try_into().unwrap_or_default();
         unsafe { usize_base.add(reg.offset).write_volatile(value_as_usize) };
+        // Ensure the compiler doesn't re-order the write.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Zero a field from a provided value
     pub fn zf(&self, field: Field, value: T) -> T {
