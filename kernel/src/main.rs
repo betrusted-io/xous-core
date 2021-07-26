@@ -4,7 +4,7 @@
 #![cfg_attr(baremetal, no_main)]
 #![cfg_attr(baremetal, no_std)]
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 #[macro_use]
 extern crate bitflags;
 
@@ -28,9 +28,9 @@ mod syscall;
 use services::SystemServices;
 use xous_kernel::*;
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 use core::panic::PanicInfo;
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn handle_panic(_arg: &PanicInfo) -> ! {
     println!("PANIC in PID {}: {}", crate::arch::current_pid(), _arg);

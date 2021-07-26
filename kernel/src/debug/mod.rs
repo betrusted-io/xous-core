@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use core::fmt::{Error, Write};
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 use utralib::generated::*;
 
 pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
@@ -10,7 +10,7 @@ pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 #[macro_use]
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub mod debug_print_hardware {
@@ -19,12 +19,12 @@ pub mod debug_print_hardware {
 }
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART_ADDR;
 
-#[cfg(all(not(test), baremetal))]
+#[cfg(all(target_os = "none"))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
@@ -36,7 +36,7 @@ macro_rules! print {
     }};
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! println
 {
@@ -51,15 +51,15 @@ macro_rules! println
 	});
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub struct Uart {}
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub static mut UART: Uart = Uart {};
 
-#[cfg(all(baremetal, feature = "wrap-print"))]
+#[cfg(all(target_os = "none", feature = "wrap-print"))]
 static mut CHAR_COUNT: usize = 0;
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 impl Uart {
     #[allow(dead_code)]
     pub fn init(self) {
@@ -120,10 +120,10 @@ impl Uart {
     }
 }
 
-#[cfg(all(feature = "gdbserver", baremetal))]
+#[cfg(all(feature = "gdbserver", target_os = "none"))]
 mod gdb_server;
 
-#[cfg(all(feature = "gdbserver", baremetal))]
+#[cfg(all(feature = "gdbserver", target_os = "none"))]
 impl gdbstub::Connection for Uart {
     type Error = ();
 
@@ -149,7 +149,7 @@ impl gdbstub::Connection for Uart {
 
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
@@ -161,7 +161,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
 }
 
 fn process_irq_character(b: u8) {
-    #[cfg(all(feature = "gdbserver", baremetal))]
+    #[cfg(all(feature = "gdbserver", target_os = "none"))]
     if gdb_server::handle(b) {
         return;
     }
@@ -257,7 +257,7 @@ fn process_irq_character(b: u8) {
             });
             println!("{} k total", total_bytes / 1024);
         }
-        #[cfg(all(feature = "gdbserver", baremetal))]
+        #[cfg(all(feature = "gdbserver", target_os = "none"))]
         b'g' => {
             println!("Starting GDB server -- attach your debugger now");
             gdb_server::setup();
@@ -266,7 +266,7 @@ fn process_irq_character(b: u8) {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");
-            #[cfg(all(feature = "gdbserver", baremetal))]
+            #[cfg(all(feature = "gdbserver", target_os = "none"))]
             println!(" g  | enter the gdb server");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
@@ -277,7 +277,7 @@ fn process_irq_character(b: u8) {
     }
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 impl Write for Uart {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         for c in s.bytes() {
