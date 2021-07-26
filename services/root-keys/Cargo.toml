@@ -22,6 +22,7 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 cipher = "0.3"
 
 gam = {path = "../gam"} # for direct password modals
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

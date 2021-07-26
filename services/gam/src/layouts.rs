@@ -206,7 +206,7 @@ impl MenuLayout {
             menu_x_pad: MENU_X_PAD,
             menu_min_height: height,
             screensize,
-            height,
+            height, // start with "minimum" size and grow up as items are added
             visible: true,
         })
     }
@@ -291,12 +291,13 @@ impl ModalLayout {
             base_trust
         };
 
-        const MODAL_Y_PAD: i16 = 100;
+        const MODAL_Y_PAD: i16 = 80;
         const MODAL_X_PAD: i16 = 20;
+        const MODAL_Y_MAX: i16 = 450; // in absolute screen coords, not relative to top pad
         // base trust - 1 so that status bar can always ride on top
         let modal_canvas = Canvas::new(
-            Rectangle::new_coords(MODAL_X_PAD, MODAL_Y_PAD, screensize.x - MODAL_X_PAD, MODAL_Y_PAD + height),
-            checked_base_trust - 1, &trng, None
+            Rectangle::new_coords(MODAL_X_PAD, MODAL_Y_PAD, screensize.x - MODAL_X_PAD, MODAL_Y_MAX),
+            checked_base_trust, &trng, None
         ).expect("couldn't create modal canvas");
         canvases.insert(modal_canvas.gid(), modal_canvas).expect("can't store modal canvas");
 
@@ -306,7 +307,7 @@ impl ModalLayout {
             modal_x_pad: MODAL_X_PAD,
             modal_min_height: height,
             screensize,
-            height,
+            height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
             visible: true,
         })
     }

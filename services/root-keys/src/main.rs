@@ -10,6 +10,8 @@ use num_traits::*;
 
 use gam::modal::*;
 
+use locales::t;
+
 #[cfg(target_os = "none")]
 mod implementation;
 #[cfg(target_os = "none")]
@@ -58,9 +60,16 @@ pub(crate) fn rootkeys_ux_thread() {
         visibility: gam::modal::TextEntryVisibility::LastChars,
         action_conn: 0, //place holder
         action_opcode: 0, // placeholder
-        action_payload: None, //placeholder
+        action_payload: TextEntryPayload::new(),
     };
-    let mut modal = gam::Modal::new(crate::ROOTKEY_MODAL_NAME, gam::ActionType::TextEntry(password_action), None, None);
+    log::trace!("building ux thread modal");
+    let mut modal = gam::Modal::new(
+        crate::ROOTKEY_MODAL_NAME,
+        gam::ActionType::TextEntry(password_action),
+        Some(t!("rootpass.top", xous::LANG)),
+        Some("Underneath text"),
+        GlyphStyle::Small,
+    );
     log::trace!("ux thread modal: {:?}", modal);
 
     loop {

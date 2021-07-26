@@ -6,7 +6,7 @@ edition = "2018"
 description = "blitstr import package"
 
 [dependencies]
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "f1f1ca2352a90b08f97fcb48ab790053dda25f42" }
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "a7bef27fd3ceccefc01000ca2c6c4841b516d671" }
 #blitstr = { path = "../../../blitstr" }
 
 

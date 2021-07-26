@@ -62,12 +62,24 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
+use core::fmt::Write;
+
 const MAX_ITEMS: usize = 8;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ItemName(String::<64>);
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct TextEntryPayload(String::<256>);
+impl TextEntryPayload {
+    pub fn new() -> Self {
+        TextEntryPayload(String::<256>::new())
+    }
+}
+impl Drop for TextEntryPayload {
+    fn drop(&mut self) {
+        self.0.volatile_clear(); // volatile_clear() ensures that 0's are written and not optimized out; important for password fields
+    }
+}
 #[derive(Debug, Copy, Clone)]
 pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
 #[derive(Debug, Copy, Clone)]
@@ -82,17 +94,122 @@ pub enum TextEntryVisibility {
     /// all chars hidden as *
     Hidden,
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct TextEntry {
     pub is_password: bool,
     pub visibility: TextEntryVisibility,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
-    pub action_payload: Option<TextEntryPayload>,
+    pub action_payload: TextEntryPayload,
 }
 impl ActionApi for TextEntry {
-    fn height(&self) -> i16 {
-        16  // placeholder
+    fn is_password(&self) -> bool {
+        self.is_password
+    }
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+        /*
+            -------------------
+            | ****            |    <-- glyph_height + 2*margin
+            -------------------
+                ← 👁️ 🕶️ * →        <-- glyph_height
+
+            + 2 * margin top/bottom
+
+            auto-closes on enter
+        */
+        glyph_height + 2*margin + glyph_height + 2*margin
+    }
+    fn redraw(&self, at_height: i16, modal: &Modal) {
+        let color = if self.is_password {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        };
+
+        // draw the currently entered text
+        let mut tv = TextView::new(
+            modal.canvas,
+            TextBounds::BoundingBox(Rectangle::new(
+                Point::new(modal.margin, at_height),
+                Point::new(modal.canvas_width - modal.margin, at_height + modal.line_height))
+        ));
+        tv.ellipsis = true; // TODO: fix so we are drawing from the right-most entered text and old text is ellipsis *to the left*
+        tv.invert = self.is_password;
+        tv.style = modal.style;
+        tv.margin = Point::new(0, 0);
+        tv.draw_border = false;
+        tv.insertion = Some(self.action_payload.0.len() as i32);
+        tv.text.clear(); // make sure this is blank
+        match self.visibility {
+            TextEntryVisibility::Visible => {
+                write!(tv.text, "{}", self.action_payload.0.as_str().unwrap());
+                modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+            },
+            TextEntryVisibility::Hidden => {
+                for _char in self.action_payload.0.as_str().unwrap().chars() {
+                    tv.text.push('*').expect("text field too long");
+                }
+                modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+            },
+            TextEntryVisibility::LastChars => {
+                let hide_to = if tv.text.len() >= 2 {
+                    tv.text.len() - 2
+                } else {
+                    0
+                };
+                for (index, ch) in self.action_payload.0.as_str().unwrap().chars().enumerate() {
+                    if index <= hide_to {
+                        tv.text.push('*').expect("text field too long");
+                    } else {
+                        tv.text.push(ch).expect("text field too long");
+                    }
+                }
+                modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+            }
+        }
+        // draw the visibility selection area
+        // "<👀🤫✴️>" coded explicitly. Pasting unicode into vscode yields extra cruft that we can't parse (e.g. skin tones and color mods).
+        let prompt = "\u{2b05} \u{1f440}\u{1f576}\u{26d4} \u{27a1}";
+        let select_index = match self.visibility {
+            TextEntryVisibility::Visible => 2,
+            TextEntryVisibility::LastChars => 3,
+            TextEntryVisibility::Hidden => 4,
+        };
+        let spacing = 38; // fixed width spacing for the array
+        let emoji_width = 36;
+        // center the prompt nicely, if possible
+        let left_edge = if modal.canvas_width > prompt.chars().count() as i16 * spacing {
+            (modal.canvas_width - prompt.chars().count() as i16 * spacing) / 2
+        } else {
+            0
+        };
+        for (i, ch) in prompt.chars().enumerate() {
+            let mut tv = TextView::new(
+                modal.canvas,
+                TextBounds::BoundingBox(Rectangle::new(
+                    Point::new(left_edge + i as i16 * spacing, at_height + modal.line_height + modal.margin * 4),
+                    Point::new(left_edge + i as i16 * spacing + emoji_width, at_height + modal.line_height + 34 + modal.margin * 4))
+            ));
+            tv.style = GlyphStyle::Regular;
+            tv.margin = Point::new(0, 0);
+            tv.draw_border = false;
+            if i == select_index {
+                tv.invert = !self.is_password;
+            } else {
+                tv.invert = self.is_password;
+            }
+            tv.text.clear();
+            write!(tv.text, "{}", ch).unwrap();
+            log::trace!("tv.text: {} : {}/{}", i, tv.text, ch);
+            modal.gam.post_textview(&mut tv).expect("couldn't post textview");
+        }
+
+        // draw a line for where text gets entered (don't use a box, fitting could be awkward)
+        modal.gam.draw_line(modal.canvas, Line::new_with_style(
+            Point::new(modal.margin*2, at_height + modal.line_height + modal.margin * 2),
+            Point::new(modal.canvas_width - modal.margin*2, at_height + modal.line_height + modal.margin * 2),
+            DrawStyle::new(color, color, 1))
+            ).expect("couldn't draw entry line");
     }
 }
 #[derive(Debug, Copy, Clone)]
@@ -103,8 +220,11 @@ pub struct RadioButtons {
     pub action_payload: Option<RadioButtonPayload>,
 }
 impl ActionApi for RadioButtons {
-    fn height(&self) -> i16 {
-        16  // placeholder
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+        let mut total_items = 0;
+        // total items, then +1 for the "Okay" message
+        for item in self.items.iter().map(|i| if i.is_some(){ total_items += 1} ) {}
+        (total_items + 1) * glyph_height + margin * 2
     }
 }
 #[derive(Debug, Copy, Clone)]
@@ -115,8 +235,12 @@ pub struct CheckBoxes {
     pub action_payload: Option<CheckBoxPayload>,
 }
 impl ActionApi for CheckBoxes {
-    fn height(&self) -> i16 {
-        16  // placeholder
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+        let mut total_items = 0;
+        // total items, then +1 for the "Okay" message
+        let mut total_items = 0;
+        for item in self.items.iter().map(|i| if i.is_some(){ total_items += 1} ) {}
+        (total_items + 1) * glyph_height + margin * 2
     }
 }
 #[derive(Debug, Copy, Clone)]
@@ -129,18 +253,26 @@ pub struct Slider {
     pub action_payload: u32,
 }
 impl ActionApi for Slider {
-    fn height(&self) -> i16 {
-        16  // placeholder
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {
+        /*
+            min            max    <- glyph height
+             -----O----------     <- glyph height
+                 [ Okay ]         <- glyph height
+        */
+        glyph_height * 3 + margin * 2
     }
 }
 
 #[enum_dispatch]
 trait ActionApi {
-    fn height(&self) -> i16 {16} // get the computed height for an action
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
+    fn redraw(&self, at_height: i16, modal: &Modal) { unimplemented!() }
+    fn close(&mut self) {}
+    fn is_password(&self) -> bool { false }
 }
 
 #[enum_dispatch(ActionApi)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum ActionType {
     TextEntry,
     RadioButtons,
@@ -162,7 +294,9 @@ pub struct Modal {
     pub authtoken: [u32; 4],
     pub margin: i16,
     pub line_height: i16,
-    pub canvas_width: Option<i16>,
+    pub canvas_width: i16,
+    pub inverted: bool,
+    pub style: GlyphStyle,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -173,7 +307,7 @@ pub enum ModalOpcode {
 }
 
 impl Modal {
-    pub fn new(name: &str, action: ActionType, top_text: Option<TextView>, bot_text: Option<TextView>) -> Modal {
+    pub fn new(name: &str, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) -> Modal {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private modal message server");
         let gam = Gam::new(&xns).expect("can't connect to GAM");
@@ -192,51 +326,103 @@ impl Modal {
         assert!(authtoken.is_some(), "Couldn't register modal. Did you remember to add the app_name to the tokens.rs expected boot contexts list?");
         log::debug!("requesting content canvas for modal");
         let canvas = gam.request_content_canvas(authtoken.unwrap()).expect("couldn't get my content canvas from GAM");
-        let line_height = gam.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height hint") as i16;
+        let line_height = gam.glyph_height_hint(style).expect("couldn't get glyph height hint") as i16;
+        let canvas_bounds = gam.get_canvas_bounds(canvas).expect("couldn't get starting canvas bounds");
 
+        // check to see if this is a password field or not
+        // note: if a modal claims it's a password field but lacks sufficient trust level, the GAM will refuse
+        // to render the element.
+        let inverted = match action {
+            ActionType::TextEntry(_) => action.is_password(),
+            _ => false
+        };
+
+        log::trace!("initializing Modal structure");
         // we now have a canvas that is some minimal height, but with the final width as allowed by the GAM.
         // compute the final height based upon the contents within.
         let mut modal = Modal {
             sid,
             gam,
             xns,
-            top_text,
-            bot_text,
+            top_text: None,
+            bot_text: None,
             action,
             canvas,
             authtoken: authtoken.unwrap(),
             margin: 4,
             line_height,
-            canvas_width: None,
+            canvas_width: canvas_bounds.x, // memoize this, it shouldn't change
+            inverted,
+            style,
         };
 
-        let mut total_height = modal.margin * 2;
+        // method:
+        //   - we assume the GAM gives us an initial modal with a "maximum" height setting
+        //   - items are populated within this maximal canvas setting, and then the actual height needed is computed
+        //   - the canvas is resized to this actual height
+        // problems:
+        //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text box that's
+        //     huge, it will just overflow the canvas size and nothing else will get drawn.
+
+        let mut total_height = modal.margin;
+        log::trace!("step 0 total_height: {}", total_height);
         // compute height of top_text, if any
-        if let Some(mut text) = modal.top_text {
-            text.dry_run = true;
-            modal.gam.post_textview(&mut text).expect("couldn't simulate top text size");
-            if let Some(bounds) = text.bounds_computed {
+        if let Some(top_str) = top_text {
+            let mut top_tv = TextView::new(canvas,
+                TextBounds::GrowableFromTl(
+                    Point::new(modal.margin, total_height),
+                    (modal.canvas_width - modal.margin * 2) as u16
+                ));
+            top_tv.draw_border = false;
+            top_tv.style = style;
+            top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+            top_tv.ellipsis = false;
+            top_tv.invert = inverted;
+            write!(top_tv.text, "{}", top_str);
+
+            log::trace!("posting top tv: {:?}", top_tv);
+            modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
+            if let Some(bounds) = top_tv.bounds_computed {
                 total_height += bounds.br.y - bounds.tl.y;
             } else {
-                log::error!("couldn't compute height for modal top_text: {:?}", text);
+                log::error!("couldn't compute height for modal top_text: {:?}", top_tv);
                 panic!("couldn't compute height for modal top_text");
             }
+            modal.top_text = Some(top_tv);
         }
+        total_height += modal.margin;
 
         // compute height of action item
-        total_height += modal.action.height();
+        log::trace!("step 1 total_height: {}", total_height);
+        total_height += modal.action.height(modal.line_height, modal.margin);
+        total_height += modal.margin;
 
         // compute height of bot_text, if any
-        if let Some(mut text) = modal.bot_text {
-            text.dry_run = true;
-            modal.gam.post_textview(&mut text).expect("couldn't simulate bot text size");
-            if let Some(bounds) = text.bounds_computed {
+        log::trace!("step 2 total_height: {}", total_height);
+        if let Some(bot_str) = bot_text {
+            let mut bot_tv = TextView::new(canvas,
+                TextBounds::GrowableFromTl(
+                    Point::new(modal.margin, total_height),
+                    (modal.canvas_width - modal.margin * 2) as u16
+                ));
+            bot_tv.draw_border = false;
+            bot_tv.style = style;
+            bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+            bot_tv.ellipsis = false;
+            bot_tv.invert = inverted;
+            write!(bot_tv.text, "{}", bot_str);
+
+            modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
+            if let Some(bounds) = bot_tv.bounds_computed {
                 total_height += bounds.br.y - bounds.tl.y;
             } else {
-                log::error!("couldn't compute height for modal bot_text: {:?}", text);
+                log::error!("couldn't compute height for modal bot_text: {:?}", bot_tv);
                 panic!("couldn't compute height for modal bot_text");
             }
+            modal.bot_text = Some(bot_tv);
+            total_height += modal.margin;
         }
+        log::trace!("step 3 total_height: {}", total_height);
 
         let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
         let mut new_bounds = SetCanvasBoundsRequest {
@@ -245,87 +431,41 @@ impl Modal {
             token_type: TokenType::App,
             token: modal.authtoken,
         };
-        log::debug!("modal requesting bounds of {:?}", new_bounds);
+        log::debug!("applying recomputed bounds of {:?}", new_bounds);
         modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
 
         modal
     }
 
-    /*
-    pub fn draw_item(&self, index: i16, with_marker: bool) {
-        use core::fmt::Write;
-        let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
-
-        if let Some(item) = self.items[index as usize] {
-            let mut item_tv = TextView::new(
-                self.canvas,
-                TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(self.margin, index * self.line_height + self.margin),
-                    Point::new(canvas_size.x - self.margin, (index + 1) * self.line_height + self.margin),
-                )));
-
-            if with_marker {
-                write!(item_tv.text, " • ").unwrap();
-            } else {
-                write!(item_tv.text, "    ").unwrap();
-            }
-            write!(item_tv.text, "{}", item.name.as_str().unwrap()).unwrap();
-            item_tv.draw_border = false;
-            item_tv.style = GlyphStyle::Small;
-            item_tv.margin = Point::new(0, 0);
-            item_tv.ellipsis = true;
-
-            self.gam.post_textview(&mut item_tv).expect("couldn't render modal list item");
-        }
-    }
-    // draw a dividing line above the indexed item
-    pub fn draw_divider(&self, index: i16) {
-        if let Some(canvas_width) = self.canvas_width {
-            self.gam.draw_line(self.canvas, Line::new_with_style(
-                Point::new(self.divider_margin, index * self.line_height + self.margin/2),
-                Point::new(canvas_width - self.divider_margin, index * self.line_height + self.margin/2),
-                DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
-                ).expect("couldn't draw dividing line")
-        } else {
-            log::debug!("cant draw divider because our canvas width was not initialized. Ignoring request.");
-        }
-    }
-    */
-
-    pub fn redraw(&mut self) {
-        // for now, just draw a black rectangle
+    pub fn redraw(&self) {
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
-        self.canvas_width = Some(canvas_size.x);
-
         // draw the outer border
         self.gam.draw_rounded_rectangle(self.canvas,
             RoundedRectangle::new(
                 Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                    DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 3)
+                    DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 3)
                 ), 5
             )).unwrap();
-        /*
-        // draw the line items
-        // we require that the items list be in index-order, with no holes: we abort at the first None item
-        let mut cur_index: i16 = 0;
-        for maybe_item in self.items.iter() {
-            if let Some(_item) = maybe_item {
-                if self.index == cur_index as usize {
-                    self.draw_item(cur_index as i16, true);
-                } else {
-                    self.draw_item(cur_index as i16, false);
-                }
-                if cur_index != 0 {
-                    self.draw_divider(cur_index);
-                }
 
-                cur_index += 1;
-            } else {
-                break;
+        let mut cur_height = self.margin;
+        if let Some(mut tv) = self.top_text {
+            self.gam.post_textview(&mut tv).expect("couldn't draw text");
+            if let Some(bounds) = tv.bounds_computed {
+                cur_height += bounds.br.y - bounds.tl.y;
             }
         }
-        */
+
+        self.action.redraw(cur_height, &self);
+        cur_height += self.action.height(self.line_height, self.margin);
+
+        if let Some(mut tv) = self.bot_text {
+            self.gam.post_textview(&mut tv).expect("couldn't draw text");
+            if let Some(bounds) = tv.bounds_computed {
+                cur_height += bounds.br.y - bounds.tl.y;
+            }
+        }
+        log::trace!("total height: {}", cur_height);
         self.gam.redraw().unwrap();
     }
 

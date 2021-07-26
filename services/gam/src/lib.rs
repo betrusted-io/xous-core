@@ -90,6 +90,21 @@ impl Gam {
         tv.set_op(TextOp::Nop);
         Ok(())
     }
+    pub fn bounds_compute_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
+        tv.set_op(TextOp::ComputeBounds);
+        let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::RenderTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+
+        match buf.to_original().unwrap() {
+            api::Return::RenderReturn(tvr) => {
+                tv.bounds_computed = tvr.bounds_computed;
+                tv.cursor = tvr.cursor;
+            }
+            _ => panic!("GAM_API: bounds_compute_textview got a return value from the server that isn't expected or handled")
+        }
+        tv.set_op(TextOp::Nop);
+        Ok(())
+    }
 
     pub fn draw_line(&self, gid: Gid, line: Line) -> Result<(), xous::Error> {
         let go = GamObject {

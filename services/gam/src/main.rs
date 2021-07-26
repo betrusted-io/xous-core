@@ -735,21 +735,27 @@ fn xmain() -> ! {
 
                         log::trace!("render request for {:?}", tv);
                         if tv.get_op() == TextOp::ComputeBounds {
-                            tv.dry_run = true;
+                            tv.set_dry_run(true);
                         } else {
-                            tv.dry_run = false;
+                            tv.set_dry_run(false);
                         }
 
                         if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
                             // if we're requesting inverted text, this better be a "trusted canvas"
-                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL) {
+                            // BOOT_CONTEXT_TRUSTLEVEL is reserved for the "status bar"
+                            // BOOT_CONTEXT_TRUSTLEVEL - 1 is where e.g. password modal dialog boxes end up
+                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL - 1) {
                                 log::error!("Attempt to draw inverted text without sufficient trust level. Aborting.");
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
-                            if canvas.is_drawable() {
+                            if canvas.is_drawable() || tv.dry_run() { // dry runs should not move any pixels so they are OK to go through in any case
                                 // set the clip rectangle according to the canvas' location
-                                tv.clip_rect = Some(canvas.clip_rect().into());
+                                let mut base_clip_rect = canvas.clip_rect();
+                                if tv.dry_run() {
+                                    base_clip_rect.normalize();
+                                }
+                                tv.clip_rect = Some(base_clip_rect.into());
 
                                 // you have to clone the tv object, because if you don't the same block of
                                 // memory gets passed on to the graphics_server(). Which is efficient, but,
@@ -759,13 +765,15 @@ fn xmain() -> ! {
                                 // issue the draw command
                                 gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
                                 // copy back the fields that we want to be mutable
-                                log::trace!("got computed cursor of {:?}", tv_clone.cursor);
+                                log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
-                                canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                if !tv.dry_run() {
+                                    canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                }
                             } else {
                                 info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
                             }

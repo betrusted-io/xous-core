@@ -62,7 +62,7 @@ pub struct TextView {
     pub bounds_hint: TextBounds,
     pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
     pub overflow: Option<bool>,  // indicates if the text has overflowed the canvas, set by the drawing routine
-    pub dry_run: bool, // set to true if no drawing is desired and we just want to compute the bounds
+    dry_run: bool, // callers should not set; use TexOp to select. gam-side bookkeepping, set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
     pub cursor: Cursor,
@@ -106,6 +106,8 @@ impl TextView {
             dry_run: false,
         }
     }
+    pub fn dry_run(&self) -> bool {self.dry_run}
+    pub fn set_dry_run(&mut self, dry_run: bool) {self.dry_run = dry_run;}
     pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
     pub fn get_op(&self) -> TextOp { self.operation }
     pub fn get_canvas_gid(&self) -> Gid { self.canvas }
@@ -150,8 +152,8 @@ impl AsRef<str> for TextView {
 impl core::fmt::Debug for TextView {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // this should definitely be extended to print more relevant data, but for now just render the string itself
-        write!(f, "{:?}, {:?}, {:?}, {:?}, {}",
-            self.get_op(), self.bounds_hint, self.cursor, self.get_canvas_gid(), self.to_str())
+        write!(f, "{:?}, {:?}, {:?}, {:?}, dry_run: {:?}, {}",
+            self.get_op(), self.bounds_hint, self.cursor, self.get_canvas_gid(), self.dry_run, self.to_str())
     }
 }
 
