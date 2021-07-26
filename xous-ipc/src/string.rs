@@ -20,6 +20,19 @@ impl<const N: usize> String<N> {
         }
     }
 
+    // use a volatile write to ensure a clear operation is not optimized out
+    // for ensuring that a string is cleared, e.g. at the exit of a function
+    pub fn volatile_clear(&mut self) {
+        let b = self.bytes.as_mut_ptr();
+        for i in 0..N {
+            unsafe{b.add(i).write_volatile(core::mem::zeroed());}
+        }
+        // Ensure the compiler doesn't re-order the clear.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn from_str<T>(src: T) -> String<N> where T: AsRef<str> {
         let src = src.as_ref();
         let mut s = Self::new();
