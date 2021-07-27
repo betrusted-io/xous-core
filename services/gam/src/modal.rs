@@ -64,10 +64,15 @@ use num_traits::*;
 
 use core::fmt::Write;
 
-const MAX_ITEMS: usize = 8;
+pub const MAX_ITEMS: usize = 8;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ItemName(String::<64>);
+impl ItemName {
+    pub fn new(name: &str) -> Self {
+        ItemName(String::<64>::from_str(name))
+    }
+}
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
 pub struct TextEntryPayload(String::<256>);
 impl TextEntryPayload {
@@ -84,8 +89,18 @@ impl TextEntryPayload {
 
 #[derive(Debug, Copy, Clone)]
 pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
+impl RadioButtonPayload {
+    pub fn new() -> Self {
+        RadioButtonPayload(ItemName::new(""))
+    }
+}
 #[derive(Debug, Copy, Clone)]
 pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
+impl CheckBoxPayload {
+    pub fn new() -> Self {
+        CheckBoxPayload([None; MAX_ITEMS])
+    }
+}
 
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum TextEntryVisibility {
@@ -104,7 +119,8 @@ pub struct TextEntry {
     pub action_opcode: u32,
     pub action_payload: TextEntryPayload,
     // validator borrows the text entry payload, and returns an error message if something didn't go well.
-    pub validator: Option<fn(TextEntryPayload) -> Option<xous_ipc::String::<512>> >,
+    // validator takes as ragument the current action_payload, and the current action_opcode
+    pub validator: Option<fn(TextEntryPayload, u32) -> Option<xous_ipc::String::<512>> >,
 }
 impl ActionApi for TextEntry {
     fn is_password(&self) -> bool {
@@ -152,9 +168,9 @@ impl ActionApi for TextEntry {
             TextEntryVisibility::Visible => {
                 log::trace!("action payload: {}", self.action_payload.0.as_str().unwrap());
                 if payload_chars < 20 {
-                    write!(tv.text, "{}", self.action_payload.0.as_str().unwrap());
+                    write!(tv.text, "{}", self.action_payload.0.as_str().unwrap()).unwrap();
                 } else {
-                    write!(tv.text, "...{}", &self.action_payload.0.as_str().unwrap()[payload_chars-18..]);
+                    write!(tv.text, "...{}", &self.action_payload.0.as_str().unwrap()[payload_chars-18..]).unwrap();
                 }
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             },
@@ -283,7 +299,7 @@ impl ActionApi for TextEntry {
             },
             '∴' | '\u{d}' => {
                 if let Some(validator) = self.validator {
-                    if let Some(err_msg) = validator(self.action_payload) {
+                    if let Some(err_msg) = validator(self.action_payload, self.action_opcode) {
                         self.action_payload.0.clear(); // reset the input field
                         return Some(err_msg);
                     }
@@ -307,7 +323,7 @@ impl ActionApi for TextEntry {
                 let mut c_iter = temp_str.as_str().unwrap().chars();
                 self.action_payload.0.clear();
                 for _ in 0..cur_len-1 {
-                    self.action_payload.0.push(c_iter.next().unwrap());
+                    self.action_payload.0.push(c_iter.next().unwrap()).unwrap();
                 }
                 temp_str.volatile_clear();
             }
@@ -324,13 +340,34 @@ pub struct RadioButtons {
     pub items: [Option<ItemName>; MAX_ITEMS],
     pub action_conn: xous::CID,
     pub action_opcode: u32,
-    pub action_payload: Option<RadioButtonPayload>,
+    pub action_payload: RadioButtonPayload,
+}
+impl RadioButtons {
+    pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
+        RadioButtons {
+            items: [None; MAX_ITEMS],
+            action_conn,
+            action_opcode,
+            action_payload: RadioButtonPayload::new(),
+        }
+    }
+    pub fn add_item(&mut self, new_item: ItemName) -> Option<ItemName> {
+        for item in self.items.iter_mut() {
+            if item.is_none() {
+                *item = Some(new_item);
+                return None;
+            }
+        }
+        return Some(new_item);
+    }
 }
 impl ActionApi for RadioButtons {
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {
         let mut total_items = 0;
         // total items, then +1 for the "Okay" message
-        for item in self.items.iter().map(|i| if i.is_some(){ total_items += 1} ) {}
+        for item in self.items.iter() {
+            if item.is_some(){ total_items += 1}
+        }
         (total_items + 1) * glyph_height + margin * 2
     }
 }
@@ -339,14 +376,35 @@ pub struct CheckBoxes {
     pub items: [Option<ItemName>; MAX_ITEMS],
     pub action_conn: xous::CID,
     pub action_opcode: u32,
-    pub action_payload: Option<CheckBoxPayload>,
+    pub action_payload: CheckBoxPayload,
+}
+impl CheckBoxes {
+    pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
+        CheckBoxes {
+            items: [None; MAX_ITEMS],
+            action_conn,
+            action_opcode,
+            action_payload: CheckBoxPayload::new(),
+        }
+    }
+    pub fn add_item(&mut self, new_item: ItemName) -> Option<ItemName> {
+        for item in self.items.iter_mut() {
+            if item.is_none() {
+                *item = Some(new_item);
+                return None;
+            }
+        }
+        return Some(new_item);
+    }
 }
 impl ActionApi for CheckBoxes {
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {
         let mut total_items = 0;
         // total items, then +1 for the "Okay" message
         let mut total_items = 0;
-        for item in self.items.iter().map(|i| if i.is_some(){ total_items += 1} ) {}
+        for item in self.items.iter() {
+            if item.is_some(){ total_items += 1}
+        }
         (total_items + 1) * glyph_height + margin * 2
     }
 }
@@ -414,7 +472,7 @@ pub struct Modal {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum ModalOpcode {
-    Redraw,
+    Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
     Rawkeys,
     Quit,
 }
