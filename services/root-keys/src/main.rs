@@ -64,6 +64,7 @@ pub(crate) fn rootkeys_ux_thread() {
         action_conn: main_conn,
         action_opcode: Opcode::PasswordModalEntry.to_u32().unwrap(),
         action_payload: TextEntryPayload::new(),
+        validator: None,
     };
     log::trace!("building ux thread modal");
     let mut modal = gam::Modal::new(
@@ -73,7 +74,6 @@ pub(crate) fn rootkeys_ux_thread() {
         None,
         GlyphStyle::Small,
     );
-    log::trace!("ux thread modal: {:?}", modal);
 
     loop {
         let msg = xous::receive_message(modal.sid).unwrap();

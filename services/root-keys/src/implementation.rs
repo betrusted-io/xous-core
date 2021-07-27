@@ -62,6 +62,7 @@ pub(crate) struct RootKeys {
     password_policy: PasswordRetentionPolicy,
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
+    gam: gam::Gam, // for raising UX elements directly
 }
 
 impl RootKeys {
@@ -124,6 +125,7 @@ impl RootKeys {
             password_policy: PasswordRetentionPolicy::AlwaysKeep,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
+            gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
         };
 
         keys
@@ -224,7 +226,11 @@ impl RootKeys {
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }
 
-    pub fn test_ux(&mut self, _arg: usize) {
-
+    pub fn test_ux(&mut self, arg: usize) {
+        match arg {
+            0 => self.gam.raise_modal(ROOTKEY_MODAL_NAME).expect("couldn't raise modal"),
+            1 => self.gam.relinquish_focus().expect("couldn't hide modal"),
+            _ => log::info!("test_ux got unrecognized arg: {}", arg),
+        };
     }
 }

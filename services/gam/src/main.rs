@@ -3,8 +3,6 @@
 
 mod api;
 use api::*;
-mod status;
-use status::*;
 mod canvas;
 use canvas::*;
 
@@ -621,11 +619,20 @@ fn xmain() -> ! {
     canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // make a thread to manage the status bar -- this needs to start late, after the IMEF and most other things are initialized
-    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
+    // initialize the status bar -- this needs to start late, after the IMEF and most other things are initialized
+    // this used to be domiciled in the GAM, but we split it out because this started to pull too much functionality
+    // into the GAM and was causing circular crate conflicts with sub-functions that the status bar relies upon.
+    // we do a hack to try and push a GID to the status bar "securely": we introduce a race condition where we hope
+    // that the GAM is the first thing to talk to the status bar, and the first message is its GID to render on.
+    // generally should be OK, because during boot, all processes are trusted...
     let status_gid = status_canvas.gid().gid();
-    log::trace!("starting status thread with gid {:?}", status_gid);
-    xous::create_thread_4(status_thread, status_gid[0] as _, status_gid[1] as _, status_gid[2] as _, status_gid[3] as _).expect("couldn't create status thread");
+    log::trace!("initializing status bar with gid {:?}", status_gid);
+    let status_conn = xns.request_connection_blocking("_Status bar GID receiver_").expect("couldn't connect to status bar GID receiver");
+    xous::send_message(status_conn,
+        xous::Message::new_scalar(0, // message type doesn't matter because there is only one message it should ever receive
+        status_gid[0] as usize, status_gid[1] as usize, status_gid[2] as usize, status_gid[3] as usize
+        )
+    ).expect("couldn't set status GID");
 
     // make a thread to manage the main menu.
     log::trace!("starting menu thread");

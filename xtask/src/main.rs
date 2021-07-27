@@ -41,6 +41,7 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
         "gam",
+        "status",
         "shellchat",
         "ime-frontend",
         "ime-plugin-shell",

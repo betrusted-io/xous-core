@@ -530,7 +530,8 @@ fn xmain() -> ! {
     // - GAM
     // - shellchat/rtc
     // - shellchat/sleep x2
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(4)).expect("can't register server");
+    // - UX thread
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", rtc_sid);
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 
@@ -681,3 +682,71 @@ fn xmain() -> ! {
     log::trace!("quitting");
     xous::terminate_process(0)
 }
+
+/*
+pub(crate) fn rtc_ux_thread() {
+    let xns = xous_names::XousNames::new().unwrap();
+    let main_conn = xns.request_connection_blocking(api::SERVER_NAME_RTC).expect("UX thread can't connect to main thread");
+
+    let rtc_textentry = gam::modal::TextEntry {
+        is_password: false,
+        visibility: gam::modal::TextEntryVisibility::Visible,
+        action_conn: main_conn,
+        action_opcode: Opcode::PasswordModalEntry.to_u32().unwrap(),
+        action_payload: TextEntryPayload::new(),
+    };
+    log::trace!("building ux thread modal");
+    let mut modal = gam::Modal::new(
+        crate::ROOTKEY_MODAL_NAME,
+        gam::ActionType::TextEntry(password_action),
+        Some(t!("rootpass.top", xous::LANG)),
+        None,
+        GlyphStyle::Small,
+    );
+    log::trace!("ux thread modal: {:?}", modal);
+
+    loop {
+        let msg = xous::receive_message(modal.sid).unwrap();
+        log::trace!("ux message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ModalOpcode::Redraw) => {
+                modal.redraw();
+            },
+            Some(ModalOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k2 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k3 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                    if let Some(a) = core::char::from_u32(k4 as u32) {
+                        a
+                    } else {
+                        '\u{0000}'
+                    },
+                ];
+                modal.key_event(keys);
+            }),
+            Some(ModalOpcode::Quit) => {
+                break;
+            },
+            None => {
+                log::error!("unknown opcode {:?}", msg.body.id());
+            }
+        }
+    }
+    log::trace!("password modal thread exit, destroying servers");
+    // do we want to add a deregister_ux call to the system?
+    xous::destroy_server(modal.sid).unwrap();
+}
+*/

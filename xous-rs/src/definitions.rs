@@ -73,7 +73,7 @@ impl core::fmt::Display for MessageSender {
 }
 
 /// Server ID
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct SID([u32; 4]);
 impl SID {
     pub fn from_bytes(b: &[u8]) -> Option<SID> {

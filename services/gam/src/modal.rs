@@ -96,13 +96,15 @@ pub enum TextEntryVisibility {
     /// all chars hidden as *
     Hidden = 2,
 }
-#[derive(Debug, Clone)]
+#[derive(Copy, Clone)]
 pub struct TextEntry {
     pub is_password: bool,
     pub visibility: TextEntryVisibility,
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: TextEntryPayload,
+    // validator borrows the text entry payload, and returns an error message if something didn't go well.
+    pub validator: Option<fn(TextEntryPayload) -> Option<xous_ipc::String::<512>> >,
 }
 impl ActionApi for TextEntry {
     fn is_password(&self) -> bool {
@@ -250,7 +252,7 @@ impl ActionApi for TextEntry {
             DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
     }
-    fn key_action(&mut self, k: char) {
+    fn key_action(&mut self, k: char) -> Option<xous_ipc::String::<512>> {
         log::trace!("key_action: {}", k);
         match k {
             '←' => {
@@ -280,6 +282,13 @@ impl ActionApi for TextEntry {
                 }
             },
             '∴' | '\u{d}' => {
+                if let Some(validator) = self.validator {
+                    if let Some(err_msg) = validator(self.action_payload) {
+                        self.action_payload.0.clear(); // reset the input field
+                        return Some(err_msg);
+                    }
+                }
+
                 let mut buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
                 buf.lend(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
                 self.action_payload.volatile_clear(); // ensure the local copy of text is zero'd out
@@ -307,6 +316,7 @@ impl ActionApi for TextEntry {
                 log::trace!("****update payload: {}", self.action_payload.0);
             }
         }
+        None
     }
 }
 #[derive(Debug, Copy, Clone)]
@@ -371,11 +381,11 @@ trait ActionApi {
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, key: char) {}
+    fn key_action(&mut self, key: char) -> Option<xous_ipc::String::<512>> {None}
 }
 
 #[enum_dispatch(ActionApi)]
-#[derive(Debug, Clone)]
+#[derive(Copy, Clone)]
 pub enum ActionType {
     TextEntry,
     RadioButtons,
@@ -383,7 +393,7 @@ pub enum ActionType {
     Slider
 }
 
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct Modal {
     pub sid: xous::SID,
     pub gam: Gam,
@@ -409,6 +419,86 @@ pub enum ModalOpcode {
     Quit,
 }
 
+fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
+    // method:
+    //   - we assume the GAM gives us an initial modal with a "maximum" height setting
+    //   - items are populated within this maximal canvas setting, and then the actual height needed is computed
+    //   - the canvas is resized to this actual height
+    // problems:
+    //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text box that's
+    //     huge, it will just overflow the canvas size and nothing else will get drawn.
+
+    let mut total_height = modal.margin;
+    log::trace!("step 0 total_height: {}", total_height);
+    // compute height of top_text, if any
+    if let Some(top_str) = top_text {
+        let mut top_tv = TextView::new(modal.canvas,
+            TextBounds::GrowableFromTl(
+                Point::new(modal.margin, total_height),
+                (modal.canvas_width - modal.margin * 2) as u16
+            ));
+        top_tv.draw_border = false;
+        top_tv.style = style;
+        top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+        top_tv.ellipsis = false;
+        top_tv.invert = modal.inverted;
+        write!(top_tv.text, "{}", top_str);
+
+        log::trace!("posting top tv: {:?}", top_tv);
+        modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
+        if let Some(bounds) = top_tv.bounds_computed {
+            total_height += bounds.br.y - bounds.tl.y;
+        } else {
+            log::error!("couldn't compute height for modal top_text: {:?}", top_tv);
+            panic!("couldn't compute height for modal top_text");
+        }
+        modal.top_text = Some(top_tv);
+    }
+    total_height += modal.margin;
+
+    // compute height of action item
+    log::trace!("step 1 total_height: {}", total_height);
+    total_height += modal.action.height(modal.line_height, modal.margin);
+    total_height += modal.margin;
+
+    // compute height of bot_text, if any
+    log::trace!("step 2 total_height: {}", total_height);
+    if let Some(bot_str) = bot_text {
+        let mut bot_tv = TextView::new(modal.canvas,
+            TextBounds::GrowableFromTl(
+                Point::new(modal.margin, total_height),
+                (modal.canvas_width - modal.margin * 2) as u16
+            ));
+        bot_tv.draw_border = false;
+        bot_tv.style = style;
+        bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
+        bot_tv.ellipsis = false;
+        bot_tv.invert = modal.inverted;
+        write!(bot_tv.text, "{}", bot_str);
+
+        modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
+        if let Some(bounds) = bot_tv.bounds_computed {
+            total_height += bounds.br.y - bounds.tl.y;
+        } else {
+            log::error!("couldn't compute height for modal bot_text: {:?}", bot_tv);
+            panic!("couldn't compute height for modal bot_text");
+        }
+        modal.bot_text = Some(bot_tv);
+        total_height += modal.margin;
+    }
+    log::trace!("step 3 total_height: {}", total_height);
+
+    let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
+    let mut new_bounds = SetCanvasBoundsRequest {
+        requested: Point::new(current_bounds.x, total_height),
+        granted: None,
+        token_type: TokenType::App,
+        token: modal.authtoken,
+    };
+    log::debug!("applying recomputed bounds of {:?}", new_bounds);
+    modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+}
+
 impl Modal {
     pub fn new(name: &str, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) -> Modal {
         let xns = xous_names::XousNames::new().unwrap();
@@ -432,6 +522,7 @@ impl Modal {
         let line_height = gam.glyph_height_hint(style).expect("couldn't get glyph height hint") as i16;
         let canvas_bounds = gam.get_canvas_bounds(canvas).expect("couldn't get starting canvas bounds");
 
+        log::trace!("initializing Modal structure");
         // check to see if this is a password field or not
         // note: if a modal claims it's a password field but lacks sufficient trust level, the GAM will refuse
         // to render the element.
@@ -440,7 +531,6 @@ impl Modal {
             _ => false
         };
 
-        log::trace!("initializing Modal structure");
         // we now have a canvas that is some minimal height, but with the final width as allowed by the GAM.
         // compute the final height based upon the contents within.
         let mut modal = Modal {
@@ -458,85 +548,7 @@ impl Modal {
             inverted,
             style,
         };
-
-        // method:
-        //   - we assume the GAM gives us an initial modal with a "maximum" height setting
-        //   - items are populated within this maximal canvas setting, and then the actual height needed is computed
-        //   - the canvas is resized to this actual height
-        // problems:
-        //   - there is no sanity check on the size of the text boxes. So if you give the UX element a top_text box that's
-        //     huge, it will just overflow the canvas size and nothing else will get drawn.
-
-        let mut total_height = modal.margin;
-        log::trace!("step 0 total_height: {}", total_height);
-        // compute height of top_text, if any
-        if let Some(top_str) = top_text {
-            let mut top_tv = TextView::new(canvas,
-                TextBounds::GrowableFromTl(
-                    Point::new(modal.margin, total_height),
-                    (modal.canvas_width - modal.margin * 2) as u16
-                ));
-            top_tv.draw_border = false;
-            top_tv.style = style;
-            top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
-            top_tv.ellipsis = false;
-            top_tv.invert = inverted;
-            write!(top_tv.text, "{}", top_str);
-
-            log::trace!("posting top tv: {:?}", top_tv);
-            modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
-            if let Some(bounds) = top_tv.bounds_computed {
-                total_height += bounds.br.y - bounds.tl.y;
-            } else {
-                log::error!("couldn't compute height for modal top_text: {:?}", top_tv);
-                panic!("couldn't compute height for modal top_text");
-            }
-            modal.top_text = Some(top_tv);
-        }
-        total_height += modal.margin;
-
-        // compute height of action item
-        log::trace!("step 1 total_height: {}", total_height);
-        total_height += modal.action.height(modal.line_height, modal.margin);
-        total_height += modal.margin;
-
-        // compute height of bot_text, if any
-        log::trace!("step 2 total_height: {}", total_height);
-        if let Some(bot_str) = bot_text {
-            let mut bot_tv = TextView::new(canvas,
-                TextBounds::GrowableFromTl(
-                    Point::new(modal.margin, total_height),
-                    (modal.canvas_width - modal.margin * 2) as u16
-                ));
-            bot_tv.draw_border = false;
-            bot_tv.style = style;
-            bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
-            bot_tv.ellipsis = false;
-            bot_tv.invert = inverted;
-            write!(bot_tv.text, "{}", bot_str);
-
-            modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
-            if let Some(bounds) = bot_tv.bounds_computed {
-                total_height += bounds.br.y - bounds.tl.y;
-            } else {
-                log::error!("couldn't compute height for modal bot_text: {:?}", bot_tv);
-                panic!("couldn't compute height for modal bot_text");
-            }
-            modal.bot_text = Some(bot_tv);
-            total_height += modal.margin;
-        }
-        log::trace!("step 3 total_height: {}", total_height);
-
-        let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
-        let mut new_bounds = SetCanvasBoundsRequest {
-            requested: Point::new(current_bounds.x, total_height),
-            granted: None,
-            token_type: TokenType::App,
-            token: modal.authtoken,
-        };
-        log::debug!("applying recomputed bounds of {:?}", new_bounds);
-        modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
-
+        recompute_canvas(&mut modal, action, top_text, bot_text, style);
         modal
     }
 
@@ -576,19 +588,90 @@ impl Modal {
         for &k in keys.iter() {
             if k != '\u{0}' {
                 log::debug!("got key '{}'", k);
-                self.action.key_action(k); // this is where the action is at
-                match k {
-                    '∴' | '\u{d}' => {
-                        log::trace!("closing modal");
-                        // if it's a "close" button, invoke the GAM to put our box away
-                        self.gam.relinquish_focus().unwrap();
-                    }
-                    _ => {
-                        // already handled by key_action() above
+                if let Some(err_msg) = self.action.key_action(k) {
+                    self.modify(None, None, Some(err_msg.to_str()), None);
+                } else {
+                    match k {
+                        '∴' | '\u{d}' => {
+                            log::trace!("closing modal");
+                            // if it's a "close" button, invoke the GAM to put our box away
+                            self.gam.relinquish_focus().unwrap();
+                        }
+                        _ => {
+                            // already handled by key_action() above
+                        }
                     }
                 }
             }
         }
         self.redraw();
+    }
+
+    /// this function will modify UX elements if any of the arguments are Some()
+    /// if None, the element is unchanged. To remove an element, use remove()
+    pub fn modify(&mut self, update_action: Option<ActionType>, update_top_text: Option<&str>, update_bot_text: Option<&str>, update_style: Option<GlyphStyle>) {
+        let action = if let Some(action) = update_action {
+            action
+        } else {
+            self.action
+        };
+
+        let mut top_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        if let Some(top_text) = update_top_text {
+            write!(top_tv_temp, "{}", top_text).unwrap();
+        } else {
+            if let Some(top_text) = self.top_text {
+                write!(top_tv_temp, "{}", top_text).unwrap();
+            }
+        };
+        let top_text = if self.top_text.is_none() && update_top_text.is_none() {
+            None
+        } else {
+            Some(top_tv_temp.to_str())
+        };
+
+        let mut bot_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        if let Some(bot_text) = update_bot_text {
+            write!(bot_tv_temp, "{}", bot_text).unwrap();
+        } else {
+            if let Some(bot_text) = self.bot_text {
+                write!(bot_tv_temp, "{}", bot_text).unwrap();
+            }
+        };
+        let bot_text = if self.bot_text.is_none() && update_bot_text.is_none() {
+            None
+        } else {
+            Some(bot_tv_temp.to_str())
+        };
+
+        let style = if let Some(style) = update_style {
+            style
+        } else {
+            self.style
+        };
+        recompute_canvas(self, action, top_text, bot_text, style);
+    }
+    /// only the top and bottom texts are optional, setting either to false will remove them from the UX element
+    pub fn remove(&mut self, remove_top: bool, remove_bot: bool) {
+        let mut top_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        if let Some(top_text) = self.top_text {
+            write!(top_tv_temp, "{}", top_text).unwrap();
+        };
+        let top_text = if remove_top {
+            None
+        } else {
+            Some(top_tv_temp.to_str())
+        };
+
+        let mut bot_tv_temp = String::<3072>::new(); // size matches that used in TextView
+        if let Some(bot_text) = self.bot_text {
+            write!(bot_tv_temp, "{}", bot_text).unwrap();
+        };
+        let bot_text = if remove_bot {
+            None
+        } else {
+            Some(bot_tv_temp.to_str())
+        };
+        recompute_canvas(self, self.action, top_text, bot_text, self.style);
     }
 }

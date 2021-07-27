@@ -740,7 +740,6 @@ name = "gam"
 version = "0.1.0"
 dependencies = [
  "blitstr-ref",
- "chrono",
  "com",
  "content-plugin-api",
  "enum_dispatch",
@@ -749,14 +748,12 @@ dependencies = [
  "ime-plugin-api",
  "ime-plugin-shell",
  "keyboard",
- "llio",
  "locales",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
- "rtc",
  "susres",
  "ticktimer-server",
  "trng",
@@ -1849,6 +1846,31 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "status"
+version = "0.1.0"
+dependencies = [
+ "blitstr-ref",
+ "chrono",
+ "com",
+ "content-plugin-api",
+ "gam",
+ "graphics-server",
+ "llio",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "rtc",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
 
 [[package]]
 name = "strsim"
