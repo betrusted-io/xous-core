@@ -69,9 +69,9 @@ impl Repl{
         gam.request_focus(token.unwrap()).expect("couldn't take focus");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
-        log::debug!("content canvas {:?}", content);
+        log::trace!("content canvas {:?}", content);
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        log::debug!("size {:?}", screensize);
+        log::trace!("size {:?}", screensize);
         Repl {
             input: None,
             msg: None,
@@ -308,7 +308,7 @@ fn xmain() -> ! {
             repl.update(was_callback).expect("REPL had problems updating");
             update_repl = false;
         }
-        log::debug!("reached bottom of main loop");
+        log::trace!("reached bottom of main loop");
     }
     // clean up our program
     log::error!("main loop exit, destroying servers");

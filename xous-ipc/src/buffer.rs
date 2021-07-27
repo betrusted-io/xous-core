@@ -59,6 +59,19 @@ impl<'a> Buffer<'a> {
         }
     }
 
+    // use a volatile write to ensure a clear operation is not optimized out
+    // for ensuring that a buffer is cleared, e.g. at the exit of a function
+    pub fn volatile_clear(&mut self) {
+        let b = self.slice.as_mut_ptr();
+        for i in 0..self.slice.len() {
+            unsafe{b.add(i).write_volatile(core::mem::zeroed());}
+        }
+        // Ensure the compiler doesn't re-order the clear.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
     #[allow(dead_code)]
     pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
         Buffer {

@@ -85,6 +85,9 @@ impl Gam {
                 tv.bounds_computed = tvr.bounds_computed;
                 tv.cursor = tvr.cursor;
             }
+            api::Return::NotCurrentlyDrawable => {
+                tv.bounds_computed = None;
+            }
             _ => panic!("GAM_API: post_textview got a return value from the server that isn't expected or handled")
         }
         tv.set_op(TextOp::Nop);

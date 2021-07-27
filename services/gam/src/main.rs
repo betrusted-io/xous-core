@@ -776,6 +776,8 @@ fn xmain() -> ! {
                                 }
                             } else {
                                 info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                let ret = api::Return::NotCurrentlyDrawable;
+                                buffer.replace(ret).unwrap();
                             }
                         } else {
                             info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);

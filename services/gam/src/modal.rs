@@ -68,31 +68,33 @@ const MAX_ITEMS: usize = 8;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ItemName(String::<64>);
-#[derive(Debug, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
 pub struct TextEntryPayload(String::<256>);
 impl TextEntryPayload {
     pub fn new() -> Self {
         TextEntryPayload(String::<256>::new())
     }
-}
-impl Drop for TextEntryPayload {
-    fn drop(&mut self) {
+    pub fn volatile_clear(&mut self) {
         self.0.volatile_clear(); // volatile_clear() ensures that 0's are written and not optimized out; important for password fields
     }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str().expect("couldn't convert password string")
+    }
 }
+
 #[derive(Debug, Copy, Clone)]
 pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
 #[derive(Debug, Copy, Clone)]
 pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum TextEntryVisibility {
     /// text is fully visible
-    Visible,
+    Visible = 0,
     /// only last chars are shown of text entry, the rest obscured with *
-    LastChars,
+    LastChars = 1,
     /// all chars hidden as *
-    Hidden,
+    Hidden = 2,
 }
 #[derive(Debug, Clone)]
 pub struct TextEntry {
@@ -117,7 +119,7 @@ impl ActionApi for TextEntry {
 
             auto-closes on enter
         */
-        glyph_height + 2*margin + glyph_height + 2*margin
+        glyph_height + 2*margin + glyph_height + 2*margin + 8 // 8 pixels extra margin because the emoji glyphs are oversized
     }
     fn redraw(&self, at_height: i16, modal: &Modal) {
         let color = if self.is_password {
@@ -142,6 +144,7 @@ impl ActionApi for TextEntry {
         tv.text.clear(); // make sure this is blank
         match self.visibility {
             TextEntryVisibility::Visible => {
+                log::trace!("action payload: {}", self.action_payload.0.as_str().unwrap());
                 write!(tv.text, "{}", self.action_payload.0.as_str().unwrap());
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             },
@@ -152,13 +155,13 @@ impl ActionApi for TextEntry {
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             },
             TextEntryVisibility::LastChars => {
-                let hide_to = if tv.text.len() >= 2 {
-                    tv.text.len() - 2
+                let hide_to = if self.action_payload.0.as_str().unwrap().chars().count() >= 2 {
+                    self.action_payload.0.as_str().unwrap().chars().count() - 2
                 } else {
                     0
                 };
                 for (index, ch) in self.action_payload.0.as_str().unwrap().chars().enumerate() {
-                    if index <= hide_to {
+                    if index < hide_to {
                         tv.text.push('*').expect("text field too long");
                     } else {
                         tv.text.push(ch).expect("text field too long");
@@ -210,6 +213,53 @@ impl ActionApi for TextEntry {
             Point::new(modal.canvas_width - modal.margin*2, at_height + modal.line_height + modal.margin * 2),
             DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
+    }
+    fn key_action(&mut self, k: char) {
+        log::trace!("key_action: {}", k);
+        match k {
+            '←' => {
+                if self.visibility as u32 > 0 {
+                    match FromPrimitive::from_u32(self.visibility as u32 - 1) {
+                        Some(new_visibility) => {
+                            log::trace!("new visibility: {:?}", new_visibility);
+                            self.visibility = new_visibility;
+                        },
+                        _ => {
+                            panic!("internal error: an TextEntryVisibility did not resolve correctly");
+                        }
+                    }
+                }
+            },
+            '→' => {
+                if (self.visibility as u32) < (TextEntryVisibility::Hidden as u32) {
+                    match FromPrimitive::from_u32(self.visibility as u32 + 1) {
+                        Some(new_visibility) => {
+                            log::trace!("new visibility: {:?}", new_visibility);
+                            self.visibility = new_visibility
+                        },
+                        _ => {
+                            panic!("internal error: an TextEntryVisibility did not resolve correctly");
+                        }
+                    }
+                }
+            },
+            '∴' | '\u{d}' => {
+                let mut buf = Buffer::into_buf(self.action_payload).expect("couldn't convert message to payload");
+                buf.lend(self.action_conn, self.action_opcode).map(|_| ()).expect("couldn't send action message");
+                self.action_payload.volatile_clear(); // ensure the local copy of text is zero'd out
+                buf.volatile_clear(); // ensure that the copy of the text used to send the message is also zero'd out
+            }
+            '↑' | '↓' => {
+                // ignore these navigation keys
+            }
+            '\u{0}' => {
+                // ignore null messages
+            }
+            _ => { // text entry
+                self.action_payload.0.push(k).expect("ran out of space storing password");
+                log::trace!("****update payload: {}", self.action_payload.0);
+            }
+        }
     }
 }
 #[derive(Debug, Copy, Clone)]
@@ -263,12 +313,18 @@ impl ActionApi for Slider {
     }
 }
 
+
+
+
+
 #[enum_dispatch]
 trait ActionApi {
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
     fn redraw(&self, at_height: i16, modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
+    /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
+    fn key_action(&mut self, key: char) {}
 }
 
 #[enum_dispatch(ActionApi)]
@@ -471,50 +527,21 @@ impl Modal {
 
     pub fn key_event(&mut self, keys: [char; 4]) {
         for &k in keys.iter() {
-            log::debug!("got key '{}'", k);
-            match k {
-                '∴' => {
-                        /*
-                    if let Some(mi) = self.items[self.index] {
-                        // give up focus before issuing the command, as some commands conflict with loss of focus...
-                        if mi.close_on_select {
-                            self.gam.relinquish_focus().unwrap();
-                        }
-                        log::debug!("doing modal action for {}", mi.name);
-                        match mi.action_payload {
-                            ModalPayload::Scalar(args) => {
-                                xous::send_message(mi.action_conn,
-                                    xous::Message::new_scalar(mi.action_opcode as usize,
-                                        args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize)
-                                ).expect("couldn't send modal action");
-                            },
-                            ModalPayload::Memory((_buf, _len)) => {
-                                unimplemented!("modal buffer targets are a future feature");
-                            }
-                        }
-                        self.index = 0; // reset the index to 0
+            if k != '\u{0}' {
+                log::debug!("got key '{}'", k);
+                self.action.key_action(k); // this is where the action is at
+                match k {
+                    '∴' | '\u{d}' => {
+                        log::trace!("closing modal");
+                        // if it's a "close" button, invoke the GAM to put our box away
+                        self.gam.relinquish_focus().unwrap();
                     }
-                    */
-                    self.gam.redraw().unwrap();
-                },
-                '←' => {
-                    // placeholder
-                    log::trace!("got left arrow");
+                    _ => {
+                        // already handled by key_action() above
+                    }
                 }
-                '→' => {
-                    // placeholder
-                    log::trace!("got right arrow");
-                }
-                '↑' => {
-                    //self.prev_item();
-                    self.gam.redraw().unwrap();
-                }
-                '↓' => {
-                    //self.next_item();
-                    self.gam.redraw().unwrap();
-                }
-                _ => {}
             }
         }
+        self.redraw();
     }
 }

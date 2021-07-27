@@ -161,4 +161,5 @@ pub(crate) enum Return {
     SetCanvasBoundsReturn(SetCanvasBoundsRequest),
     ContentCanvasReturn(Option<Gid>),
     Failure,
+    NotCurrentlyDrawable,
 }

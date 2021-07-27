@@ -27,6 +27,7 @@ impl<const N: usize> String<N> {
         for i in 0..N {
             unsafe{b.add(i).write_volatile(core::mem::zeroed());}
         }
+        self.len = 0; // also set my length to 0
         // Ensure the compiler doesn't re-order the clear.
         // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
         // *reads*, but this method only *writes* to the locations.

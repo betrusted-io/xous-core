@@ -11,6 +11,9 @@ pub(crate) enum Opcode {
 
     TestUx,
 
+    /// UX opcodes
+    PasswordModalEntry,
+
     /// Suspend/resume callback
     SuspendResume,
 

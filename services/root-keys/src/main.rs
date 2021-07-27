@@ -55,11 +55,14 @@ mod implementation {
 }
 
 pub(crate) fn rootkeys_ux_thread() {
+    let xns = xous_names::XousNames::new().unwrap();
+    let main_conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("rootkeys password thread can't connect to main thread");
+
     let password_action = gam::modal::TextEntry {
         is_password: true,
         visibility: gam::modal::TextEntryVisibility::LastChars,
-        action_conn: 0, //place holder
-        action_opcode: 0, // placeholder
+        action_conn: main_conn,
+        action_opcode: Opcode::PasswordModalEntry.to_u32().unwrap(),
         action_payload: TextEntryPayload::new(),
     };
     log::trace!("building ux thread modal");
@@ -67,7 +70,7 @@ pub(crate) fn rootkeys_ux_thread() {
         crate::ROOTKEY_MODAL_NAME,
         gam::ActionType::TextEntry(password_action),
         Some(t!("rootpass.top", xous::LANG)),
-        Some("Underneath text"),
+        None,
         GlyphStyle::Small,
     );
     log::trace!("ux thread modal: {:?}", modal);
@@ -129,9 +132,10 @@ fn xmain() -> ! {
     /*
        Connections allowed to the keys server:
           1. Shellchat (to originate update test requests)
+          2. Password entry UX thread
           2. (future) PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(1)).expect("can't register server");
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new(&xns);
@@ -164,6 +168,12 @@ fn xmain() -> ! {
                 keys.test_ux(arg);
                 xous::return_scalar(msg.sender, 0).expect("couldn't unblock sender");
             }),
+            Some(Opcode::PasswordModalEntry) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                log::info!("got pw entry: {}", plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after printing
+            }
             Some(Opcode::Quit) => {
                 log::warn!("password thread received quit, exiting.");
                 break
