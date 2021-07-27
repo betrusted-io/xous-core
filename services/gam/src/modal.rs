@@ -108,6 +108,8 @@ impl ActionApi for TextEntry {
     fn is_password(&self) -> bool {
         self.is_password
     }
+    /// The total canvas height is computed with this API call
+    /// The canvas height is not dynamically adjustable for modals.
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {
         /*
             -------------------
@@ -142,29 +144,63 @@ impl ActionApi for TextEntry {
         tv.draw_border = false;
         tv.insertion = Some(self.action_payload.0.len() as i32);
         tv.text.clear(); // make sure this is blank
+        let payload_chars = self.action_payload.0.as_str().unwrap().chars().count();
+        // TODO: condense the "above 20" chars length path a bit -- written out "the dumb way" just to reason out the logic a bit
         match self.visibility {
             TextEntryVisibility::Visible => {
                 log::trace!("action payload: {}", self.action_payload.0.as_str().unwrap());
-                write!(tv.text, "{}", self.action_payload.0.as_str().unwrap());
+                if payload_chars < 20 {
+                    write!(tv.text, "{}", self.action_payload.0.as_str().unwrap());
+                } else {
+                    write!(tv.text, "...{}", &self.action_payload.0.as_str().unwrap()[payload_chars-18..]);
+                }
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             },
             TextEntryVisibility::Hidden => {
-                for _char in self.action_payload.0.as_str().unwrap().chars() {
-                    tv.text.push('*').expect("text field too long");
+                if payload_chars < 20 {
+                    for _char in self.action_payload.0.as_str().unwrap().chars() {
+                        tv.text.push('*').expect("text field too long");
+                    }
+                } else {
+                    // just render a pure dummy string
+                    tv.text.push('.').unwrap();
+                    tv.text.push('.').unwrap();
+                    tv.text.push('.').unwrap();
+                    for _ in 0..18 {
+                        tv.text.push('*').expect("text field too long");
+                    }
                 }
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             },
             TextEntryVisibility::LastChars => {
-                let hide_to = if self.action_payload.0.as_str().unwrap().chars().count() >= 2 {
-                    self.action_payload.0.as_str().unwrap().chars().count() - 2
-                } else {
-                    0
-                };
-                for (index, ch) in self.action_payload.0.as_str().unwrap().chars().enumerate() {
-                    if index < hide_to {
-                        tv.text.push('*').expect("text field too long");
+                if payload_chars < 20 {
+                    let hide_to = if self.action_payload.0.as_str().unwrap().chars().count() >= 2 {
+                        self.action_payload.0.as_str().unwrap().chars().count() - 2
                     } else {
-                        tv.text.push(ch).expect("text field too long");
+                        0
+                    };
+                    for (index, ch) in self.action_payload.0.as_str().unwrap().chars().enumerate() {
+                        if index < hide_to {
+                            tv.text.push('*').expect("text field too long");
+                        } else {
+                            tv.text.push(ch).expect("text field too long");
+                        }
+                    }
+                } else {
+                    tv.text.push('.').unwrap();
+                    tv.text.push('.').unwrap();
+                    tv.text.push('.').unwrap();
+                    let hide_to = if self.action_payload.0.as_str().unwrap().chars().count() >= 2 {
+                        self.action_payload.0.as_str().unwrap().chars().count() - 2
+                    } else {
+                        0
+                    };
+                    for (index, ch) in self.action_payload.0.as_str().unwrap()[payload_chars-18..].chars().enumerate() {
+                        if index + payload_chars-18 < hide_to {
+                            tv.text.push('*').expect("text field too long");
+                        } else {
+                            tv.text.push(ch).expect("text field too long");
+                        }
                     }
                 }
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
@@ -254,6 +290,17 @@ impl ActionApi for TextEntry {
             }
             '\u{0}' => {
                 // ignore null messages
+            }
+            '\u{8}' => { // backspace
+                // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
+                let mut temp_str = String::<256>::from_str(self.action_payload.0.as_str().unwrap());
+                let cur_len = temp_str.as_str().unwrap().chars().count();
+                let mut c_iter = temp_str.as_str().unwrap().chars();
+                self.action_payload.0.clear();
+                for _ in 0..cur_len-1 {
+                    self.action_payload.0.push(c_iter.next().unwrap());
+                }
+                temp_str.volatile_clear();
             }
             _ => { // text entry
                 self.action_payload.0.push(k).expect("ran out of space storing password");
