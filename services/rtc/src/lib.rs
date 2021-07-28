@@ -23,6 +23,8 @@ impl Rtc {
           callback_sid: None,
         })
     }
+    pub fn conn(&self) -> CID {self.conn}
+    pub fn getop_set_ux(&self) -> u32 {Opcode::UxSetTime.to_u32().unwrap()}
 
     pub fn set_rtc_ux(&self) -> Result<(), xous::Error> {
         xous::send_message(self.conn,

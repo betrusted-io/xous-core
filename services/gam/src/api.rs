@@ -2,6 +2,7 @@ use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Cir
 use xous_ipc::String;
 
 pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
+pub const MAIN_MENU_NAME: &'static str = "main menu";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum GamObjectType {

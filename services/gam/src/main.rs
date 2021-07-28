@@ -27,10 +27,6 @@ use core::{sync::atomic::{AtomicU32, Ordering}};
 
 use enum_dispatch::enum_dispatch;
 
-use gam::{MenuItem, MenuPayload, Menu, MenuOpcode};
-
-use locales::t;
-
 //// todo:
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
 
@@ -95,7 +91,6 @@ pub(crate) struct UxContext {
 const MAX_UX_CONTEXTS: usize = 5;
 pub(crate) const MAX_CANVASES: usize = 32;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
-pub const MAIN_MENU_NAME: &'static str = "main menu";
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
@@ -635,10 +630,6 @@ fn xmain() -> ! {
         )
     ).expect("couldn't set status GID");
 
-    // make a thread to manage the main menu.
-    log::trace!("starting menu thread");
-    xous::create_thread_0(main_menu_thread).expect("couldn't create menu thread");
-
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer.elapsed_ms();
     log::trace!("entering main loop");
@@ -1010,95 +1001,4 @@ fn xmain() -> ! {
     xous::destroy_server(gam_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
-}
-
-
-// this is the provider for the main menu, it's built into the GAM so we always have at least this
-// root-level menu available
-pub fn main_menu_thread() {
-    let mut menu = Menu::new(crate::MAIN_MENU_NAME);
-
-    let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let com = com::Com::new(&xns).unwrap();
-
-    let blon_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.backlighton", xous::LANG)),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(blon_item);
-
-    let bloff_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.backlightoff", xous::LANG)),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(bloff_item);
-
-    let sleep_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.sleep", xous::LANG)),
-        action_conn: susres.conn(),
-        action_opcode: susres.getop_suspend(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(sleep_item);
-
-    let close_item = MenuItem {
-        name: String::<64>::from_str(t!("mainmenu.closemenu", xous::LANG)),
-        action_conn: menu.gam.conn(),
-        action_opcode: menu.gam.getop_revert_focus(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: false, // don't close because we're already closing
-    };
-    menu.add_item(close_item);
-
-    loop {
-        let msg = xous::receive_message(menu.sid).unwrap();
-        log::trace!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(MenuOpcode::Redraw) => {
-                menu.redraw();
-            },
-            Some(MenuOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                menu.key_event(keys);
-            }),
-            Some(MenuOpcode::Quit) => {
-                break;
-            },
-            None => {
-                log::error!("unknown opcode {:?}", msg.body.id());
-            }
-        }
-    }
-    log::trace!("menu thread exit, destroying servers");
-    // do we want to add a deregister_ux call to the system?
-    xous::destroy_server(menu.sid).unwrap();
 }

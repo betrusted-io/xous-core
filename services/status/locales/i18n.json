@@ -14,14 +14,14 @@
         "zh": "背光关闭",
         "en-audio": "🔇"
     },
+    "mainmenu.set_rtc": {
+        "en": "Set time",
+        "zh": "设置时间",
+        "en-audio": "Set time"
+    },
     "mainmenu.closemenu": {
         "en": "Close menu",
         "zh": "关闭功能表",
         "en-audio": "Close menu"
-    },
-    "radio.select_and_close": {
-        "en": "[ Okay ]",
-        "zh": "[ 确定 ]",
-        "en-audio": "Accept and close radio box"
     }
 }
