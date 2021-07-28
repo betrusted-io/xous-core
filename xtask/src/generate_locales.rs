@@ -119,7 +119,6 @@ fn generate_code(translations: Translations) -> proc_macro2::TokenStream {
     }
 
     quote! {
-        #![cfg_attr(target_os = "none", no_std)]
         #[macro_export]
         macro_rules! t {
             #(#branches)*
@@ -134,7 +133,7 @@ fn write_code(code: TokenStream) {
     let mut dest = project_root();
     dest.push("locales");
     dest.push("src");
-    let mut output = File::create(&std::path::Path::new(&dest).join("lib.rs")).unwrap();
+    let mut output = File::create(&std::path::Path::new(&dest).join("generated.rs")).unwrap();
     output
         .write(code.to_string().as_bytes())
         .expect("Cannot write generated i18n code");

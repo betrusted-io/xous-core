@@ -86,6 +86,7 @@ exclude = [
   "kernel",
   "loader",
   "utralib",  # Exclude UTRA, since it is machine-generated.
+  "locales",  # exclude because it is machine-generated
 ]
 
 [profile.release]
