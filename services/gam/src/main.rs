@@ -428,6 +428,7 @@ impl ContextManager {
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
 
+                log::debug!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
@@ -865,7 +866,7 @@ fn xmain() -> ! {
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
-                        info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                        info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
                     }
                 } else {
                     info!("bogus GID in Object, not doing anything in response to draw request.");

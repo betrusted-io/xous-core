@@ -71,6 +71,10 @@ pub(crate) enum Opcode {
     UxMinute,
     UxSeconds,
 
+    UxRedraw,
+    UxRawkeys,
+    UxQuit,
+
     /// Quit
     Quit
 }

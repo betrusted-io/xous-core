@@ -35,6 +35,10 @@ impl<'a> ShellCmdApi<'a> for RtcCmd {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "ux" => {
+                    self.rtc.set_rtc_ux().expect("couldn't send set UX message");
+                    write!(ret, "{}", "UX time set launched").unwrap();
+                }
                 "get" => {
                     write!(ret, "{}", "Requesting DateTime from RTC...").unwrap();
                     self.rtc.hook_rtc_callback(dt_callback).unwrap();

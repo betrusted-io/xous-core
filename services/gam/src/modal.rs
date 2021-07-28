@@ -62,15 +62,20 @@ use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
+use crate::MsgForwarder;
+
 use core::fmt::Write;
 
 pub const MAX_ITEMS: usize = 8;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ItemName(String::<64>);
 impl ItemName {
     pub fn new(name: &str) -> Self {
         ItemName(String::<64>::from_str(name))
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str().expect("couldn't convert item into string")
     }
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
@@ -83,22 +88,28 @@ impl TextEntryPayload {
         self.0.volatile_clear(); // volatile_clear() ensures that 0's are written and not optimized out; important for password fields
     }
     pub fn as_str(&self) -> &str {
-        self.0.as_str().expect("couldn't convert password string")
+        self.0.as_str().expect("couldn't convert textentry string")
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct RadioButtonPayload(ItemName); // returns the name of the item corresponding to the radio button selection
 impl RadioButtonPayload {
     pub fn new() -> Self {
         RadioButtonPayload(ItemName::new(""))
     }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct CheckBoxPayload([Option<ItemName>; MAX_ITEMS]); // returns a list of potential items that could be selected
 impl CheckBoxPayload {
     pub fn new() -> Self {
         CheckBoxPayload([None; MAX_ITEMS])
+    }
+    pub fn payload(&self) -> [Option<ItemName>; MAX_ITEMS] {
+        self.0
     }
 }
 
@@ -139,7 +150,11 @@ impl ActionApi for TextEntry {
 
             auto-closes on enter
         */
-        glyph_height + 2*margin + glyph_height + 2*margin + 8 // 8 pixels extra margin because the emoji glyphs are oversized
+        if self.is_password {
+            glyph_height + 2*margin + glyph_height + 2*margin + 8 // 8 pixels extra margin because the emoji glyphs are oversized
+        } else {
+            glyph_height + 2*margin
+        }
     }
     fn redraw(&self, at_height: i16, modal: &Modal) {
         let color = if self.is_password {
@@ -224,41 +239,43 @@ impl ActionApi for TextEntry {
                 modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             }
         }
-        // draw the visibility selection area
-        // "<👀🤫✴️>" coded explicitly. Pasting unicode into vscode yields extra cruft that we can't parse (e.g. skin tones and color mods).
-        let prompt = "\u{2b05} \u{1f440}\u{1f576}\u{26d4} \u{27a1}";
-        let select_index = match self.visibility {
-            TextEntryVisibility::Visible => 2,
-            TextEntryVisibility::LastChars => 3,
-            TextEntryVisibility::Hidden => 4,
-        };
-        let spacing = 38; // fixed width spacing for the array
-        let emoji_width = 36;
-        // center the prompt nicely, if possible
-        let left_edge = if modal.canvas_width > prompt.chars().count() as i16 * spacing {
-            (modal.canvas_width - prompt.chars().count() as i16 * spacing) / 2
-        } else {
-            0
-        };
-        for (i, ch) in prompt.chars().enumerate() {
-            let mut tv = TextView::new(
-                modal.canvas,
-                TextBounds::BoundingBox(Rectangle::new(
-                    Point::new(left_edge + i as i16 * spacing, at_height + modal.line_height + modal.margin * 4),
-                    Point::new(left_edge + i as i16 * spacing + emoji_width, at_height + modal.line_height + 34 + modal.margin * 4))
-            ));
-            tv.style = GlyphStyle::Regular;
-            tv.margin = Point::new(0, 0);
-            tv.draw_border = false;
-            if i == select_index {
-                tv.invert = !self.is_password;
+        if self.is_password {
+            // draw the visibility selection area
+            // "<👀🤫✴️>" coded explicitly. Pasting unicode into vscode yields extra cruft that we can't parse (e.g. skin tones and color mods).
+            let prompt = "\u{2b05} \u{1f440}\u{1f576}\u{26d4} \u{27a1}";
+            let select_index = match self.visibility {
+                TextEntryVisibility::Visible => 2,
+                TextEntryVisibility::LastChars => 3,
+                TextEntryVisibility::Hidden => 4,
+            };
+            let spacing = 38; // fixed width spacing for the array
+            let emoji_width = 36;
+            // center the prompt nicely, if possible
+            let left_edge = if modal.canvas_width > prompt.chars().count() as i16 * spacing {
+                (modal.canvas_width - prompt.chars().count() as i16 * spacing) / 2
             } else {
-                tv.invert = self.is_password;
+                0
+            };
+            for (i, ch) in prompt.chars().enumerate() {
+                let mut tv = TextView::new(
+                    modal.canvas,
+                    TextBounds::BoundingBox(Rectangle::new(
+                        Point::new(left_edge + i as i16 * spacing, at_height + modal.line_height + modal.margin * 4),
+                        Point::new(left_edge + i as i16 * spacing + emoji_width, at_height + modal.line_height + 34 + modal.margin * 4))
+                ));
+                tv.style = GlyphStyle::Regular;
+                tv.margin = Point::new(0, 0);
+                tv.draw_border = false;
+                if i == select_index {
+                    tv.invert = !self.is_password;
+                } else {
+                    tv.invert = self.is_password;
+                }
+                tv.text.clear();
+                write!(tv.text, "{}", ch).unwrap();
+                log::trace!("tv.text: {} : {}/{}", i, tv.text, ch);
+                modal.gam.post_textview(&mut tv).expect("couldn't post textview");
             }
-            tv.text.clear();
-            write!(tv.text, "{}", ch).unwrap();
-            log::trace!("tv.text: {} : {}/{}", i, tv.text, ch);
-            modal.gam.post_textview(&mut tv).expect("couldn't post textview");
         }
 
         // draw a line for where text gets entered (don't use a box, fitting could be awkward)
@@ -452,7 +469,7 @@ pub enum ActionType {
 }
 
 //#[derive(Debug)]
-pub struct Modal {
+pub struct Modal<'a> {
     pub sid: xous::SID,
     pub gam: Gam,
     pub xns: xous_names::XousNames,
@@ -468,6 +485,7 @@ pub struct Modal {
     pub canvas_width: i16,
     pub inverted: bool,
     pub style: GlyphStyle,
+    pub helper_data: Option<Buffer<'a>>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -557,8 +575,8 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
     modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
 }
 
-impl Modal {
-    pub fn new(name: &str, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) -> Modal {
+impl<'a> Modal<'a> {
+    pub fn new(name: &str, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle, margin: i16) -> Modal<'a> {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private modal message server");
         let gam = Gam::new(&xns).expect("can't connect to GAM");
@@ -600,14 +618,33 @@ impl Modal {
             action,
             canvas,
             authtoken: authtoken.unwrap(),
-            margin: 4,
+            margin,
             line_height,
             canvas_width: canvas_bounds.x, // memoize this, it shouldn't change
             inverted,
             style,
+            helper_data: None,
         };
         recompute_canvas(&mut modal, action, top_text, bot_text, style);
         modal
+    }
+
+    /// this function spawns a client-side thread to forward redraw and key event
+    /// messages on to a local server. The goal is to keep the local server's SID
+    /// a secret. The GAM only knows the single-use SID for redraw commands; this
+    /// isolates a server's private command set from the GAM.
+    pub fn spawn_helper(&mut self, private_sid: xous::SID, public_sid: xous::SID, redraw_op: u32, rawkeys_op: u32, drop_op: u32) {
+        let helper_data = MsgForwarder {
+            private_sid: private_sid.to_array(),
+            public_sid: public_sid.to_array(),
+            redraw_op,
+            rawkeys_op,
+            drop_op
+        };
+        let mut buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
+        let (addr, size, offset) = unsafe{buf.to_raw_parts()};
+        self.helper_data = Some(buf);
+        xous::create_thread_3(crate::forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
     }
 
     pub fn redraw(&self) {

@@ -73,6 +73,7 @@ pub(crate) fn rootkeys_ux_thread() {
         Some(t!("rootpass.top", xous::LANG)),
         None,
         GlyphStyle::Small,
+        4
     );
 
     loop {

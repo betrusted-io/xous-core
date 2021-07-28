@@ -362,8 +362,8 @@ impl LayoutApi for ModalLayout {
             // should actually never reach this because of the identity check at the very top
             Point::new(0, 0)
         };
-        log::debug!("moving modal box by {:?}", offscreen);
         modal_canvas.set_clip(modal_canvas.clip_rect().translate_chain(offscreen));
         self.visible = onscreen;
+        log::debug!("moving modal box by {:?}, final state: {:?}", offscreen, modal_canvas);
     }
 }

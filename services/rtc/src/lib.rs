@@ -24,6 +24,13 @@ impl Rtc {
         })
     }
 
+    pub fn set_rtc_ux(&self) -> Result<(), xous::Error> {
+        xous::send_message(self.conn,
+            Message::new_scalar(Opcode::UxSetTime.to_usize().unwrap(),
+            0, 0, 0, 0
+            )
+        ).map(|_| ())
+    }
     pub fn set_rtc(&self, dt: DateTime) -> Result<(), xous::Error> {
         let buf = Buffer::into_buf(dt).or(Err(xous::Error::InternalError))?;
         buf.lend(self.conn, Opcode::SetDateTime.to_u32().unwrap()).map(|_| ())

@@ -359,7 +359,7 @@ pub struct MenuItem {
 }
 
 #[derive(Debug)]
-pub struct Menu {
+pub struct Menu<'a> {
     pub sid: xous::SID,
     pub gam: Gam,
     pub xns: xous_names::XousNames,
@@ -371,6 +371,7 @@ pub struct Menu {
     pub divider_margin: i16,
     pub line_height: i16,
     pub canvas_width: Option<i16>,
+    pub helper_data: Option<Buffer<'a>>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -380,7 +381,7 @@ pub enum MenuOpcode {
     Quit,
 }
 
-impl Menu {
+impl<'a> Menu<'a> {
     pub fn new(name: &str) -> Menu {
         let xns = xous_names::XousNames::new().unwrap();
         let sid = xous::create_server().expect("can't create private menu message server");
@@ -413,8 +414,28 @@ impl Menu {
             divider_margin: 20,
             line_height,
             canvas_width: None,
+            helper_data: None,
         }
     }
+
+    /// this function spawns a client-side thread to forward redraw and key event
+    /// messages on to a local server. The goal is to keep the local server's SID
+    /// a secret. The GAM only knows the single-use SID for redraw commands; this
+    /// isolates a server's private command set from the GAM.
+    pub fn spawn_helper(&mut self, private_sid: xous::SID, public_sid: xous::SID, redraw_op: u32, rawkeys_op: u32, drop_op: u32) {
+        let helper_data = MsgForwarder {
+            private_sid: private_sid.to_array(),
+            public_sid: public_sid.to_array(),
+            redraw_op,
+            rawkeys_op,
+            drop_op
+        };
+        let mut buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
+        let (addr, size, offset) = unsafe{buf.to_raw_parts()};
+        self.helper_data = Some(buf);
+        xous::create_thread_3(forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
+    }
+
     // if successful, returns None, otherwise, the menu item
     pub fn add_item(&mut self, new_item: MenuItem) -> Option<MenuItem> {
         if new_item.name.as_str().unwrap() == "🔇" { // suppress the addition of menu items that are not applicable for a given locale
@@ -620,4 +641,51 @@ impl Menu {
             }
         }
     }
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct MsgForwarder {
+    pub public_sid: [u32; 4],
+    pub private_sid: [u32; 4],
+    pub redraw_op: u32,
+    pub rawkeys_op: u32,
+    pub drop_op: u32,
+}
+/// this is a simple server that forwards incoming messages from a generic
+/// "modal" interface to the internal private server. It keeps the GAM from being
+/// able to tinker with the internal mechanics of the larger server that owns the
+/// dialog box.
+fn forwarding_thread(addr: usize, size: usize, offset: usize) {
+    let buf = unsafe{Buffer::from_raw_parts(addr, size, offset)};
+    let forwarding_config = buf.to_original::<MsgForwarder, _>().unwrap();
+    let private_conn = xous::connect(xous::SID::from_array(forwarding_config.private_sid)).expect("couldn't connect to the private server");
+
+    log::trace!("modal forwarding server started");
+    loop {
+        let msg = xous::receive_message(xous::SID::from_array(forwarding_config.public_sid)).unwrap();
+        log::trace!("modal forwarding server got msg: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(ModalOpcode::Redraw) => {
+                xous::send_message(private_conn,
+                    Message::new_scalar(forwarding_config.redraw_op as usize, 0, 0, 0, 0)
+                ).expect("couldn't forward redraw message");
+            },
+            Some(ModalOpcode::Rawkeys) => xous::msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                xous::send_message(private_conn,
+                    Message::new_scalar(forwarding_config.rawkeys_op as usize, k1, k2, k3, k4)
+                ).expect("couldn't forard rawkeys message");
+            }),
+            Some(ModalOpcode::Quit) => {
+                xous::send_message(private_conn,
+                    Message::new_scalar(forwarding_config.drop_op as usize, 0, 0, 0, 0)
+                ).expect("couldn't forward drop message");
+                break;
+            },
+            None => {
+                log::error!("unknown opcode {:?}", msg.body.id());
+            }
+        }
+    }
+    log::trace!("modal forwarding server exiting");
+    xous::destroy_server(xous::SID::from_array(forwarding_config.public_sid)).expect("can't destroy my server on exit!");
 }

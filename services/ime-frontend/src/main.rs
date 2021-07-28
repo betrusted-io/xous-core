@@ -618,6 +618,8 @@ fn xmain() -> ! {
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
 
+    // an explicit, separate emoji menu handler is created, because the Ux opcodes for the emoji menu should not
+    // be conflacted with the ImefOpcode API.
     xous::create_thread_0(emoji_menu_thread).expect("can't start emoji handler menu");
 
     log::trace!("Initialized but still waiting for my canvas Gids");
