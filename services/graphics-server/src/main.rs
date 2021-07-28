@@ -192,8 +192,8 @@ fn xmain() -> ! {
                             };
                             // if less than one line of text, shrink the box
                             let finalwidth = if c.pt.y == 0 {
-                                if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
-                                    c.pt.x as i16 + tv.margin.x * 3
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
                                 } else {
                                     checkedwidth
                                 }
@@ -243,8 +243,8 @@ fn xmain() -> ! {
 
                             // if less than one line of text, shrink the box
                             let finalwidth = if c.pt.y == 0 {
-                                if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
-                                    c.pt.x as i16 + tv.margin.x * 3
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
                                 } else {
                                     checkedwidth
                                 }
@@ -299,8 +299,8 @@ fn xmain() -> ! {
 
                             // if less than one line of text, shrink the box
                             let finalwidth = if c.pt.y == 0 {
-                                if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
-                                    c.pt.x as i16 + tv.margin.x * 3
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
                                 } else {
                                     checkedwidth
                                 }
