@@ -8,5 +8,25 @@
         "en": "Password request\nSoftware update key\nSecurity: Critical",
         "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
         "en-audio": "Enter update password. This password is critically important."
+    },
+    "rootkeys.policy_clear": {
+        "en": "Clear after use",
+        "zh": "使用后删除",
+        "en-audio": "Clear password after use"
+    },
+    "rootkeys.policy_suspend": {
+        "en": "Retain until sleep",
+        "zh": "睡眠后删除",
+        "en-audio": "Retain password until sleep"
+    },
+    "rootkeys.policy_idle": {
+        "en": "Retain until timeout",
+        "zh": "保留到延时",
+        "en-audio": "Retain until timeout"
+    },
+    "rootkeys.policy_keep": {
+        "en": "Retain until reboot",
+        "zh": "保留到启动",
+        "en-audio": "Retain until reboot"
     }
 }

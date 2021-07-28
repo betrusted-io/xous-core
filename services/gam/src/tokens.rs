@@ -12,8 +12,8 @@ use xous_ipc::String;
 */
 
 // if you add more UxContexts, and you want them authorized by the GAM, add their names here.
-const TOKEN_SLOTS: usize = 6;
-const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = ["shellchat", "main menu", "status", "emoji menu", "rootkeys modal", "rtc modal"];
+const TOKEN_SLOTS: usize = 7;
+const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = ["shellchat", "main menu", "status", "emoji menu", "rootkeys modal", "rtc modal", "rootkeys menu"];
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct NamedToken {
@@ -50,7 +50,10 @@ impl<'a> TokenManager {
                 valid = true;
             }
         }
-        if !valid { return None }
+        if !valid {
+            log::error!("Server {} is not pre-registered in gam/src/tokens.rs. Did you forget to register it?", name);
+            return None
+        }
         // now check if it hasn't already been registered
         let mut registered = false;
         for maybe_token in self.tokens.iter() {
@@ -63,7 +66,10 @@ impl<'a> TokenManager {
                 _ => ()
             }
         }
-        if registered { return None }
+        if registered {
+            log::error!("Attempt to re-register a UX context: {}", name);
+            return None
+        }
         // now do the registration
         let token = [self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(), self.trng.get_u32().unwrap(),];
         log::trace!("registering {} to {:x?}", name, token);

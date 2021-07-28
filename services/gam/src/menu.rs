@@ -43,11 +43,12 @@ pub struct Menu<'a> {
     pub line_height: i16,
     pub canvas_width: Option<i16>,
     pub helper_data: Option<Buffer<'a>>,
+    pub name: String::<128>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum MenuOpcode {
-    Redraw,
+pub enum MenuOpcode { // note: this should match ModalOpcode, for compatibility with the generic helper function
+    Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
     Rawkeys,
     Quit,
 }
@@ -86,7 +87,11 @@ impl<'a> Menu<'a> {
             line_height,
             canvas_width: None,
             helper_data: None,
+            name: String::<128>::from_str(name),
         }
+    }
+    pub fn activate(&self) {
+        self.gam.raise_menu(self.name.to_str()).expect("couldn't activate menu");
     }
 
     /// this function spawns a client-side thread to forward redraw and key event

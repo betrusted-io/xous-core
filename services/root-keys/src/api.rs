@@ -1,7 +1,7 @@
 pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
 #[allow(dead_code)]
 pub(crate) const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
-
+pub(crate) const ROOTKEY_MENU_NAME: &'static str = "rootkeys menu";
 
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
@@ -14,6 +14,14 @@ pub(crate) enum Opcode {
 
     /// UX opcodes
     PasswordModalEntry,
+    PasswordPolicy,
+    RaisePolicyMenu,
+    MenuRedraw,
+    MenuKeys,
+    MenuDrop,
+    ModalRedraw,
+    ModalKeys,
+    ModalDrop,
 
     /// Suspend/resume callback
     SuspendResume,
@@ -33,6 +41,7 @@ pub struct ProgressReport {
     pub finished: bool,
 }
 
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum PasswordRetentionPolicy {
     AlwaysKeep,
     EraseOnSuspend,

@@ -88,7 +88,7 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 5;
+const MAX_UX_CONTEXTS: usize = 6;
 pub(crate) const MAX_CANVASES: usize = 32;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
@@ -585,7 +585,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();

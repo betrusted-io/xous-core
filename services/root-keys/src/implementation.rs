@@ -229,12 +229,4 @@ impl RootKeys {
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }
-
-    pub fn test_ux(&mut self, arg: usize) {
-        match arg {
-            0 => self.gam.raise_modal(ROOTKEY_MODAL_NAME).expect("couldn't raise modal"),
-            1 => self.gam.relinquish_focus().expect("couldn't hide modal"),
-            _ => log::info!("test_ux got unrecognized arg: {}", arg),
-        };
-    }
 }

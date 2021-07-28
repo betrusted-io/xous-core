@@ -75,7 +75,7 @@ impl ItemName {
     }
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
-pub struct TextEntryPayload(String::<256>);
+pub struct TextEntryPayload(pub String::<256>);
 impl TextEntryPayload {
     pub fn new() -> Self {
         TextEntryPayload(String::<256>::new())
@@ -792,10 +792,11 @@ pub struct Modal<'a> {
     pub inverted: bool,
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
+    pub name: String::<128>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum ModalOpcode {
+pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
     Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
     Rawkeys,
     Quit,
@@ -947,9 +948,13 @@ impl<'a> Modal<'a> {
             inverted,
             style,
             helper_data: None,
+            name: String::<128>::from_str(name),
         };
         recompute_canvas(&mut modal, action, top_text, bot_text, style);
         modal
+    }
+    pub fn activate(&self) {
+        self.gam.raise_modal(self.name.to_str()).expect("couldn't activate modal");
     }
 
     /// this function spawns a client-side thread to forward redraw and key event
@@ -1011,7 +1016,7 @@ impl<'a> Modal<'a> {
                     self.modify(None, None, false, Some(err_msg.to_str()), false, None);
                 } else {
                     if close {
-                        log::trace!("closing modal");
+                        log::debug!("closing modal");
                         // if it's a "close" button, invoke the GAM to put our box away
                         self.gam.relinquish_focus().unwrap();
                     }

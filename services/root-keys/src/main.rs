@@ -9,8 +9,11 @@ use xous_ipc::{String, Buffer};
 use num_traits::*;
 
 use gam::modal::*;
+use gam::menu::*;
 
 use locales::t;
+
+use core::fmt::Write;
 
 #[cfg(target_os = "none")]
 mod implementation;
@@ -43,82 +46,7 @@ mod implementation {
 
         pub fn try_init_keys(&mut self, _maybe_progress: Option<xous::SID>) {
         }
-
-        pub fn test_ux(&mut self, arg: usize) {
-            match arg {
-                0 => self.gam.raise_modal(ROOTKEY_MODAL_NAME).expect("couldn't raise modal"),
-                1 => self.gam.relinquish_focus().expect("couldn't hide modal"),
-                _ => log::info!("test_ux got unrecognized arg: {}", arg),
-            };
-        }
     }
-}
-
-pub(crate) fn rootkeys_ux_thread() {
-    let xns = xous_names::XousNames::new().unwrap();
-    let main_conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("rootkeys password thread can't connect to main thread");
-
-    let password_action = gam::modal::TextEntry {
-        is_password: true,
-        visibility: gam::modal::TextEntryVisibility::LastChars,
-        action_conn: main_conn,
-        action_opcode: Opcode::PasswordModalEntry.to_u32().unwrap(),
-        action_payload: TextEntryPayload::new(),
-        validator: None,
-    };
-    log::trace!("building ux thread modal");
-    let mut modal = gam::Modal::new(
-        crate::api::ROOTKEY_MODAL_NAME,
-        gam::ActionType::TextEntry(password_action),
-        Some(t!("rootpass.top", xous::LANG)),
-        None,
-        GlyphStyle::Small,
-        4
-    );
-
-    loop {
-        let msg = xous::receive_message(modal.sid).unwrap();
-        log::trace!("ux message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(ModalOpcode::Redraw) => {
-                modal.redraw();
-            },
-            Some(ModalOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                modal.key_event(keys);
-            }),
-            Some(ModalOpcode::Quit) => {
-                break;
-            },
-            None => {
-                log::error!("unknown opcode {:?}", msg.body.id());
-            }
-        }
-    }
-    log::trace!("password modal thread exit, destroying servers");
-    // do we want to add a deregister_ux call to the system?
-    xous::destroy_server(modal.sid).unwrap();
 }
 
 #[xous::xous_main]
@@ -126,7 +54,7 @@ fn xmain() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Debug);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -144,11 +72,69 @@ fn xmain() -> ! {
     log::trace!("ready to accept requests");
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
 
-    xous::create_thread_0(rootkeys_ux_thread).expect("couldn't start rootkeys UX thread");
+    // create a policy menu object
+    let mut policy_menu = gam::menu::Menu::new(crate::ROOTKEY_MENU_NAME);
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_keep", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::PasswordPolicy.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_idle", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::PasswordPolicy.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnIdle.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::PasswordPolicy.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_clear", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::PasswordPolicy.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.spawn_helper(keys_sid, policy_menu.sid,
+        Opcode::MenuRedraw.to_u32().unwrap(),
+        Opcode::MenuKeys.to_u32().unwrap(),
+        Opcode::MenuDrop.to_u32().unwrap());
 
+    //xous::create_thread_0(rootkeys_ux_thread).expect("couldn't start rootkeys UX thread");
+    let password_action = gam::modal::TextEntry {
+        is_password: true,
+        visibility: gam::modal::TextEntryVisibility::LastChars,
+        action_conn: main_cid,
+        action_opcode: Opcode::PasswordModalEntry.to_u32().unwrap(),
+        action_payload: TextEntryPayload::new(),
+        validator: None,
+    };
+    let mut password_modal = gam::Modal::new(
+        crate::api::ROOTKEY_MODAL_NAME,
+        gam::ActionType::TextEntry(password_action),
+        Some(t!("rootpass.top", xous::LANG)),
+        None,
+        GlyphStyle::Small,
+        4
+    );
+    password_modal.spawn_helper(keys_sid, password_modal.sid,
+        Opcode::ModalRedraw.to_u32().unwrap(),
+        Opcode::ModalKeys.to_u32().unwrap(),
+        Opcode::ModalDrop.to_u32().unwrap(),
+    );
+
+    let mut cur_plaintext = String::<256>::new();
+    let mut cur_policy: Option<PasswordRetentionPolicy> = None;
     loop {
         let msg = xous::receive_message(keys_sid).unwrap();
         log::trace!("message: {:?}", msg);
@@ -165,16 +151,61 @@ fn xmain() -> ! {
                 let sid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
                 keys.try_init_keys(Some(sid));
             }),
-            Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, arg, _, _, _, {
-                keys.test_ux(arg);
-                xous::return_scalar(msg.sender, 0).expect("couldn't unblock sender");
+            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
+                log::debug!("activating password modal");
+                password_modal.activate();
+                //policy_menu.activate();
             }),
             Some(Opcode::PasswordModalEntry) => {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
-                log::info!("got pw entry: {}", plaintext_pw.as_str());
+                write!(cur_plaintext, "{}", plaintext_pw.as_str()).expect("couldn't copy plaintext password");
                 plaintext_pw.volatile_clear(); // ensure the data is destroyed after printing
                 buf.volatile_clear();
+                log::info!("cur_plaintext: {}", cur_plaintext);
+                // now explicitly request a policy decision
+                xous::send_message(main_cid,
+                    Message::new_scalar(Opcode::RaisePolicyMenu.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't raise policy menu follow-up dialogue");
+            },
+            Some(Opcode::RaisePolicyMenu) => {
+                xous::yield_slice();  // let any pending redraws happen before raising this menu
+                log::debug!("raising policy menu");
+                policy_menu.activate();
+            }
+            Some(Opcode::PasswordPolicy) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
+                cur_policy = FromPrimitive::from_usize(policy_code);
+                log::info!("cur_policy: {:?}", cur_policy);
+            }),
+            Some(Opcode::MenuRedraw) => {
+                policy_menu.redraw();
+            },
+            Some(Opcode::MenuKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                ];
+                policy_menu.key_event(keys);
+            }),
+            Some(Opcode::MenuDrop) => {
+                panic!("Menu handler for rootkeys quit unexpectedly");
+            },
+            Some(Opcode::ModalRedraw) => {
+                password_modal.redraw();
+            },
+            Some(Opcode::ModalKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                ];
+                password_modal.key_event(keys);
+            }),
+            Some(Opcode::ModalDrop) => {
+                panic!("Password modal for rootkeys quit unexpectedly")
             }
             Some(Opcode::Quit) => {
                 log::warn!("password thread received quit, exiting.");

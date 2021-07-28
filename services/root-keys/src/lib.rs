@@ -119,7 +119,7 @@ impl RootKeys {
 
     pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
-            Message::new_blocking_scalar(Opcode::TestUx.to_usize().unwrap(),
+            Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
     }
