@@ -590,7 +590,7 @@ fn imef_cb(s: String::<4000>) {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -785,7 +785,7 @@ fn xmain() -> ! {
                                     canvas.do_drawn().expect("couldn't set canvas to drawn");
                                 }
                             } else {
-                                info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                log::debug!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
                                 let ret = api::Return::NotCurrentlyDrawable;
                                 buffer.replace(ret).unwrap();
                             }
@@ -868,7 +868,7 @@ fn xmain() -> ! {
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
-                        info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
+                        log::debug!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
                     }
                 } else {
                     info!("bogus GID in Object, not doing anything in response to draw request.");

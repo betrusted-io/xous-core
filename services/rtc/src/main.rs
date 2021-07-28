@@ -573,7 +573,7 @@ fn xmain() -> ! {
     use crate::implementation::Rtc;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -790,16 +790,22 @@ fn xmain() -> ! {
             Some(Opcode::UxDayOfWeek) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
-                weekday = match payload.as_str() {
-                    "monday" => Weekday::Monday,
-                    "tuesday" => Weekday::Tuesday,
-                    "wednesday" => Weekday::Wednesday,
-                    "thursday" => Weekday::Thursday,
-                    "friday" => Weekday::Friday,
-                    "saturday" => Weekday::Saturday,
-                    "sunday" => Weekday::Sunday,
-                    _ => Weekday::Monday, // coz mondays suck
-                };
+                weekday =
+                    if payload.as_str() == t!("rtc.monday", xous::LANG) {
+                        Weekday::Monday
+                    } else if payload.as_str() == t!("rtc.tuesday", xous::LANG) {
+                        Weekday::Tuesday
+                    } else if payload.as_str() == t!("rtc.wednesday", xous::LANG) {
+                        Weekday::Wednesday
+                    } else if payload.as_str() == t!("rtc.thursday", xous::LANG) {
+                        Weekday::Thursday
+                    } else if payload.as_str() == t!("rtc.friday", xous::LANG) {
+                        Weekday::Friday
+                    } else if payload.as_str() == t!("rtc.saturday", xous::LANG) {
+                        Weekday::Saturday
+                    } else {
+                        Weekday::Sunday
+                    };
 
                 rtc_textentry.action_opcode = Opcode::UxHour.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
