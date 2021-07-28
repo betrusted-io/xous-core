@@ -278,6 +278,7 @@ pub(crate) struct ModalLayout {
     screensize: Point,
     height: i16,
     visible: bool,
+    modal_y_max: i16,
 }
 impl ModalLayout {
     pub fn init(gfx: &graphics_server::Gfx, trng: &trng::Trng, base_trust: u8, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<ModalLayout, xous::Error> {
@@ -293,10 +294,9 @@ impl ModalLayout {
 
         const MODAL_Y_PAD: i16 = 80;
         const MODAL_X_PAD: i16 = 20;
-        const MODAL_Y_MAX: i16 = 450; // in absolute screen coords, not relative to top pad
         // base trust - 1 so that status bar can always ride on top
         let modal_canvas = Canvas::new(
-            Rectangle::new_coords(MODAL_X_PAD, MODAL_Y_PAD, screensize.x - MODAL_X_PAD, MODAL_Y_MAX),
+            Rectangle::new_coords(MODAL_X_PAD, MODAL_Y_PAD, screensize.x - MODAL_X_PAD, crate::api::MODAL_Y_MAX),
             checked_base_trust, &trng, None
         ).expect("couldn't create modal canvas");
         canvases.insert(modal_canvas.gid(), modal_canvas).expect("can't store modal canvas");
@@ -309,6 +309,7 @@ impl ModalLayout {
             screensize,
             height: screensize.y - MODAL_Y_PAD, // start with the "maximum" size, and shrink down once items are known
             visible: true,
+            modal_y_max: crate::api::MODAL_Y_MAX,
         })
     }
 }

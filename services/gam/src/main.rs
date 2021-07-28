@@ -773,7 +773,9 @@ fn xmain() -> ! {
                                 // issue the draw command
                                 gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
                                 // copy back the fields that we want to be mutable
-                                log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
+                                if tv.dry_run() {
+                                    log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
+                                }
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
 

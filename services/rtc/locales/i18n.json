@@ -10,7 +10,7 @@
         "en-audio": "Enter day one through 31"
     },
     "rtc.year": {
-        "en": "Enter last two digits of year",
+        "en": "Enter last two digits of\nyear",
         "zh": "输入年份 (最后两位数)",
         "en-audio": "Enter last two digits of year"
     },
@@ -31,7 +31,7 @@
     },
     "rtc.day_of_week": {
         "en": "Select the day of week",
-        "zh": "[星期几]清單方塊",
+        "zh": "[星期几]清单框",
         "en-audio": "Select the day of week"
     },
     "rtc.monday": {
@@ -51,7 +51,7 @@
     },
     "rtc.thursday": {
         "en": "Thursday",
-        "zh": "周四",
+        "zh": "星期四",
         "en-audio": "Thursday"
     },
     "rtc.friday": {
@@ -70,7 +70,7 @@
         "en-audio": "Sunday"
     },
     "rtc.integer_err": {
-        "en": "Error: entry was not numeric",
+        "en": "Error: entry was not\nnumeric",
         "zh": "错误：输入不是数字",
         "en-audio": "Error: entry was not numeric"
     },

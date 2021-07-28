@@ -170,10 +170,11 @@ fn xmain() -> ! {
                 xous::return_scalar(msg.sender, 0).expect("couldn't unblock sender");
             }),
             Some(Opcode::PasswordModalEntry) => {
-                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
                 log::info!("got pw entry: {}", plaintext_pw.as_str());
                 plaintext_pw.volatile_clear(); // ensure the data is destroyed after printing
+                buf.volatile_clear();
             }
             Some(Opcode::Quit) => {
                 log::warn!("password thread received quit, exiting.");

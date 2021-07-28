@@ -356,14 +356,15 @@ fn xmain() -> ! {
                     stroke_color: bordercolor,
                     stroke_width: borderwidth,
                 };
-                if tv.rounded_border.is_some() {
-                    op::rounded_rectangle(display.native_buffer(),
-                        RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), Some(clear_rect));
-                } else {
-                    if debugtv { log::trace!("(TV): clearing rectangle {:?}", clear_rect); }
-                    op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
+                if !tv.dry_run() {
+                    if tv.rounded_border.is_some() {
+                        op::rounded_rectangle(display.native_buffer(),
+                            RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), Some(clear_rect));
+                    } else {
+                        if debugtv { log::trace!("(TV): clearing rectangle {:?}", clear_rect); }
+                        op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
+                    }
                 }
-
 
                 // compute the final clipping region for the string
                 clear_rect.margin(tv.margin);

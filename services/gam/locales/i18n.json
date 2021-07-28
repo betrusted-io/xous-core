@@ -18,5 +18,10 @@
         "en": "Close menu",
         "zh": "关闭功能表",
         "en-audio": "Close menu"
+    },
+    "radio.select_and_close": {
+        "en": "[ Okay ]",
+        "zh": "[ 确定 ]",
+        "en-audio": "Accept and close radio box"
     }
 }

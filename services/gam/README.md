@@ -182,7 +182,7 @@ The Action currently can be one of the following types:
 - TextEntry: for passwords, or for regular text
 - RadioButtons: for selecting one of many options
 - CheckBox: for selecting any of many options
-- Slider [WORK IN PROGRESS]: for selecting a single numeric value along a range of values
+- Slider [NOT YET CODED]: for selecting a single numeric value along a range of values
 
 Creating a `Modal` follows the same general pattern as the `Menu`, with the exception that the `new()` function is meant to be "complete": instead of creating a skeleton of a menu, the `new()` function takes all the necessary arguments for the repsective top, bottom, and action fields and tries to build the modal all in one go. It is, however, possible to dynamically modify the modal once created, using the `modify()` and `remove()` methods.
 
