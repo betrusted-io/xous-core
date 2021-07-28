@@ -1,4 +1,5 @@
 pub(crate) const SERVER_NAME_KEYS: &str     = "_Root key server and update manager_";
+#[allow(dead_code)]
 pub(crate) const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 
 

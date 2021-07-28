@@ -3,7 +3,7 @@
 pub mod api;
 use api::*;
 
-use xous::{CID, msg_blocking_scalar_unpack, msg_scalar_unpack, send_message, Message};
+use xous::{CID, msg_scalar_unpack, send_message, Message};
 use num_traits::*;
 
 pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, consts::U16};

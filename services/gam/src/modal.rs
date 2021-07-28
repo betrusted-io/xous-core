@@ -51,14 +51,9 @@ use enum_dispatch::enum_dispatch;
 use crate::api::*;
 use crate::Gam;
 
-use graphics_server::api::{TextOp, TextView};
-
-use graphics_server::api::{Point, Gid, Line, Rectangle, Circle, RoundedRectangle, TokenClaim};
+use graphics_server::api::*;
 pub use graphics_server::GlyphStyle;
-// menu imports
-use graphics_server::api::{PixelColor, TextBounds, DrawStyle};
 
-use xous::{send_message, CID, Message};
 use xous_ipc::{String, Buffer};
 use num_traits::*;
 
@@ -463,7 +458,7 @@ impl ActionApi for RadioButtons {
                     tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                         Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
                     ));
-                    write!(tv, "»");
+                    write!(tv, "»").unwrap();
                     modal.gam.post_textview(&mut tv).expect("couldn't post tv");
                     do_okay = false;
                 }
@@ -474,7 +469,7 @@ impl ActionApi for RadioButtons {
                     tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                         Point::new(select_x, cur_y), Point::new(select_x + 36, cur_y + modal.line_height)
                     ));
-                    write!(tv, "•");
+                    write!(tv, "•").unwrap();
                     modal.gam.post_textview(&mut tv).expect("couldn't post tv");
                 }
                 // draw the text
@@ -483,7 +478,7 @@ impl ActionApi for RadioButtons {
                 tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                     Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
                 ));
-                write!(tv, "{}", item.as_str());
+                write!(tv, "{}", item.as_str()).unwrap();
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
                 cur_line += 1;
@@ -497,9 +492,8 @@ impl ActionApi for RadioButtons {
             tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                 Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
             ));
-            write!(tv, "»"); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
+            write!(tv, "»").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
-            do_okay = false;
         }
         // draw the "OK" line
         tv.text.clear();
@@ -634,7 +628,7 @@ impl ActionApi for CheckBoxes {
                     tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                         Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
                     ));
-                    write!(tv, "»");
+                    write!(tv, "»").unwrap();
                     modal.gam.post_textview(&mut tv).expect("couldn't post tv");
                     do_okay = false;
                 }
@@ -645,7 +639,7 @@ impl ActionApi for CheckBoxes {
                     tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                         Point::new(select_x, cur_y - emoji_slop), Point::new(select_x + 36, cur_y + modal.line_height)
                     ));
-                    write!(tv, "\u{d7}"); // multiplication sign
+                    write!(tv, "\u{d7}").unwrap(); // multiplication sign
                     modal.gam.post_textview(&mut tv).expect("couldn't post tv");
                 }
                 // draw the text
@@ -654,7 +648,7 @@ impl ActionApi for CheckBoxes {
                 tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                     Point::new(text_x, cur_y), Point::new(modal.canvas_width - modal.margin, cur_y + modal.line_height)
                 ));
-                write!(tv, "{}", item.as_str());
+                write!(tv, "{}", item.as_str()).unwrap();
                 modal.gam.post_textview(&mut tv).expect("couldn't post tv");
 
                 cur_line += 1;
@@ -668,9 +662,8 @@ impl ActionApi for CheckBoxes {
             tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
                 Point::new(cursor_x, cur_y - emoji_slop), Point::new(cursor_x + 36, cur_y - emoji_slop + 36)
             ));
-            write!(tv, "»"); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
+            write!(tv, "»").unwrap(); // right arrow emoji. use unicode numbers, because text editors do funny shit with emojis
             modal.gam.post_textview(&mut tv).expect("couldn't post tv");
-            do_okay = false;
         }
         // draw the "OK" line
         tv.text.clear();
@@ -765,11 +758,11 @@ impl ActionApi for Slider {
 #[enum_dispatch]
 trait ActionApi {
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
-    fn redraw(&self, at_height: i16, modal: &Modal) { unimplemented!() }
+    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
     fn close(&mut self) {}
     fn is_password(&self) -> bool { false }
     /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
+    fn key_action(&mut self, _key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
 }
 
 #[enum_dispatch(ActionApi)]
@@ -842,7 +835,7 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
         top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
         top_tv.ellipsis = false;
         top_tv.invert = modal.inverted;
-        write!(top_tv.text, "{}", top_str);
+        write!(top_tv.text, "{}", top_str).unwrap();
 
         log::trace!("posting top tv: {:?}", top_tv);
         modal.gam.bounds_compute_textview(&mut top_tv).expect("couldn't simulate top text size");
@@ -858,7 +851,7 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
 
     // compute height of action item
     log::trace!("step 1 total_height: {}", total_height);
-    total_height += modal.action.height(modal.line_height, modal.margin);
+    total_height += action.height(modal.line_height, modal.margin);
     total_height += modal.margin;
 
     // compute height of bot_text, if any
@@ -874,7 +867,7 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
         bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
         bot_tv.ellipsis = false;
         bot_tv.invert = modal.inverted;
-        write!(bot_tv.text, "{}", bot_str);
+        write!(bot_tv.text, "{}", bot_str).unwrap();
 
         log::trace!("posting bot tv: {:?}", bot_tv);
         modal.gam.bounds_compute_textview(&mut bot_tv).expect("couldn't simulate bot text size");
@@ -971,7 +964,7 @@ impl<'a> Modal<'a> {
             rawkeys_op,
             drop_op
         };
-        let mut buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
+        let buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
         let (addr, size, offset) = unsafe{buf.to_raw_parts()};
         self.helper_data = Some(buf);
         xous::create_thread_3(crate::forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");

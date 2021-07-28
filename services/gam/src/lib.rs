@@ -430,7 +430,7 @@ impl<'a> Menu<'a> {
             rawkeys_op,
             drop_op
         };
-        let mut buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
+        let buf = Buffer::into_buf(helper_data).expect("couldn't allocate helper data for helper thread");
         let (addr, size, offset) = unsafe{buf.to_raw_parts()};
         self.helper_data = Some(buf);
         xous::create_thread_3(forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");

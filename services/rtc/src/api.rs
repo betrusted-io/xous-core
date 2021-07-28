@@ -29,6 +29,7 @@ pub struct DateTime {
 }
 
 pub(crate) const SERVER_NAME_RTC: &str       = "_Real time clock application server_";
+#[allow(dead_code)]
 pub(crate) const RTC_MODAL_NAME: &'static str = "rtc modal";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

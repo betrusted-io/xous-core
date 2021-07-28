@@ -68,7 +68,7 @@ pub(crate) fn rootkeys_ux_thread() {
     };
     log::trace!("building ux thread modal");
     let mut modal = gam::Modal::new(
-        crate::ROOTKEY_MODAL_NAME,
+        crate::api::ROOTKEY_MODAL_NAME,
         gam::ActionType::TextEntry(password_action),
         Some(t!("rootpass.top", xous::LANG)),
         None,

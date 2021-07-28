@@ -613,7 +613,7 @@ fn xmain() -> ! {
     rtc_radiobox.add_item(ItemName::new(t!("rtc.sunday", xous::LANG)));
     log::trace!("building rtc ux modal");
     let mut modal = gam::Modal::new(
-        crate::RTC_MODAL_NAME,
+        crate::api::RTC_MODAL_NAME,
         gam::ActionType::TextEntry(rtc_textentry),
         Some(t!("rtc.month", xous::LANG)),
         None,
@@ -626,7 +626,7 @@ fn xmain() -> ! {
         Opcode::UxQuit.to_u32().unwrap()
     );
     let gam = gam::Gam::new(&xns).expect("couldn't connect to GAM");
-    let mut secs: u8 = 0;
+    let mut secs: u8;
     let mut mins: u8 = 0;
     let mut hours: u8 = 0;
     let mut months: u8 = 0;

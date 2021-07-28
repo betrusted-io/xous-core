@@ -1,19 +1,22 @@
 use utralib::generated::*;
 use crate::api::*;
-use log::info;
 use core::num::NonZeroUsize;
 use num_traits::*;
 
-const KEYROMADR_FPGA_KEY:            u32 = 0x00;
-const KEYROMADR_SELFSIGN_PRIVKEY:    u32 = 0x08;
-const KEYROMADR_SELFSIGN_PUBKEY:     u32 = 0x10;
-const KEYROMADR_DEVELOPER_PUBKEY:    u32 = 0x18;
-const KEYROMADR_THIRDPARTY_PUBKEY:   u32 = 0x20;
-const KEYROMADR_USER_KEY:   u32 = 0x28;
-const KEYROMADR_PEPPER:     u32 = 0xf8;
-const KEYROMADR_FPGA_REV:   u32 = 0xfc;
-const KEYROMADR_LOADER_REV: u32 = 0xfd;
-const KERYOMADR_CONFIG:     u32 = 0xff;
+struct KeyRomLocations {}
+#[allow(dead_code)]
+impl KeyRomLocations {
+    const FPGA_KEY:            u32 = 0x00;
+    const SELFSIGN_PRIVKEY:    u32 = 0x08;
+    const SELFSIGN_PUBKEY:     u32 = 0x10;
+    const DEVELOPER_PUBKEY:    u32 = 0x18;
+    const THIRDPARTY_PUBKEY:   u32 = 0x20;
+    const USER_KEY:   u32 = 0x28;
+    const PEPPER:     u32 = 0xf8;
+    const FPGA_REV:   u32 = 0xfc;
+    const LOADER_REV: u32 = 0xfd;
+    const CONFIG:     u32 = 0xff;
+}
 
 pub struct KeyField {
     mask: u32,
@@ -31,6 +34,7 @@ impl KeyField {
         (value & self.mask) << self.offset
     }
 }
+#[allow(dead_code)]
 pub(crate) mod keyrom_config {
     use crate::KeyField;
     pub const VERSION_MINOR:       KeyField = KeyField::new(8, 0 );
@@ -114,7 +118,7 @@ impl RootKeys {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
 
-        let mut keys = RootKeys {
+        let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
             gateware,
             staging,
@@ -182,7 +186,7 @@ impl RootKeys {
             step += 1;
             self.update_progress(progress_cid, step, total, false);
 
-            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KERYOMADR_CONFIG);
+            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG);
             let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
 
             if config & keyrom_config::INITIALIZED.ms(1) != 0 {
@@ -210,7 +214,7 @@ impl RootKeys {
             // - pepper
 
             // provision the pepper
-            for keyword in sensitive_slice[KEYROMADR_PEPPER as usize..(KEYROMADR_PEPPER + 8) as usize].iter_mut() {
+            for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 8) as usize].iter_mut() {
                 *keyword = self.trng.get_u32().expect("couldn't get random number");
             }
 

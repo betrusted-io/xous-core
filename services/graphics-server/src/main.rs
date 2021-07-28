@@ -251,8 +251,8 @@ fn xmain() -> ! {
                             } else {
                                 checkedwidth
                             };
-                            let br = Point::new(tl.x + checkedwidth, tl.y + checkedheight);
-                            log::trace!("br: {:?}, comp w: {}, comp h: {}", br, checkedwidth, checkedheight);
+                            let br = Point::new(tl.x + finalwidth, tl.y + checkedheight);
+                            log::trace!("br: {:?}, comp w: {}, comp h: {}", br, finalwidth, checkedheight);
                             if clip_rect.intersects_point(br) {
                                 tv.bounds_computed = Some(Rectangle::new(
                                     tl,
