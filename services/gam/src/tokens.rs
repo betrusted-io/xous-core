@@ -12,8 +12,8 @@ use xous_ipc::String;
 */
 
 // if you add more UxContexts, and you want them authorized by the GAM, add their names here.
-const TOKEN_SLOTS: usize = 4;
-const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = ["shellchat", "main menu", "status", "emoji menu"];
+const TOKEN_SLOTS: usize = 6;
+const EXPECTED_BOOT_CONTEXTS: [&'static str; TOKEN_SLOTS] = ["shellchat", "main menu", "status", "emoji menu", "rootkeys modal", "rtc modal"];
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct NamedToken {

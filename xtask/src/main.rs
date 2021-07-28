@@ -5,6 +5,9 @@ use std::{
     process::Command,
 };
 
+mod generate_locales;
+use generate_locales::*;
+
 type DynError = Box<dyn std::error::Error>;
 
 const TARGET: &str = "riscv32imac-unknown-none-elf";
@@ -38,6 +41,7 @@ fn main() {
 fn try_main() -> Result<(), DynError> {
     let hw_pkgs = [
         "gam",
+        "status",
         "shellchat",
         "ime-frontend",
         "ime-plugin-shell",
@@ -55,6 +59,7 @@ fn try_main() -> Result<(), DynError> {
         "engine-sha512",
         "engine-25519",
         "spinor",
+        "root-keys",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -163,6 +168,7 @@ fn try_main() -> Result<(), DynError> {
         Some("burn-kernel") => update_usb(true, false, false)?,
         Some("burn-loader") => update_usb(false, true, false)?,
         Some("burn-soc") => update_usb(false, false, true)?,
+        Some("generate-locales") => generate_locales(),
         _ => print_help(),
     }
     Ok(())
@@ -189,6 +195,7 @@ sr-test [soc.svd]       builds the suspend/resume testing image
 burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
 burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
+generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
@@ -259,6 +266,8 @@ fn build_hw_image(
     kkey: Option<String>,
     extra_args: Option<&[&str]>,
 ) -> Result<(), DynError> {
+    generate_locales();
+
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),
@@ -435,6 +444,8 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
 }
 
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
+    generate_locales();
+
     let stream = if debug { "debug" } else { "release" };
 
     build(&init, debug, None, None, None)?;

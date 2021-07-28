@@ -1197,6 +1197,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     if !clean {
         // cold boot path
         println!("no suspend marker found, doing a cold boot!");
+        clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
         println!("done initializing for cold boot.");
@@ -1370,6 +1371,19 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     }
 
     (clean, was_forced_suspend, pid)
+}
+
+fn clear_ram(cfg: &mut BootConfig) {
+    // clear RAM on a cold boot.
+    // RAM is persistent and battery-backed. This means secret material could potentiall
+    // stay there forever, if not explicitly cleared. This clear adds a couple seconds
+    // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
+    let ram: *mut u32 = cfg.sram_start as *mut u32;
+    unsafe {
+        for addr in 0..(cfg.sram_size - 8192) / 4 { // 8k is reserved for our own stack
+            ram.add(addr).write_volatile(0);
+        }
+    }
 }
 
 fn phase_1(cfg: &mut BootConfig) {

@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "addr2line"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a55f82cfe485775d02112886f4169bde0c5894d75e79ead7eafe7e40a25e45f7"
+dependencies = [
+ "gimli",
+]
+
+[[package]]
 name = "adler"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -94,6 +103,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "backtrace"
+version = "0.3.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d117600f438b1707d4e4ae15d3595657288f8235a0eb593e80ecc98ab34e1bc"
+dependencies = [
+ "addr2line",
+ "cfg-if 1.0.0",
+ "libc",
+ "miniz_oxide",
+ "object",
+ "rustc-demangle",
+]
+
+[[package]]
 name = "bare-metal"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -162,7 +185,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "which",
+ "which 3.1.1",
 ]
 
 [[package]]
@@ -180,7 +203,7 @@ checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 [[package]]
 name = "blitstr"
 version = "0.5.0"
-source = "git+https://github.com/betrusted-io/blitstr.git?rev=f1f1ca2352a90b08f97fcb48ab790053dda25f42#f1f1ca2352a90b08f97fcb48ab790053dda25f42"
+source = "git+https://github.com/betrusted-io/blitstr.git?rev=a7bef27fd3ceccefc01000ca2c6c4841b516d671#a7bef27fd3ceccefc01000ca2c6c4841b516d671"
 dependencies = [
  "log",
  "rkyv 0.4.3",
@@ -530,6 +553,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "debug-here"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d7791f83f55f330aa6406d71cc29d6d785ea1e2cf326001d7b2b45a5065efb1"
+dependencies = [
+ "lazy_static",
+ "which 2.0.1",
+ "winapi",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,6 +703,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "failure"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d32e9bd16cc02eae7db7ef620b392808b89f6a5e16bb3497d159c6b92a0f4f86"
+dependencies = [
+ "backtrace",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -697,7 +740,6 @@ name = "gam"
 version = "0.1.0"
 dependencies = [
  "blitstr-ref",
- "chrono",
  "com",
  "content-plugin-api",
  "enum_dispatch",
@@ -706,13 +748,12 @@ dependencies = [
  "ime-plugin-api",
  "ime-plugin-shell",
  "keyboard",
- "llio",
+ "locales",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
- "rtc",
  "susres",
  "ticktimer-server",
  "trng",
@@ -760,6 +801,12 @@ dependencies = [
  "libc",
  "wasi",
 ]
+
+[[package]]
+name = "gimli"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6503fe142514ca4799d4c26297c4248239fe8838d827db6bd6065c6ed29a6ce"
 
 [[package]]
 name = "glob"
@@ -905,6 +952,7 @@ dependencies = [
  "graphics-server",
  "ime-plugin-api",
  "keyboard",
+ "locales",
  "log",
  "log-server",
  "num-derive",
@@ -1039,6 +1087,10 @@ dependencies = [
  "xous-ipc",
  "xous-names",
 ]
+
+[[package]]
+name = "locales"
+version = "0.1.0"
 
 [[package]]
 name = "log"
@@ -1188,6 +1240,12 @@ checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "object"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9a7ab5d64814df0fe4a4b5ead45ed6c5f181ee3ff04ba344313a6c80446c5d4"
 
 [[package]]
 name = "once_cell"
@@ -1549,12 +1607,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "root-keys"
+version = "0.1.0"
+dependencies = [
+ "cipher",
+ "gam",
+ "locales",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "susres",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "rtc"
 version = "0.1.0"
 dependencies = [
  "bitflags",
  "chrono",
+ "gam",
+ "graphics-server",
  "llio",
+ "locales",
  "log",
  "log-server",
  "num-derive",
@@ -1566,6 +1648,12 @@ dependencies = [
  "xous-ipc",
  "xous-names",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dead70b0b5e03e9c814bcb6b01e03e68f7c57a80aa48c72ec92152ab3e818d49"
 
 [[package]]
 name = "rustc-hash"
@@ -1644,6 +1732,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 
 [[package]]
+name = "serde_json"
+version = "1.0.64"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
+dependencies = [
+ "itoa",
+ "ryu",
+ "serde",
+]
+
+[[package]]
 name = "sha2"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1666,6 +1765,7 @@ dependencies = [
  "com",
  "content-plugin-api",
  "curve25519-dalek",
+ "debug-here",
  "digest",
  "ed25519-dalek",
  "engine-25519",
@@ -1684,6 +1784,7 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv 0.4.3",
+ "root-keys",
  "rtc",
  "sha2",
  "spinor",
@@ -1748,6 +1849,31 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "status"
+version = "0.1.0"
+dependencies = [
+ "blitstr-ref",
+ "chrono",
+ "com",
+ "content-plugin-api",
+ "gam",
+ "graphics-server",
+ "llio",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "rtc",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
 
 [[package]]
 name = "strsim"
@@ -2195,6 +2321,16 @@ dependencies = [
 
 [[package]]
 name = "which"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b57acb10231b9493c8472b20cb57317d0679a49e0bdbee44b3b803a6473af164"
+dependencies = [
+ "failure",
+ "libc",
+]
+
+[[package]]
+name = "which"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d011071ae14a2f6671d0b74080ae0cd8ebf3a6f8c9589a2cd45f23126fe29724"
@@ -2317,6 +2453,7 @@ version = "0.8.3"
 dependencies = [
  "bitflags",
  "compiler_builtins",
+ "debug-here",
  "hex",
  "lazy_static",
  "log",
@@ -2362,6 +2499,14 @@ dependencies = [
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "glob",
+ "lazy_static",
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "regex",
+ "serde_json",
+]
 
 [[package]]
 name = "zero"

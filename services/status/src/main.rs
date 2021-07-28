@@ -1,24 +1,31 @@
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
+
 use log::info;
 use com::api::BattStats;
-use graphics_server::*;
 
 use core::fmt::Write;
 
 use blitstr_ref as blitstr;
 
 use xous::{send_message, CID, Message, msg_scalar_unpack};
-use num_traits::{ToPrimitive, FromPrimitive};
+use num_traits::*;
+
+use graphics_server::*;
+
+const SERVER_NAME_STATUS: &str   = "_Status bar manager_";
+const SERVER_NAME_STATUS_GID: &str   = "_Status bar GID receiver_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 enum StatusOpcode {
     // for passing battstats on to the main thread from the callback
     BattStats,
-
     // for passing DateTime
     DateTime,
-
     // indicates time for periodic update of the status bar
     Pump,
+    // exists to make clippy happy about unreachable code
+    Quit,
 }
 
 static mut CB_TO_MAIN_CONN: Option<CID> = None;
@@ -53,16 +60,38 @@ pub fn pump_thread(conn: usize) {
         ticktimer.sleep_ms(1000).unwrap();
     }
 }
+#[xous::xous_main]
+fn xmain() -> ! {
+    log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    log::info!("my PID is {}", xous::process::id());
 
-const SERVER_NAME_STATUS: &str   = "_Status bar manager_";
-pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usize, canvas_gid_3: usize) {
-    let canvas_gid = [canvas_gid_0 as u32, canvas_gid_1 as u32, canvas_gid_2 as u32, canvas_gid_3 as u32];
+    let xns = xous_names::XousNames::new().unwrap();
+    // 1 connection exactly -- from the GAM to set our canvas GID
+    let status_gam_getter = xns.register_name(SERVER_NAME_STATUS_GID, Some(1)).expect("can't register server");
+    let mut canvas_gid: [u32; 4] = [0; 4];
+    // wait unil we're assigned a GID -- this is a one-time message from the GAM
+    let msg = xous::receive_message(status_gam_getter).unwrap();
+    log::trace!("GID assignment message: {:?}", msg);
+    xous::msg_scalar_unpack!(msg, g0, g1, g2, g3, {
+            canvas_gid[0] = g0 as u32;
+            canvas_gid[1] = g1 as u32;
+            canvas_gid[2] = g2 as u32;
+            canvas_gid[3] = g3 as u32;
+    });
+    match xns.unregister_server(status_gam_getter) {
+        Err(e) => {
+            log::error!("couldn't unregister getter server: {:?}", e);
+        }
+        _ => {}
+    }
+    xous::destroy_server(status_gam_getter).unwrap();
 
+    // ok, now that we have a GID, we can continue on with our merry way
     let status_gid: Gid = Gid::new(canvas_gid);
     log::trace!("|status: my canvas {:?}", status_gid);
 
     log::trace!("|status: registering GAM|status thread");
-    let xns = xous_names::XousNames::new().unwrap();
     // should be only one connection here, from the status main loop
     let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).expect("|status: can't register server");
     // create a connection for callback hooks
@@ -283,7 +312,10 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
                 let dt = buffer.to_original::<rtc::DateTime, _>().unwrap();
                 datetime = Some(dt);
             }
-            None => {log::error!("|status: received unknown Opcode"); break}
+            Some(StatusOpcode::Quit) => {
+                break;
+            }
+            None => {log::error!("|status: received unknown Opcode");}
         }
     }
     log::trace!("status thread exit, destroying servers");
@@ -296,4 +328,5 @@ pub fn status_thread(canvas_gid_0: usize, canvas_gid_1: usize, canvas_gid_2: usi
     xns.unregister_server(status_sid).unwrap();
     xous::destroy_server(status_sid).unwrap();
     log::trace!("status thread quitting");
+    xous::terminate_process(0)
 }

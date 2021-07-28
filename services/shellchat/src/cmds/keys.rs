@@ -5,6 +5,7 @@ use xous_ipc::String;
 pub struct Keys {
     testing_range: xous::MemoryRange,
     spinor: spinor::Spinor,
+    rootkeys: root_keys::RootKeys,
 }
 const TEST_SIZE: usize = 0x4000;
 const TEST_BASE: usize = 0x608_0000;
@@ -32,6 +33,7 @@ impl Keys {
         Keys {
             testing_range,
             spinor,
+            rootkeys: root_keys::RootKeys::new(&xns).expect("couldn't allocate rootkeys API"),
         }
     }
 }
@@ -48,6 +50,16 @@ impl<'a> ShellCmdApi<'a> for Keys {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "ux0" => {
+                    self.rootkeys.test_ux(0);
+                    //debug_here::debug_here!();
+                    write!(ret, "show UX").unwrap();
+                }
+                "ux1" => {
+                    self.rootkeys.test_ux(1);
+                    //debug_here::debug_here!();
+                    write!(ret, "hide UX").unwrap();
+                }
                 "usblock" => {
                     env.llio.debug_usb(Some(true)).unwrap();
                     write!(ret, "USB debug port locked out; one word at 0x80000000 is disclosable via USB.").unwrap();

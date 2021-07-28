@@ -1,0 +1,12 @@
+{
+    "rootpass.top": {
+        "en": "Password request\nDevice unlock\nSecurity: Low",
+        "zh": "输入密码\n解锁\n安全含义:低",
+        "en-audio": "Enter unlock password"
+    },
+    "update.top": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password. This password is critically important."
+    }
+}

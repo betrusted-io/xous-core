@@ -69,9 +69,9 @@ impl Repl{
         gam.request_focus(token.unwrap()).expect("couldn't take focus");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
-        log::debug!("content canvas {:?}", content);
+        log::trace!("content canvas {:?}", content);
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        log::debug!("size {:?}", screensize);
+        log::trace!("size {:?}", screensize);
         Repl {
             input: None,
             msg: None,
@@ -264,7 +264,7 @@ pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -279,7 +279,7 @@ fn xmain() -> ! {
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
-        log::trace!("got message {:?}", msg);
+        log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -294,7 +294,7 @@ fn xmain() -> ! {
                 repl.redraw().expect("REPL couldn't redraw");
             }
             Some(ShellOpcode::Quit) => {
-                log::trace!("got Quit");
+                log::error!("got Quit");
                 break;
             }
             _ => {
@@ -311,7 +311,7 @@ fn xmain() -> ! {
         log::trace!("reached bottom of main loop");
     }
     // clean up our program
-    log::trace!("main loop exit, destroying servers");
+    log::error!("main loop exit, destroying servers");
     xns.unregister_server(shch_sid).unwrap();
     xous::destroy_server(shch_sid).unwrap();
     log::trace!("quitting");

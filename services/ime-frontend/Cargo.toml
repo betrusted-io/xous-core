@@ -15,6 +15,7 @@ log = "0.4"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 xous = {path = "../../xous-rs"}
+locales = {path = "../../locales"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
 

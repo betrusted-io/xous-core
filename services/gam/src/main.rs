@@ -3,8 +3,6 @@
 
 mod api;
 use api::*;
-mod status;
-use status::*;
 mod canvas;
 use canvas::*;
 
@@ -30,6 +28,8 @@ use core::{sync::atomic::{AtomicU32, Ordering}};
 use enum_dispatch::enum_dispatch;
 
 use gam::{MenuItem, MenuPayload, Menu, MenuOpcode};
+
+use locales::t;
 
 //// todo:
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
@@ -62,6 +62,7 @@ pub(crate) trait LayoutApi {
 pub(crate) enum UxLayout {
     ChatLayout,
     MenuLayout,
+    ModalLayout,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -91,10 +92,11 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 4;
+const MAX_UX_CONTEXTS: usize = 5;
 pub(crate) const MAX_CANVASES: usize = 32;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const MAIN_MENU_NAME: &'static str = "main menu";
+pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
 /*
@@ -186,7 +188,7 @@ impl ContextManager {
                         trust_level, canvases).expect("couldn't create menu layout");
                     // default to off-screen for all layouts
                     menulayout.set_visibility_state(false, canvases);
-                    log::debug!("debug layout: {:?}", menulayout);
+                    log::debug!("debug menu layout: {:?}", menulayout);
                     let ux_context = UxContext {
                         layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
@@ -214,6 +216,33 @@ impl ContextManager {
                         }
                     }
                 }
+                UxType::Modal => {
+                    let mut modallayout = ModalLayout::init(&gfx, &trng,
+                        trust_level, canvases).expect("couldn't create modal layout");
+                    // default to off-screen for all layouts
+                    modallayout.set_visibility_state(false, canvases);
+                    log::debug!("debug modal layout: {:?}", modallayout);
+                    let ux_context = UxContext {
+                        layout: UxLayout::ModalLayout(modallayout),
+                        predictor: None,
+                        app_token: token,
+                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        trust_level,
+                        listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
+                        redraw_id: registration.redraw_id,
+                        gotinput_id: None,
+                        audioframe_id: None,
+                        rawkeys_id: registration.rawkeys_id,
+                        vibe: false,
+                    };
+                    for maybe_context in self.contexts.iter_mut() {
+                        if maybe_context.is_none() {
+                            *maybe_context = Some(ux_context);
+                            found_slot = true;
+                            break;
+                        }
+                    }
+                }
             }
         } else {
             // at the moment, we don't allow contexts that are not part of the boot set.
@@ -225,6 +254,13 @@ impl ContextManager {
         if found_slot {
             maybe_token
         } else {
+            // Note: for the most paranoid modes, you probably want exactly as many UX contexts
+            // as you expect to use. This cap helps prevent rouge processes from registering
+            // UX contexts that it shouldn't.
+            //
+            // That being said, if you are to run "generic apps from the internet" you can't
+            // put a proper bound on this number.
+            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam.rs");
             None
         }
     }
@@ -392,6 +428,7 @@ impl ContextManager {
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
 
+                log::debug!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
@@ -583,11 +620,20 @@ fn xmain() -> ! {
     canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // make a thread to manage the status bar -- this needs to start late, after the IMEF and most other things are initialized
-    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
+    // initialize the status bar -- this needs to start late, after the IMEF and most other things are initialized
+    // this used to be domiciled in the GAM, but we split it out because this started to pull too much functionality
+    // into the GAM and was causing circular crate conflicts with sub-functions that the status bar relies upon.
+    // we do a hack to try and push a GID to the status bar "securely": we introduce a race condition where we hope
+    // that the GAM is the first thing to talk to the status bar, and the first message is its GID to render on.
+    // generally should be OK, because during boot, all processes are trusted...
     let status_gid = status_canvas.gid().gid();
-    log::trace!("starting status thread with gid {:?}", status_gid);
-    xous::create_thread_4(status_thread, status_gid[0] as _, status_gid[1] as _, status_gid[2] as _, status_gid[3] as _).expect("couldn't create status thread");
+    log::trace!("initializing status bar with gid {:?}", status_gid);
+    let status_conn = xns.request_connection_blocking("_Status bar GID receiver_").expect("couldn't connect to status bar GID receiver");
+    xous::send_message(status_conn,
+        xous::Message::new_scalar(0, // message type doesn't matter because there is only one message it should ever receive
+        status_gid[0] as usize, status_gid[1] as usize, status_gid[2] as usize, status_gid[3] as usize
+        )
+    ).expect("couldn't set status GID");
 
     // make a thread to manage the main menu.
     log::trace!("starting menu thread");
@@ -697,21 +743,27 @@ fn xmain() -> ! {
 
                         log::trace!("render request for {:?}", tv);
                         if tv.get_op() == TextOp::ComputeBounds {
-                            tv.dry_run = true;
+                            tv.set_dry_run(true);
                         } else {
-                            tv.dry_run = false;
+                            tv.set_dry_run(false);
                         }
 
                         if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
                             // if we're requesting inverted text, this better be a "trusted canvas"
-                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL) {
+                            // BOOT_CONTEXT_TRUSTLEVEL is reserved for the "status bar"
+                            // BOOT_CONTEXT_TRUSTLEVEL - 1 is where e.g. password modal dialog boxes end up
+                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL - 1) {
                                 log::error!("Attempt to draw inverted text without sufficient trust level. Aborting.");
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
-                            if canvas.is_drawable() {
+                            if canvas.is_drawable() || tv.dry_run() { // dry runs should not move any pixels so they are OK to go through in any case
                                 // set the clip rectangle according to the canvas' location
-                                tv.clip_rect = Some(canvas.clip_rect().into());
+                                let mut base_clip_rect = canvas.clip_rect();
+                                if tv.dry_run() {
+                                    base_clip_rect.normalize();
+                                }
+                                tv.clip_rect = Some(base_clip_rect.into());
 
                                 // you have to clone the tv object, because if you don't the same block of
                                 // memory gets passed on to the graphics_server(). Which is efficient, but,
@@ -721,15 +773,21 @@ fn xmain() -> ! {
                                 // issue the draw command
                                 gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
                                 // copy back the fields that we want to be mutable
-                                log::trace!("got computed cursor of {:?}", tv_clone.cursor);
+                                if tv.dry_run() {
+                                    log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
+                                }
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
-                                canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                if !tv.dry_run() {
+                                    canvas.do_drawn().expect("couldn't set canvas to drawn");
+                                }
                             } else {
-                                info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                log::debug!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                let ret = api::Return::NotCurrentlyDrawable;
+                                buffer.replace(ret).unwrap();
                             }
                         } else {
                             info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
@@ -810,7 +868,7 @@ fn xmain() -> ! {
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
-                        info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                        log::debug!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
                     }
                 } else {
                     info!("bogus GID in Object, not doing anything in response to draw request.");
@@ -920,6 +978,12 @@ fn xmain() -> ! {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
                         }
                     }
+                } else if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
+                    if modal_token == switchapp.token {
+                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                        }
+                    }
                 }
             },
             Some(Opcode::RaiseMenu) => {
@@ -959,7 +1023,7 @@ pub fn main_menu_thread() {
     let com = com::Com::new(&xns).unwrap();
 
     let blon_item = MenuItem {
-        name: String::<64>::from_str("Backlight on"),
+        name: String::<64>::from_str(t!("mainmenu.backlighton", xous::LANG)),
         action_conn: com.conn(),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
@@ -968,7 +1032,7 @@ pub fn main_menu_thread() {
     menu.add_item(blon_item);
 
     let bloff_item = MenuItem {
-        name: String::<64>::from_str("Backlight off"),
+        name: String::<64>::from_str(t!("mainmenu.backlightoff", xous::LANG)),
         action_conn: com.conn(),
         action_opcode: com.getop_backlight(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -977,7 +1041,7 @@ pub fn main_menu_thread() {
     menu.add_item(bloff_item);
 
     let sleep_item = MenuItem {
-        name: String::<64>::from_str("Sleep now"),
+        name: String::<64>::from_str(t!("mainmenu.sleep", xous::LANG)),
         action_conn: susres.conn(),
         action_opcode: susres.getop_suspend(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
@@ -986,7 +1050,7 @@ pub fn main_menu_thread() {
     menu.add_item(sleep_item);
 
     let close_item = MenuItem {
-        name: String::<64>::from_str("Close Menu"),
+        name: String::<64>::from_str(t!("mainmenu.closemenu", xous::LANG)),
         action_conn: menu.gam.conn(),
         action_opcode: menu.gam.getop_revert_focus(),
         action_payload: MenuPayload::Scalar([0, 0, 0, 0]),

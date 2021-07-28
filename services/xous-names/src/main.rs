@@ -83,6 +83,7 @@ struct Connection {
     pub auth_conns: u32,  // number of authenticated connections
     pub token: Option<[u32; 4]>,  // a random number that must be presented to allow for disconnection for single-connection servers
 }
+#[derive(Debug)]
 struct SlowMap {
     pub map: [Option<Connection>; 128],
 }
@@ -128,8 +129,8 @@ impl SlowMap {
                 if mapping.sid == sid {
                     name = Some(mapping.name);
                     *entry = None;
+                    break;
                 }
-                break;
             }
         }
         name
@@ -278,6 +279,8 @@ fn xmain() -> ! {
                     info!("{} server has unregistered", name);
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
+                    log::error!("couldn't unregister {:?}", gid);
+                    log::error!("table: {:?}", name_table);
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),

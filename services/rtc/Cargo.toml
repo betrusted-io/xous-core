@@ -13,6 +13,9 @@ xous-names = { path = "../xous-names" }
 log = "0.4"
 bitflags = "1.2.1"
 llio = {path = "../llio"}
+gam = {path = "../gam"}
+locales = {path = "../../locales"}
+graphics-server = {path = "../graphics-server"}
 
 xous-ipc = {path = "../../xous-ipc"}
 num-derive = {version = "0.3", default-features = false}

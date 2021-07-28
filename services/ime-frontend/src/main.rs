@@ -19,6 +19,8 @@ use xous::{CID, msg_scalar_unpack};
 
 use core::fmt::Write;
 
+use locales::t;
+
 /// max number of prediction options to track/render
 const MAX_PREDICTION_OPTIONS: usize = 4;
 pub(crate) const EMOJI_MENU_NAME: &'static str = "emoji menu";
@@ -550,7 +552,7 @@ impl InputTracker {
                 empty_tv.draw_border = false;
                 empty_tv.border_width = 1;
                 empty_tv.clear_area = true;
-                write!(empty_tv.text, "Ready for input...").expect("couldn't set up empty TextView");
+                write!(empty_tv.text, "{}", t!("input.greeting", xous::LANG)).expect("couldn't set up empty TextView");
                 if debug_canvas { info!("pc canvas {:?}", pc) }
                 self.gam.post_textview(&mut empty_tv).expect("can't draw prediction TextView");
             } else if update_predictor || force_redraw {
@@ -616,6 +618,8 @@ fn xmain() -> ! {
 
     let mut listeners: [Option<CID>; 32] = [None; 32];
 
+    // an explicit, separate emoji menu handler is created, because the Ux opcodes for the emoji menu should not
+    // be conflacted with the ImefOpcode API.
     xous::create_thread_0(emoji_menu_thread).expect("can't start emoji handler menu");
 
     log::trace!("Initialized but still waiting for my canvas Gids");

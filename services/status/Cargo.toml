@@ -1,0 +1,39 @@
+[package]
+authors = ["bunnie <bunnie@kosagi.com>"]
+description = "Status bar for Xous"
+edition = "2018"
+name = "status"
+version = "0.1.0"
+
+[dependencies]
+blitstr-ref = {path = "../../imports/blitstr-ref"}
+com = {path = "../com"}
+content-plugin-api = {path = "../content-plugin-api"}
+log = "0.4"
+log-server = {path = "../log-server"}
+ticktimer-server = {path = "../ticktimer-server"}
+trng = {path = "../trng"}
+rtc = {path = "../rtc"}
+llio = {path = "../llio"}
+xous = {path = "../../xous-rs"}
+xous-ipc = {path = "../../xous-ipc"}
+xous-names = {path = "../xous-names"}
+graphics-server = {path = "../graphics-server"}
+gam = {path = "../gam"}
+
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = {path = "../../utralib"}
+
+# short circuit the datetime call on hosted mode
+[target.'cfg(any(windows,unix))'.dependencies]
+chrono = "0.4"
+
+[features]
+debugprint = []
+slowstatus = [] # used for braille mode, so console isn't overwhelmed with status
+# default = ["debugprint"] # "debugprint"
+default = []
