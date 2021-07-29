@@ -123,7 +123,10 @@ fn xmain() -> ! {
                 log::trace!("DrawClipObject {:?}", obj);
                 match obj.obj {
                     ClipObjectType::Line(line) => {
-                        op::line(display.native_buffer(), line, Some(obj.clip));
+                        op::line(display.native_buffer(), line, Some(obj.clip), false);
+                    },
+                    ClipObjectType::XorLine(line) => {
+                        op::line(display.native_buffer(), line, Some(obj.clip), true);
                     },
                     ClipObjectType::Circ(circ) => {
                         op::circle(display.native_buffer(), circ, Some(obj.clip));
@@ -412,7 +415,7 @@ fn xmain() -> ! {
             }
             Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
                 let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
-                op::line(display.native_buffer(), l, screen_clip.into());
+                op::line(display.native_buffer(), l, screen_clip.into(), false);
             }),
             Some(Opcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
                 let r = Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));

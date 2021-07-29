@@ -117,6 +117,13 @@ impl Gfx {
         buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
     }
 
+    // for use in the deface operation
+    pub fn draw_line_clipped_xor(&self, line: Line, clip: Rectangle) -> Result<(), xous::Error> {
+        let co = ClipObject { clip, obj: ClipObjectType::XorLine(line) };
+        let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;
+        buf.lend(self.conn, Opcode::DrawClipObject.to_u32().unwrap()).map(|_| ())
+    }
+
     pub fn draw_circle_clipped(&self, circ: Circle, clip: Rectangle) -> Result<(), xous::Error> {
         let co = ClipObject { clip, obj: ClipObjectType::Circ(circ) };
         let buf = Buffer::into_buf(co).or(Err(xous::Error::InternalError))?;

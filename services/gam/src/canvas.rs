@@ -210,7 +210,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvI
                         delta_x = delta_x % width;
                         delta_y = delta_y % width;
 
-                        gfx.draw_line_clipped(
+                        gfx.draw_line_clipped_xor(
                             Line::new_with_style(
                                 Point::new(x, y),
                                 Point::new(x + delta_x, y + delta_y),

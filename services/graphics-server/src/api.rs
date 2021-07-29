@@ -99,6 +99,7 @@ pub enum ClipObjectType {
     Circ(Circle),
     Rect(Rectangle),
     RoundRect(RoundedRectangle),
+    XorLine(Line),
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
