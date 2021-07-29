@@ -42,9 +42,8 @@ pub struct ProgressReport {
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub(crate) enum PasswordRetentionPolicy {
+pub enum PasswordRetentionPolicy {
     AlwaysKeep,
     EraseOnSuspend,
-    EraseOnIdle,
     AlwaysPurge,
 }

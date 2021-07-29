@@ -1,21 +1,27 @@
+use ticktimer_server::Ticktimer;
 use utralib::generated::*;
 use crate::api::*;
 use core::num::NonZeroUsize;
 use num_traits::*;
 
+use crate::bcrypt::*;
+use crate::PasswordType;
+
+const BCRYPT_COST: u32 = 10;   // 10 is the minimum recommended by OWASP; takes xxx ms to verify @ 10 rounds
+
 struct KeyRomLocations {}
 #[allow(dead_code)]
 impl KeyRomLocations {
-    const FPGA_KEY:            u32 = 0x00;
-    const SELFSIGN_PRIVKEY:    u32 = 0x08;
-    const SELFSIGN_PUBKEY:     u32 = 0x10;
-    const DEVELOPER_PUBKEY:    u32 = 0x18;
-    const THIRDPARTY_PUBKEY:   u32 = 0x20;
-    const USER_KEY:   u32 = 0x28;
-    const PEPPER:     u32 = 0xf8;
-    const FPGA_REV:   u32 = 0xfc;
-    const LOADER_REV: u32 = 0xfd;
-    const CONFIG:     u32 = 0xff;
+    const FPGA_KEY:            u8 = 0x00;
+    const SELFSIGN_PRIVKEY:    u8 = 0x08;
+    const SELFSIGN_PUBKEY:     u8 = 0x10;
+    const DEVELOPER_PUBKEY:    u8 = 0x18;
+    const THIRDPARTY_PUBKEY:   u8 = 0x20;
+    const USER_KEY:   u8 = 0x28;
+    const PEPPER:     u8 = 0xf8;
+    const FPGA_REV:   u8 = 0xfc;
+    const LOADER_REV: u8 = 0xfd;
+    const CONFIG:     u8 = 0xff;
 }
 
 pub struct KeyField {
@@ -50,7 +56,11 @@ pub(crate) mod keyrom_config {
 #[repr(C)]
 struct PasswordCache {
     // this structure is mapped into the password cache page and can be zero-ized at any time
-    canary: u32, // this is 0 if the page was cleared; it is set immediately upon allocation/initialization/update
+    // we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
+    hashed_boot_pw: [u8; 24],
+    hashed_boot_pw_valid: u32, // non-zero for valid
+    hashed_update_pw: [u8; 24],
+    hashed_update_pw_valid: u32,
 }
 
 pub(crate) struct RootKeys {
@@ -61,9 +71,10 @@ pub(crate) struct RootKeys {
     kernel: xous::MemoryRange,
     /// regions of RAM that holds all plaintext passwords, keys, and temp data. stuck in two well-defined page so we can
     /// zero-ize it upon demand, without guessing about stack frames and/or Rust optimizers removing writes
-    sensitive_data: xous::MemoryRange,
-    pass_cache: xous::MemoryRange,
-    password_policy: PasswordRetentionPolicy,
+    sensitive_data: xous::MemoryRange, // this gets purged at least on every suspend, but ideally purged sooner than that
+    pass_cache: xous::MemoryRange,  // this can be purged based on a policy, as set below
+    boot_password_policy: PasswordRetentionPolicy,
+    update_password_policy: PasswordRetentionPolicy,
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
     gam: gam::Gam, // for raising UX elements directly
@@ -126,7 +137,8 @@ impl RootKeys {
             kernel,
             sensitive_data,
             pass_cache,
-            password_policy: PasswordRetentionPolicy::AlwaysKeep,
+            update_password_policy: PasswordRetentionPolicy::AlwaysPurge,
+            boot_password_policy: PasswordRetentionPolicy::AlwaysKeep,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
@@ -135,20 +147,119 @@ impl RootKeys {
         keys
     }
 
+    fn purge_password(&mut self, pw_type: PasswordType) {
+        unsafe {
+            let pcache_ptr: *mut PasswordCache = self.pass_cache.as_mut_ptr() as *mut PasswordCache;
+            match pw_type {
+                PasswordType::Boot => {
+                    for p in (*pcache_ptr).hashed_boot_pw.iter_mut() {
+                        *p = 0;
+                    }
+                    (*pcache_ptr).hashed_boot_pw_valid = 0;
+                }
+                PasswordType::Update => {
+                    for p in (*pcache_ptr).hashed_update_pw.iter_mut() {
+                        *p = 0;
+                    }
+                    (*pcache_ptr).hashed_update_pw_valid = 0;
+                }
+            }
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    fn purge_sensitive_data(&mut self) {
+        let data = self.sensitive_data.as_slice_mut::<u32>();
+        for d in data.iter_mut() {
+            *d = 0;
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn suspend(&mut self) {
-        match self.password_policy {
+        match self.boot_password_policy {
             PasswordRetentionPolicy::AlwaysKeep => {
                 ()
             },
             _ => {
-                let data = self.sensitive_data.as_slice_mut::<u32>();
-                for d in data.iter_mut() {
-                    *d = 0;
+                self.purge_password(PasswordType::Boot);
+            }
+        }
+        match self.update_password_policy {
+            PasswordRetentionPolicy::AlwaysKeep => {
+                ()
+            },
+            _ => {
+                self.purge_password(PasswordType::Update);
+            }
+        }
+        self.purge_sensitive_data();
+    }
+    pub fn resume(&mut self) {
+    }
+
+    pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>, pw_type: PasswordType) {
+        if let Some(p) = policy {
+            match pw_type {
+                PasswordType::Boot => self.boot_password_policy = p,
+                PasswordType::Update => self.update_password_policy = p,
+            };
+        } else {
+            match pw_type {
+                PasswordType::Boot => PasswordRetentionPolicy::AlwaysPurge,
+                PasswordType::Update => PasswordRetentionPolicy::AlwaysPurge,
+            };
+        }
+    }
+
+    /// plaintext password is passed as a &str. Any copies internally are destroyed.
+    pub fn hash_and_save_password(&mut self, pw: &str, pw_type: PasswordType) {
+        let pw_len = if pw.len() > 72 {
+            log::warn!("password of length {} is truncated to 72 bytes [bcrypt]", pw.len());
+            72
+        } else {
+            pw.len()
+        };
+        let mut plaintext_copy: [u8; 72] = [0; 72];
+        for (src, dst) in pw.bytes().zip(plaintext_copy.iter_mut()) {
+            *dst = src;
+        }
+        let mut hashed_password: [u8; 24] = [0; 24];
+        let salt = self.read_key_128(KeyRomLocations::PEPPER);
+
+        let timer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
+        // this function was pulled in from another crate. A quick look around makes me think it doesn't
+        // create any extra copies of the plaintext anywhere -- the &[u8] gets dereferenced and mixed up
+        // in some key expansion immediately
+        let start_time = timer.elapsed_ms();
+        bcrypt(BCRYPT_COST, &salt, &plaintext_copy[..pw_len], &mut hashed_password);
+        let elapsed = timer.elapsed_ms() - start_time;
+        log::info!("bcrypt cost: {} time: {}ms", BCRYPT_COST, elapsed); // benchmark to figure out how to set cost parameter
+
+        let pcache_ptr: *mut PasswordCache = self.pass_cache.as_mut_ptr() as *mut PasswordCache;
+        unsafe {
+            match pw_type {
+                PasswordType::Boot => {
+                    for (&src, dst) in pw.as_bytes().iter().zip((*pcache_ptr).hashed_boot_pw.iter_mut()) {
+                        *dst = src;
+                    }
+                    (*pcache_ptr).hashed_boot_pw_valid = 1;
+                }
+                PasswordType::Update => {
+                    for (&src, dst) in pw.as_bytes().iter().zip((*pcache_ptr).hashed_update_pw.iter_mut()) {
+                        *dst = src;
+                    }
+                    (*pcache_ptr).hashed_update_pw_valid = 1;
                 }
             }
         }
-    }
-    pub fn resume(&mut self) {
+
+        // an unsafe method is used because the compiler will correctly reason that plaintext_copy goes out of scope
+        // and these writes are never read, and therefore they may be optimized out.
+        let pt_ptr = plaintext_copy.as_mut_ptr();
+        for i in 0..plaintext_copy.len() {
+            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     fn update_progress(&mut self, maybe_cid: Option<xous::CID>, current_step: u32, total_steps: u32, finished: bool) {
@@ -162,6 +273,17 @@ impl RootKeys {
     // reads a 256-bit key at a given index offset
     fn read_key_256(&mut self, index: u8) -> [u8; 32] {
         let mut key: [u8; 32] = [0; 32];
+        for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
+            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, index as u32 + addr as u32);
+            let keyword = self.keyrom.rf(utra::keyrom::DATA_DATA);
+            for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
+                *dst = byte;
+            }
+        }
+        key
+    }
+    fn read_key_128(&mut self, index: u8) -> [u8; 16] {
+        let mut key: [u8; 16] = [0; 16];
         for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, index as u32 + addr as u32);
             let keyword = self.keyrom.rf(utra::keyrom::DATA_DATA);
@@ -186,7 +308,7 @@ impl RootKeys {
             step += 1;
             self.update_progress(progress_cid, step, total, false);
 
-            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG);
+            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG as u32);
             let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
 
             if config & keyrom_config::INITIALIZED.ms(1) != 0 {
@@ -214,7 +336,7 @@ impl RootKeys {
             // - pepper
 
             // provision the pepper
-            for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 8) as usize].iter_mut() {
+            for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 4) as usize].iter_mut() {
                 *keyword = self.trng.get_u32().expect("couldn't get random number");
             }
 
