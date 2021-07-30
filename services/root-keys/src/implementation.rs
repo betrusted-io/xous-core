@@ -326,62 +326,29 @@ impl RootKeys {
         }
     }
 
-    pub fn try_init_keys(&mut self) {
-        let mut step = 0; // current step
-        let total = 10; // total number of steps
-
-        { // this block checks if we're already initialized, and aborts if we are
-            let progress_cid = if let Some(progress_sid) = maybe_progress {
-                Some(xous::connect(progress_sid).expect("couldn't connect to originator for progress updates"))
-            } else {
-                None
-            };
-            // first progress update: we could make a progress update
-            step += 1;
-            self.update_progress(progress_cid, step, total, false);
-
-            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG as u32);
-
-            if self.is_initialized() {
-                self.update_progress(progress_cid, step, total, true);
-                // don't re-initialize an initialized KEYROM
-                return;
-            }
-        }
-
+    pub fn setup_key_init(&mut self) {
         // block suspend/resume ops during security-sensitive operations
         self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
-
-        { // in this block, keyrom data is copied into RAM.
-            // make a copy of the KEYROM to hold the new mods, in the sensitive data area
-            let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
-            for addr in 0..256 {
-                self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
-                sensitive_slice[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
-            }
-
-            // the following keys should be provisioned:
-            // - self-signing private key
-            // - self-signing public key
-            // - user root key
-            // - pepper
-
-            // provision the pepper
-            for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 4) as usize].iter_mut() {
-                *keyword = self.trng.get_u32().expect("couldn't get random number");
-            }
-
-            // prompt the user for a password
-            self.cur_password_type = Some(PasswordType::Boot);
-
-
-
-            // zeroize the RAM-backed data
-            for data in sensitive_slice.iter_mut() {
-                *data = 0;
-            }
+        // in this block, keyrom data is copied into RAM.
+        // make a copy of the KEYROM to hold the new mods, in the sensitive data area
+        let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+        for addr in 0..256 {
+            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
+            sensitive_slice[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
         }
 
+        // provision the pepper
+        for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 4) as usize].iter_mut() {
+            *keyword = self.trng.get_u32().expect("couldn't get random number");
+        }
+    }
+
+    pub fn finish_key_init(&mut self) {
+        let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+        // zeroize the RAM-backed data
+        for data in sensitive_slice.iter_mut() {
+            *data = 0;
+        }
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }

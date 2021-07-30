@@ -6,17 +6,16 @@ pub(crate) const ROOTKEY_MENU_NAME: &'static str = "rootkeys menu";
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
-    /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
-    TryInitKeys,
     /// use to check if we've been initialized
     KeysInitialized,
 
-    TestUx,
-
+    /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
+    UxTryInitKeys,
+    UxRequestBootPassword,
+    UxPasswordReturn,
+    UxPolicyReturn,
+    UxGutter, // NOP for UX calls that require a destination
     /// UX opcodes
-    PasswordModalEntry,
-    PasswordPolicy,
-    RaisePolicyMenu,
     MenuRedraw,
     MenuKeys,
     MenuDrop,

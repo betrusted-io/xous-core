@@ -750,7 +750,7 @@ fn xmain() -> ! {
             Some(Opcode::UxSetTime) => msg_scalar_unpack!(msg, _, _, _, _, {
                 rtc_textentry.action_opcode = Opcode::UxMonth.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)), Some(t!("rtc.month", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }),
             Some(Opcode::UxMonth) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -762,7 +762,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxDay.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
                 Some(t!("rtc.day", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxDay) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -774,7 +774,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxYear.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
                 Some(t!("rtc.year", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxYear) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -785,7 +785,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxDayOfWeek.to_u32().unwrap();
                 modal.modify(Some(RadioButtons(rtc_radiobox)),
                 Some(t!("rtc.day_of_week", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxDayOfWeek) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -810,7 +810,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxHour.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
                 Some(t!("rtc.hour", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxHour) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -821,7 +821,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxMinute.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
                 Some(t!("rtc.minute", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxMinute) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -832,7 +832,7 @@ fn xmain() -> ! {
                 rtc_textentry.action_opcode = Opcode::UxSeconds.to_u32().unwrap();
                 modal.modify(Some(TextEntry(rtc_textentry)),
                 Some(t!("rtc.seconds", xous::LANG)), false, None, true, None);
-                gam.raise_modal(crate::RTC_MODAL_NAME).expect("couldn't raise RTC modal");
+                modal.activate();
             }
             Some(Opcode::UxSeconds) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };

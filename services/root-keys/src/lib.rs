@@ -44,7 +44,7 @@ impl RootKeys {
     }
     pub fn conn(&self) -> CID {self.conn}
     pub fn get_try_init_keys_op(&self) -> u32 {
-        Opcode::TryInitKeys.to_u32().unwrap()
+        Opcode::UxTryInitKeys.to_u32().unwrap()
     }
 
     fn ensure_progress_server(&mut self) -> xous::SID {
@@ -93,7 +93,7 @@ impl RootKeys {
     /// if the KEYROM entries are not 0, it will abort without any user prompt, but with an error code.
     pub fn try_init_keys(&mut self) -> Result<(), xous::Error> {
         send_message(self.conn,
-            Message::new_scalar(Opcode::TryInitKeys.to_usize().unwrap(),
+            Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
             0, 0, 0, 0)
         ).map(|_| ())
     }
@@ -119,13 +119,13 @@ impl RootKeys {
     pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
         unimplemented!();
     }
-
+    /*
     pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
             Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
-    }
+    }*/
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

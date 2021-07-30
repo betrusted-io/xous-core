@@ -9,6 +9,16 @@
         "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
         "en-audio": "Enter update password. This password is critically important."
     },
+    "rootkeys.already_init": {
+        "en": "Root keys already initialized.",
+        "zh": "根密码已经设置",
+        "en-audio": "Root keys already initialized."
+    },
+    "rootkeys.setup": {
+        "en": "This will init the root keys.\nI'm going to need two\npasswords:\n 1. Device unlock\n 2. Software update",
+        "zh": "这将初始化根密钥\n需要两个密码\n1.解锁\n2.软件更新",
+        "en-audio": "This will initialize the root keys. We're going to need two passwords, one for device unlock, and one for software updates."
+    },
     "rootkeys.policy_clear": {
         "en": "Clear after use",
         "zh": "使用后删除",
