@@ -19,6 +19,11 @@
         "zh": "这将初始化根密钥\n需要两个密码\n1.解锁\n2.软件更新",
         "en-audio": "This will initialize the root keys. We're going to need two passwords, one for device unlock, and one for software updates."
     },
+    "rootkeys.setup_wait": {
+        "en": "Initializing keys. This may\ntake a couple minutes.\nDo not reset or sleep!",
+        "zh": "现在正在初始化\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Initializing keys. This may take a while, don't reset or sleep the device."
+    },
     "rootkeys.policy_clear": {
         "en": "Clear after use",
         "zh": "使用后删除",

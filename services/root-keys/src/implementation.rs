@@ -313,9 +313,10 @@ impl RootKeys {
         }
     }
 
-    pub fn set_ux_password_type(&mut self, cur_type: PasswordType) {
-        self.cur_password_type = Some(cur_type);
+    pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
+        self.cur_password_type = cur_type;
     }
+    pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.cur_password_type}
 
     pub fn is_initialized(&self) -> bool {
         let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
@@ -341,6 +342,10 @@ impl RootKeys {
         for keyword in sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 4) as usize].iter_mut() {
             *keyword = self.trng.get_u32().expect("couldn't get random number");
         }
+    }
+
+    pub fn do_key_init(&mut self) {
+        
     }
 
     pub fn finish_key_init(&mut self) {

@@ -31,11 +31,13 @@ mod implementation {
     use crate::PasswordType;
 
     pub struct RootKeys {
+        password_type: Option<PasswordType>,
     }
 
     impl RootKeys {
         pub fn new(xns: &xous_names::XousNames) -> RootKeys {
             RootKeys {
+                password_type: None,
             }
         }
         pub fn suspend(&self) {
@@ -51,10 +53,13 @@ mod implementation {
         }
         pub fn try_init_keys(&mut self) {
         }
-        pub fn set_ux_password_type(&mut self, _cur_type: PasswordType) {
+        pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
+            self.password_type = cur_type;
         }
         pub fn is_initialized(&self) -> bool {false}
         pub fn setup_key_init(&mut self) {}
+        pub fn do_key_init(&mut self) {}
+        pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
     }
 }
 
@@ -124,11 +129,11 @@ fn xmain() -> ! {
         Opcode::MenuKeys.to_u32().unwrap(),
         Opcode::MenuDrop.to_u32().unwrap());
 
-    let password_action = TextEntry {
+    let mut password_action = TextEntry {
         is_password: true,
         visibility: TextEntryVisibility::LastChars,
         action_conn: main_cid,
-        action_opcode: Opcode::UxPasswordReturn.to_u32().unwrap(),
+        action_opcode: Opcode::UxInitPasswordReturn.to_u32().unwrap(),
         action_payload: TextEntryPayload::new(),
         validator: None,
     };
@@ -188,18 +193,22 @@ fn xmain() -> ! {
                         Some(ActionType::Notification(dismiss_modal_action)),
                         Some(t!("rootkeys.already_init", xous::LANG)), false,
                         None, true, None);
+                    keys.set_ux_password_type(None);
                 } else {
-                    dismiss_modal_action.set_action_opcode(Opcode::UxRequestBootPassword.to_u32().unwrap());
+                    dismiss_modal_action.set_action_opcode(Opcode::UxInitRequestPassword.to_u32().unwrap());
                     rootkeys_modal.modify(
                         Some(ActionType::Notification(dismiss_modal_action)),
                         Some(t!("rootkeys.setup", xous::LANG)), false,
                         None, true, None);
+                    // setup_key_init() prepares the salt and other items necessary to receive a password safely
+                    keys.setup_key_init();
+                    // request the boot password first
+                    keys.set_ux_password_type(Some(PasswordType::Boot));
                 }
                 rootkeys_modal.activate();
             }),
-            Some(Opcode::UxRequestBootPassword) => {
-                keys.setup_key_init();
-                keys.set_ux_password_type(PasswordType::Boot);
+            Some(Opcode::UxInitRequestPassword) => {
+                password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
                 rootkeys_modal.modify(
                     Some(ActionType::TextEntry(password_action)),
                     Some(t!("rootpass.top", xous::LANG)), false,
@@ -207,7 +216,10 @@ fn xmain() -> ! {
                 );
                 rootkeys_modal.activate();
             }
-            Some(Opcode::UxPasswordReturn) => {
+            Some(Opcode::UxInitPasswordReturn) => {
+                // assume:
+                //   - setup_key_init has also been called (exactly once, before anything happens)
+                //   - set_ux_password_type has been called already
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
 
@@ -215,12 +227,33 @@ fn xmain() -> ! {
                 plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
                 buf.volatile_clear();
 
-                // always explicitly request a policy decision for rootkeys
-                policy_menu.activate();
+                if let Some(pwt) = keys.get_ux_password_type() {
+                    match pwt {
+                        PasswordType::Boot => {
+                            // now grab the update password
+                            keys.set_ux_password_type(Some(PasswordType::Update));
+                            send_message(main_cid,
+                                xous::Message::new_scalar(Opcode::UxInitRequestPassword.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't initiate dialog box");
+                        }
+                        PasswordType::Update => {
+                            keys.set_ux_password_type(None);
+                            // now show the init wait note...
+                            dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                            rootkeys_modal.modify(
+                                Some(ActionType::Notification(dismiss_modal_action)),
+                                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                                None, true, None);
+                            rootkeys_modal.activate();
+
+                            xous:: yield_slice(); // give some time to the GAM to render
+
+                            keys.do_key_init();
+                        }
+                    }
+                } else {
+                    log::error!("invalid UX state -- someone called init password return, but no password type was set!");
+                }
             },
-            Some(Opcode::UxPolicyReturn) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
-                keys.update_policy(FromPrimitive::from_usize(policy_code));
-            }),
             /*
             Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
                 log::debug!("activating password modal");
@@ -228,6 +261,12 @@ fn xmain() -> ! {
                 rootkeys_modal.activate();
                 //policy_menu.activate();
             }),*/
+            Some(Opcode::UxGetPolicy) => {
+                policy_menu.activate();
+            }
+            Some(Opcode::UxPolicyReturn) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
+                keys.update_policy(FromPrimitive::from_usize(policy_code));
+            }),
             Some(Opcode::UxGutter) => {
                 // an intentional NOP for UX actions that require a destintation but need no action
             },

@@ -11,10 +11,11 @@ pub(crate) enum Opcode {
 
     /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
     UxTryInitKeys,
-    UxRequestBootPassword,
-    UxPasswordReturn,
-    UxPolicyReturn,
+    UxInitRequestPassword,
+    UxInitPasswordReturn,
     UxGutter, // NOP for UX calls that require a destination
+    UxGetPolicy,
+    UxPolicyReturn,
     /// UX opcodes
     MenuRedraw,
     MenuKeys,
