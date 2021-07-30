@@ -40,6 +40,9 @@ pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     }
     plaintext_copy[72] = 0; // always null terminate
 
+    // this function takes the plaintext key and uses it to prime a ~4k region of stack with an s-box
+    // that's used for the round function. The upstream Rust crypto crate does not wipe the sbox after use.
+    // however, it seems non-trivial to reverse the original password from the s-boxes.
     let state = setup(cost, salt, &plaintext_copy[..pw_len]);
 
     // erase the plaintext copy as soon as we're done with it

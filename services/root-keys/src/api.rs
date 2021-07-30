@@ -7,8 +7,9 @@ pub(crate) const ROOTKEY_MENU_NAME: &'static str = "rootkeys menu";
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     /// attempt to initialize keys on a brand new system. Does nothing if the keys are already provisioned.
-    TryInitKeysWithProgress,
     TryInitKeys,
+    /// use to check if we've been initialized
+    KeysInitialized,
 
     TestUx,
 

@@ -1879,6 +1879,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv 0.4.3",
+ "root-keys",
  "rtc",
  "susres",
  "ticktimer-server",

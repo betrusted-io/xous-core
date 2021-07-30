@@ -42,6 +42,11 @@ impl RootKeys {
             key_index: None,
         })
     }
+    pub fn conn(&self) -> CID {self.conn}
+    pub fn get_try_init_keys_op(&self) -> u32 {
+        Opcode::TryInitKeys.to_u32().unwrap()
+    }
+
     fn ensure_progress_server(&mut self) -> xous::SID {
         if let Some(sid) = self.progress_sid {
             sid
@@ -86,24 +91,22 @@ impl RootKeys {
     /// use this firmware to make your keys, you also trusted it.
     /// it will then update the bitstream with your keys.
     /// if the KEYROM entries are not 0, it will abort without any user prompt, but with an error code.
-    pub fn try_init_keys(&mut self, progress: Option<fn(ProgressReport)>) -> Result<(), xous::Error> {
-        if let Some(cb) = progress {
-            unsafe {
-                PROGRESS_CB = Some(cb);
-            }
-            let sid = self.ensure_progress_server().to_array();
-            send_message(self.conn,
-                Message::new_scalar(Opcode::TryInitKeysWithProgress.to_usize().unwrap(),
-                sid[0] as usize, sid[1] as usize, sid[2] as usize, sid[3] as usize)
-            ).map(|_| ())
+    pub fn try_init_keys(&mut self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::TryInitKeys.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).map(|_| ())
+    }
+
+    pub fn is_initialized(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::KeysInitialized.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't send KeysInitialized check message");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {return Ok(true)} else {return Ok(false)}
         } else {
-            unsafe {
-                PROGRESS_CB = None;
-            }
-            send_message(self.conn,
-                Message::new_scalar(Opcode::TryInitKeys.to_usize().unwrap(),
-                0, 0, 0, 0)
-            ).map(|_| ())
+            log::error!("unexpected return value: {:#?}", response);
+            Err(xous::Error::InternalError)
         }
     }
 

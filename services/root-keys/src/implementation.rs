@@ -7,7 +7,8 @@ use num_traits::*;
 use crate::bcrypt::*;
 use crate::PasswordType;
 
-const BCRYPT_COST: u32 = 10;   // 10 is the minimum recommended by OWASP; takes xxx ms to verify @ 10 rounds
+// TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
+const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
 
 struct KeyRomLocations {}
 #[allow(dead_code)]
@@ -75,6 +76,7 @@ pub(crate) struct RootKeys {
     pass_cache: xous::MemoryRange,  // this can be purged based on a policy, as set below
     boot_password_policy: PasswordRetentionPolicy,
     update_password_policy: PasswordRetentionPolicy,
+    cur_password_type: Option<PasswordType>, // for tracking which password we're dealing with at the UX layer
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
     gam: gam::Gam, // for raising UX elements directly
@@ -139,6 +141,7 @@ impl RootKeys {
             pass_cache,
             update_password_policy: PasswordRetentionPolicy::AlwaysPurge,
             boot_password_policy: PasswordRetentionPolicy::AlwaysKeep,
+            cur_password_type: None,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
@@ -197,7 +200,13 @@ impl RootKeys {
     pub fn resume(&mut self) {
     }
 
-    pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>, pw_type: PasswordType) {
+    pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
+        let pw_type = if let Some(cur_type) = self.cur_password_type {
+            cur_type
+        } else {
+            log::error!("got an unexpected policy update from the UX");
+            return;
+        };
         if let Some(p) = policy {
             match pw_type {
                 PasswordType::Boot => self.boot_password_policy = p,
@@ -209,17 +218,27 @@ impl RootKeys {
                 PasswordType::Update => PasswordRetentionPolicy::AlwaysPurge,
             };
         }
+        // once the policy has been set, revert the current type to None
+        self.cur_password_type = None;
     }
 
     /// plaintext password is passed as a &str. Any copies internally are destroyed. Caller is responsible for destroying the &str original.
-    pub fn hash_and_save_password(&mut self, pw: &str, pw_type: PasswordType) {
+    pub fn hash_and_save_password(&mut self, pw: &str) {
+        let pw_type = if let Some(cur_type) = self.cur_password_type {
+            cur_type
+        } else {
+            log::error!("got an unexpected password from the UX");
+            return;
+        };
         let mut hashed_password: [u8; 24] = [0; 24];
-        let salt = self.read_key_128(KeyRomLocations::PEPPER);
+        let mut salt = self.get_salt();
+        // we change the salt ever-so-slightly for every password. This doesn't make any one password more secure;
+        // but it disallows guessing all the passwords with a single off-the-shelf hashcat run.
+        salt[0] ^= pw_type as u8;
 
         let timer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
-        // this function was pulled in from another crate. A quick look around makes me think it doesn't
-        // create any extra copies of the plaintext anywhere -- the &[u8] gets dereferenced and mixed up
-        // in some key expansion immediately
+        // the bcrypt function takes the plaintext password and makes one copy to prime the blowfish bcrypt
+        // cipher. It is responsible for erasing this state.
         let start_time = timer.elapsed_ms();
         bcrypt(BCRYPT_COST, &salt, pw, &mut hashed_password); // note: this internally makes a copy of the password, and destroys it
         let elapsed = timer.elapsed_ms() - start_time;
@@ -275,8 +294,39 @@ impl RootKeys {
         }
         key
     }
+    // this routine handles the special-case of being unitialized: in that case, we need to get
+    // salt from a staging area, and not our KEYROM
+    fn get_salt(&mut self) -> [u8; 16] {
+        if !self.is_initialized() {
+            // we're not initialized, use the salt that should already be in the staging area
+            let sensitive_slice = self.sensitive_data.as_slice::<u32>();
+            let mut key: [u8; 16] = [0; 16];
+            for (word, &keyword) in key.chunks_mut(4).into_iter()
+                                                    .zip(sensitive_slice[KeyRomLocations::PEPPER as usize..(KeyRomLocations::PEPPER + 4) as usize].iter()) {
+                for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
+                    *dst = byte;
+                }
+            }
+            key
+        } else {
+            self.read_key_128(KeyRomLocations::PEPPER)
+        }
+    }
 
-    pub fn try_init_keys(&mut self, maybe_progress: Option<xous::SID>) {
+    pub fn set_ux_password_type(&mut self, cur_type: PasswordType) {
+        self.cur_password_type = Some(cur_type);
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
+        if config & keyrom_config::INITIALIZED.ms(1) != 0 {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_init_keys(&mut self) {
         let mut step = 0; // current step
         let total = 10; // total number of steps
 
@@ -291,9 +341,8 @@ impl RootKeys {
             self.update_progress(progress_cid, step, total, false);
 
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG as u32);
-            let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
 
-            if config & keyrom_config::INITIALIZED.ms(1) != 0 {
+            if self.is_initialized() {
                 self.update_progress(progress_cid, step, total, true);
                 // don't re-initialize an initialized KEYROM
                 return;
@@ -323,6 +372,9 @@ impl RootKeys {
             }
 
             // prompt the user for a password
+            self.cur_password_type = Some(PasswordType::Boot);
+
+
 
             // zeroize the RAM-backed data
             for data in sensitive_slice.iter_mut() {

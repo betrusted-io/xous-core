@@ -14,6 +14,11 @@
         "zh": "背光关闭",
         "en-audio": "🔇"
     },
+    "mainmenu.init_keys": {
+        "en": "Initialize root keys",
+        "zh": "设置根密码",
+        "en-audio": "Initialize root keys"
+    },
     "mainmenu.set_rtc": {
         "en": "Set time",
         "zh": "设置时间",

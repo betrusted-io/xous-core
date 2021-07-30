@@ -28,6 +28,7 @@ mod bcrypt;
 mod implementation {
     use crate::ROOTKEY_MODAL_NAME;
     use crate::PasswordRetentionPolicy;
+    use crate::PasswordType;
 
     pub struct RootKeys {
     }
@@ -45,19 +46,25 @@ mod implementation {
         pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
             log::info!("policy updated: {:?}", policy);
         }
-        pub fn set_plaintext_password(&mut self, pw: &str) {
-            log::info!("got password plaintext: {}", pw);
+        pub fn hash_and_save_password(&mut self, pw: &str) {
+            log::info!("got password plaintext: {}, type: {:?}", pw, pw_type);
         }
-        pub fn try_init_keys(&mut self, _maybe_progress: Option<xous::SID>) {
+        pub fn try_init_keys(&mut self) {
         }
+        pub fn set_ux_password_type(&mut self, _cur_type: PasswordType) {
+        }
+        pub fn is_initialized(&self) -> bool {false}
     }
 }
 
 // enumerate the possible password types dealt with by this manager
+// the discriminant is used to every-so-slightly change the salt going into bcrypt
+// I don't think it hurts; but it also prevents an off-the-shelf "hashcat" run from
+// being used to brute force all the passwords in a single go.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum PasswordType {
-    Boot,
-    Update,
+pub enum PasswordType {
+    Boot = 1,
+    Update = 2,
 }
 
 #[xous::xous_main]
@@ -74,9 +81,10 @@ fn xmain() -> ! {
           1. Shellchat (to originate update test requests)
           2. Password entry UX thread
           3. Key purge timer
-          4. (future) PDDB
+          4. Main menu -> trigger initialization
+          5. (future) PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(3)).expect("can't register server");
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(4)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new(&xns);
@@ -139,7 +147,6 @@ fn xmain() -> ! {
     );
 
     let mut cur_plaintext = String::<256>::new();
-    let mut cur_password_type: Option<PasswordType> = None;
     loop {
         let msg = xous::receive_message(keys_sid).unwrap();
         log::trace!("message: {:?}", msg);
@@ -150,14 +157,18 @@ fn xmain() -> ! {
                 keys.resume();
             }),
             Some(Opcode::TryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
-                keys.try_init_keys(None);
+                keys.try_init_keys();
             }),
-            Some(Opcode::TryInitKeysWithProgress) => msg_scalar_unpack!(msg, s0, s1, s2, s3, {
-                let sid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
-                keys.try_init_keys(Some(sid));
+            Some(Opcode::KeysInitialized) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_initialized() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
             }),
             Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
                 log::debug!("activating password modal");
+                keys.set_ux_password_type(PasswordType::Boot);
                 password_modal.activate();
                 //policy_menu.activate();
             }),
@@ -165,32 +176,21 @@ fn xmain() -> ! {
                 let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
 
-                if let Some(pw_type) = cur_password_type {
-                    keys.hash_and_save_password(plaintext_pw.as_str(), pw_type);
-                    plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                    buf.volatile_clear();
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
 
-                    // now explicitly request a policy decision
-                    xous::send_message(main_cid,
-                        Message::new_scalar(Opcode::RaisePolicyMenu.to_usize().unwrap(), 0, 0, 0, 0)
-                    ).expect("couldn't raise policy menu follow-up dialogue");
-                } else {
-                    plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
-                    buf.volatile_clear();
-                    log::error!("got a password from our UX but didn't expect one. Ignoring it.")
-                }
+                // always explicitly request a policy decision for rootkeys
+                xous::send_message(main_cid,
+                    Message::new_scalar(Opcode::RaisePolicyMenu.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't raise policy menu follow-up dialogue");
             },
             Some(Opcode::RaisePolicyMenu) => {
-                xous::yield_slice();  // let any pending redraws happen before raising this menu
                 log::debug!("raising policy menu");
                 policy_menu.activate();
             }
             Some(Opcode::PasswordPolicy) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
-                if let Some(pw_type) = cur_password_type {
-                    keys.update_policy(FromPrimitive::from_usize(policy_code), pw_type);
-                } else {
-                    log::error!("got a policy from our UX but didn't expect one. Ignoring.")
-                }
+                keys.update_policy(FromPrimitive::from_usize(policy_code));
             }),
 
             // boilerplate Ux handlers

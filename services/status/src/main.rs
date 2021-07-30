@@ -374,6 +374,18 @@ pub fn main_menu_thread() {
     };
     menu.add_item(sleep_item);
 
+    let keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
+    if !keys.is_initialized().unwrap() {
+        let initkeys_item = MenuItem {
+            name: String::<64>::from_str(t!("mainmenu.init_keys", xous::LANG)),
+            action_conn: keys.conn(),
+            action_opcode: keys.get_try_init_keys_op(),
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        };
+        menu.add_item(initkeys_item);
+    }
+
     let setrtc_item = MenuItem {
         name: String::<64>::from_str(t!("mainmenu.set_rtc", xous::LANG)),
         action_conn: rtc.conn(),
