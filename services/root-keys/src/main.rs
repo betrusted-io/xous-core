@@ -78,7 +78,7 @@ fn xmain() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -143,7 +143,7 @@ fn xmain() -> ! {
     let mut rootkeys_modal = Modal::new(
         crate::api::ROOTKEY_MODAL_NAME,
         ActionType::TextEntry(password_action),
-        Some(t!("rootpass.top", xous::LANG)),
+        Some(t!("rootkeys.bootpass", xous::LANG)),
         None,
         GlyphStyle::Small,
         4
@@ -209,12 +209,27 @@ fn xmain() -> ! {
             }),
             Some(Opcode::UxInitRequestPassword) => {
                 password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
-                rootkeys_modal.modify(
-                    Some(ActionType::TextEntry(password_action)),
-                    Some(t!("rootpass.top", xous::LANG)), false,
-                    None, true, None
-                );
-                rootkeys_modal.activate();
+                if let Some(pwt) = keys.get_ux_password_type() {
+                    match pwt {
+                        PasswordType::Boot => {
+                            rootkeys_modal.modify(
+                                Some(ActionType::TextEntry(password_action)),
+                                Some(t!("rootkeys.bootpass", xous::LANG)), false,
+                                None, true, None
+                            );
+                        }
+                        PasswordType::Update => {
+                            rootkeys_modal.modify(
+                                Some(ActionType::TextEntry(password_action)),
+                                Some(t!("rootkeys.updatepass", xous::LANG)), false,
+                                None, true, None
+                            );
+                        }
+                    }
+                    rootkeys_modal.activate();
+                } else {
+                    log::error!("init password ux request without a password type requested!");
+                }
             }
             Some(Opcode::UxInitPasswordReturn) => {
                 // assume:
