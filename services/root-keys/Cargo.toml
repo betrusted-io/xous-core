@@ -30,3 +30,10 @@ utralib = { path = "../../utralib"}
 
 [features]
 default = []
+
+[lib]
+test = true
+
+[[bin]]
+name = "root-keys"
+test = false

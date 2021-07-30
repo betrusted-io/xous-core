@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(all(target_os = "none", not(test)), no_std)]
 
 pub mod api;
 use api::*;
@@ -197,4 +197,49 @@ fn progress_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         }
     }
     xous::destroy_server(sid).unwrap();
+}
+
+#[cfg(test)]
+mod bcrypt;
+
+// some short tests to just confirm we're not totally broken.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hash_with_fixed_salt() {
+        let salt: [u8; 16] = [
+            38, 113, 212, 141, 108, 213, 195, 166, 201, 38, 20, 13, 47, 40, 104, 18,
+        ];
+        let mut output: [u8; 24] = [0; 24];
+
+        let pw = "My S3cre7 P@55w0rd!";
+
+        crate::bcrypt::bcrypt(5,  &salt, pw, &mut output);
+
+        assert_eq!(output, [22, 80, 102, 192, 193, 204, 118, 167, 41, 102, 241, 75, 103, 49, 4, 245, 194, 145, 85, 104, 179, 60, 88, 53]);
+    }
+
+    #[test]
+    fn hash_with_max_len() {
+        let salt: [u8; 16] = [
+            38, 113, 212, 141, 108, 213, 195, 166, 201, 38, 20, 13, 47, 40, 104, 18,
+        ];
+        let mut output: [u8; 24] = [0; 24];
+        let pw = "this is a test of a very long password that is exactly 72 characters lon";
+        crate::bcrypt::bcrypt(10,  &salt, pw, &mut output);
+        assert_eq!(output, [46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129, 237, 116, 61]);
+    }
+
+    #[test]
+    fn hash_with_longer_than_max_len() {
+        let salt: [u8; 16] = [
+            38, 113, 212, 141, 108, 213, 195, 166, 201, 38, 20, 13, 47, 40, 104, 18,
+        ];
+        let mut output: [u8; 24] = [0; 24];
+        let pw = "this is a test of a very long password that is exactly 72 characters long, but this one is even longer";
+        crate::bcrypt::bcrypt(10,  &salt, pw, &mut output);
+        assert_eq!(output, [46, 39, 41, 217, 39, 103, 62, 189, 120, 3, 248, 84, 175, 40, 134, 190, 76, 43, 232, 147, 129, 237, 116, 61]);
+    }
 }

@@ -24,12 +24,33 @@ fn setup(cost: u32, salt: &[u8], key: &[u8]) -> Blowfish {
     state
 }
 
-pub fn bcrypt(cost: u32, salt: &[u8], password: &[u8], output: &mut [u8]) {
+pub fn bcrypt(cost: u32, salt: &[u8], pw: &str, output: &mut [u8]) {
     assert!(salt.len() == 16);
-    assert!(!password.is_empty() && password.len() <= 72);
     assert!(output.len() == 24);
 
-    let state = setup(cost, salt, password);
+    let pw_len = if pw.len() > 72 {
+        log::warn!("password of length {} is truncated to 72 bytes [reason: bcrypt limitation]", pw.len());
+        72
+    } else {
+        pw.len() + 1
+    };
+    let mut plaintext_copy: [u8; 73] = [0; 73];
+    for (src, dst) in pw.bytes().zip(plaintext_copy.iter_mut()) {
+        *dst = src;
+    }
+    plaintext_copy[72] = 0; // always null terminate
+
+    let state = setup(cost, salt, &plaintext_copy[..pw_len]);
+
+    // erase the plaintext copy as soon as we're done with it
+    // an unsafe method is used because the compiler will correctly reason that plaintext_copy goes out of scope
+    // and these writes are never read, and therefore they may be optimized out.
+    let pt_ptr = plaintext_copy.as_mut_ptr();
+    for i in 0..plaintext_copy.len() {
+        unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
     // OrpheanBeholderScryDoubt
     #[allow(clippy::unreadable_literal)]
     let mut ctext = [
@@ -49,6 +70,3 @@ pub fn bcrypt(cost: u32, salt: &[u8], password: &[u8], output: &mut [u8]) {
         output[(i + 1) * 4..][..4].copy_from_slice(&buf);
     }
 }
-
-//// TODO: add at least one test vector to confirm this implementation isn't
-//// totally braindead...!

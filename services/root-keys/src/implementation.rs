@@ -211,18 +211,8 @@ impl RootKeys {
         }
     }
 
-    /// plaintext password is passed as a &str. Any copies internally are destroyed.
+    /// plaintext password is passed as a &str. Any copies internally are destroyed. Caller is responsible for destroying the &str original.
     pub fn hash_and_save_password(&mut self, pw: &str, pw_type: PasswordType) {
-        let pw_len = if pw.len() > 72 {
-            log::warn!("password of length {} is truncated to 72 bytes [bcrypt]", pw.len());
-            72
-        } else {
-            pw.len()
-        };
-        let mut plaintext_copy: [u8; 72] = [0; 72];
-        for (src, dst) in pw.bytes().zip(plaintext_copy.iter_mut()) {
-            *dst = src;
-        }
         let mut hashed_password: [u8; 24] = [0; 24];
         let salt = self.read_key_128(KeyRomLocations::PEPPER);
 
@@ -231,7 +221,7 @@ impl RootKeys {
         // create any extra copies of the plaintext anywhere -- the &[u8] gets dereferenced and mixed up
         // in some key expansion immediately
         let start_time = timer.elapsed_ms();
-        bcrypt(BCRYPT_COST, &salt, &plaintext_copy[..pw_len], &mut hashed_password);
+        bcrypt(BCRYPT_COST, &salt, pw, &mut hashed_password); // note: this internally makes a copy of the password, and destroys it
         let elapsed = timer.elapsed_ms() - start_time;
         log::info!("bcrypt cost: {} time: {}ms", BCRYPT_COST, elapsed); // benchmark to figure out how to set cost parameter
 
@@ -252,14 +242,6 @@ impl RootKeys {
                 }
             }
         }
-
-        // an unsafe method is used because the compiler will correctly reason that plaintext_copy goes out of scope
-        // and these writes are never read, and therefore they may be optimized out.
-        let pt_ptr = plaintext_copy.as_mut_ptr();
-        for i in 0..plaintext_copy.len() {
-            unsafe{pt_ptr.add(i).write_volatile(core::mem::zeroed());}
-        }
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     fn update_progress(&mut self, maybe_cid: Option<xous::CID>, current_step: u32, total_steps: u32, finished: bool) {
