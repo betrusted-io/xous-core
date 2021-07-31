@@ -318,7 +318,8 @@ impl RootKeys {
     }
     pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.cur_password_type}
 
-    pub fn is_initialized(&self) -> bool {
+    pub fn is_initialized(&mut self) -> bool {
+        self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocations::CONFIG as u32);
         let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
         if config & keyrom_config::INITIALIZED.ms(1) != 0 {
             true
@@ -345,7 +346,18 @@ impl RootKeys {
     }
 
     pub fn do_key_init(&mut self) {
-        
+        // here:
+        // - generate signing private key (encrypted with update password)
+        // - generate rootkey (encrypted with boot password)
+        // - generate signing public key
+        // - set the init bit
+        // - sign the loader
+        // - sign the kernel
+        // - compute the patch set for the FPGA bitstream
+        // - do the patch (whatever that means - gotta deal with the AES key, HMAC etc.)
+        // - verify the FPGA image hmac
+        // - sign the FPGA image
+        // - get ready for a reboot
     }
 
     pub fn finish_key_init(&mut self) {

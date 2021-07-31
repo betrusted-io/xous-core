@@ -139,6 +139,10 @@ fn xmain() -> ! {
     };
     let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
     dismiss_modal_action.set_is_password(true);
+    let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+        0, 100, 10, Some("%"), 0, true, true
+    );
+    progress_action.set_is_password(true);
 
     let mut rootkeys_modal = Modal::new(
         crate::api::ROOTKEY_MODAL_NAME,
@@ -253,16 +257,29 @@ fn xmain() -> ! {
                         PasswordType::Update => {
                             keys.set_ux_password_type(None);
                             // now show the init wait note...
-                            dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
                             rootkeys_modal.modify(
-                                Some(ActionType::Notification(dismiss_modal_action)),
+                                Some(ActionType::Slider(progress_action)),
                                 Some(t!("rootkeys.setup_wait", xous::LANG)), false,
                                 None, true, None);
                             rootkeys_modal.activate();
 
-                            xous:: yield_slice(); // give some time to the GAM to render
+                            xous::yield_slice(); // give some time to the GAM to render
 
                             keys.do_key_init();
+                            log::info!("trying out progress bar");
+                            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                            for i in 1..11 {
+                                log::info!("progress: {}", i);
+                                progress_action.set_state(i * 10);
+                                rootkeys_modal.modify(
+                                    Some(ActionType::Slider(progress_action)),
+                                    Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                                    None, true, None);
+                                    rootkeys_modal.redraw();
+                                rootkeys_modal.gam.redraw();
+                                xous::yield_slice();
+                                ticktimer.sleep_ms(3000);
+                            }
                         }
                     }
                 } else {

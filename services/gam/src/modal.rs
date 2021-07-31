@@ -47,6 +47,7 @@ General form for modals:
    - slider - left/right moves the slider, enter/select closes the modal
 */
 use enum_dispatch::enum_dispatch;
+use log_server::init;
 use xous::MessageEnvelope;
 use xous::send_message;
 
@@ -788,9 +789,7 @@ impl ActionApi for Notification {
         } else {
             modal.canvas_width - modal.margin * 2
         };
-        log::info!("tw: {}", textwidth);
         let offset = (modal.canvas_width - textwidth) / 2;
-        log::info!("offset2: {}", offset);
         tv.bounds_computed = None;
         tv.bounds_hint = TextBounds::BoundingBox(Rectangle::new(
             Point::new(offset, at_height + modal.margin * 2),
@@ -834,21 +833,195 @@ pub struct Slider {
     pub action_conn: xous::CID,
     pub action_opcode: u32,
     pub action_payload: u32,
+    pub is_progressbar: bool,
+    pub is_password: bool,
+    pub show_legend: bool,
+    pub units: xous_ipc::String::<8>,
+}
+impl Slider {
+    pub fn new(action_conn: xous::CID, action_opcode: u32, min: u32, max: u32, step: u32, units: Option<&str>, initial_setting: u32, is_progressbar: bool, show_legend: bool) -> Self {
+        let checked_units = if let Some(unit_str) = units {
+            if unit_str.len() < 8 {
+                String::<8>::from_str(unit_str)
+            } else {
+                log::error!("Unit string must be less than 8 *bytes* long (are you using unicode?), ignoring length {} string", unit_str.len());
+                String::<8>::new()
+            }
+        } else {
+            String::<8>::new() // just populate with a blank string, easier than checking Some/None later on everywhere
+        };
+
+        Slider {
+            action_conn,
+            action_opcode,
+            is_password: false,
+            is_progressbar,
+            min,
+            max,
+            step,
+            action_payload: initial_setting,
+            units: checked_units,
+            show_legend,
+        }
+    }
+    pub fn set_is_password(&mut self, setting: bool) {
+        // this will cause text to be inverted. Untrusted entities can try to set this,
+        // but the GAM should defeat this for dialog boxes outside of the trusted boot
+        // set because they can't achieve a high enough trust level.
+        self.is_password = true;
+    }
+    pub fn set_state(&mut self, state: u32) {
+        if state < self.min {
+            self.action_payload = self.min;
+        } else if state > self.max {
+            self.action_payload = self.max;
+        } else {
+            self.action_payload = state;
+        }
+    }
 }
 impl ActionApi for Slider {
     fn height(&self, glyph_height: i16, margin: i16) -> i16 {
         /*
+        margin
             min            max    <- glyph height
              -----O----------     <- glyph height
-                 [ Okay ]         <- glyph height
+                 legend
+        margin
         */
-        glyph_height * 3 + margin * 2
+        if self.show_legend {
+            glyph_height * 3 + margin * 2
+        } else {
+            glyph_height * 2 + margin * 2
+        }
     }
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
+
+    fn redraw(&self, at_height: i16, modal: &Modal) {
+        let color = if self.is_password {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        };
+        let fill_color = if self.is_password {
+            PixelColor::Dark
+        } else {
+            PixelColor::Light
+        };
+
+        // prime a textview with the correct general style parameters
+        let mut tv = TextView::new(
+            modal.canvas,
+            TextBounds::BoundingBox(Rectangle::new_coords(0, 0, 1, 1))
+        );
+        tv.ellipsis = true;
+        tv.style = modal.style;
+        tv.invert = self.is_password;
+        tv.draw_border= false;
+        tv.margin = Point::new(0, 0,);
+        tv.insertion = None;
+
+        let maxwidth = (modal.canvas_width - modal.margin * 2) as u16;
+        if self.show_legend {
+            /* // min/max doesn't look good, leave it out for now
+            // render min
+            tv.bounds_computed = None;
+            tv.bounds_hint = TextBounds::GrowableFromTl(
+                Point::new(modal.margin, at_height + modal.margin),
+                maxwidth
+            );
+            tv.text.clear();
+            write!(tv, "{}{}", self.min, self.units.to_str()).unwrap();
+            modal.gam.post_textview(&mut tv).expect("couldn't post tv");
+            // render max
+            tv.bounds_computed = None;
+            tv.bounds_hint = TextBounds::GrowableFromBr(
+                Point::new(modal.canvas_width - modal.margin, at_height + modal.margin + modal.line_height),
+                maxwidth
+            );
+            tv.text.clear();
+            write!(tv, "{}{}", self.max, self.units.to_str()).unwrap();
+            modal.gam.post_textview(&mut tv).expect("couldn't post tv");
+            */
+            // estimate width of current setting
+            tv.bounds_computed = None;
+            tv.bounds_hint = TextBounds::GrowableFromTl(
+                Point::new(0, 0),
+                maxwidth
+            );
+            write!(tv, "{}{}", self.action_payload, self.units.to_str()).unwrap();
+            modal.gam.bounds_compute_textview(&mut tv).expect("couldn't simulate text size");
+            let textwidth = if let Some(bounds) = tv.bounds_computed {
+                bounds.br.x - bounds.tl.x
+            } else {
+                maxwidth as i16
+            };
+            let offset = (modal.canvas_width - textwidth) / 2;
+            // render current setting
+            tv.bounds_computed = None;
+            tv.bounds_hint = TextBounds::GrowableFromTl(
+                Point::new(offset, at_height + modal.margin + modal.line_height*2 + modal.margin),
+                maxwidth
+            );
+            modal.gam.post_textview(&mut tv).expect("couldn't post tv");
+        }
+
+        // the actual slider
+        let outer_rect = Rectangle::new_with_style(
+            Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
+            Point::new(modal.canvas_width - modal.margin * 2, modal.margin + modal.line_height * 2 + at_height),
+            DrawStyle::new(fill_color, color, 2)
+        );
+        modal.gam.draw_rectangle(modal.canvas, outer_rect).expect("couldn't draw outer rectangle");
+        let total_width = modal.canvas_width - modal.margin * 4;
+        let slider_point = (((modal.canvas_width - modal.margin * 4) as u32 * (self.action_payload - self.min)) / (self.max - self.min)) as i16;
+        let inner_rect = Rectangle::new_with_style(
+            Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
+            Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 2 + at_height),
+            DrawStyle::new(color, color, 1)
+        );
+        modal.gam.draw_rectangle(modal.canvas, inner_rect).expect("couldn't draw inner rectangle");
+    }
+    fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {
+        log::trace!("key_action: {}", k);
+        if !self.is_progressbar {
+            match k {
+                '←' => {
+                    if self.action_payload >= self.min + self.step {
+                        self.action_payload -= self.step;
+                    } else if self.action_payload >= self.min && self.action_payload < self.min + self.step {
+                        self.action_payload = self.min
+                    }
+                },
+                '→' => {
+                    if self.action_payload <= self.max - self.step {
+                        self.action_payload += self.step;
+                    } else if self.action_payload < self.max && self.action_payload > self.max - self.step {
+                        self.action_payload = self.max
+                    }
+                },
+                '\u{0}' => {
+                    // ignore null messages
+                }
+                '∴' | '\u{d}' => {
+                    send_message(self.action_conn,
+                        xous::Message::new_scalar(self.action_opcode as usize, self.action_payload as usize, 0, 0, 0)).expect("couldn't pass on action payload");
+                    return(None, true)
+                }
+                _ => {
+                    // ignore all other messages
+                }
+            }
+            (None, false)
+        } else {
+            if k == '🛑' { // use the "stop" emoji as a signal that we should close the progress bar
+                (None, true)
+            } else {
+                (None, false)
+            }
+        }
+    }
 }
-
-
-
 
 
 #[enum_dispatch]
@@ -891,6 +1064,12 @@ pub struct Modal<'a> {
     pub style: GlyphStyle,
     pub helper_data: Option<Buffer<'a>>,
     pub name: String::<128>,
+
+    // optimize draw time
+    top_dirty: bool,
+    top_memoized_height: Option<i16>,
+    bot_dirty: bool,
+    bot_memoized_height: Option<i16>,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -1047,6 +1226,10 @@ impl<'a> Modal<'a> {
             style,
             helper_data: None,
             name: String::<128>::from_str(name),
+            top_dirty: true,
+            bot_dirty: true,
+            top_memoized_height: None,
+            bot_memoized_height: None,
         };
         recompute_canvas(&mut modal, action, top_text, bot_text, style);
         modal
@@ -1073,33 +1256,60 @@ impl<'a> Modal<'a> {
         xous::create_thread_3(crate::forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
     }
 
-    pub fn redraw(&self) {
+    pub fn redraw(&mut self) {
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
+        let do_redraw = self.top_dirty || self.bot_dirty;
         // draw the outer border
-        self.gam.draw_rounded_rectangle(self.canvas,
-            RoundedRectangle::new(
-                Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                    DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 3)
-                ), 5
-            )).unwrap();
+        if do_redraw {
+            self.gam.draw_rounded_rectangle(self.canvas,
+                RoundedRectangle::new(
+                    Rectangle::new_with_style(Point::new(0, 0), canvas_size,
+                        DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 3)
+                    ), 5
+                )).unwrap();
+        }
 
         let mut cur_height = self.margin;
         if let Some(mut tv) = self.top_text {
-            self.gam.post_textview(&mut tv).expect("couldn't draw text");
-            if let Some(bounds) = tv.bounds_computed {
-                cur_height += bounds.br.y - bounds.tl.y;
+            if do_redraw {
+                self.gam.post_textview(&mut tv).expect("couldn't draw text");
+                if let Some(bounds) = tv.bounds_computed {
+                    cur_height += bounds.br.y - bounds.tl.y;
+                    self.top_memoized_height = Some(bounds.br.y - bounds.tl.y);
+                }
+                self.top_dirty = false;
+            } else {
+                cur_height += self.top_memoized_height.expect("internal error: memoization didn't work correctly");
             }
+        } else {
+            self.top_dirty = false;
         }
 
+        let action_height = self.action.height(self.line_height, self.margin);
+        if !do_redraw {
+            // the action area wasn't blanked, so blank it as prep for the action redraw
+            self.gam.draw_rectangle(self.canvas,
+            Rectangle::new_with_style(Point::new(0, cur_height), Point::new(canvas_size.x, cur_height + action_height),
+                DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 2)
+            )).unwrap();
+        }
         self.action.redraw(cur_height, &self);
-        cur_height += self.action.height(self.line_height, self.margin);
+        cur_height += action_height;
 
         if let Some(mut tv) = self.bot_text {
-            self.gam.post_textview(&mut tv).expect("couldn't draw text");
-            if let Some(bounds) = tv.bounds_computed {
-                cur_height += bounds.br.y - bounds.tl.y;
+            if do_redraw {
+                self.gam.post_textview(&mut tv).expect("couldn't draw text");
+                if let Some(bounds) = tv.bounds_computed {
+                    cur_height += bounds.br.y - bounds.tl.y;
+                    self.bot_memoized_height = Some(bounds.br.y - bounds.tl.y);
+                }
+                self.bot_dirty = false;
+            } else {
+                cur_height += self.bot_memoized_height.expect("internal error: memoization didn't work correctly");
             }
+        } else {
+            self.bot_dirty = false;
         }
         log::trace!("total height: {}", cur_height);
         self.gam.redraw().unwrap();
@@ -1139,10 +1349,18 @@ impl<'a> Modal<'a> {
         };
 
         if remove_top {
+            self.top_dirty = true;
             self.top_text = None;
         }
         if remove_bot {
+            self.bot_dirty = true;
             self.bot_text = None;
+        }
+        if update_top_text.is_some() {
+            self.top_dirty = true;
+        }
+        if update_bot_text.is_some() {
+            self.bot_dirty = true;
         }
 
         let mut top_tv_temp = String::<3072>::new(); // size matches that used in TextView
