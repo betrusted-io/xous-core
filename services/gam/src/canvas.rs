@@ -148,6 +148,7 @@ impl Eq for Canvas {}
 pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> bool {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
+    let mut defaced = false;  // this is set if any drawing actually happens
     for (_, c) in canvases.iter() {
         if c.needs_defacing() {
             needs_defacing = true;
@@ -217,6 +218,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvI
                                 DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1)),
                                 clip_rect).unwrap();
                     }
+                    defaced = true;
                 }
 
                 // indicate that the defacement has happened to the canvas state machine
@@ -224,7 +226,7 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvI
             }
         }
     }
-    needs_defacing
+    defaced
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen

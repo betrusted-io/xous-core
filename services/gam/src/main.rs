@@ -110,6 +110,8 @@ struct ContextManager {
     imef_active: bool,
     kbd: keyboard::Keyboard,
     main_menu_app_token: Option<[u32; 4]>, // app_token of the main menu, if it has been registered
+    /// for internal generation of deface states
+    pub trng: trng::Trng,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -129,6 +131,7 @@ impl ContextManager {
             imef_active: false,
             kbd,
             main_menu_app_token: None,
+            trng: trng::Trng::new(&xns).expect("couldn't connect to trng"),
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -428,6 +431,8 @@ impl ContextManager {
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
             }
+            // run the defacement before we redraw all the canvases
+            deface(gfx, &self.trng, canvases);
             self.redraw().expect("couldn't redraw the currently focused app");
         }
     }
@@ -705,7 +710,9 @@ fn xmain() -> ! {
                         last_time = elapsed_time;
 
                         if deface(&gfx, &trng, &mut canvases) {
-                            // redraw the trusted foreground apps after a defacement
+                            // we keep this here because it's a fail-safe in case prior routines missed an edge case. shoot out a warning noting the issue.
+                            log::warn!("canvases were not defaced in order. running a defacement, but this could result in drawing optimizations failing.");
+                            // try to redraw the trusted foreground apps after a defacement
                             context_mgr.redraw().expect("couldn't redraw after defacement");
                         }
                         log::trace!("flushing...");
