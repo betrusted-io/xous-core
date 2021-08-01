@@ -5,9 +5,10 @@
 // in our use case.
 
 // Cost constants
+#[allow(dead_code)]
 const MIN_COST: u32 = 4;
+#[allow(dead_code)]
 const MAX_COST: u32 = 31;
-pub const DEFAULT_COST: u32 = 12;
 
 use blowfish::Blowfish;
 

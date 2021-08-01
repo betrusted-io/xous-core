@@ -625,7 +625,6 @@ fn xmain() -> ! {
         Opcode::UxRawkeys.to_u32().unwrap(),
         Opcode::UxQuit.to_u32().unwrap()
     );
-    let gam = gam::Gam::new(&xns).expect("couldn't connect to GAM");
     let mut secs: u8;
     let mut mins: u8 = 0;
     let mut hours: u8 = 0;

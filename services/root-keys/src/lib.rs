@@ -4,7 +4,7 @@
 pub mod api;
 use api::*;
 
-use xous::{CID, msg_scalar_unpack, send_message, Message};
+use xous::{CID, send_message, Message};
 use num_traits::*;
 
 pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, consts::U16};
@@ -30,7 +30,6 @@ pub enum ImageType {
 #[derive(Debug)] // there is no confidential information in the external structure; it's safe to Debug it
 pub struct RootKeys {
     conn: CID,
-    progress_sid: Option<xous::SID>,
     // index of the key to use for the next encrypt/decrypt ops
     key_index: Option<u8>,
 }
@@ -40,7 +39,6 @@ impl RootKeys {
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("Can't connect to Keys server");
         Ok(RootKeys {
             conn,
-            progress_sid: None,
             key_index: None,
         })
     }
@@ -49,27 +47,15 @@ impl RootKeys {
         Opcode::UxTryInitKeys.to_u32().unwrap()
     }
 
-    fn ensure_progress_server(&mut self) -> xous::SID {
-        if let Some(sid) = self.progress_sid {
-            sid
-        } else {
-            let sid = xous::create_server().unwrap();
-            self.progress_sid = Some(sid);
-            let sid_tuple = sid.to_u32();
-            xous::create_thread_4(progress_cb_server, sid_tuple.0 as usize, sid_tuple.1 as usize, sid_tuple.2 as usize, sid_tuple.3 as usize).unwrap();
-            sid
-        }
-    }
-
     /// this function causes the staging gateware to be provisioned with a copy of our keys,
     /// while being encrypted to the AES key indicated inside the KEYROM
-    pub fn provision_and_encrypt_staging_gateware(&mut self, progress: Option<fn(ProgressReport)>) -> Result<(), xous::Error> {
+    pub fn provision_and_encrypt_staging_gateware(&mut self) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
     /// this function causes the staging gateware to be copied to the boot gateware region.
     /// it can report progress of the operation by sending a message to an optional ScalarHook
-    pub fn copy_staging_to_boot_gateware(&mut self, progress: Option<fn(ProgressReport)>) -> Result<(), xous::Error> {
+    pub fn copy_staging_to_boot_gateware(&mut self) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
@@ -84,7 +70,7 @@ impl RootKeys {
     /// 7. suspends the device with auto-resume so that the new gateware is in effect
     /// 8. reads back the eFuse key from the KEYROM to confirm everything went as planned, compares to previously computed result
     /// 9. clears the eFuse key from RAM.
-    pub fn seal_boot_gateware(&mut self, progress: Option<fn(ProgressReport)>) -> Result<(), xous::Error> {
+    pub fn seal_boot_gateware(&mut self) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
@@ -141,14 +127,6 @@ impl Drop for RootKeys {
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
             unsafe{xous::disconnect(self.conn).unwrap();}
         }
-
-        // de-allocate our progress responder server, if it existed
-        if let Some(sid) = self.progress_sid {
-            let cid = xous::connect(sid).unwrap();
-            xous::send_message(cid,
-                Message::new_scalar(ProgressCallback::Drop.to_usize().unwrap(), 0, 0, 0, 0)).unwrap();
-            unsafe{xous::disconnect(cid).unwrap();}
-        }
     }
 }
 
@@ -174,34 +152,6 @@ impl BlockDecrypt for RootKeys {
     fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
 
     }
-}
-
-/// handles progress messages from root-key server, in the library user's process space.
-static mut PROGRESS_CB: Option<fn(ProgressReport)> = None;
-fn progress_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
-    let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    loop {
-        let msg = xous::receive_message(sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(ProgressCallback::Update) => msg_scalar_unpack!(msg, current, total, finished, _, {
-                let report = ProgressReport {
-                    current_step: current as u32,
-                    total_steps: total as u32,
-                    finished: if finished != 0 {true} else {false}
-                };
-                unsafe {
-                    if let Some (cb) = PROGRESS_CB {
-                        cb(report)
-                    }
-                }
-            }),
-            Some(ProgressCallback::Drop) => {
-                break; // this exits the loop and kills the thread
-            }
-            None => (),
-        }
-    }
-    xous::destroy_server(sid).unwrap();
 }
 
 #[cfg(test)]

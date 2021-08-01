@@ -7,6 +7,8 @@ use num_traits::*;
 use crate::bcrypt::*;
 use crate::PasswordType;
 
+use gam::modal::{Modal, Slider};
+
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
 
@@ -222,7 +224,8 @@ impl RootKeys {
         self.cur_password_type = None;
     }
 
-    /// plaintext password is passed as a &str. Any copies internally are destroyed. Caller is responsible for destroying the &str original.
+    /// Plaintext password is passed as a &str. Any copies internally are destroyed. Caller is responsible for destroying the &str original.
+    /// Performs a bcrypt hash of the password, with the currently set salt; does not store the plaintext after exit.
     pub fn hash_and_save_password(&mut self, pw: &str) {
         let pw_type = if let Some(cur_type) = self.cur_password_type {
             cur_type
@@ -263,15 +266,7 @@ impl RootKeys {
         }
     }
 
-    fn update_progress(&mut self, maybe_cid: Option<xous::CID>, current_step: u32, total_steps: u32, finished: bool) {
-        if let Some(cid) = maybe_cid {
-            xous::send_message(cid, xous::Message::new_scalar(ProgressCallback::Update.to_usize().unwrap(),
-                current_step as usize, total_steps as usize, if finished {1} else {0}, 0)
-            ).expect("couldn't send a progress report message");
-        }
-    }
-
-    // reads a 256-bit key at a given index offset
+    /// Reads a 256-bit key at a given index offset
     fn read_key_256(&mut self, index: u8) -> [u8; 32] {
         let mut key: [u8; 32] = [0; 32];
         for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
@@ -283,6 +278,7 @@ impl RootKeys {
         }
         key
     }
+    /// Reads a 128-bit key at a given index offset
     fn read_key_128(&mut self, index: u8) -> [u8; 16] {
         let mut key: [u8; 16] = [0; 16];
         for (addr, word) in key.chunks_mut(4).into_iter().enumerate() {
@@ -294,8 +290,11 @@ impl RootKeys {
         }
         key
     }
-    // this routine handles the special-case of being unitialized: in that case, we need to get
-    // salt from a staging area, and not our KEYROM
+
+    /// Returns the `salt` needed for the `bcrypt` routine.
+    /// This routine handles the special-case of being unitialized: in that case, we need to get
+    /// salt from a staging area, and not our KEYROM. However, `setup_key_init` must be called
+    /// first to ensure that the staging area has a valid salt.
     fn get_salt(&mut self) -> [u8; 16] {
         if !self.is_initialized() {
             // we're not initialized, use the salt that should already be in the staging area
@@ -313,9 +312,11 @@ impl RootKeys {
         }
     }
 
+    /// Called by the UX layer to track which password we're currently requesting
     pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
         self.cur_password_type = cur_type;
     }
+    /// Called by the UX layer to check which password request is in progress
     pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.cur_password_type}
 
     pub fn is_initialized(&mut self) -> bool {
@@ -328,6 +329,8 @@ impl RootKeys {
         }
     }
 
+    /// Called by the UX layer to set up a key init run. It disables suspend/resume for the duration
+    /// of the run, and also sets up some missing fields of KEYROM necessary to encrypt passwords.
     pub fn setup_key_init(&mut self) {
         // block suspend/resume ops during security-sensitive operations
         self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
@@ -345,21 +348,37 @@ impl RootKeys {
         }
     }
 
-    pub fn do_key_init(&mut self) {
-        // here:
-        // - generate signing private key (encrypted with update password)
-        // - generate rootkey (encrypted with boot password)
-        // - generate signing public key
-        // - set the init bit
-        // - sign the loader
-        // - sign the kernel
-        // - compute the patch set for the FPGA bitstream
-        // - do the patch (whatever that means - gotta deal with the AES key, HMAC etc.)
-        // - verify the FPGA image hmac
-        // - sign the FPGA image
-        // - get ready for a reboot
-    }
+    /// Core of the key initialization routine. Requires a `progress_modal` dialog box that has been set
+    /// up with the appropriate notification messages by the UX layer, and a `Slider` type action which
+    /// is used to report the progress of the initialization routine. We assume the `Slider` box is set
+    /// up to report progress on a range of 0-100%.
+    ///
+    /// This routine dispatches the following activities:
+    /// - generate signing private key (encrypted with update password)
+    /// - generate rootkey (encrypted with boot password)
+    /// - generate signing public key
+    /// - set the init bit
+    /// - sign the loader
+    /// - sign the kernel
+    /// - compute the patch set for the FPGA bitstream
+    /// - do the patch (whatever that means - gotta deal with the AES key, HMAC etc.)
+    /// - verify the FPGA image hmac
+    /// - sign the FPGA image
+    /// - get ready for a reboot
+    ///   - returns true if we should reboot (everything succeeded)
+    ///   - returns false if we had an error condition (don't reboot)
+    pub fn do_key_init(&mut self, progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+        // kick the progress bar to indicate we've entered the routine
+        update_progress(1, progress_modal, progress_action);
 
+
+
+        // finalize the progress bar on exit -- always leave at 100%
+        update_progress(100, progress_modal, progress_action);
+        true
+    }
+    /// Called by the UX layer at the epilogue of the initialization run. Allows suspend/resume to resume,
+    /// and zero-izes any sensitive data that was created in the process.
     pub fn finish_key_init(&mut self) {
         let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
         // zeroize the RAM-backed data
@@ -369,4 +388,15 @@ impl RootKeys {
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }
+}
+
+fn update_progress(new_state: u32, progress_modal: &mut Modal, progress_action: &mut Slider) {
+    log::info!("progress: {}", new_state);
+    progress_action.set_state(new_state);
+    progress_modal.modify(
+        Some(gam::modal::ActionType::Slider(*progress_action)),
+        None, false, None, false, None);
+    progress_modal.redraw(); // stage the modal box pixels to the back buffer
+    progress_modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
+    xous::yield_slice(); // this gives time for the GAM to do the sending
 }

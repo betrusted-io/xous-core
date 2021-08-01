@@ -31,18 +31,6 @@ pub(crate) enum Opcode {
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum ProgressCallback {
-    Update,
-    Drop,
-}
-
-pub struct ProgressReport {
-    pub current_step: u32,
-    pub total_steps: u32,
-    pub finished: bool,
-}
-
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum PasswordRetentionPolicy {
     AlwaysKeep,
     EraseOnSuspend,

@@ -48,8 +48,6 @@ General form for modals:
    - slider - left/right moves the slider, enter/select closes the modal
 */
 use enum_dispatch::enum_dispatch;
-use log_server::init;
-use xous::MessageEnvelope;
 use xous::send_message;
 
 use crate::api::*;
@@ -760,7 +758,7 @@ impl Notification {
         // this will cause text to be inverted. Untrusted entities can try to set this,
         // but the GAM should defeat this for dialog boxes outside of the trusted boot
         // set because they can't achieve a high enough trust level.
-        self.is_password = true;
+        self.is_password = setting;
     }
 }
 impl ActionApi for Notification {
@@ -872,7 +870,7 @@ impl Slider {
         // this will cause text to be inverted. Untrusted entities can try to set this,
         // but the GAM should defeat this for dialog boxes outside of the trusted boot
         // set because they can't achieve a high enough trust level.
-        self.is_password = true;
+        self.is_password = setting;
     }
     pub fn set_state(&mut self, state: u32) {
         if state < self.min {
@@ -978,7 +976,7 @@ impl ActionApi for Slider {
         );
         modal.gam.draw_rectangle(modal.canvas, outer_rect).expect("couldn't draw outer rectangle");
         let total_width = modal.canvas_width - modal.margin * 4;
-        let slider_point = (((modal.canvas_width - modal.margin * 4) as u32 * (self.action_payload - self.min)) / (self.max - self.min)) as i16;
+        let slider_point = (total_width * (self.action_payload - self.min) as i16) / (self.max - self.min) as i16;
         let inner_rect = Rectangle::new_with_style(
             Point::new(modal.margin * 2, modal.margin + modal.line_height + at_height),
             Point::new(modal.margin * 2 + slider_point, modal.margin + modal.line_height * 2 + at_height),

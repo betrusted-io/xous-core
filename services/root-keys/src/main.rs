@@ -13,8 +13,6 @@ use gam::menu::*;
 
 use locales::t;
 
-use core::fmt::Write;
-
 #[cfg(target_os = "none")]
 mod implementation;
 #[cfg(target_os = "none")]
@@ -29,6 +27,7 @@ mod implementation {
     use crate::ROOTKEY_MODAL_NAME;
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
+    use gam::modal::{Modal, Slider};
 
     pub struct RootKeys {
         password_type: Option<PasswordType>,
@@ -51,14 +50,26 @@ mod implementation {
         pub fn hash_and_save_password(&mut self, pw: &str) {
             log::info!("got password plaintext: {}", pw);
         }
-        pub fn try_init_keys(&mut self) {
-        }
         pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
             self.password_type = cur_type;
         }
         pub fn is_initialized(&self) -> bool {false}
         pub fn setup_key_init(&mut self) {}
-        pub fn do_key_init(&mut self) {}
+        pub fn do_key_init(&mut self,progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+            for i in 1..10 {
+                log::info!("fake progress: {}", i * 10);
+                progress_action.set_state(i);
+                progress_modal.modify(
+                    Some(gam::modal::ActionType::Slider(*progress_action)),
+                    None, false, None, false, None);
+                progress_modal.redraw(); // stage the modal box pixels to the back buffer
+                progress_modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
+                xous::yield_slice(); // this gives time for the GAM to do the sending
+                ticktimer.sleep_ms(2000).unwrap();
+            }
+            true
+        }
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
     }
 }
@@ -158,7 +169,6 @@ fn xmain() -> ! {
         Opcode::ModalDrop.to_u32().unwrap(),
     );
 
-    let mut cur_plaintext = String::<256>::new();
     loop {
         let msg = xous::receive_message(keys_sid).unwrap();
         log::trace!("message: {:?}", msg);
@@ -265,20 +275,16 @@ fn xmain() -> ! {
 
                             xous::yield_slice(); // give some time to the GAM to render
 
-                            keys.do_key_init();
-                            log::info!("trying out progress bar");
-                            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
-                            for i in 1..11 {
-                                log::info!("progress: {}", i);
-                                progress_action.set_state(i * 10);
-                                rootkeys_modal.modify(
-                                    Some(ActionType::Slider(progress_action)),
-                                    Some(t!("rootkeys.setup_wait", xous::LANG)), false,
-                                    None, true, None);
-                                    rootkeys_modal.redraw();
-                                rootkeys_modal.gam.redraw();
-                                xous::yield_slice();
-                                ticktimer.sleep_ms(3000);
+                            // this routine will update the rootkeys_modal with the current Ux state
+                            let success = keys.do_key_init(&mut rootkeys_modal, &mut progress_action);
+
+                            // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                            rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                            // at this point, we may want to pop up a modal indicating we are going to reboot?
+                            // we also need to include a command that does the reboot.
+                            if success {
+                                // do a reboot
                             }
                         }
                     }
