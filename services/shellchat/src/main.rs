@@ -1,6 +1,34 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+/*! Detailed docs are parked under Modules/cmds "Shell Chat" below
+
+To make your own command, copy the `ver.rs` template (for an example with argument parsing),
+or snag the very simple echo template below, and put
+it in the services/shellchat/src/cmds/ directory:
+
+```Rust
+use crate::{ShellCmdApi, CommonEnv};
+use xous_ipc::String;
+
+#[derive(Debug)]
+pub struct Echo {
+}
+
+impl<'a> ShellCmdApi<'a> for Echo {
+    cmd_api!(echo); // inserts boilerplate for command API
+
+    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        Ok(Some(rest))
+    }
+}
+```
+
+Once you've added your command to the directory, go to the `cmds.rs` file, and follow
+the four-step instructions embedded within the file, starting around line 40.
+
+Check for more detailed docs under Modules/cmds "Shell Chat" below
+*/
 use log::info;
 
 use core::fmt::Write;
@@ -12,6 +40,7 @@ use xous_ipc::{String, Buffer};
 
 use heapless::spsc::Queue;
 
+#[doc = include_str!("../README.md")]
 mod cmds;
 use cmds::*;
 

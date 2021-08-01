@@ -1,5 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+//! Detailed docs are parked under Structs/Gam down below
+
 pub mod api;
 pub use api::*;
 
@@ -22,9 +24,12 @@ use num_traits::*;
 use ime_plugin_api::ImefCallback;
 
 
+#[doc = include_str!("../README.md")]
 #[derive(Debug)]
 pub struct Gam {
+    /// The Gam structure exists on the client-side. This is the connection ID to the GAM server, local to this client.
     conn: xous::CID,
+    /// A SID for callbacks from the GAM (e.g. redraw requests)
     callback_sid: Option<xous::SID>,
 }
 impl Gam {

@@ -1,5 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+//! Detailed docs are parked under Structs/XousNames down below
+
 pub mod api;
 
 use core::fmt::Write;
@@ -7,6 +9,7 @@ use api::Disconnect;
 use xous_ipc::{String, Buffer};
 use num_traits::ToPrimitive;
 
+#[doc = include_str!("../README.md")]
 #[derive(Debug)]
 pub struct XousNames {
     conn: xous::CID,

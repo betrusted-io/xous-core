@@ -1,3 +1,4 @@
+//! The main API entry point is the `Modal` struct. Click into the struct for more details.
 
 /*
   design ideas
@@ -67,6 +68,7 @@ use locales::t;
 
 pub const MAX_ITEMS: usize = 8;
 
+/// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct ItemName(String::<64>);
 impl ItemName {
@@ -77,14 +79,16 @@ impl ItemName {
         self.0.as_str().expect("couldn't convert item into string")
     }
 }
+
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone, Eq, PartialEq)]
 pub struct TextEntryPayload(pub String::<256>);
 impl TextEntryPayload {
     pub fn new() -> Self {
         TextEntryPayload(String::<256>::new())
     }
+    /// Ensures that 0's are written to the storage of this struct, and not optimized out; important for password fields.
     pub fn volatile_clear(&mut self) {
-        self.0.volatile_clear(); // volatile_clear() ensures that 0's are written and not optimized out; important for password fields
+        self.0.volatile_clear();
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str().expect("couldn't convert textentry string")

@@ -1,3 +1,5 @@
+//! The main API entry point is the `Menu` struct. Click into the struct for more details.
+
 use crate::api::*;
 use crate::Gam;
 use crate::{MsgForwarder, forwarding_thread};

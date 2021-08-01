@@ -1,4 +1,5 @@
 #![cfg_attr(all(target_os = "none", not(test)), no_std)]
+//! Detailed docs are parked under Structs/RootKeys down below
 
 pub mod api;
 use api::*;
@@ -25,6 +26,7 @@ pub enum ImageType {
     Kernel,
 }
 
+#[doc = include_str!("../README.md")]
 #[derive(Debug)] // there is no confidential information in the external structure; it's safe to Debug it
 pub struct RootKeys {
     conn: CID,
