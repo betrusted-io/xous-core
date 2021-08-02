@@ -54,9 +54,9 @@ sysbus SilenceRange <0xF0023000, 0xF0023FFF>
 macro reset
 """
     sysbus LoadELF @../loader/target/riscv32imac-unknown-none-elf/release/loader
-    sysbus LoadBinary @../target/riscv32imac-unknown-none-elf/release/xous.img 0x40800000
+    sysbus LoadBinary @../target/riscv32imac-unknown-none-elf/release/xous.img 0x20980000
     # Set $a0 to point at the args binary
-    cpu SetRegisterUnsafe 10 0x40800000
+    cpu SetRegisterUnsafe 10 0x20980000
 """
 
 # Connect the serial port to an Ethernet port
