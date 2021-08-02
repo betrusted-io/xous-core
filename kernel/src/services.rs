@@ -118,7 +118,7 @@ pub struct Process {
     previous_thread: TID,
 
     /// When an exception is hit, the kernel will switch to this Thread.
-    exception_thread: Option<TID>,
+    exception_handler: Option<(usize /* handler */, usize /* Stack */)>,
 }
 
 impl Default for Process {
@@ -254,7 +254,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         current_thread: 0 as TID,
         previous_thread: INITIAL_TID as TID,
-        exception_thread: None,
+        exception_handler: None,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
@@ -665,9 +665,7 @@ impl SystemServices {
             ProcessState::Exception(x) => {
                 process.activate()?;
                 let mut p = crate::arch::process::Process::current();
-                let tid = process
-                    .exception_thread
-                    .expect("process is in exception state with no handler");
+                let tid = crate::arch::process::EXCEPTION_TID;
                 p.set_thread(tid)?;
                 process.current_thread = tid as _;
                 ProcessState::Exception(x)
@@ -910,7 +908,7 @@ impl SystemServices {
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Exception(_) => {
-                    new.current_thread = new.exception_thread.expect("no exception state set");
+                    new.current_thread = crate::arch::process::EXCEPTION_TID;
                 }
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
@@ -2125,6 +2123,11 @@ impl SystemServices {
             }
         }
         Ok(())
+    }
+
+    ///
+    pub fn handle_exception(&mut self) -> Option<ExceptionHandler> {
+        None
     }
 
     /// Returns the process name, if any, of a given PID

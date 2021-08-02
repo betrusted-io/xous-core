@@ -141,6 +141,25 @@ pub extern "C" fn trap_handler(
                     })
                     .expect("Couldn't allocate page");
 
+                // If there is an exception of some sort, see if there is an exception handler
+                // available. If so, invoke it.
+                if let Some((pc, sp)) = SystemServices::with_mut(|ss| ss.handle_exception()) {
+                    ArchProcess::with_current_mut(|process| {
+                        crate::arch::syscall::invoke(
+                            process.thread_mut(crate::arch::process::EXCEPTION_TID),
+                            current_pid().get() == 1,
+                            pc,
+                            sp,
+                            RETURN_FROM_EXCEPTION_HANDLER,
+                            args,
+                        );
+                        crate::arch::syscall::resume(
+                            current_pid().get() == 1,
+                            process.thread(crate::arch::process::EXCEPTION_TID),
+                        )
+                    });
+                }
+
                 #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
                 print!(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
@@ -148,6 +167,22 @@ pub extern "C" fn trap_handler(
                 );
                 println!("Page was not allocated");
             }
+
+            RiscvException::InstructionPageFault(RETURN_FROM_EXCEPTION_HANDLER, _offset) => {
+                let tid = ArchProcess::with_current(|process| process.current_tid());
+
+                // This address indicates a thread has exited. Destroy the thread.
+                // This activates another thread within this process.
+                if SystemServices::with_mut(|ss| ss.destroy_thread(pid, tid)).unwrap() {
+                    crate::syscall::reset_switchto_caller();
+                }
+
+                // Resume the new thread within the same process.
+                ArchProcess::with_current_mut(|p| {
+                    crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
+                });
+            }
+
             RiscvException::InstructionPageFault(EXIT_THREAD, _offset) => {
                 let tid = ArchProcess::with_current(|process| process.current_tid());
 
@@ -162,6 +197,7 @@ pub extern "C" fn trap_handler(
                     crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
                 });
             }
+
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
                 // If we hit this address, then an ISR has just returned.  Since
                 // we're in an interrupt context, it is safe to access this
@@ -188,6 +224,7 @@ pub extern "C" fn trap_handler(
                     crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                 });
             }
+
             _ => (),
         }
         println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);

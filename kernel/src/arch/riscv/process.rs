@@ -4,7 +4,8 @@
 use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
-pub const INITIAL_TID: TID = 1;
+pub const EXCEPTION_TID: TID = 1;
+pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
@@ -20,6 +21,9 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
 pub const EXIT_THREAD: usize = 0xff80_3000;
+
+/// This is the address a thread will return to when it finishes handling an exception.
+pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_4000;
 
 // Thread IDs have three possible meaning:
 // Logical Thread ID: What the user sees
