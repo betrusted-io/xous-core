@@ -282,16 +282,8 @@ fn build_hw_image(
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
 
     // extract key file names; replace with defaults if not specified
-    let loaderkey_file = if let Some(lkf) = lkey {
-        lkf
-    } else {
-        String::from("devkey/dev.key")
-    };
-    let kernelkey_file = if let Some(kkf) = kkey {
-        kkf
-    } else {
-        String::from("devkey/dev.key")
-    };
+    let loaderkey_file = lkey.unwrap_or("devkey/dev.key".into());
+    let kernelkey_file = kkey.unwrap_or("devkey/dev.key".into());
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
