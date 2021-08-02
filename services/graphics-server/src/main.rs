@@ -19,20 +19,21 @@ use blitstr::GlyphStyle;
 
 use num_traits::FromPrimitive;
 use xous_ipc::Buffer;
-use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack, MemoryRange};
 
 mod fontmap;
+use api::{BulkRead, ArchivedBulkRead};
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(poweron::LOGO_MAP);
 }
 
 #[cfg(target_os = "none")]
-fn map_fonts() {
+fn map_fonts() -> MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
-    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000;
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
     log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
@@ -48,11 +49,22 @@ fn map_fonts() {
     blitstr::map_font(blitstr::GlyphData::Regular((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Small((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Bold((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize));
+
+    fontregion
 }
 
 #[cfg(not(target_os = "none"))]
-fn map_fonts() {
+fn map_fonts() -> MemoryRange {
     // does nothing
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000 + 8;
+    let fontregion = xous::syscall::map_memory(
+        None,
+        None,
+        fontlen as usize,
+        xous::MemoryFlags::R,
+    ).expect("couldn't map dummy memory for fonts");
+
+    fontregion
 }
 
 #[xous::xous_main]
@@ -65,7 +77,8 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // these connections should be established:
     // - GAM
-    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    // - keyrom (for verifying font maps)
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server");
     log::trace!("Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.
@@ -73,7 +86,7 @@ fn xmain() -> ! {
 
     draw_boot_logo(&mut display);
 
-    map_fonts();
+    let fontregion = map_fonts();
 
     let mut use_sleep_note = true;
     if false {
@@ -101,6 +114,7 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
@@ -452,6 +466,34 @@ fn xmain() -> ! {
                 if ena != 0 { display.set_devboot(true); }
                 else { display.set_devboot(false); }
             }),
+            Some(Opcode::RestartBulkRead) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                bulkread.from_offset = 0;
+                xous::return_scalar(msg.sender, 0).expect("couldn't ack that bulk read pointer was reset");
+            }),
+            Some(Opcode::BulkReadFonts) => {
+                let fontlen = fontmap::FONT_TOTAL_LEN as u32 + 8;
+                let mut buf = unsafe{ Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init step by using a persistent structure
+                let fontslice = fontregion.as_slice::<u8>();
+                assert!(fontlen <= fontslice.len() as u32);
+                if bulkread.from_offset >= fontlen {
+                    log::error!("BulkReadFonts attempt to read out of bound on the font area; ignoring!");
+                    continue
+                }
+                let readlen = if bulkread.from_offset + bulkread.buf.len() as u32 > fontlen {
+                    // returns what is readable of the last bit; anything longer than the fontlen is undefined/invalid
+                    fontlen as usize - bulkread.from_offset as usize
+                } else {
+                    bulkread.buf.len()
+                };
+                for (&src, dst) in fontslice[bulkread.from_offset as usize .. bulkread.from_offset as usize + readlen].iter()
+                    .zip(bulkread.buf.iter_mut()) {
+                        *dst = src;
+                }
+                bulkread.len = readlen as u32;
+                bulkread.from_offset += readlen as u32;
+                buf.replace(bulkread).unwrap();
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("received opcode scalar that is not handled");}
         }

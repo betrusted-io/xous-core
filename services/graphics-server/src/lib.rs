@@ -7,11 +7,16 @@ use blitstr_ref as blitstr;
 pub use blitstr::{ClipRect, Cursor, GlyphStyle};
 pub mod op;
 
+pub mod fontmap;
+pub use fontmap::*;
+
 use api::Opcode; // if you prefer to map the api into your local namespace
 use xous::{send_message, Message};
 use xous_ipc::Buffer;
 use num_traits::ToPrimitive;
 
+pub use api::BulkRead;
+pub use api::ArchivedBulkRead;
 #[derive(Debug)]
 pub struct Gfx {
     conn: xous::CID,
@@ -24,6 +29,7 @@ impl Gfx {
             conn,
         })
     }
+    pub fn conn(&self) -> xous::CID {self.conn}
 
     pub fn draw_line(&self, line: Line) -> Result<(), xous::Error> {
         send_message(self.conn,
@@ -158,6 +164,18 @@ impl Gfx {
             Message::new_scalar(Opcode::Devboot.to_usize().unwrap(),
             ena, 0, 0, 0,)
         ).map(|_| ())
+    }
+
+    /// instead of implementing the read in the library, we had the raw opcode to the caller
+    /// this allows the caller to re-use the bulk read data structure across multiple reads
+    /// instead of it being re-allocated and re-init'd every single call
+    pub fn bulk_read_fontmap_op(&self) -> u32 {Opcode::BulkReadFonts.to_u32().unwrap()}
+    /// the bulk read auto-increments a pointer on the gfx server, so this message is necessary
+    /// to reset the pointer to 0.
+    pub fn bulk_read_restart(&self) {
+        send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::RestartBulkRead.to_usize().unwrap(), 0, 0, 0, 0)
+        ).expect("couldn't reset bulk read");
     }
 }
 
