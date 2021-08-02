@@ -16,9 +16,11 @@ i @peripherals/keyrom.cs
 i @peripherals/LiteX_Timer_32.cs
 i @peripherals/memlcd.cs
 i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
 i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
+i @peripherals/wfi.cs
 
 ############### Define the Betrusted SoC ###############
 mach create "SoC"
