@@ -6,17 +6,14 @@ edition = "2018"
 description = "blitstr import package"
 
 [dependencies]
-blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "a7bef27fd3ceccefc01000ca2c6c4841b516d671" }
-#blitstr = { path = "../../../blitstr" }
-
+blitstr = { git = "https://github.com/betrusted-io/blitstr.git", rev = "cebcabb9a2b0686bb47f6e1508640941ae88469c" }
+# blitstr = { path = "../blitstr" }
 
 # targeting hardware
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 
-
 # targeting hosted mode
 [target.'cfg(any(windows,unix))'.dependencies]
-
 
 [features]
 default = []
