@@ -17,7 +17,7 @@ struct ScalarCallback {
     cb_to_client_id: u32,
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::{ExcursionTest, MiniRunsTest, NistTests, HealthTests, TrngErrors, TrngBuf};
@@ -404,7 +404,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::api::{TrngBuf, HealthTests, TrngErrors};
 

@@ -11,14 +11,14 @@ const TEST_SIZE: usize = 0x4000;
 const TEST_BASE: usize = 0x608_0000;
 impl Keys {
     pub fn new(xns: &xous_names::XousNames) -> Keys {
-        #[cfg(target_os = "none")]
+        #[cfg(any(target_os = "none", target_os = "xous"))]
         let testing_range = xous::syscall::map_memory(
             Some(core::num::NonZeroUsize::new(TEST_BASE + xous::FLASH_PHYS_BASE as usize).unwrap()), // occupy the 44.1khz short sample area for testing
             None,
             TEST_SIZE,
             xous::MemoryFlags::R,
         ).expect("couldn't map in testing range");
-        #[cfg(not(target_os = "none"))] // just make a dummy mapping to keep things from crashing in hosted mode
+        #[cfg(not(any(target_os = "none", target_os = "xous")))] // just make a dummy mapping to keep things from crashing in hosted mode
         let testing_range = xous::syscall::map_memory(
             None,
             None,

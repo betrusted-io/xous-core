@@ -51,7 +51,7 @@ impl core::cmp::PartialEq for SleepRequest {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::SleepRequest;
@@ -302,7 +302,7 @@ mod implementation {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use super::SleepRequest;
     use std::convert::TryInto;

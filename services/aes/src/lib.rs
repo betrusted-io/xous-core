@@ -16,12 +16,12 @@ mod vex;
 
 pub use soft::{Aes128Soft, Aes192, Aes256Soft};
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub use vex::{Aes128, Aes256};
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use soft::Aes128Soft as Aes128;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use soft::Aes256Soft as Aes256;
 
 #[cfg(feature = "ctr")]

@@ -27,7 +27,7 @@ fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(poweron::LOGO_MAP);
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 fn map_fonts() {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
@@ -50,7 +50,7 @@ fn map_fonts() {
     blitstr::map_font(blitstr::GlyphData::Bold((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize));
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 fn map_fonts() {
     // does nothing
 }

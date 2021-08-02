@@ -13,16 +13,16 @@ use gam::menu::*;
 
 use locales::t;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation;
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 use implementation::*;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod bcrypt;
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::ROOTKEY_MODAL_NAME;
     use crate::PasswordRetentionPolicy;

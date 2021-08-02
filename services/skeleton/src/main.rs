@@ -8,7 +8,7 @@ use num_traits::FromPrimitive;
 use log::info;
 
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     // use crate::api::*;
@@ -57,7 +57,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use log::info;
 

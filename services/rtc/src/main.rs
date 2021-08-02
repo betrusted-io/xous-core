@@ -16,7 +16,7 @@ use gam::ActionType::*;
 use core::sync::atomic::{AtomicU32, Ordering};
 static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     #![allow(dead_code)]
     use bitflags::*;
@@ -448,7 +448,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::api::Weekday;
     use chrono::prelude::*;
@@ -586,10 +586,10 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", rtc_sid);
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut rtc = Rtc::new(&xns);
 
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let mut rtc = Rtc::new(&xns);
 
     let mut rtc_textentry = gam::modal::TextEntry {

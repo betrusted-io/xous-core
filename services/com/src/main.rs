@@ -29,7 +29,7 @@ fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> 
     ).map(|_| ())
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
@@ -197,7 +197,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;

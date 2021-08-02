@@ -48,7 +48,7 @@ impl Keyboard {
         ).map(|_| ())
     }
 
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     pub fn hostmode_inject_key(&self, c: char) {
         send_message(self.conn,
             Message::new_scalar(Opcode::InjectKey.to_usize().unwrap(),

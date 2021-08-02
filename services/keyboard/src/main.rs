@@ -160,7 +160,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
@@ -754,7 +754,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use heapless::Vec;
     use crate::api::*;
@@ -841,9 +841,9 @@ fn xmain() -> ! {
     // connections expected:
     //  - GAM
     //  - graphics (if building for hosted mode)
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(1)).expect("can't register server");
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 

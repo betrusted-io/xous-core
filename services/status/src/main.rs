@@ -153,7 +153,7 @@ fn xmain() -> ! {
     log::debug!("initializing RTC...");
     let mut rtc = rtc::Rtc::new(&xns).unwrap();
 
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     rtc.clear_wakeup_alarm().unwrap(); // clear any wakeup alarm state, if it was set
 
     rtc.hook_rtc_callback(dt_callback).unwrap();
@@ -247,9 +247,9 @@ fn xmain() -> ! {
                     }
                 }
                 if (stats_phase % dt_pump_interval) == 2 {
-                    #[cfg(target_os = "none")]
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
                     rtc.request_datetime().expect("|status: can't request datetime from RTC");
-                    #[cfg(not(target_os = "none"))]
+                    #[cfg(not(any(target_os = "none", target_os = "xous")))]
                     {
                         log::trace!("hosted request of date time - short circuiting server call");
                         use chrono::prelude::*;

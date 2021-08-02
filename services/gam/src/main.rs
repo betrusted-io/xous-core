@@ -639,7 +639,7 @@ fn xmain() -> ! {
     let mut last_time: u64 = ticktimer.elapsed_ms();
     log::trace!("entering main loop");
 
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
         log::info!("********************************************************************************");
         log::info!("USAGE:");

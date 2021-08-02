@@ -12,7 +12,7 @@ use xous_ipc::{String, Buffer};
 
 use log::{error, info};
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -48,7 +48,7 @@ mod implementation {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     pub struct D11cTimeout {}
     impl D11cTimeout {
