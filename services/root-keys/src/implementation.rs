@@ -8,7 +8,7 @@ use num_traits::*;
 use gam::modal::{Modal, Slider};
 
 use crate::bcrypt::*;
-use crate::PasswordType;
+use crate::api::PasswordType;
 
 use core::convert::TryInto;
 use ed25519_dalek::{Keypair, Signature, Signer};
@@ -16,6 +16,8 @@ use engine_sha512::*;
 use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
+
+use root_keys::key2bits::*;
 
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
 const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5696 ms to verify @ 10 rounds; 804 ms to verify 7 rounds
@@ -418,8 +420,11 @@ impl RootKeys {
 
         // extract the update password key from the cache, and apply it to the private key
         let pcache: &PasswordCache = unsafe{&*(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
-        log::info!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
-        log::info!("cached update password: {:x?}", pcache.hashed_update_pw);
+        #[cfg(feature = "hazardous-debug")]
+        {
+            log::info!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
+            log::info!("cached update password: {:x?}", pcache.hashed_update_pw);
+        }
         // private key must XOR with password before storing
         let mut private_key_enc: [u8; ed25519_dalek::SECRET_KEY_LENGTH] = [0; ed25519_dalek::SECRET_KEY_LENGTH];
         // we do this from to try and avoid making as few copies of the hashed password as possible
@@ -481,6 +486,7 @@ impl RootKeys {
 
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in plaintext format
         // e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a 0's key and we'd later on set it)
+        #[cfg(feature = "hazardous-debug")]
         self.debug_print_key(KeyRomLocs::FPGA_KEY as usize, 256, "FPGA key before encryption: ");
         {
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
@@ -496,26 +502,26 @@ impl RootKeys {
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, KeyRomLocs::CONFIG as u32);
             let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
-            log::info!("config on device {:x}", config);
-            log::info!("cached copy before mod {:x}", sensitive_slice[KeyRomLocs::CONFIG as usize]);
-            log::info!("mask shift computation: {:x}", keyrom_config::INITIALIZED.ms(1));
             sensitive_slice[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
-            log::info!("cached copy after mod {:x}", sensitive_slice[KeyRomLocs::CONFIG as usize]);
         }
         update_progress(60, progress_modal, progress_action);
 
-        log::info!("Self private key: {:x?}", keypair.secret.to_bytes());
-        log::info!("Self public key: {:x?}", keypair.public.to_bytes());
-        self.debug_staging();
+        #[cfg(feature = "hazardous-debug")]
+        {
+            log::info!("Self private key: {:x?}", keypair.secret.to_bytes());
+            log::info!("Self public key: {:x?}", keypair.public.to_bytes());
+            self.debug_staging();
+        }
         // compute the keyrom patch set for the bitstream
         // at this point the KEYROM as replicated in sensitive_slice should have all its assets in place
-
+        patch::should_patch(42);
 
         // finalize the progress bar on exit -- always leave at 100%
         update_progress(100, progress_modal, progress_action);
         true
     }
 
+    #[cfg(feature = "hazardous-debug")]
     fn debug_staging(&self) {
         self.debug_print_key(KeyRomLocs::FPGA_KEY as usize, 256, "FPGA key: ");
         self.debug_print_key(KeyRomLocs::SELFSIGN_PRIVKEY as usize, 256, "Self private key: ");
@@ -526,6 +532,8 @@ impl RootKeys {
         self.debug_print_key(KeyRomLocs::PEPPER as usize, 128, "Pepper: ");
         self.debug_print_key(KeyRomLocs::CONFIG as usize, 32, "Config (as BE): ");
     }
+
+    #[cfg(feature = "hazardous-debug")]
     fn debug_print_key(&self, offset: usize, num_bits: usize, name: &str) {
         use core::fmt::Write;
         let mut debugstr = xous_ipc::String::<4096>::new();
@@ -564,22 +572,24 @@ impl RootKeys {
             let br = buf.as_flat::<BulkRead, _>().unwrap();
             hasher.update(&br.buf[..br.len as usize]);
             if br.len != bulkread.buf.len() as u32 {
-                log::info!("non-full block len: {}", br.len);
+                log::trace!("non-full block len: {}", br.len);
             }
             if br.len < bulkread.buf.len() as u32 {
                 // read until we get a buffer that's not fully filled
                 break;
             }
         }
-        let digest = hasher.finalize();
-        if false {
+        if false { // this path is for debugging the loader hash. It spoils the loader signature in the process.
+            let digest = hasher.finalize();
             log::info!("len: {}", loader_len);
             log::info!("{:x?}", digest);
             // fake hasher for now
             let mut hasher = engine_sha512::Sha512::new(Some(engine_sha512::FallbackStrategy::WaitForHardware));
             hasher.update(&loader_region[SIGBLOCK_SIZE as usize..]);
+            (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the loader"), loader_len)
+        } else {
+            (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the loader"), loader_len)
         }
-        (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the loader"), loader_len)
     }
 
     pub fn sign_kernel(&mut self, signing_key: &Keypair) -> (Signature, u32) {

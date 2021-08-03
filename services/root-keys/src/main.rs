@@ -74,15 +74,6 @@ mod implementation {
     }
 }
 
-// enumerate the possible password types dealt with by this manager
-// the discriminant is used to every-so-slightly change the salt going into bcrypt
-// I don't think it hurts; but it also prevents an off-the-shelf "hashcat" run from
-// being used to brute force all the passwords in a single go.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PasswordType {
-    Boot = 1,
-    Update = 2,
-}
 
 #[xous::xous_main]
 fn xmain() -> ! {
