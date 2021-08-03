@@ -106,7 +106,7 @@ fn xmain() -> ! {
             }
             Some(Opcode::Unpick) => {
                 if history.len() == 1 {
-                    history.remove(0);
+                    let _ = history.remove(0);
                 } else if history.len() > 1 {
                     let _ = history.pop(); // discard the last entry
                 }
