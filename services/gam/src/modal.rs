@@ -370,14 +370,16 @@ impl ActionApi for TextEntry {
             }
             '\u{8}' => { // backspace
                 // coded in a conservative manner to avoid temporary allocations that can leave the plaintext on the stack
-                let mut temp_str = String::<256>::from_str(self.action_payload.0.as_str().unwrap());
-                let cur_len = temp_str.as_str().unwrap().chars().count();
-                let mut c_iter = temp_str.as_str().unwrap().chars();
-                self.action_payload.0.clear();
-                for _ in 0..cur_len-1 {
-                    self.action_payload.0.push(c_iter.next().unwrap()).unwrap();
+                if self.action_payload.0.len() > 0 { // don't backspace if we have no string.
+                    let mut temp_str = String::<256>::from_str(self.action_payload.0.as_str().unwrap());
+                    let cur_len = temp_str.as_str().unwrap().chars().count();
+                    let mut c_iter = temp_str.as_str().unwrap().chars();
+                    self.action_payload.0.clear();
+                    for _ in 0..cur_len-1 {
+                        self.action_payload.0.push(c_iter.next().unwrap()).unwrap();
+                    }
+                    temp_str.volatile_clear();
                 }
-                temp_str.volatile_clear();
             }
             _ => { // text entry
                 self.action_payload.0.push(k).expect("ran out of space storing password");

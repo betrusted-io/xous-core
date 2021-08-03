@@ -9,6 +9,7 @@ from nacl.encoding import RawEncoder
 import os.path
 
 import binascii
+import hashlib
 
 DEVKEY_PATH='../devkey/dev.key'
 SIGNER_VERSION=1
@@ -25,6 +26,10 @@ def blob_sign(source, output, key, defile=False):
         signing_key = SigningKey(key[-32:], encoder=RawEncoder)
 
         signature = signing_key.sign(source, encoder=RawEncoder)
+        print("signing {} bytes".format(len(source)))
+        m = hashlib.sha512()
+        m.update(bytearray(source))
+        print("hash of {}".format(m.hexdigest()))
 
         with open(output, "wb") as output_f:
             written = 0
