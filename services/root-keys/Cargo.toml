@@ -13,6 +13,7 @@ xous-names = { path = "../xous-names" }
 log = "0.4"
 susres = {path = "../susres"}
 trng = {path= "../trng"}
+spinor = {path="../spinor"}
 
 xous-ipc = {path = "../../xous-ipc"}
 num-derive = {version = "0.3", default-features = false}

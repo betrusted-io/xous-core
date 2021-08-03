@@ -1640,6 +1640,7 @@ dependencies = [
  "rand_core 0.5.1",
  "rkyv 0.4.3",
  "sha2",
+ "spinor",
  "susres",
  "ticktimer-server",
  "trng",

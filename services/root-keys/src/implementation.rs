@@ -109,6 +109,7 @@ pub(crate) struct RootKeys {
     trng: trng::Trng,
     gam: gam::Gam, // for raising UX elements directly
     gfx: graphics_server::Gfx, // for reading out font planes for signing verification
+    spinor: spinor::Spinor,
 }
 
 impl RootKeys {
@@ -160,6 +161,9 @@ impl RootKeys {
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
 
+        let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
+        spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
+
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
             gateware,
@@ -175,6 +179,7 @@ impl RootKeys {
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
+            spinor
         };
 
         keys
@@ -512,6 +517,12 @@ impl RootKeys {
             log::info!("Self public key: {:x?}", keypair.public.to_bytes());
             self.debug_staging();
         }
+
+        // Because we're initializing keys for the *first* time, make a backup copy of the bitstream to
+        // the staging area. Note that if we're doing an update, the update target would already be
+        // in the staging area, so this step should be skipped.
+        self.make_gateware_backup(60, 70, progress_modal, progress_action);
+
         // compute the keyrom patch set for the bitstream
         // at this point the KEYROM as replicated in sensitive_slice should have all its assets in place
         patch::should_patch(42);
@@ -519,6 +530,10 @@ impl RootKeys {
         // finalize the progress bar on exit -- always leave at 100%
         update_progress(100, progress_modal, progress_action);
         true
+    }
+
+    fn make_gateware_backup(&mut self, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) {
+        
     }
 
     #[cfg(feature = "hazardous-debug")]
