@@ -56,7 +56,7 @@ fn map_fonts() -> MemoryRange {
 #[cfg(not(target_os = "none"))]
 fn map_fonts() -> MemoryRange {
     // does nothing
-    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000 + 8;
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
     let fontregion = xous::syscall::map_memory(
         None,
         None,
