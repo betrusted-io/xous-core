@@ -10,6 +10,7 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
@@ -596,19 +597,15 @@ fn xmain() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let ssid = buffer.to_original::<String::<WF200_SSID_LEN>, _>().unwrap();
                 info!("WlanSetSSID: {}", ssid);
-                let ssid_bytes = ssid.as_bytes();
-                let length = ssid.len();
-                com.txrx(ComState::WLAN_SET_SSID.verb);
-                // Always send fixed size message of 1 length word + WF200_SSID_LEN/2 ssid words
-                com.txrx(length as u16);
-                for i in 0..WF200_SSID_LEN/2 {
-                    let n = i * 2;
-                    let word: u16 = match 0 {
-                        _ if n + 1 < length => (ssid_bytes[n] as u16) | ((ssid_bytes[n + 1] as u16) << 8),
-                        _ if n < length => ssid_bytes[n] as u16,
-                        _ => 0 as u16,
-                    };
-                    com.txrx(word);
+                let mut str_ser = StringSer::<STR_32_WORDS>::new();
+                match str_ser.encode(&ssid.to_str()) {
+                    Ok(tx_words) => {
+                        com.txrx(ComState::WLAN_SET_SSID.verb);
+                        for w in tx_words.iter() {
+                            com.txrx(*w);
+                        }
+                    }
+                    _ => info!("WlanSetSSID FAIL"),
                 }
             }
             Some(Opcode::WlanSetPass) => {
@@ -616,19 +613,15 @@ fn xmain() -> ! {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let pass = buffer.to_original::<String::<WF200_PASS_LEN>, _>().unwrap();
                 info!("WlanSetPass: {}", pass);
-                let pass_bytes = pass.as_bytes();
-                let length = pass.len();
-                com.txrx(ComState::WLAN_SET_PASS.verb);
-                // Always send fixed size message of 1 length word + WF200_PASS_LEN/2 ssid words
-                com.txrx(length as u16);
-                for i in 0..WF200_PASS_LEN/2 {
-                    let n = i * 2;
-                    let word: u16 = match 0 {
-                        _ if n + 1 < length => (pass_bytes[n] as u16) | ((pass_bytes[n + 1] as u16) << 8),
-                        _ if n < length => pass_bytes[n] as u16,
-                        _ => 0 as u16,
-                    };
-                    com.txrx(word);
+                let mut str_ser = StringSer::<STR_64_WORDS>::new();
+                match str_ser.encode(&pass.to_str()) {
+                    Ok(tx_words) => {
+                        com.txrx(ComState::WLAN_SET_PASS.verb);
+                        for w in tx_words.iter() {
+                            com.txrx(*w);
+                        }
+                    }
+                    _ => info!("WlanSetPASS FAIL"),
                 }
             }
             Some(Opcode::WlanJoin) => {
