@@ -110,29 +110,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false, &hw_pkgs)?,
-        Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
+        Some("renode-image") => renode_image(false, &hw_pkgs, &[])?,
+        Some("renode-test") => renode_image(false, &cbtest_pkgs, &[])?,
         Some("libstd-test") => {
-            let mut pkgs = base_pkgs.to_vec();
+            let mut args = env::args();
+            args.nth(1);
+            let pkgs = base_pkgs.to_vec();
             let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
             for program in &args {
-                pkgs.push(&program);
+                extra_packages.push(program.as_str());
             }
-            renode_image(false, &pkgs)?;
+            renode_image(false, &pkgs, extra_packages.as_slice())?;
         }
-        Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
-        Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
+        Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
+        Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
         Some("run") => run(false, &hw_pkgs)?,
-        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None)?,
-        Some("benchmark") => {
-            build_hw_image(false, env::args().nth(2), &benchmark_pkgs, lkey, kkey, None)?
+        Some("hw-image") => {
+            build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
         }
-        Some("minimal") => {
-            build_hw_image(false, env::args().nth(2), &minimal_pkgs, lkey, kkey, None)?
-        }
-        Some("cbtest") => {
-            build_hw_image(false, env::args().nth(2), &cbtest_pkgs, lkey, kkey, None)?
-        }
+        Some("benchmark") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &benchmark_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
+        Some("minimal") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &minimal_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
+        Some("cbtest") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &cbtest_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
         Some("trng-test") => build_hw_image(
             false,
             env::args().nth(2),
@@ -140,6 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "urandomtest"]),
+            &[],
         )?,
         Some("ro-test") => build_hw_image(
             false,
@@ -148,6 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "ringosctest"]),
+            &[],
         )?,
         Some("av-test") => build_hw_image(
             false,
@@ -156,8 +181,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             lkey,
             kkey,
             Some(&["--features", "avalanchetest"]),
+            &[],
         )?,
-        Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None)?,
+        Some("sr-test") => {
+            build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
+        }
         Some("debug") => run(true, &hw_pkgs)?,
         Some("burn-kernel") => update_usb(true, false, false)?,
         Some("burn-loader") => update_usb(false, true, false)?,
@@ -259,6 +287,7 @@ fn build_hw_image(
     lkey: Option<String>,
     kkey: Option<String>,
     extra_args: Option<&[&str]>,
+    extra_packages: &[&str],
 ) -> Result<(), DynError> {
     generate_locales();
 
@@ -284,6 +313,11 @@ fn build_hw_image(
     let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
+        pkg_path.push(pkg);
+        init.push(pkg_path);
+    }
+    for pkg in extra_packages {
+        let mut pkg_path = project_root();
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
@@ -401,7 +435,7 @@ fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
 
 }*/
 
-fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
+fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Result<(), DynError> {
     // Regenerate the Platform file
     let status = Command::new(cargo())
         .current_dir(project_root())
@@ -426,6 +460,7 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         None,
         None,
         None,
+        extra_packages,
     )
 }
 
