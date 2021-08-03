@@ -10,7 +10,8 @@ use generate_locales::*;
 
 type DynError = Box<dyn std::error::Error>;
 
-const TARGET: &str = "riscv32imac-unknown-none-elf";
+const PROGRAM_TARGET: &str = "riscv32imac-unknown-none-elf";
+const KERNEL_TARGET: &str = "riscv32imac-unknown-none-elf";
 
 enum MemorySpec {
     SvdFile(String),
@@ -31,14 +32,7 @@ impl std::fmt::Display for BuildError {
 
 impl std::error::Error for BuildError {}
 
-fn main() {
-    if let Err(e) = try_main() {
-        eprintln!("{}", e);
-        std::process::exit(-1);
-    }
-}
-
-fn try_main() -> Result<(), DynError> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hw_pkgs = [
         "gam",
         "status",
@@ -287,7 +281,7 @@ fn build_hw_image(
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None, extra_args)?;
+    let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
         pkg_path.push(pkg);
@@ -296,7 +290,7 @@ fn build_hw_image(
     let mut loader = build(
         &["loader"],
         debug,
-        Some(TARGET),
+        Some(KERNEL_TARGET),
         Some("loader".into()),
         None,
     )?;
@@ -390,8 +384,8 @@ fn build_hw_image(
     }
 
     println!();
-    println!("Signed loader at {}", loader_bin.to_str().unwrap());
-    println!("Signed kernel at {}", xous_img_path.to_str().unwrap());
+    println!("Signed loader at {}", loader_bin.display());
+    println!("Signed kernel at {}", xous_img_path.display());
 
     Ok(())
 }
@@ -484,7 +478,7 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
     let mut path = build(
         &["kernel"],
         debug,
-        Some(TARGET),
+        Some(KERNEL_TARGET),
         Some("kernel".into()),
         None,
     )?;
@@ -560,7 +554,7 @@ fn create_image(
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
-    let output_file = format!("target/{}/{}/args.bin", TARGET, stream);
+    let output_file = format!("target/{}/{}/args.bin", PROGRAM_TARGET, stream);
     args.push(&output_file);
 
     args.push("--kernel");
@@ -586,7 +580,7 @@ fn create_image(
     if !status.success() {
         return Err("cargo build failed".into());
     }
-    Ok(project_root().join(&format!("target/{}/{}/args.bin", TARGET, stream)))
+    Ok(project_root().join(&format!("target/{}/{}/args.bin", PROGRAM_TARGET, stream)))
 }
 
 fn cargo() -> String {

@@ -1,4 +1,3 @@
-
 // this code vendored in from https://github.com/terry90/internationalization-rs
 // the original crate is targeted at a non-workspace, `std` project structure. The adaptations here
 // make it suitable for `no_std` and workspace integration.
@@ -29,7 +28,7 @@ fn read_locales() -> Translations {
 
     for entry in glob(&locales).expect("Failed to read glob pattern") {
         let entry = entry.unwrap();
-        println!("cargo:rerun-if-changed={}", entry.display());
+        // println!("cargo:rerun-if-changed={}", entry.display());
         let file = File::open(entry).expect("Failed to open the file");
         let mut reader = std::io::BufReader::new(file);
         let mut content = String::new();
