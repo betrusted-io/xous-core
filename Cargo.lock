@@ -425,7 +425,6 @@ name = "com"
 version = "0.1.0"
 dependencies = [
  "com_rs-ref",
- "heapless 0.7.0",
  "log",
  "log-server",
  "num-derive",

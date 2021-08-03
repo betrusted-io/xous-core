@@ -533,7 +533,7 @@ impl RootKeys {
     }
 
     fn make_gateware_backup(&mut self, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) {
-        println!("test");
+        // println!("this is a test of stdlib");
     }
 
     #[cfg(feature = "hazardous-debug")]

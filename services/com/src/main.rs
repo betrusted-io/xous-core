@@ -40,15 +40,13 @@ mod implementation {
     use utralib::generated::*;
     use susres::{RegManager, RegOrField, SuspendResume};
 
-    use heapless::Vec;
-
     const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
         susres: RegManager::<{utra::com::COM_NUMREGS}>,
         ticktimer: ticktimer_server::Ticktimer,
-        pub workqueue: Vec<WorkRequest, 64>,
+        pub workqueue: Vec<WorkRequest>,
         busy: bool,
         stby_current: Option<i16>,
     }
@@ -487,8 +485,8 @@ fn xmain() -> ! {
                             .push(WorkRequest {
                                 work: ComState::STAT,
                                 sender: conn,
-                            })
-                            .unwrap();
+                            });
+                            //.unwrap();
                     }
                 }
             }
