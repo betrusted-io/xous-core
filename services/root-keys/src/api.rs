@@ -36,3 +36,14 @@ pub enum PasswordRetentionPolicy {
     EraseOnSuspend,
     AlwaysPurge,
 }
+
+/// Enumerate the possible password types dealt with by this manager.
+/// Note that the discriminant of the enum is used to every-so-slightly change the salt going into bcrypt
+/// I don't think it hurts; more importantly, it also prevents an off-the-shelf "hashcat" run from
+/// being used to brute force both passwords in a single go, as the salt has to be (slightly)
+/// recomputed for each type of password.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PasswordType {
+    Boot = 1,
+    Update = 2,
+}

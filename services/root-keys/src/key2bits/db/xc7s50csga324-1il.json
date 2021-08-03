@@ -1,0 +1,452 @@
+{
+    "global_clock_regions": {
+        "bottom": {
+            "rows": {
+                "0": {
+                    "configuration_buses": {
+                        "BLOCK_RAM": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 128
+                                },
+                                "1": {
+                                    "frame_count": 128
+                                },
+                                "2": {
+                                    "frame_count": 128
+                                }
+                            }
+                        },
+                        "CLB_IO_CLK": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 42
+                                },
+                                "1": {
+                                    "frame_count": 30
+                                },
+                                "2": {
+                                    "frame_count": 36
+                                },
+                                "3": {
+                                    "frame_count": 36
+                                },
+                                "4": {
+                                    "frame_count": 36
+                                },
+                                "5": {
+                                    "frame_count": 36
+                                },
+                                "6": {
+                                    "frame_count": 28
+                                },
+                                "7": {
+                                    "frame_count": 36
+                                },
+                                "8": {
+                                    "frame_count": 36
+                                },
+                                "9": {
+                                    "frame_count": 28
+                                },
+                                "10": {
+                                    "frame_count": 36
+                                },
+                                "11": {
+                                    "frame_count": 36
+                                },
+                                "12": {
+                                    "frame_count": 36
+                                },
+                                "13": {
+                                    "frame_count": 36
+                                },
+                                "14": {
+                                    "frame_count": 36
+                                },
+                                "15": {
+                                    "frame_count": 36
+                                },
+                                "16": {
+                                    "frame_count": 36
+                                },
+                                "17": {
+                                    "frame_count": 36
+                                },
+                                "18": {
+                                    "frame_count": 30
+                                },
+                                "19": {
+                                    "frame_count": 36
+                                },
+                                "20": {
+                                    "frame_count": 36
+                                },
+                                "21": {
+                                    "frame_count": 36
+                                },
+                                "22": {
+                                    "frame_count": 36
+                                },
+                                "23": {
+                                    "frame_count": 30
+                                },
+                                "24": {
+                                    "frame_count": 36
+                                },
+                                "25": {
+                                    "frame_count": 36
+                                },
+                                "26": {
+                                    "frame_count": 36
+                                },
+                                "27": {
+                                    "frame_count": 36
+                                },
+                                "28": {
+                                    "frame_count": 36
+                                },
+                                "29": {
+                                    "frame_count": 36
+                                },
+                                "30": {
+                                    "frame_count": 28
+                                },
+                                "31": {
+                                    "frame_count": 36
+                                },
+                                "32": {
+                                    "frame_count": 36
+                                },
+                                "33": {
+                                    "frame_count": 36
+                                },
+                                "34": {
+                                    "frame_count": 28
+                                },
+                                "35": {
+                                    "frame_count": 36
+                                },
+                                "36": {
+                                    "frame_count": 36
+                                },
+                                "37": {
+                                    "frame_count": 28
+                                },
+                                "38": {
+                                    "frame_count": 36
+                                },
+                                "39": {
+                                    "frame_count": 36
+                                },
+                                "40": {
+                                    "frame_count": 36
+                                },
+                                "41": {
+                                    "frame_count": 36
+                                },
+                                "42": {
+                                    "frame_count": 30
+                                },
+                                "43": {
+                                    "frame_count": 42
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "top": {
+            "rows": {
+                "0": {
+                    "configuration_buses": {
+                        "BLOCK_RAM": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 128
+                                },
+                                "1": {
+                                    "frame_count": 128
+                                },
+                                "2": {
+                                    "frame_count": 128
+                                }
+                            }
+                        },
+                        "CLB_IO_CLK": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 42
+                                },
+                                "1": {
+                                    "frame_count": 30
+                                },
+                                "2": {
+                                    "frame_count": 36
+                                },
+                                "3": {
+                                    "frame_count": 36
+                                },
+                                "4": {
+                                    "frame_count": 36
+                                },
+                                "5": {
+                                    "frame_count": 36
+                                },
+                                "6": {
+                                    "frame_count": 28
+                                },
+                                "7": {
+                                    "frame_count": 36
+                                },
+                                "8": {
+                                    "frame_count": 36
+                                },
+                                "9": {
+                                    "frame_count": 28
+                                },
+                                "10": {
+                                    "frame_count": 36
+                                },
+                                "11": {
+                                    "frame_count": 36
+                                },
+                                "12": {
+                                    "frame_count": 36
+                                },
+                                "13": {
+                                    "frame_count": 36
+                                },
+                                "14": {
+                                    "frame_count": 36
+                                },
+                                "15": {
+                                    "frame_count": 36
+                                },
+                                "16": {
+                                    "frame_count": 36
+                                },
+                                "17": {
+                                    "frame_count": 36
+                                },
+                                "18": {
+                                    "frame_count": 30
+                                },
+                                "19": {
+                                    "frame_count": 36
+                                },
+                                "20": {
+                                    "frame_count": 36
+                                },
+                                "21": {
+                                    "frame_count": 36
+                                },
+                                "22": {
+                                    "frame_count": 36
+                                },
+                                "23": {
+                                    "frame_count": 30
+                                },
+                                "24": {
+                                    "frame_count": 36
+                                },
+                                "25": {
+                                    "frame_count": 36
+                                },
+                                "26": {
+                                    "frame_count": 36
+                                },
+                                "27": {
+                                    "frame_count": 36
+                                },
+                                "28": {
+                                    "frame_count": 36
+                                },
+                                "29": {
+                                    "frame_count": 36
+                                },
+                                "30": {
+                                    "frame_count": 28
+                                },
+                                "31": {
+                                    "frame_count": 36
+                                },
+                                "32": {
+                                    "frame_count": 36
+                                },
+                                "33": {
+                                    "frame_count": 36
+                                },
+                                "34": {
+                                    "frame_count": 28
+                                },
+                                "35": {
+                                    "frame_count": 36
+                                },
+                                "36": {
+                                    "frame_count": 36
+                                },
+                                "37": {
+                                    "frame_count": 28
+                                },
+                                "38": {
+                                    "frame_count": 36
+                                },
+                                "39": {
+                                    "frame_count": 36
+                                },
+                                "40": {
+                                    "frame_count": 36
+                                },
+                                "41": {
+                                    "frame_count": 36
+                                },
+                                "42": {
+                                    "frame_count": 30
+                                },
+                                "43": {
+                                    "frame_count": 42
+                                }
+                            }
+                        }
+                    }
+                },
+                "1": {
+                    "configuration_buses": {
+                        "BLOCK_RAM": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 128
+                                },
+                                "1": {
+                                    "frame_count": 128
+                                }
+                            }
+                        },
+                        "CLB_IO_CLK": {
+                            "configuration_columns": {
+                                "0": {
+                                    "frame_count": 42
+                                },
+                                "1": {
+                                    "frame_count": 30
+                                },
+                                "2": {
+                                    "frame_count": 36
+                                },
+                                "3": {
+                                    "frame_count": 36
+                                },
+                                "4": {
+                                    "frame_count": 36
+                                },
+                                "5": {
+                                    "frame_count": 36
+                                },
+                                "6": {
+                                    "frame_count": 28
+                                },
+                                "7": {
+                                    "frame_count": 36
+                                },
+                                "8": {
+                                    "frame_count": 36
+                                },
+                                "9": {
+                                    "frame_count": 28
+                                },
+                                "10": {
+                                    "frame_count": 36
+                                },
+                                "11": {
+                                    "frame_count": 36
+                                },
+                                "12": {
+                                    "frame_count": 36
+                                },
+                                "13": {
+                                    "frame_count": 36
+                                },
+                                "14": {
+                                    "frame_count": 36
+                                },
+                                "15": {
+                                    "frame_count": 36
+                                },
+                                "16": {
+                                    "frame_count": 36
+                                },
+                                "17": {
+                                    "frame_count": 36
+                                },
+                                "18": {
+                                    "frame_count": 30
+                                },
+                                "19": {
+                                    "frame_count": 36
+                                },
+                                "20": {
+                                    "frame_count": 36
+                                },
+                                "21": {
+                                    "frame_count": 36
+                                },
+                                "22": {
+                                    "frame_count": 36
+                                },
+                                "23": {
+                                    "frame_count": 30
+                                },
+                                "24": {
+                                    "frame_count": 36
+                                },
+                                "25": {
+                                    "frame_count": 36
+                                },
+                                "26": {
+                                    "frame_count": 36
+                                },
+                                "27": {
+                                    "frame_count": 36
+                                },
+                                "28": {
+                                    "frame_count": 36
+                                },
+                                "29": {
+                                    "frame_count": 36
+                                },
+                                "30": {
+                                    "frame_count": 28
+                                },
+                                "31": {
+                                    "frame_count": 36
+                                },
+                                "32": {
+                                    "frame_count": 36
+                                },
+                                "33": {
+                                    "frame_count": 36
+                                },
+                                "34": {
+                                    "frame_count": 28
+                                },
+                                "35": {
+                                    "frame_count": 36
+                                },
+                                "36": {
+                                    "frame_count": 36
+                                },
+                                "37": {
+                                    "frame_count": 32
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "idcode": 56815763
+}
+

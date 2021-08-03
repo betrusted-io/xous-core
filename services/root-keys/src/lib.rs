@@ -4,6 +4,9 @@
 pub mod api;
 use api::*;
 
+pub mod key2bits;
+use key2bits::*;
+
 use xous::{CID, send_message, Message};
 use num_traits::*;
 
@@ -15,10 +18,6 @@ pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
 /// 16 x 128-bit AES blocks to be processed in bulk
 pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
 
-pub enum RootPasswordType {
-    Update,
-    Boot,
-}
 pub enum ImageType {
     All,
     Gateware,
@@ -99,7 +98,7 @@ impl RootKeys {
     }
 
     /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
-    pub fn try_update_password(&mut self, which: RootPasswordType) -> Result<(), xous::Error> {
+    pub fn try_update_password(&mut self, which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
     }
 

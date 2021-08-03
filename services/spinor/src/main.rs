@@ -536,10 +536,10 @@ fn xmain() -> ! {
         Here is the list of servers allowed to access, and why:
           - shellchat (for testing ONLY, remove once done)
           - suspend/resume (for suspend locking/unlocking calls)
+          - keystore
           - PDDB (not yet written)
-          - keystore (not yet written)
     */
-    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
+    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(3)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
