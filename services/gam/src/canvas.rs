@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+use std::collections::BinaryHeap;
+
 use core::cmp::Ordering;
-use heapless::binary_heap::{BinaryHeap, Max};
-use heapless::FnvIndexMap;
 use graphics_server::*;
 use log::{error, info};
 
@@ -145,7 +146,7 @@ impl PartialEq for Canvas {
 impl Eq for Canvas {}
 
 
-pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvIndexMap<Gid, Canvas, 32>) -> bool {
+pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut HashMap<Gid, Canvas>) -> bool {
     // first check if any need defacing, if not, then we're done
     let mut needs_defacing = false;
     let mut defaced = false;  // this is set if any drawing actually happens
@@ -230,19 +231,19 @@ pub fn deface(gfx: &graphics_server::Gfx, trng: &trng::Trng, canvases: &mut FnvI
 }
 
 // we use the "screen" parameter to determine when we can turn off drawing to canvases that are off-screen
-pub fn recompute_canvases(canvases: &FnvIndexMap<Gid, Canvas, 32>, screen: Rectangle) -> FnvIndexMap<Gid, Canvas, 32> {
+pub fn recompute_canvases(canvases: &HashMap<Gid, Canvas>, screen: Rectangle) -> HashMap<Gid, Canvas> {
     let debug = false;
     // first, sort canvases by trust_level. Canvas implements ord/eq based on the trust_level attribute
     // so jush pushing it into a max binary heap does the trick.
     if debug { info!("CANVAS: recompute canvas"); }
-    let mut sorted_clipregions: BinaryHeap<Canvas, Max, 32> = BinaryHeap::new();
+    let mut sorted_clipregions: BinaryHeap<Canvas> = BinaryHeap::new();
     for (&k, &c) in canvases.iter() {
         if debug { info!("   CANVAS: sorting gid {:?}, canvas {:?}", k, c);}
-        sorted_clipregions.push(c).unwrap(); // always succeeds because incoming type is the same size
+        sorted_clipregions.push(c); // always succeeds because incoming type is the same size
     }
 
     // now, descend through trust levels and compute intersections, putting the updated drawable states into higher_clipregions
-    let mut higher_clipregions: BinaryHeap<Canvas, Max, 32> = BinaryHeap::new();
+    let mut higher_clipregions: BinaryHeap<Canvas> = BinaryHeap::new();
     let mut trust_level: u8 = 255;
     // sorted_clipregions is a Max heap keyed on trust, so popping the elements off will return them sorted from most to least trusted
     if debug{info!("CANVAS: received screen argument of {:?}", screen);}
@@ -271,18 +272,18 @@ pub fn recompute_canvases(canvases: &FnvIndexMap<Gid, Canvas, 32>, screen: Recta
                 }
             }
             canvas.set_drawable(drawable);
-            higher_clipregions.push(canvas).unwrap();
+            higher_clipregions.push(canvas);
         } else {
             break;
         }
     }
 
     // create a new index map out of the recomputed higher_clipregions
-    let mut map: FnvIndexMap<Gid, Canvas, 32> = FnvIndexMap::new();
+    let mut map: HashMap<Gid, Canvas> = HashMap::new();
     if debug { info!("CANVAS: reconstituting index map");}
     for &c in higher_clipregions.iter() {
         if debug { info!("   CANVAS: inserting gid {:?}, canvas {:?}", c.gid(), c);}
-        map.insert(c.gid(), c).unwrap();
+        map.insert(c.gid(), c);
     }
 
     map

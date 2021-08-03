@@ -24,7 +24,7 @@ pub mod text;
 pub use text::*;
 
 
-use hash32::{Hash, Hasher};
+use std::hash::{Hash, Hasher};
 
 //////////////// IPC APIs
 #[derive(Debug, Copy, Clone, PartialEq, Eq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -36,7 +36,7 @@ impl Gid {
     pub fn new(id: [u32; 4]) -> Self { Gid{gid: id} }
     pub fn gid(&self) -> [u32; 4] { self.gid }
 }
-impl hash32::Hash for Gid {
+impl Hash for Gid {
     fn hash<H>(&self, state: &mut H)
     where
     H: Hasher,

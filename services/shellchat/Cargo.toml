@@ -31,7 +31,6 @@ engine-25519 = {path="../engine-25519"}
 spinor = {path="../spinor"}
 root-keys = {path="../root-keys"}
 
-heapless = "0.7"
 trng = {path = "../trng"}
 
 num-derive = {version = "0.3", default-features = false}
