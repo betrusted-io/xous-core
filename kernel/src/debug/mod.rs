@@ -102,12 +102,16 @@ impl Uart {
         if unsafe { DEBUG_OUTPUT.is_none() } {
             return None;
         }
-        let uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
-        match uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) {
-            1 => None,
-            _ => Some(uart_csr.r(utra::uart::RXTX) as u8),
+        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
+            0 => None,
+            _ => {
+                let ret = Some(uart_csr.r(utra::uart::RXTX) as u8);
+                uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
+                ret
+            },
         }
     }
 
@@ -157,7 +161,7 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
     while let Some(b) = uart.getc() {
         process_irq_character(b);
     }
-    uart.acknowledge_irq();
+    // uart.acknowledge_irq();
 }
 
 fn process_irq_character(b: u8) {
