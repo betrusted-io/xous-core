@@ -272,9 +272,24 @@ mod implementation {
         }
         pub fn set_uart_mux(&mut self, mux: UartType) {
             match mux {
-                UartType::Kernel => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0),
-                UartType::Log => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1),
-                UartType::Application => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2),
+                UartType::Kernel => {
+                    log::warn!("disabling WFI so that kernel console works as expected");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
+                },
+                UartType::Log => {
+                    // this is a command mainly for debugging, so we'll accept the chance that we re-enabled WFI e.g.
+                    // during a critical operation like SPINOR flashing because we swapped consoles at a bad time. Should be
+                    // very rare and only affect devs...
+                    log::warn!("unsafe re-enabling WFI -- if you issued this command at a bad time, could have side effects");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1)
+                },
+                UartType::Application => {
+                    log::warn!("disabling WFI so that app console works as expected");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2)
+                },
                 _ => info!("invalid UART type specified for mux, doing nothing."),
             }
         }
