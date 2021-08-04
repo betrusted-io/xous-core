@@ -246,6 +246,7 @@ impl MiniElf {
         println!("    Stack");
         for i in 0..STACK_PAGE_COUNT {
             if i == 0 {
+                // For the initial stack frame, allocate a valid page
                 let sp_page = allocator.alloc() as usize;
                 allocator.map_page(
                     satp,
