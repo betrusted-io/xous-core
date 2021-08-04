@@ -2,16 +2,16 @@
 // the original crate is targeted at a non-workspace, `std` project structure. The adaptations here
 // make it suitable for `no_std` and workspace integration.
 
-use crate::project_root;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::{Path, PathBuf};
 
 use glob::glob;
 use lazy_static::lazy_static;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use regex::Regex;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
 
 type Key = String;
 type Locale = String;
@@ -28,7 +28,7 @@ fn read_locales() -> Translations {
 
     for entry in glob(&locales).expect("Failed to read glob pattern") {
         let entry = entry.unwrap();
-        // println!("cargo:rerun-if-changed={}", entry.display());
+        println!("cargo:rerun-if-changed={}", entry.display());
         let file = File::open(entry).expect("Failed to open the file");
         let mut reader = std::io::BufReader::new(file);
         let mut content = String::new();
@@ -138,9 +138,17 @@ fn write_code(code: TokenStream) {
         .expect("Cannot write generated i18n code");
 }
 
-pub fn generate_locales() {
+fn main() {
     let translations = read_locales();
     let code = generate_code(translations);
     //println!("{}", &code);
     write_code(code);
+}
+
+fn project_root() -> PathBuf {
+    Path::new(&env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(1)
+        .unwrap()
+        .to_path_buf()
 }

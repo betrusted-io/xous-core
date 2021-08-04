@@ -5,9 +5,6 @@ use std::{
     process::Command,
 };
 
-mod generate_locales;
-use generate_locales::*;
-
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
@@ -190,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("burn-kernel") => update_usb(true, false, false)?,
         Some("burn-loader") => update_usb(false, true, false)?,
         Some("burn-soc") => update_usb(false, false, true)?,
-        Some("generate-locales") => generate_locales(),
+        Some("generate-locales") => generate_locales()?,
         _ => print_help(),
     }
     Ok(())
@@ -289,8 +286,6 @@ fn build_hw_image(
     extra_args: Option<&[&str]>,
     extra_packages: &[&str],
 ) -> Result<(), DynError> {
-    generate_locales();
-
     let svd_file = match svd {
         Some(s) => s,
         None => return Err("svd file not specified".into()),
@@ -303,10 +298,11 @@ fn build_hw_image(
 
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
 
     // extract key file names; replace with defaults if not specified
-    let loaderkey_file = lkey.unwrap_or("devkey/dev.key".into());
-    let kernelkey_file = kkey.unwrap_or("devkey/dev.key".into());
+    let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
+    let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
@@ -465,8 +461,6 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
 }
 
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
-    generate_locales();
-
     let stream = if debug { "debug" } else { "release" };
 
     build(&init, debug, None, None, None)?;
@@ -559,6 +553,11 @@ fn build(
         dir.push(subdir);
     }
 
+    print!("    Command: cargo");
+    for arg in &args {
+        print!(" {}", arg);
+    }
+    println!();
     let status = Command::new(cargo())
         .current_dir(dir)
         .args(&args)
@@ -628,6 +627,13 @@ fn project_root() -> PathBuf {
         .nth(1)
         .unwrap()
         .to_path_buf()
+}
+
+/// Force the locales to be regenerated. This simply `touches`
+/// the `build.rs` for locales, causing a rebuild next time.
+fn generate_locales() -> Result<(), std::io::Error> {
+    let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+    filetime::set_file_mtime("locales/src/lib.rs", ts)
 }
 
 // fn dist_dir() -> PathBuf {
