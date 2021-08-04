@@ -38,8 +38,6 @@ use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, Gl
 use xous::MessageEnvelope;
 use xous_ipc::{String, Buffer};
 
-use heapless::spsc::Queue;
-
 #[doc = include_str!("../README.md")]
 mod cmds;
 use cmds::*;
@@ -61,7 +59,8 @@ struct Repl {
     msg: Option<MessageEnvelope>,
 
     // record our input history
-    history: Queue::<History, 16>,
+    history: Vec::<History>,
+    history_len: usize,
     content: Gid,
     gam: gam::Gam,
 
@@ -104,7 +103,8 @@ impl Repl{
         Repl {
             input: None,
             msg: None,
-            history: Queue::new(),
+            history: Vec::new(),
+            history_len: 10,
             content,
             gam,
             screensize,
@@ -133,10 +133,10 @@ impl Repl{
     }
 
     fn circular_push(&mut self, item: History) {
-        if self.history.len() == self.history.capacity() {
-            self.history.dequeue().expect("couldn't dequeue historye");
+        if self.history.len() >= self.history_len {
+            self.history.remove(0);
         }
-        self.history.enqueue(item).expect("couldn't store input line");
+        self.history.push(item);
     }
 
     /// update the loop, in response to various inputs

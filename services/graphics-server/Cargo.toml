@@ -7,8 +7,6 @@ version = "0.1.0"
 
 [dependencies]
 blitstr-ref = {path = "../../imports/blitstr-ref"}
-hash32 = "0.2"
-hash32-derive = "0.1.0"
 keyboard = {path = "../keyboard"}
 log = "0.4"
 log-server = {path = "../log-server"}

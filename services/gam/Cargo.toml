@@ -10,7 +10,6 @@ blitstr-ref = {path = "../../imports/blitstr-ref"}
 com = {path = "../com"} # used by the backlight setting on the main menu thread
 content-plugin-api = {path = "../content-plugin-api"}
 graphics-server = {path = "../graphics-server"}
-heapless = "0.7" # used for creating a sortable heap of canvas objects
 ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 keyboard = {path = "../keyboard"}

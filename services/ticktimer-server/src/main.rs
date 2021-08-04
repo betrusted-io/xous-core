@@ -5,7 +5,8 @@
 
 mod api;
 
-use heapless::binary_heap::{BinaryHeap, Min};
+use std::collections::BinaryHeap;
+use std::cmp::Reverse;
 
 use log::{error, info};
 
@@ -449,14 +450,14 @@ use implementation::*;
 
 fn recalculate_sleep(
     ticktimer: &mut XousTickTimer,
-    sleep_heap: &mut BinaryHeap<SleepRequest, Min, 64>,
+    sleep_heap: &mut BinaryHeap<Reverse<SleepRequest>>, // min-heap with Reverse
     new: Option<SleepRequest>,
 ) {
     // If there's a sleep request ongoing now, grab it.
     if let Some(current) = ticktimer.stop_interrupt() {
         #[cfg(feature = "debug-print")]
         info!("Existing request was {:?}", current);
-        sleep_heap.push(current).expect("couldn't push to heap")
+        sleep_heap.push(Reverse(current));
     } else {
         #[cfg(feature = "debug-print")]
         info!("There was no existing request");
@@ -472,15 +473,14 @@ fn recalculate_sleep(
         #[cfg(feature = "debug-print")]
         info!("Modified, the request was: {:?}", request);
         sleep_heap
-            .push(request)
-            .expect("couldn't push new sleep to heap");
+            .push(Reverse(request));
     } else {
         #[cfg(feature = "debug-print")]
         info!("No new sleep request");
     }
 
     // If there are items in the sleep heap, take the next item that will expire.
-    if let Some(next_response) = sleep_heap.pop() {
+    if let Some(Reverse(next_response)) = sleep_heap.pop() {
         #[cfg(feature = "debug-print")]
         info!(
             "scheduling a response at {} to {} (heap: {:?})",
@@ -492,7 +492,7 @@ fn recalculate_sleep(
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    let mut sleep_heap: BinaryHeap<SleepRequest, Min, 64> = BinaryHeap::new();
+    let mut sleep_heap: BinaryHeap<Reverse<SleepRequest>> = BinaryHeap::new(); // Reverse wrapping makes this a min-heap
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);

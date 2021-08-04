@@ -16,7 +16,7 @@ use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
 
 use log::info;
 
-use heapless::FnvIndexMap;
+use std::collections::HashMap;
 
 use num_traits::*;
 use xous_ipc::{Buffer, String};
@@ -40,16 +40,16 @@ pub(crate) enum LayoutBehavior {
 
 #[enum_dispatch]
 pub(crate) trait LayoutApi {
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error>;
+    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error>;
     // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error>;
+    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
     fn get_input_canvas(&self) -> Option<Gid> { None }
     fn get_prediction_canvas(&self) -> Option<Gid> { None }
     fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
     // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen clipping rectangle
     // when false, the context is moved "offscreen" by moving the canvases outside the screen clipping rectangle
     // note that this visibility state is an independent variable from the trust level draw-ability
-    fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>);
+    fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>);
     fn behavior(&self) -> LayoutBehavior;
 }
 
@@ -147,7 +147,7 @@ impl ContextManager {
                 gfx: &graphics_server::Gfx,
                 trng: &trng::Trng,
                 status_canvas: &Canvas,
-                canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+                canvases: &mut HashMap<Gid, Canvas>,
                 trust_level: u8,
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
@@ -277,7 +277,7 @@ impl ContextManager {
         gam_token: [u32; 4],
         new_height: i16,
         status_canvas: &Canvas,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Option<Point> {
+        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
@@ -295,7 +295,7 @@ impl ContextManager {
         app_token: [u32; 4],
         new_height: i16,
         status_canvas: &Canvas,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Option<Point> {
+        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
@@ -329,7 +329,7 @@ impl ContextManager {
     }
     pub(crate) fn activate(&mut self,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
         token: [u32; 4],
         clear: bool,
     ) {
@@ -438,7 +438,7 @@ impl ContextManager {
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         if let Some(last) = self.last_context {
             self.activate(gfx, canvases, last, false);
@@ -494,7 +494,7 @@ impl ContextManager {
     }
     pub(crate) fn key_event(&mut self, keys: [char; 4],
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
         // only pop up the menu if it isn't already popped up
@@ -559,7 +559,7 @@ impl ContextManager {
     pub(crate) fn raise_menu(&mut self,
         name: &str,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         log::debug!("looking for menu {}", name);
         if let Some(token) = self.find_app_token_by_name(name) {
@@ -607,7 +607,7 @@ fn xmain() -> ! {
     let mut context_mgr = ContextManager::new(&xns);
 
     // a map of canvases accessable by Gid
-    let mut canvases: FnvIndexMap<Gid, Canvas, MAX_CANVASES> = FnvIndexMap::new();
+    let mut canvases: HashMap<Gid, Canvas> = HashMap::new();
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
     let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
@@ -617,7 +617,7 @@ fn xmain() -> ! {
         Rectangle::new_coords(0, 0, screensize.x, small_height * 2),
         255, &trng, None
     ).expect("couldn't create status canvas");
-    canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
+    canvases.insert(status_canvas.gid(), status_canvas);
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
     // initialize the status bar -- this needs to start late, after the IMEF and most other things are initialized

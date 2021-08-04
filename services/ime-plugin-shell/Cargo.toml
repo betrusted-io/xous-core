@@ -6,7 +6,6 @@ name = "ime-plugin-shell"
 version = "0.1.0"
 
 [dependencies]
-heapless = "0.5.6"
 ime-plugin-api = {path = "../ime-plugin-api"}
 log = "0.4"
 log-server = {path = "../log-server"}

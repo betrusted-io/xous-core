@@ -4,8 +4,6 @@
 use ime_plugin_api::*;
 
 use log::{error, info};
-use heapless::spsc::Queue;
-use heapless::consts::*;
 
 use xous_ipc::{String, Buffer};
 use num_traits::FromPrimitive;
@@ -21,20 +19,20 @@ fn xmain() -> ! {
     let ime_sh_sid = xns.register_name(ime_plugin_shell::SERVER_NAME_IME_PLUGIN_SHELL, Some(1)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", ime_sh_sid);
 
-    let mut history: Queue<String<64>, U4> = Queue::new(); // this has 2^4 elements = 16??? or does it just have 4 elements.
+    let mut history: Vec<String<64>> = Vec::new();
     let history_max = 4;
 
     if false { // loads defaults into the predictor array to test things
         use core::fmt::Write as CoreWriter;
         let mut test1: String::<64> = String::new();
         write!(test1, "This〰should overflow the box").unwrap();
-        history.enqueue(test1).unwrap();
+        history.push(test1);
         let mut test2: String::<64> = String::new();
         write!(test2, "Another string too long").unwrap();
-        history.enqueue(test2).unwrap();
+        history.push(test2);
         let mut test3: String::<64> = String::new();
         write!(test3, "未雨绸缪").unwrap();
-        history.enqueue(test3).unwrap();
+        history.push(test3);
     }
 
     let mytriggers = PredictionTriggers {
@@ -61,9 +59,9 @@ fn xmain() -> ! {
                 write!(local_s, "{}", s.as_str()).expect("overflowed history variable");
                 log::trace!("storing history value | {}", s.as_str());
                 if history.len() == history_max {
-                    history.dequeue().expect("couldn't dequeue history");
+                    history.remove(0);
                 }
-                history.enqueue(local_s).expect("couldn't store history");
+                history.push(local_s);
                 log::trace!("history has length {}", history.len());
             }
             Some(Opcode::Prediction) => {
@@ -108,15 +106,9 @@ fn xmain() -> ! {
             }
             Some(Opcode::Unpick) => {
                 if history.len() == 1 {
-                    history.dequeue().expect("couldn't dequeue in Unpick (1)");
+                    let _ = history.remove(0);
                 } else if history.len() > 1 {
-                    // rotate everything around except the last entry
-                    for _ in 0 .. history.len() - 1 {
-                        let s = history.dequeue().expect("couldn't dequee in Unpick (>1)");
-                        history.enqueue(s).expect("couldn't enqueue in Unpick");
-                    }
-                    // discard the last entry
-                    history.dequeue().expect("couldn't dequeue in Unpick (>1 last)");
+                    let _ = history.pop(); // discard the last entry
                 }
                 // in case of 0 length, do nothing
             }
