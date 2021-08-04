@@ -1,0 +1,100 @@
+rs, 0, 0
+dl, 0, 0
+
+ir, 6, 0b001011, jpgrogram
+ir, 6, 0b010100, isc_noop
+ir, 6, 0b010100, isc_noop
+# the pause in the IR state for isc_enable is critical
+irp, 6, 0b010000, isc_enable
+dr, 5, 0b10101
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+dr, 5, 0b10101
+
+ir, 6, 0b010010, program_key
+# the one-cycle delay between program_key and dr is critical
+id, 0, 0
+dr, 32, 0xffffffff
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+
+ir, 6, 0b010001, isc_program
+dr, 32, 0x557b
+ir, 6, 0b010001, isc_program
+dr, 32, 0x39cc176c
+ir, 6, 0b010001, isc_program
+dr, 32, 0x205da0fa
+ir, 6, 0b010001, isc_program
+dr, 32, 0xa48c2c04
+ir, 6, 0b010001, isc_program
+dr, 32, 0x3f053d8a
+ir, 6, 0b010001, isc_program
+dr, 32, 0xef8a5930
+ir, 6, 0b010001, isc_program
+dr, 32, 0x44bfe3f1
+ir, 6, 0b010001, isc_program
+dr, 32, 0x97fd81f6
+ir, 6, 0b010001, isc_program
+dr, 32, 0x19b7a962
+
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+ir, 6, 0b010101, bbkey_rbk
+dr, 37, 0x1fffffffff
+
+ir, 6, 0b010110, isc_disable
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+id, 0, 0
+rs, 0, 0
+id, 0, 0,
+id, 0, 0,
+id, 0, 0,
+id, 0, 0,
+id, 0, 0,
+ir, 6, 0b111111, bypass
+dl, 0, 0
+ir, 6, 0b111111, bypass
