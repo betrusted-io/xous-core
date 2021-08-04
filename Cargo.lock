@@ -967,6 +967,14 @@ dependencies = [
 [[package]]
 name = "locales"
 version = "0.1.0"
+dependencies = [
+ "glob",
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "serde_json",
+]
 
 [[package]]
 name = "log"
@@ -1564,9 +1572,9 @@ checksum = "92d5161132722baa40d802cc70b15262b98258453e85e5d1d365c757c73869ae"
 
 [[package]]
 name = "serde_json"
-version = "1.0.64"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
+checksum = "336b10da19a12ad094b59d870ebde26a45402e5b470add4b5fd03c5048a32127"
 dependencies = [
  "itoa",
  "ryu",
@@ -2286,12 +2294,7 @@ dependencies = [
 name = "xtask"
 version = "0.1.0"
 dependencies = [
- "glob",
- "lazy_static",
- "proc-macro2",
- "quote",
- "regex",
- "serde_json",
+ "filetime",
 ]
 
 [[package]]
