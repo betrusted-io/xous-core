@@ -114,14 +114,6 @@ impl Uart {
             },
         }
     }
-
-    pub fn acknowledge_irq(&self) {
-        if unsafe { DEBUG_OUTPUT.is_none() } {
-            return;
-        }
-        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
-        uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
-    }
 }
 
 #[cfg(all(feature = "gdbserver", baremetal))]
