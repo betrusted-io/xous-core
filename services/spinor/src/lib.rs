@@ -107,7 +107,8 @@ impl Spinor {
     /// `patch` is an extremely low-level function that can patch data on FLASH. Access control must be enforced by higher level
     ///     abstractions. However, there is a single sanity check on the server side that prevents rogue writes to the SoC gateware area.
     ///     Aside from that, it's the wild west! Think of this as `dd` into a raw disk device node, and not a filesystem-abstracted `write`
-    /// `region` is a slice that points to the ostensible region that we have access to, and wish to patch
+    /// `region` is a slice that points to the target region that we wish to patch -- ostensibly we should have access to it, so this should
+    ///     just be the MemoryRange turned into a slice.
     /// `region_base` is the base address of `region`, given as an offset from base of FLASH (that is, physical address minus 0x2000_0000)
     ///     this *must* be aligned to an erase sector.
     /// `patch_data` is a slice that contains exactly the data we want to have patched into FLASH. If you're lazy and you just send a large

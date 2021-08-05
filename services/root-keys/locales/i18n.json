@@ -20,9 +20,49 @@
         "en-audio": "This will initialize the root keys. We're going to need two passwords, one for device unlock, and one for software updates."
     },
     "rootkeys.setup_wait": {
-        "en": "Initializing keys. This may\ntake a couple minutes.\nDo not reset or sleep!",
+        "en": "Initializing keys.\nThis takes a few minutes.\nDo not reset or sleep!",
         "zh": "现在正在初始化\n可能还要等一下\n不要重置或睡眠!\n",
         "en-audio": "Initializing keys. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.signing_loader": {
+        "en": "Signing loader.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "签名引导程序\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Signing loader. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.signing_kernel": {
+        "en": "Signing kernel.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "签名内核\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Signing kernel. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.backup_gateware": {
+        "en": "Backing up gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "备份比特流\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Backing up gateware. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.patching_keys": {
+        "en": "Injecting new keys.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "更换新钥匙\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Injecting new keys. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.verifying_gateware": {
+        "en": "Verifying gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "验证比特流\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Verifying gateware. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.finished": {
+        "en": "Preparing to reboot...",
+        "zh": "准备重启...",
+        "en-audio": "Preparing to reboot."
+    },
+    "rootkeys.init.failure": {
+        "en": "Process failed, aborting!",
+        "zh": "正在初始化失败，中止!",
+        "en-audio": "Process failed, aborting"
+    },
+    "rootkeys.init.confirmation": {
+        "en": "This cannot be undone.\nContinue?",
+        "zh": "这无法撤消，要继续吗?",
+        "en-audio": "This cannot be undone. Continue?"
     },
     "rootkeys.policy_clear": {
         "en": "Clear after use",

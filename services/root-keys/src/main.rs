@@ -179,38 +179,51 @@ fn xmain() -> ! {
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
-                // overall flow:
-                //  - setup the init
-                //  - prompt for root password
-                //  - prompt for boot password
-                //  - create the keys
-                //  - write the keys
-                //  - clear the passwords
-                //  - reboot
-                // the following keys should be provisioned:
-                // - self-signing private key
-                // - self-signing public key
-                // - user root key
-                // - pepper
-                if keys.is_initialized() {
-                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                if true { // short-circuit for testing subroutines
                     rootkeys_modal.modify(
-                        Some(ActionType::Notification(dismiss_modal_action)),
-                        Some(t!("rootkeys.already_init", xous::LANG)), false,
+                        Some(ActionType::Slider(progress_action)),
+                        Some(t!("rootkeys.setup_wait", xous::LANG)), false,
                         None, true, None);
-                    keys.set_ux_password_type(None);
+                    rootkeys_modal.activate();
+
+                    xous::yield_slice(); // give some time to the GAM to render
+
+                    let success = keys.test(&mut rootkeys_modal, &mut progress_action);
                 } else {
-                    dismiss_modal_action.set_action_opcode(Opcode::UxInitRequestPassword.to_u32().unwrap());
-                    rootkeys_modal.modify(
-                        Some(ActionType::Notification(dismiss_modal_action)),
-                        Some(t!("rootkeys.setup", xous::LANG)), false,
-                        None, true, None);
-                    // setup_key_init() prepares the salt and other items necessary to receive a password safely
-                    keys.setup_key_init();
-                    // request the boot password first
-                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    // overall flow:
+                    //  - setup the init
+                    //  -------> TODO: add an abort option here, in case someone clicked on this item out of curiosity
+                    //  - prompt for root password
+                    //  - prompt for boot password
+                    //  - create the keys
+                    //  - write the keys
+                    //  - clear the passwords
+                    //  - reboot
+                    // the following keys should be provisioned:
+                    // - self-signing private key
+                    // - self-signing public key
+                    // - user root key
+                    // - pepper
+                    if keys.is_initialized() {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.already_init", xous::LANG)), false,
+                            None, true, None);
+                        keys.set_ux_password_type(None);
+                    } else {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxInitRequestPassword.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.setup", xous::LANG)), false,
+                            None, true, None);
+                        // setup_key_init() prepares the salt and other items necessary to receive a password safely
+                        keys.setup_key_init();
+                        // request the boot password first
+                        keys.set_ux_password_type(Some(PasswordType::Boot));
+                    }
+                    rootkeys_modal.activate();
                 }
-                rootkeys_modal.activate();
             }),
             Some(Opcode::UxInitRequestPassword) => {
                 password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
@@ -275,7 +288,23 @@ fn xmain() -> ! {
                             // at this point, we may want to pop up a modal indicating we are going to reboot?
                             // we also need to include a command that does the reboot.
                             if success {
-                                // do a reboot
+                                dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                rootkeys_modal.modify(
+                                    Some(ActionType::Notification(dismiss_modal_action)),
+                                    Some(t!("rootkeys.init.finished", xous::LANG)), false,
+                                    None, false, None);
+                                rootkeys_modal.activate();
+                                xous::yield_slice();
+
+                                // TODO: insert the reboot code here
+                            } else {
+                                dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                rootkeys_modal.modify(
+                                    Some(ActionType::Notification(dismiss_modal_action)),
+                                    Some(t!("rootkeys.init.failure", xous::LANG)), false,
+                                    None, false, None);
+                                rootkeys_modal.activate();
+                                xous::yield_slice();
                             }
                         }
                     }

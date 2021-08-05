@@ -1,11 +1,13 @@
 use gam::FONT_TOTAL_LEN;
 use ticktimer_server::Ticktimer;
 use utralib::generated::*;
+use xous::SOC_STAGING_GW_LEN;
 use crate::api::*;
 use core::num::NonZeroUsize;
 use num_traits::*;
 
 use gam::modal::{Modal, Slider};
+use locales::t;
 
 use crate::bcrypt::*;
 use crate::api::PasswordType;
@@ -16,6 +18,9 @@ use engine_sha512::*;
 use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
+
+use aes_xous::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
+use cipher::generic_array::GenericArray;
 
 use root_keys::key2bits::*;
 
@@ -78,6 +83,13 @@ pub(crate) mod keyrom_config {
     pub const INITIALIZED:         KeyField = KeyField::new(1, 27);
 }
 
+enum RootkeyResult {
+    AlignmentError,
+    KeyError,
+    IntegrityError,
+    FlashError,
+}
+
 /// This structure is mapped into the password cache page and can be zero-ized at any time
 /// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
 /// The "password" here is generated as follows:
@@ -90,6 +102,125 @@ struct PasswordCache {
     hashed_boot_pw_valid: u32, // non-zero for valid
     hashed_update_pw: [u8; 32],
     hashed_update_pw_valid: u32,
+    fpga_key: [u8; 32],
+    fpga_key_valid: u32,
+}
+
+/// helper routine that will reverse the order of bits. uses a divide-and-conquer approach.
+fn bitflip(input: &[u8], output: &mut [u8]) {
+    assert!((input.len() % 4 == 0) && (output.len() % 4 == 0) && (input.len() == output.len()));
+    for (src, dst) in
+    input.chunks(4).into_iter()
+    .zip(output.chunks_mut(4).into_iter()) {
+        let mut word = u32::from_le_bytes(src.try_into().unwrap()); // read in as LE
+        word = ((word >> 1) & 0x5555_5555) | ((word & (0x5555_5555)) << 1);
+        word = ((word >> 2) & 0x3333_3333) | ((word & (0x3333_3333)) << 2);
+        word = ((word >> 4) & 0x0F0F_0F0F) | ((word & (0x0F0F_0F0F)) << 4);
+        // copy out as BE, this performs the final byte-level swap needed by the divde-and-conquer algorithm
+        for (&s, d) in word.to_be_bytes().iter().zip(dst.iter_mut()) {
+            *d = s;
+        }
+    }
+}
+
+const AES_BLOCKSIZE: usize = 16;
+/// This structure encapsulates the tools necessary to create an Oracle that can go from
+/// the encrypted bitstream to plaintext and back again, based on the position in the bitstream.
+/// It is a partial re-implementation of the Cbc crate from block-ciphers, and the reason we're
+/// not just using the stock Cbc crate is that it doesn't seem to support restarting the Cbc
+/// stream from an arbitrary position.
+struct BitstreamOracle<'a> {
+    bitstream: &'a [u8],
+    cipher: Aes256,
+    iv: [u8; AES_BLOCKSIZE],
+    /// subslice of the bitstream that contains just the encrypted area of the bitstream
+    ciphertext: &'a [u8],
+}
+impl<'a> BitstreamOracle<'a> {
+    pub fn new(key: &'a[u8], bitstream: &'a[u8]) -> BitstreamOracle<'a> {
+        let mut position: usize = 0;
+
+        // Search through the bitstream for the key words that define the IV and ciphertetx length.
+        // This is done so that if extra headers are added or modified, the code doesn't break (versus coding in static offsets).
+        let mut iv_pos = 0;
+        while position < bitstream.len() {
+            let cwd = u32::from_be_bytes(bitstream[position..position+4].try_into().unwrap());
+            if cwd == 0x3001_6004 {
+                iv_pos = position + 4
+            }
+            if cwd == 0x3003_4001 {
+                break;
+            }
+            position += 1;
+        }
+
+        let position = position + 4;
+        let ciphertext_len = 4 * u32::from_be_bytes(bitstream[position..position+4].try_into().unwrap());
+        let ciphertext_start = position + 4;
+        log::info!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
+        let ciphertext = &bitstream[ciphertext_start..ciphertext_start + ciphertext_len as usize];
+
+        let mut iv_bytes: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
+        bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
+        log::info!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
+        log::info!("recovered iv           : {:x?}", &iv_bytes);
+
+        let cipher = Aes256::new(key.try_into().unwrap());
+
+        BitstreamOracle {
+            bitstream,
+            cipher,
+            iv: iv_bytes,
+            ciphertext,
+        }
+    }
+    pub fn clear(&mut self) {
+        self.cipher.clear();
+    }
+    /// decrypts a portion of the bitstream starting at "from", of length output
+    pub fn decrypt(&self, from: usize, output: &mut [u8]) {
+        assert!(from & (AES_BLOCKSIZE - 1) == 0); // all requests must be an even multiple of an AES block size
+
+        let mut index = from;
+        let mut temp_block = [0; AES_BLOCKSIZE];
+        let mut chain: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
+        for block in output.chunks_mut(AES_BLOCKSIZE).into_iter() {
+            if index ==  0 {
+                chain = self.iv;
+            } else {
+                bitflip(&self.ciphertext[index - AES_BLOCKSIZE..index], &mut chain);
+            };
+            // copy the ciphertext into the temp_block, with a bitflip
+            bitflip(&self.ciphertext[index..index + AES_BLOCKSIZE], &mut temp_block);
+
+            // replaces the ciphertext with "plaintext"
+            let mut d = GenericArray::clone_from_slice(&mut temp_block);
+            self.cipher.decrypt_block(&mut d);
+            for (&src, dst) in d.iter().zip(temp_block.iter_mut()) {
+                *dst = src;
+            }
+
+            // now XOR against the IV into the final output block. We use a "temp" block so we
+            // guarantee an even block size for AES, but in fact, the output block does not
+            // have to be an even multiple of our block size!
+            for (dst, (&src, &iv)) in block.iter_mut().zip(temp_block.iter().zip(chain.iter())) {
+                *dst = src ^ iv;
+            }
+            index += AES_BLOCKSIZE;
+        }
+    }
+    pub fn ciphertext_len(&self) -> usize {
+        self.ciphertext.len()
+    }
+}
+impl<'a> Drop for BitstreamOracle<'a> {
+    fn drop(&mut self) {
+        self.cipher.clear();
+        for b in self.iv.iter_mut() {
+            *b = 0;
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 pub(crate) struct RootKeys {
@@ -110,6 +241,7 @@ pub(crate) struct RootKeys {
     gam: gam::Gam, // for raising UX elements directly
     gfx: graphics_server::Gfx, // for reading out font planes for signing verification
     spinor: spinor::Spinor,
+    ticktimer: ticktimer_server::Ticktimer,
 }
 
 impl RootKeys {
@@ -179,7 +311,8 @@ impl RootKeys {
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
-            spinor
+            spinor,
+            ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
         };
 
         keys
@@ -200,6 +333,11 @@ impl RootKeys {
                         *p = 0;
                     }
                     (*pcache_ptr).hashed_update_pw_valid = 0;
+
+                    for p in (*pcache_ptr).fpga_key.iter_mut() {
+                        *p = 0;
+                    }
+                    (*pcache_ptr).fpga_key_valid = 0;
                 }
             }
         }
@@ -418,13 +556,13 @@ impl RootKeys {
             // sensitive_slice is our staging area for the new keyrom contents
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
             for (src, dst) in public_key.chunks(4).into_iter()
-                .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+            .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
                 *dst = u32::from_be_bytes(src.try_into().unwrap())
             }
         }
 
         // extract the update password key from the cache, and apply it to the private key
-        let pcache: &PasswordCache = unsafe{&*(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         #[cfg(feature = "hazardous-debug")]
         {
             log::info!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
@@ -434,22 +572,22 @@ impl RootKeys {
         let mut private_key_enc: [u8; ed25519_dalek::SECRET_KEY_LENGTH] = [0; ed25519_dalek::SECRET_KEY_LENGTH];
         // we do this from to try and avoid making as few copies of the hashed password as possible
         for (dst, (plain, key)) in
-            private_key_enc.iter_mut()
-            .zip(keypair.secret.to_bytes().iter()
-            .zip(pcache.hashed_update_pw.iter())) {
-                *dst = plain ^ key;
+        private_key_enc.iter_mut()
+        .zip(keypair.secret.to_bytes().iter()
+        .zip(pcache.hashed_update_pw.iter())) {
+            *dst = plain ^ key;
         }
 
         // store the private key to the keyrom staging area
         {
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
             for (src, dst) in private_key_enc.chunks(4).into_iter()
-                .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PRIVKEY as usize..KeyRomLocs::SELFSIGN_PRIVKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+            .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PRIVKEY as usize..KeyRomLocs::SELFSIGN_PRIVKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
                 *dst = u32::from_be_bytes(src.try_into().unwrap())
             }
         }
 
-        update_progress(10, progress_modal, progress_action);
+        update_progress(5, progress_modal, progress_action);
 
         // generate and store a root key (aka boot key), this is what is unlocked by the "boot password"
         // ironically, it's a "lower security" key because it just acts as a gatekeeper to further
@@ -457,50 +595,61 @@ impl RootKeys {
         // think of this more as a user PIN login confirmation, than as a significant cryptographic event
         let mut boot_key_enc: [u8; 32] = [0; 32];
         for (dst, key) in
-            boot_key_enc.chunks_mut(4).into_iter()
-            .zip(pcache.hashed_boot_pw.chunks(4).into_iter()) {
-                let key_word = self.trng.get_u32().unwrap().to_be_bytes();
-                // just unroll this loop, it's fast and easy enough
-                (*dst)[0] = key[0] ^ key_word[0];
-                (*dst)[1] = key[1] ^ key_word[1];
-                (*dst)[2] = key[2] ^ key_word[2];
-                (*dst)[3] = key[3] ^ key_word[3];
-                // also note that interestingly, we don't have to XOR it with the hashed boot password --
-                // this key isn't used by this routine, just initialized, so really, it only matters to
-                // XOR it with the password when you use it the first time to encrypt something.
+        boot_key_enc.chunks_mut(4).into_iter()
+        .zip(pcache.hashed_boot_pw.chunks(4).into_iter()) {
+            let key_word = self.trng.get_u32().unwrap().to_be_bytes();
+            // just unroll this loop, it's fast and easy enough
+            (*dst)[0] = key[0] ^ key_word[0];
+            (*dst)[1] = key[1] ^ key_word[1];
+            (*dst)[2] = key[2] ^ key_word[2];
+            (*dst)[3] = key[3] ^ key_word[3];
+            // also note that interestingly, we don't have to XOR it with the hashed boot password --
+            // this key isn't used by this routine, just initialized, so really, it only matters to
+            // XOR it with the password when you use it the first time to encrypt something.
         }
 
         // store the boot key to the keyrom staging area
         {
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
             for (src, dst) in private_key_enc.chunks(4).into_iter()
-                .zip(sensitive_slice[KeyRomLocs::USER_KEY as usize..KeyRomLocs::USER_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
+            .zip(sensitive_slice[KeyRomLocs::USER_KEY as usize..KeyRomLocs::USER_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
                 *dst = u32::from_be_bytes(src.try_into().unwrap())
             }
         }
 
-        update_progress(20, progress_modal, progress_action);
-
         // sign the loader
+        progress_modal.modify(None, Some(t!("rootkeys.init.signing_loader", xous::LANG)), false, None, false, None);
+        update_progress(10, progress_modal, progress_action);
         let (loader_sig, loader_len) = self.sign_loader(&keypair);
-        update_progress(30, progress_modal, progress_action);
 
         // sign the kernel
+        progress_modal.modify(None, Some(t!("rootkeys.init.signing_kernel", xous::LANG)), false, None, false, None);
+        update_progress(20, progress_modal, progress_action);
         let (kernel_sig, kernel_len) = self.sign_kernel(&keypair);
-        update_progress(40, progress_modal, progress_action);
 
+        update_progress(25, progress_modal, progress_action);
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in plaintext format
         // e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a 0's key and we'd later on set it)
         #[cfg(feature = "hazardous-debug")]
         self.debug_print_key(KeyRomLocs::FPGA_KEY as usize, 256, "FPGA key before encryption: ");
         {
             let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+            // before we encrypt it, stash a copy in our password cache, as we'll need it later on to encrypt the bitstream
+            for (word, key) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
+            .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
+                for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
+                    *d = s;
+                }
+            }
+            pcache.fpga_key_valid = 1;
+
+            // now encrypt it in the staging area
             for (word, key_word) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
-                .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
+            .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
                 *word = *word ^ u32::from_be_bytes(key_word.try_into().unwrap());
             }
         }
-        update_progress(50, progress_modal, progress_action);
+        update_progress(30, progress_modal, progress_action);
 
         // set the "init" bit in the staging area
         {
@@ -509,7 +658,6 @@ impl RootKeys {
             let config = self.keyrom.rf(utra::keyrom::DATA_DATA);
             sensitive_slice[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
         }
-        update_progress(60, progress_modal, progress_action);
 
         #[cfg(feature = "hazardous-debug")]
         {
@@ -521,19 +669,221 @@ impl RootKeys {
         // Because we're initializing keys for the *first* time, make a backup copy of the bitstream to
         // the staging area. Note that if we're doing an update, the update target would already be
         // in the staging area, so this step should be skipped.
-        self.make_gateware_backup(60, 70, progress_modal, progress_action);
+        progress_modal.modify(None, Some(t!("rootkeys.init.backup_gateware", xous::LANG)), false, None, false, None);
+        update_progress(40, progress_modal, progress_action);
+        if self.make_gateware_backup(40, 60, progress_modal, progress_action).is_err() {
+            log::error!("error occured in make_gateware_backup.");
+            return false;
+        };
 
         // compute the keyrom patch set for the bitstream
         // at this point the KEYROM as replicated in sensitive_slice should have all its assets in place
+        progress_modal.modify(None, Some(t!("rootkeys.init.patching_keys", xous::LANG)), false, None, false, None);
+        update_progress(60, progress_modal, progress_action);
+
+        let gateware = self.gateware.as_slice::<u8>();
+        assert!(pcache.fpga_key_valid == 1);
+        // note to self: BitstreamOracle implements Drop which will clear the key schedule and iv
+        let oracle = BitstreamOracle::new(&pcache.fpga_key, gateware);
+
+        if self.patch_keys(&oracle, 60, 70, progress_modal, progress_action).is_err() {
+            log::error!("error occured in patch_keys.");
+            return false;
+        }
         patch::should_patch(42);
 
+        // verify that the patch worked
+        progress_modal.modify(None, Some(t!("rootkeys.init.verifying_gateware", xous::LANG)), false, None, false, None);
+        update_progress(90, progress_modal, progress_action);
+
+        // --> put the verify call here
+
+        // sign the image, commit the signature
+        // --> add something to sign the gateware region here
+        // --> format the signatures and write them to FLASH
+
         // finalize the progress bar on exit -- always leave at 100%
+        progress_modal.modify(None, Some(t!("rootkeys.init.finished", xous::LANG)), false, None, false, None);
+        update_progress(100, progress_modal, progress_action);
+
+        true
+    }
+
+    pub fn test(&mut self, progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+
+        // setup the local cache
+        let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+        for addr in 0..256 {
+            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
+            sensitive_slice[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+        }
+
+        for (word, key) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
+        .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
+            for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
+                *d = s;
+            }
+        }
+        pcache.fpga_key_valid = 1;
+
+        // make the oracle
+        let gateware = self.gateware.as_slice::<u8>();
+        assert!(pcache.fpga_key_valid == 1);
+        let oracle = BitstreamOracle::new(&pcache.fpga_key, gateware);
+
+        // TEST
+        if self.patch_keys(&oracle, 60, 80, progress_modal, progress_action).is_err() {
+            log::error!("error occured in patch_keys.");
+            return false;
+        }
+
+        if self.verify_gateware(&oracle, 80, 100, progress_modal, progress_action).is_err() {
+            log::error!("error occurred in gateware verification");
+            return false;
+        }
+        // finalize the progress bar on exit -- always leave at 100%
+        progress_modal.modify(None, Some(t!("rootkeys.init.finished", xous::LANG)), false, None, false, None);
         update_progress(100, progress_modal, progress_action);
         true
     }
 
-    fn make_gateware_backup(&mut self, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) {
-        
+    fn patch_keys(&self, oracle: &BitstreamOracle, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
+        let mut last_prog_update = 0;
+
+        // extract the HMAC header
+        let mut hmac_header: [u8; 64] = [0; 64];
+        oracle.decrypt(0, &mut hmac_header);
+
+        // check that the header has a well-known sequence in it -- sanity check the AES key
+        let mut pass = true;
+        for &b in hmac_header[32..].iter() {
+            if b != 0x6C {
+                pass = false;
+            }
+        }
+        if !pass {
+            log::error!("hmac_header did not decrypt correctly: {:x?}", hmac_header);
+            return Err(RootkeyResult::KeyError);
+        }
+
+        // patch the keyrom frames
+        for frame in patch::PATCH_FRAMES.iter() {
+
+        }
+
+        // now seek to the various frames and patch their data...
+        Ok(())
+    }
+
+    fn verify_gateware(&self, oracle: &BitstreamOracle, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
+        let mut last_prog_update = 0;
+
+        let mut hmac_area = [0; 64];
+        oracle.decrypt(0, &mut hmac_area);
+        let mut hmac_code: [u8; 32] = [0; 32];
+        for (dst, (&hm1, &mask)) in
+        hmac_code.iter_mut()
+        .zip(hmac_area[0..32].iter().zip(hmac_area[32..64].iter())) {
+            *dst = hm1 ^ mask;
+        }
+        log::trace!("hmac code: {:x?}", hmac_code);
+
+        log::debug!("verifying gateware");
+        let mut hasher = engine_sha512::Sha256::new();
+        // magic number alert:
+        // 160 = reserved space for the 2nd hash
+        // 320 = some padding that is built into the file format, for whatever reason xilinx picked
+        let tot_len = oracle.ciphertext_len() - 320 - 160;
+        // slow but steady. we can optimize later.
+        // for now, very tiny optimization - use blocksize * 2 because that happens to be divisible by the bitstream parameters
+        let mut decrypt = [0; AES_BLOCKSIZE*2];
+        let mut flipped = [0; AES_BLOCKSIZE*2];
+        for index in (0..tot_len).step_by(AES_BLOCKSIZE*2) {
+            oracle.decrypt(index, &mut decrypt);
+            bitflip(&decrypt, &mut flipped);
+            hasher.update(&flipped);
+
+            let progress = ((prog_end - prog_start) * index as u32) / tot_len as u32;
+            if progress != last_prog_update {
+                log::debug!("progress: {}", progress);
+                last_prog_update = progress;
+                update_progress(progress + prog_start, progress_modal, progress_action);
+            }
+        }
+        let h1_digest: [u8; 32] = hasher.finalize().try_into().unwrap();
+        log::trace!("computed hash: {:x?}", h1_digest);
+
+        let mut hasher2 = engine_sha512::Sha256::new();
+        let footer_mask: [u8; 32] = [0x3A; 32];
+        let mut masked_footer: [u8; 32] = [0; 32];
+        for (dst, (&hm2, &mask)) in
+        masked_footer.iter_mut()
+        .zip(hmac_code.iter().zip(footer_mask.iter())) {
+            *dst = hm2 ^ mask;
+        }
+        log::debug!("masked_footer: {:x?}", masked_footer);
+        log::debug!("footer_mask: {:x?}", footer_mask);
+        let mut masked_footer_flipped: [u8; 32] = [0; 32];
+        bitflip(&masked_footer, &mut masked_footer_flipped);
+        let mut footer_mask_flipped: [u8; 32] = [0; 32];
+        bitflip(&footer_mask, &mut footer_mask_flipped);
+        hasher2.update(masked_footer_flipped);
+        hasher2.update(footer_mask_flipped);
+        hasher2.update(h1_digest);
+        let h2_digest: [u8; 32] = hasher2.finalize().try_into().unwrap();
+
+        log::debug!("h2 hash: {:x?}", h2_digest);
+        let mut ref_digest_flipped: [u8; 32] = [0; 32];
+        oracle.decrypt(oracle.ciphertext_len() - 32, &mut ref_digest_flipped);
+        let mut ref_digest: [u8; 32] = [0; 32];
+        log::debug!("ref digest (flipped): {:x?}", ref_digest_flipped);
+        bitflip(&ref_digest_flipped, &mut ref_digest);
+        log::debug!("ref digest          : {:x?}", ref_digest);
+
+        let mut matching = true;
+        for (&l, &r) in ref_digest.iter().zip(h2_digest.iter()) {
+            if l != r {
+                matching = false;
+            }
+        }
+
+        if matching {
+            Ok(())
+        } else {
+            Err(RootkeyResult::IntegrityError)
+        }
+    }
+
+
+    fn make_gateware_backup(&mut self, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
+        let gateware_dest = self.staging.as_slice::<u8>();
+        let gateware_src = self.gateware.as_slice::<u8>();
+
+        log::trace!("src: {:x?}", &gateware_src[0..32]);
+        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
+
+        let mut last_prog_update = 0;
+        const PATCH_CHUNK: usize = 65536; // this controls the granularity of the erase operation
+        let mut dest_patch_addr = xous::SOC_STAGING_GW_LOC;
+        for (dst, src) in
+        gateware_dest.chunks(PATCH_CHUNK).into_iter()
+        .zip(gateware_src.chunks(PATCH_CHUNK)) {
+            log::debug!("writing {} backup bytes to address 0x{:08x}", src.len(), dest_patch_addr);
+            self.spinor.patch(dst, dest_patch_addr, src, 0)
+                .map_err(|_| RootkeyResult::FlashError)?;
+            dest_patch_addr += PATCH_CHUNK as u32;
+
+            let progress = ((prog_end - prog_start) * (dest_patch_addr - xous::SOC_STAGING_GW_LOC)) / xous::SOC_STAGING_GW_LEN;
+            if progress != last_prog_update {
+                last_prog_update = progress;
+                update_progress(progress + prog_start, progress_modal, progress_action);
+            }
+        }
+
+        log::trace!("src: {:x?}", &gateware_src[0..32]);
+        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
+        Ok(())
     }
 
     #[cfg(feature = "hazardous-debug")]
@@ -622,11 +972,23 @@ impl RootKeys {
     /// Called by the UX layer at the epilogue of the initialization run. Allows suspend/resume to resume,
     /// and zero-izes any sensitive data that was created in the process.
     pub fn finish_key_init(&mut self) {
-        let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
-        // zeroize the RAM-backed data
-        for data in sensitive_slice.iter_mut() {
-            *data = 0;
+        // purge the password cache, if the policy calls for it
+        match self.boot_password_policy {
+            PasswordRetentionPolicy::AlwaysPurge => {
+                self.purge_password(PasswordType::Boot);
+            },
+            _ => ()
         }
+        match self.update_password_policy {
+            PasswordRetentionPolicy::AlwaysPurge => {
+                self.purge_password(PasswordType::Update);
+            },
+            _ => ()
+        }
+
+        // now purge the keyrom copy and other temporaries
+        self.purge_sensitive_data();
+
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }

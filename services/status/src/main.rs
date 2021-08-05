@@ -180,7 +180,7 @@ fn xmain() -> ! {
     let mut stats_phase: usize = 0;
 
     let dt_pump_interval = 15;
-    let charger_pump_interval = 60;
+    let charger_pump_interval = 180;
     let stats_interval;
     let batt_interval;
     if cfg!(feature = "slowstatus") {
@@ -234,13 +234,13 @@ fn xmain() -> ! {
                 }
 
                 if (stats_phase % charger_pump_interval) == 1 { // stagger periodic tasks
-                    // once a minute confirm that the charger is in the right state.
+                    // confirm that the charger is in the right state.
                     if stats.soc < 95 || stats.remaining_capacity < 1000 { // only request if we aren't fully charged, either by SOC or capacity metrics
                         if (llio.adc_vbus().unwrap() as f64) * 0.005033 > 4.45 { // 4.45V is our threshold for deciding if a cable is present
                             // charging cable is present
                             if !com.is_charging().expect("couldn't check charging state") {
                                 // not charging, but cable is present
-                                log::info!("Charger present, but not currently charging. Automatically requesting charge start.");
+                                log::debug!("Charger present, but not currently charging. Automatically requesting charge start.");
                                 com.request_charging().expect("couldn't send charge request");
                             }
                         }
