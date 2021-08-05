@@ -11,34 +11,48 @@ pub type Connection = usize;
 
 pub const MAX_CID: usize = 34;
 
-pub const FLASH_PHYS_BASE:    u32 = 0x2000_0000;
-pub const SOC_REGION_LOC:     u32 = 0x0000_0000;
-pub const SOC_REGION_LEN:     u32 = 0x00D0_0000; // gw + staging + loader + kernel
+pub const FLASH_PHYS_BASE: u32 = 0x2000_0000;
+pub const SOC_REGION_LOC: u32 = 0x0000_0000;
+pub const SOC_REGION_LEN: u32 = 0x00D0_0000; // gw + staging + loader + kernel
 
-pub const SOC_MAIN_GW_LOC:    u32 = 0x0000_0000; // gateware - primary loading address
-pub const SOC_MAIN_GW_LEN:    u32 = 0x0028_0000;
+pub const SOC_MAIN_GW_LOC: u32 = 0x0000_0000; // gateware - primary loading address
+pub const SOC_MAIN_GW_LEN: u32 = 0x0028_0000;
 pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy
 pub const SOC_STAGING_GW_LEN: u32 = 0x0028_0000;
 
-pub const LOADER_LOC:         u32 = 0x0050_0000; // loader - base
-pub const LOADER_CODE_LEN:    u32 = 0x0002_0000; // code region only
-pub const LOADER_FONT_LOC:    u32 = 0x0052_0000; // should be the same as graphics-server/src/fontmap.rs/FONT_BASE
-pub const LOADER_FONT_LEN:    u32 = 0x0046_0000; // length of font region only
-pub const LOADER_TOTAL_LEN:   u32 = 0x0048_0000; // code + font
+pub const LOADER_LOC: u32 = 0x0050_0000; // loader - base
+pub const LOADER_CODE_LEN: u32 = 0x0002_0000; // code region only
+pub const LOADER_FONT_LOC: u32 = 0x0052_0000; // should be the same as graphics-server/src/fontmap.rs/FONT_BASE
+pub const LOADER_FONT_LEN: u32 = 0x0046_0000; // length of font region only
+pub const LOADER_TOTAL_LEN: u32 = 0x0048_0000; // code + font
 
-pub const KERNEL_LOC:         u32 = 0x0098_0000; // kernel start
-pub const KERNEL_LEN:         u32 = 0x0038_0000; // max kernel length
+pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
+pub const KERNEL_LEN: u32 = 0x0038_0000; // max kernel length
 
-pub const PDDB_LOC:           u32 = 0x00D0_0000; // PDDB start
-pub const PDDB_LEN:           u32 = 0x0530_0000; // this reserves space for testing structures
-// pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
+pub const PDDB_LOC: u32 = 0x00D0_0000; // PDDB start
+pub const PDDB_LEN: u32 = 0x0530_0000; // this reserves space for testing structures
+                                       // pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
 
-pub const EC_REGION_LOC:    u32 = 0x07F8_0000; // EC update staging area
+pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area
 pub const EC_WF200_PKG_LOC: u32 = 0x07F8_0000;
 pub const EC_WF200_PKG_LEN: u32 = 0x0004_E000;
-pub const EC_FW_PKG_LOC:    u32 = 0x07FC_E000;
-pub const EC_FW_PKG_LEN:    u32 = 0x0003_2000;
-pub const EC_REGION_LEN:    u32 = 0x0008_0000;
+pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
+pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
+pub const EC_REGION_LEN: u32 = 0x0008_0000;
+
+#[repr(usize)]
+pub enum ExceptionType {
+    InstructionAddressMisaligned = 0,
+    InstructionAccessFault = 1,
+    IllegalInstruction = 2,
+    LoadAddressMisaligned = 3,
+    LoadAccessFault = 4,
+    StoreAddressMisaligned = 5,
+    StoreAccessFault = 6,
+    InstructionPageFault = 7,
+    LoadPageFault = 8,
+    StorePageFault = 9,
+}
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
