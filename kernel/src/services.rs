@@ -20,6 +20,15 @@ const MAX_SERVER_COUNT: usize = 128;
 
 pub use crate::arch::process::{INITIAL_TID, MAX_PROCESS_COUNT};
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ExceptionHandler {
+    /// Address (in program space) where the exception handler is
+    pub pc: usize,
+
+    /// Stack pointer when the exception is run
+    pub sp: usize,
+}
+
 // fn log_process_update(f: &str, l: u32, process: &Process, old_state: ProcessState) {
 //     if process.pid.get() == 3 {
 //         println!("[{}:{}] Updated PID {:?} state: {:?} -> {:?}", f, l, process.pid, old_state, process.state);
@@ -118,7 +127,7 @@ pub struct Process {
     previous_thread: TID,
 
     /// When an exception is hit, the kernel will switch to this Thread.
-    exception_handler: Option<(usize /* handler */, usize /* Stack */)>,
+    exception_handler: Option<ExceptionHandler>,
 }
 
 impl Default for Process {
@@ -887,6 +896,7 @@ impl SystemServices {
     ) -> Result<TID, xous_kernel::Error> {
         let previous_pid = self.current_pid();
 
+        #[cfg(feature = "debug-print")]
         if new_tid != 0 {
             klog!("Activating process {} thread {}", new_pid, new_tid);
         } else {
@@ -896,8 +906,8 @@ impl SystemServices {
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
+        let new = self.get_process_mut(new_pid)?;
         if new_pid != previous_pid {
-            let new = self.get_process_mut(new_pid)?;
             // println!("New state: {:?}", new.state);
 
             // Ensure the new process can be run.
@@ -945,7 +955,7 @@ impl SystemServices {
                 }
                 ProcessState::Sleeping | ProcessState::Debug(_) => {
                     // println!("PID {} was sleeping or being debugged", new_pid);
-                    Err(xous_kernel::Error::ProcessNotFound)?;
+                    return Err(xous_kernel::Error::ProcessNotFound);
                 }
             }
 
@@ -1164,9 +1174,9 @@ impl SystemServices {
             dest_mapping.activate()?;
             let dest_virt = mm
                 .find_virtual_address(dest_virt as *mut u8, len, xous_kernel::MemoryType::Messages)
-                .or_else(|e| {
+                .map_err(|e| {
                     src_mapping.activate().expect("couldn't undo mapping");
-                    Err(e)
+                    e
                 })? as *mut usize;
             src_mapping
                 .activate()
@@ -1277,10 +1287,10 @@ impl SystemServices {
             dest_mapping.activate()?;
             let dest_virt = mm
                 .find_virtual_address(dest_virt as *mut u8, len, xous_kernel::MemoryType::Messages)
-                .or_else(|e| {
+                .map_err(|e| {
                     src_mapping.activate().unwrap();
                     // klog!("Couldn't find a virtual address");
-                    Err(e)
+                    e
                 })? as *mut usize;
             src_mapping.activate().unwrap();
 
@@ -1363,19 +1373,19 @@ impl SystemServices {
         // );
         if len == 0 {
             // klog!("No len");
-            Err(xous_kernel::Error::BadAddress)?;
+            return Err(xous_kernel::Error::BadAddress);
         }
         if len & 0xfff != 0 {
             // klog!("len not aligned");
-            Err(xous_kernel::Error::BadAddress)?;
+            return Err(xous_kernel::Error::BadAddress);
         }
         if src_virt as usize & 0xfff != 0 {
             // klog!("Src virt not aligned");
-            Err(xous_kernel::Error::BadAddress)?;
+            return Err(xous_kernel::Error::BadAddress);
         }
         if dest_virt as usize & 0xfff != 0 {
             // klog!("dest virt not aligned");
-            Err(xous_kernel::Error::BadAddress)?;
+            return Err(xous_kernel::Error::BadAddress);
         }
 
         // If memory is getting returned to the kernel, then it is memory that was
@@ -1420,7 +1430,7 @@ impl SystemServices {
                     0
                 });
             }
-            error.map_or_else(|| Ok(dest_virt), |e| Err(e))
+            error.map_or_else(|| Ok(dest_virt), Err)
         })
         .map(|val| val as *mut usize)
     }
@@ -1563,7 +1573,7 @@ impl SystemServices {
 
         // We cannot wait on ourselves.
         if tid == join_tid {
-            Err(xous_kernel::Error::ThreadNotAvailable)?
+            return Err(xous_kernel::Error::ThreadNotAvailable)
         }
 
         // If the target thread exists, put this thread to sleep.
@@ -1776,7 +1786,7 @@ impl SystemServices {
                     }
                 }
             }
-            let slot_idx = slot_idx.ok_or_else(|| Error::OutOfMemory)?;
+            let slot_idx = slot_idx.ok_or(Error::OutOfMemory)?;
 
             // Look through all servers for one whose SID matches.
             for (server_idx, server) in self.servers.iter().enumerate() {
@@ -1872,11 +1882,7 @@ impl SystemServices {
     /// within the current process.
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
         // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(), cid);
-        if cid == 0 {
-            // println!("KERNEL({}): CID is invalid -- returning", crate::arch::process::current_pid());
-            return None;
-        } else if cid == 1 {
-            // println!("KERNEL({}): Server has terminated -- returning", crate::arch::process::current_pid());
+        if cid == 0 || cid == 1 {
             return None;
         }
 
@@ -2125,9 +2131,37 @@ impl SystemServices {
         Ok(())
     }
 
-    ///
-    pub fn handle_exception(&mut self) -> Option<ExceptionHandler> {
-        None
+    /// Causes the provided process to go into an exception state. This will fail
+    /// if any of the following are true:
+    ///     1. The process does not exist
+    ///     2. The process has no exception handler
+    ///     3. The process is not "Running" or "Ready"
+    pub fn begin_exception_handler(&mut self, pid: PID) -> Option<ExceptionHandler> {
+        let process = self.get_process_mut(pid).ok()?;
+        let handler = process.exception_handler?;
+        process.state = match process.state {
+            ProcessState::Running(x) => ProcessState::Exception(x | 1 << process.current_thread),
+            ProcessState::Ready(x) => ProcessState::Exception(x),
+            _ => return None,
+        };
+        Some(handler)
+    }
+
+    /// Move the current process from an `Exception` state back into a `Running` state
+    /// with the current thread being marked as the given tid.
+    pub fn finish_exception_handler_and_resume(
+        &mut self,
+        pid: PID,
+        tid: TID,
+    ) -> Result<(), xous_kernel::Result> {
+        let process = self.get_process_mut(pid)?;
+        if let ProcessState::Exception(threads) = process.state {
+            process.state = ProcessState::Running(threads & !(1 << tid));
+            process.current_thread = tid;
+        } else {
+            return Err(xous_kernel::Error::ThreadNotAvailable.into())
+        }
+        Ok(())
     }
 
     /// Returns the process name, if any, of a given PID

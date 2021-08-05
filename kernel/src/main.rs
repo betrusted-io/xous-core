@@ -43,8 +43,16 @@ fn handle_panic(_arg: &PanicInfo) -> ! {
 #[no_mangle]
 /// This function is called from baremetal startup code to initialize various kernel structures
 /// based on arguments passed by the bootloader. It is unused when running under an operating system.
-pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offset: *mut u32) {
-    unsafe { args::KernelArguments::init(arg_offset) };
+///
+/// # Safety
+///
+/// This is safe to call only to initialize the kernel.
+pub unsafe extern "C" fn init(
+    arg_offset: *const u32,
+    init_offset: *const u32,
+    rpt_offset: *mut u32,
+) {
+    args::KernelArguments::init(arg_offset);
     let args = args::KernelArguments::get();
     // Everything needs memory, so the first thing we should do is initialize the memory manager.
     crate::mem::MemoryManager::with_mut(|mm| {
@@ -63,8 +71,12 @@ pub extern "C" fn init(arg_offset: *const u32, init_offset: *const u32, rpt_offs
     #[cfg(any(feature = "debug-print", feature = "print-panics"))]
     {
         use utralib::generated::*;
-        xous_kernel::claim_interrupt(utra::uart::UART_IRQ, debug::irq, 0 as *mut usize)
-            .expect("Couldn't claim debug interrupt");
+        xous_kernel::claim_interrupt(
+            utra::uart::UART_IRQ,
+            debug::irq,
+            core::ptr::null_mut::<usize>(),
+        )
+        .expect("Couldn't claim debug interrupt");
         // Map the serial port so println!() works as expected.
         mem::MemoryManager::with_mut(|memory_manager| {
             memory_manager
