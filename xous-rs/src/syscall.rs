@@ -321,6 +321,13 @@ pub enum SysCall {
     /// Waits for a thread to finish, and returns the return value of that thread.
     JoinThread(TID),
 
+    /// A function to call when there is an exception such as a memory fault
+    /// or illegal instruction.
+    SetExceptionHandler(
+        usize, /* function pointer */
+        usize, /* stack pointer */
+    ),
+
     /// This syscall does not exist. It captures all possible
     /// arguments so detailed analysis can be performed.
     Invalid(usize, usize, usize, usize, usize, usize, usize),
@@ -363,6 +370,7 @@ pub enum SysCallNumber {
     DestroyServer = 34,
     Disconnect = 35,
     JoinThread = 36,
+    SetExceptionHandler = 37,
     Invalid,
 }
 
@@ -405,6 +413,7 @@ impl SysCallNumber {
             34 => DestroyServer,
             35 => Disconnect,
             36 => JoinThread,
+            37 => SetExceptionHandler,
             _ => Invalid,
         }
     }
@@ -736,6 +745,16 @@ impl SysCall {
                 0,
                 0,
             ],
+            SysCall::SetExceptionHandler(pc, sp) => [
+                SysCallNumber::SetExceptionHandler as usize,
+                *pc,
+                *sp,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
             SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7) => [
                 SysCallNumber::Invalid as usize,
                 *a1,
@@ -898,6 +917,7 @@ impl SysCall {
             }
             SysCallNumber::Disconnect => SysCall::Disconnect(a1 as _),
             SysCallNumber::JoinThread => SysCall::JoinThread(a1 as _),
+            SysCallNumber::SetExceptionHandler => SysCall::SetExceptionHandler(a1 as _, a2 as _),
             SysCallNumber::Invalid => SysCall::Invalid(a1, a2, a3, a4, a5, a6, a7),
         })
     }
@@ -1606,6 +1626,33 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
     rsyscall(SysCall::JoinThread(tid)).and_then(|result| {
         if let Result::Scalar1(val) = result {
             Ok(val)
+        } else if let Result::Error(Error::ThreadNotAvailable) = result {
+            Err(Error::ThreadNotAvailable)
+        } else {
+            Err(Error::InternalError)
+        }
+    })
+}
+
+/// Sets the given function as this process' Exception handler. This function
+/// will be called whenever an Exception occurs such as a memory fault,
+/// illegal instruction, or a child process terminating.
+pub fn set_exception_handler(
+    handler: fn(crate::ExceptionType, usize, usize) -> isize,
+) -> core::result::Result<(), Error> {
+    #[cfg(feature = "bit-flags")]
+    let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
+    #[cfg(not(feature = "bit-flags"))]
+    let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
+
+    let stack = crate::map_memory(None, None, 131_072, flags)?;
+    rsyscall(SysCall::SetExceptionHandler(
+        handler as usize,
+        stack.as_ptr() as usize,
+    ))
+    .and_then(|result| {
+        if let Result::Ok = result {
+            Ok(())
         } else if let Result::Error(Error::ThreadNotAvailable) = result {
             Err(Error::ThreadNotAvailable)
         } else {
