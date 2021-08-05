@@ -65,7 +65,7 @@ impl<const N: usize> String<N> {
     /// awful, O(N) implementation because we have to iterate through the entire string
     /// and decode variable-length utf8 characters, until we can't.
     pub fn pop(&mut self) -> Option<char> {
-        if self.len() < 1 {
+        if self.is_empty() {
             return None;
         }
         // first, make a copy of the string

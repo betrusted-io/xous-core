@@ -214,7 +214,7 @@ pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {
     if src > u8::MAX as _ {
         return Err(Error::InvalidPID);
     }
-    Ok(PID::new(src as u8).ok_or(Error::InvalidPID)?)
+    PID::new(src as u8).ok_or(Error::InvalidPID)
 }
 
 #[repr(usize)]
@@ -504,7 +504,7 @@ impl Message {
 
     pub fn memory_message(&self) -> Option<&MemoryMessage> {
         match self {
-            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => Some(&mem),
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => Some(mem),
             Message::BlockingScalar(_) | Message::Scalar(_) => None,
         }
     }
@@ -519,7 +519,7 @@ impl Message {
     pub fn scalar_message(&self) -> Option<&ScalarMessage> {
         match self {
             Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) => None,
-            Message::BlockingScalar(scalar) | Message::Scalar(scalar) => Some(&scalar),
+            Message::BlockingScalar(scalar) | Message::Scalar(scalar) => Some(scalar),
         }
     }
 
@@ -643,6 +643,11 @@ impl Drop for MessageEnvelope {
 }
 
 impl MemoryRange {
+    /// # Safety
+    ///
+    /// This allows for creating a `MemoryRange` from any arbitrary pointer,
+    /// so it is imperitive that this only be used to point to valid, page-aligned
+    /// ranges.
     pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         assert!(
             addr != 0,

@@ -1371,7 +1371,7 @@ pub fn wait_event() {
 }
 
 #[deprecated(
-    since = "0.2",
+    since = "0.2.0",
     note = "Please use create_thread_n() or create_thread()"
 )]
 pub fn create_thread_simple<T, U>(
@@ -1579,6 +1579,13 @@ pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
 /// Disconnect the specified connection ID and mark it as free. This
 /// connection ID may be reused by the server in the future, so ensure
 /// no other threads are using the connection ID before disposing of it.
+///
+/// # Safety
+///
+/// This function must only be called when the connection is no longer in
+/// use. Calling this function when the connection ID is in use will result
+/// in kernel errors or, if the CID is reused, silent failures due to
+/// messages going to the wrong server.
 pub unsafe fn disconnect(cid: CID) -> core::result::Result<(), Error> {
     rsyscall(SysCall::Disconnect(cid)).and_then(|result| {
         if let Result::Ok = result {
