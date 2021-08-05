@@ -703,7 +703,7 @@ impl MemoryRange {
     /// For example, if the allocation is 4096 bytes, then the resulting
     /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
     /// `&[u32]` would have 1024. Values are rounded down.
-    pub fn as_slice_mut<T>(&self) -> &mut [T] {
+    pub fn as_slice_mut<T>(&mut self) -> &mut [T] {
         // This is safe because the pointer and length are guaranteed to
         // be valid, as long as the user hasn't already called `as_ptr()`
         // and done something unsound with the resulting pointer.
