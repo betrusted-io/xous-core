@@ -1,0 +1,32 @@
+{
+    "mainmenu.sleep": {
+        "en": "Sleep now",
+        "zh": "睡眠模式",
+        "en-audio": "Sleep now"
+    },
+    "mainmenu.backlighton": {
+        "en": "Backlight on",
+        "zh": "背光开启",
+        "en-audio": "🔇"
+    },
+    "mainmenu.backlightoff": {
+        "en": "Backlight off",
+        "zh": "背光关闭",
+        "en-audio": "🔇"
+    },
+    "mainmenu.init_keys": {
+        "en": "Initialize root keys",
+        "zh": "设置根密码",
+        "en-audio": "Initialize root keys"
+    },
+    "mainmenu.set_rtc": {
+        "en": "Set time",
+        "zh": "设置时间",
+        "en-audio": "Set time"
+    },
+    "mainmenu.closemenu": {
+        "en": "Close menu",
+        "zh": "关闭功能表",
+        "en-audio": "Close menu"
+    }
+}

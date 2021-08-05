@@ -1,10 +1,12 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+//! Detailed docs are parked under Structs/Engine25519 down below
+
 /*
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub use curve25519_dalek_hw::*;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use curve25519_dalek::*;
 */
 
@@ -16,6 +18,7 @@ use xous_ipc::Buffer;
 
 static mut ENGINE_CB: Option<fn(JobResult)> = None;
 
+#[doc = include_str!("../README.md")]
 pub struct Engine25519 {
     conn: CID,
     cb_sid: Option<[u32; 4]>,

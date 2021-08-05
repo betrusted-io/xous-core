@@ -15,7 +15,7 @@ stats_alloc = {version = "0.1.8", optional = true}
 xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages"]}
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = {path = "../utralib"}
+utralib = {path = "utralib"}
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 riscv = "0.5.6"

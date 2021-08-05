@@ -8,6 +8,7 @@ default-members = [
   "services/com",
   "services/trng",
   "services/gam",
+  "services/status",
   "imports/blitstr-ref",
   "imports/com_rs-ref",
   "services/ime-plugin-api",
@@ -29,6 +30,7 @@ default-members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/root-keys",
 ]
 members = [
   "xous-ipc",
@@ -45,6 +47,7 @@ members = [
   "services/kernel-test",
   "services/trng",
   "services/gam",
+  "services/status",
   "services/benchmark",
   "services/benchmark-target",
   "services/ime-frontend",
@@ -71,6 +74,7 @@ members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/root-keys",
 ]
 resolver = "2"
 
@@ -82,6 +86,7 @@ exclude = [
   "kernel",
   "loader",
   "utralib",  # Exclude UTRA, since it is machine-generated.
+  "locales",  # exclude because it is machine-generated
 ]
 
 [profile.release]

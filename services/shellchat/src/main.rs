@@ -1,6 +1,34 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+/*! Detailed docs are parked under Modules/cmds "Shell Chat" below
+
+To make your own command, copy the `ver.rs` template (for an example with argument parsing),
+or snag the very simple echo template below, and put
+it in the services/shellchat/src/cmds/ directory:
+
+```Rust
+use crate::{ShellCmdApi, CommonEnv};
+use xous_ipc::String;
+
+#[derive(Debug)]
+pub struct Echo {
+}
+
+impl<'a> ShellCmdApi<'a> for Echo {
+    cmd_api!(echo); // inserts boilerplate for command API
+
+    fn process(&mut self, args: String::<1024>, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+        Ok(Some(rest))
+    }
+}
+```
+
+Once you've added your command to the directory, go to the `cmds.rs` file, and follow
+the four-step instructions embedded within the file, starting around line 40.
+
+Check for more detailed docs under Modules/cmds "Shell Chat" below
+*/
 use log::info;
 
 use core::fmt::Write;
@@ -10,8 +38,7 @@ use graphics_server::{Gid, Point, Rectangle, TextBounds, TextView, DrawStyle, Gl
 use xous::MessageEnvelope;
 use xous_ipc::{String, Buffer};
 
-use heapless::spsc::Queue;
-
+#[doc = include_str!("../README.md")]
 mod cmds;
 use cmds::*;
 
@@ -32,7 +59,8 @@ struct Repl {
     msg: Option<MessageEnvelope>,
 
     // record our input history
-    history: Queue::<History, 16>,
+    history: Vec::<History>,
+    history_len: usize,
     content: Gid,
     gam: gam::Gam,
 
@@ -69,13 +97,14 @@ impl Repl{
         gam.request_focus(token.unwrap()).expect("couldn't take focus");
 
         let content = gam.request_content_canvas(token.unwrap()).expect("couldn't get content canvas");
-        log::debug!("content canvas {:?}", content);
+        log::trace!("content canvas {:?}", content);
         let screensize = gam.get_canvas_bounds(content).expect("couldn't get dimensions of content canvas");
-        log::debug!("size {:?}", screensize);
+        log::trace!("size {:?}", screensize);
         Repl {
             input: None,
             msg: None,
-            history: Queue::new(),
+            history: Vec::new(),
+            history_len: 10,
             content,
             gam,
             screensize,
@@ -104,10 +133,10 @@ impl Repl{
     }
 
     fn circular_push(&mut self, item: History) {
-        if self.history.len() == self.history.capacity() {
-            self.history.dequeue().expect("couldn't dequeue historye");
+        if self.history.len() >= self.history_len {
+            self.history.remove(0);
         }
-        self.history.enqueue(item).expect("couldn't store input line");
+        self.history.push(item);
     }
 
     /// update the loop, in response to various inputs
@@ -264,7 +293,7 @@ pub(crate) const APP_NAME_SHELLCHAT: &str = "shellchat"; // the user-facing name
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -279,7 +308,7 @@ fn xmain() -> ! {
     log::trace!("starting main loop");
     loop {
         let msg = xous::receive_message(shch_sid).unwrap();
-        log::trace!("got message {:?}", msg);
+        log::debug!("got message {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(ShellOpcode::Line) => {
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -294,7 +323,7 @@ fn xmain() -> ! {
                 repl.redraw().expect("REPL couldn't redraw");
             }
             Some(ShellOpcode::Quit) => {
-                log::trace!("got Quit");
+                log::error!("got Quit");
                 break;
             }
             _ => {
@@ -311,7 +340,7 @@ fn xmain() -> ! {
         log::trace!("reached bottom of main loop");
     }
     // clean up our program
-    log::trace!("main loop exit, destroying servers");
+    log::error!("main loop exit, destroying servers");
     xns.unregister_server(shch_sid).unwrap();
     xous::destroy_server(shch_sid).unwrap();
     log::trace!("quitting");

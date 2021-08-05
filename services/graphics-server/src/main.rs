@@ -19,20 +19,21 @@ use blitstr::GlyphStyle;
 
 use num_traits::FromPrimitive;
 use xous_ipc::Buffer;
-use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack, MemoryRange};
 
 mod fontmap;
+use api::BulkRead;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
     display.blit_screen(poweron::LOGO_MAP);
 }
 
-#[cfg(target_os = "none")]
-fn map_fonts() {
+#[cfg(any(target_os = "none", target_os = "xous"))]
+fn map_fonts() -> MemoryRange {
     log::trace!("mapping fonts");
     // this maps an extra page if the total length happens to fall on a 4096-byte boundary, but this is ok
     // because the reserved area is much larger
-    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32) & 0xFFFF_F000) + 0x1000;
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
     log::trace!("requesting map of length 0x{:08x} at 0x{:08x}", fontlen, fontmap::FONT_BASE);
     let fontregion = xous::syscall::map_memory(
         xous::MemoryAddress::new(fontmap::FONT_BASE),
@@ -48,11 +49,22 @@ fn map_fonts() {
     blitstr::map_font(blitstr::GlyphData::Regular((fontregion.as_ptr() as usize + fontmap::REGULAR_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Small((fontregion.as_ptr() as usize + fontmap::SMALL_OFFSET) as usize));
     blitstr::map_font(blitstr::GlyphData::Bold((fontregion.as_ptr() as usize + fontmap::BOLD_OFFSET) as usize));
+
+    fontregion
 }
 
-#[cfg(not(target_os = "none"))]
-fn map_fonts() {
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+fn map_fonts() -> MemoryRange {
     // does nothing
+    let fontlen: u32 = ((fontmap::FONT_TOTAL_LEN as u32 + 8) & 0xFFFF_F000) + 0x1000;
+    let fontregion = xous::syscall::map_memory(
+        None,
+        None,
+        fontlen as usize,
+        xous::MemoryFlags::R,
+    ).expect("couldn't map dummy memory for fonts");
+
+    fontregion
 }
 
 #[xous::xous_main]
@@ -65,7 +77,8 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // these connections should be established:
     // - GAM
-    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(1)).expect("can't register server");
+    // - keyrom (for verifying font maps)
+    let sid = xns.register_name(api::SERVER_NAME_GFX, Some(2)).expect("can't register server");
     log::trace!("Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.
@@ -73,7 +86,7 @@ fn xmain() -> ! {
 
     draw_boot_logo(&mut display);
 
-    map_fonts();
+    let fontregion = map_fonts();
 
     let mut use_sleep_note = true;
     if false {
@@ -101,6 +114,7 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut bulkread = BulkRead::default(); // holding buffer for bulk reads; wastes ~8k when not in use, but saves a lot of copy/init for each iteration of the read
     loop {
         let mut msg = xous::receive_message(sid).unwrap();
         log::trace!("Message: {:?}", msg);
@@ -123,7 +137,10 @@ fn xmain() -> ! {
                 log::trace!("DrawClipObject {:?}", obj);
                 match obj.obj {
                     ClipObjectType::Line(line) => {
-                        op::line(display.native_buffer(), line, Some(obj.clip));
+                        op::line(display.native_buffer(), line, Some(obj.clip), false);
+                    },
+                    ClipObjectType::XorLine(line) => {
+                        op::line(display.native_buffer(), line, Some(obj.clip), true);
                     },
                     ClipObjectType::Circ(circ) => {
                         op::circle(display.native_buffer(), circ, Some(obj.clip));
@@ -144,7 +161,7 @@ fn xmain() -> ! {
                 let clip_rect = tv.clip_rect.unwrap(); // this is the clipping rectangle of the canvas
                 let screen_offset: Point = tv.clip_rect.unwrap().tl; // this is the translation vector to and from screen space
 
-                let paintfn = if tv.dry_run {
+                let paintfn = if tv.dry_run() {
                     if debugtv { log::trace!("(TV): doing dry run"); }
                     blitstr::simulate_char
                 } else {
@@ -192,8 +209,8 @@ fn xmain() -> ! {
                             };
                             // if less than one line of text, shrink the box
                             let finalwidth = if c.pt.y == 0 {
-                                if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
-                                    c.pt.x as i16 + tv.margin.x * 3
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
                                 } else {
                                     checkedwidth
                                 }
@@ -210,8 +227,59 @@ fn xmain() -> ! {
                                 tv.bounds_computed = None;
                             }
                         },
-                        TextBounds::GrowableFromTl(_tl, _width) => {
-                            unimplemented!()
+                        TextBounds::GrowableFromTl(tl, width) => {
+                            log::trace!("growablefromtl, cr: {:?}", clip_rect);
+                            if !clip_rect.intersects_point(tl) {
+                                log::trace!("didn't intersect: clip_rect {:?}, tl {:?}", clip_rect, tl);
+                                continue;
+                            }
+                            // assume: clip_rect is the total canvas area we could draw
+                            // assume: tl is the point we want to extend the drawable text bubble on
+                            let checkedwidth: i16 = if width as i16 <= (clip_rect.br.x - tl.x) {
+                                width as _
+                            } else {
+                                (clip_rect.br.x - tl.x) as _
+                            };
+                            // first, create a clip that's the width of the growable, but as big as the height of the screen
+                            let clip = blitstr::ClipRect::new(0, 0, checkedwidth as _, display.screen_size().y as _);
+                            let mut c = blitstr::Cursor::new(0, 0, 0);
+                            // now simulate the string painting
+                            blitstr::paint_str(
+                                display.native_buffer(),
+                                clip,
+                                &mut c,
+                                tv.style.into(),
+                                tv.text.as_str().unwrap(),
+                                false,
+                                None,
+                                false,
+                                blitstr::simulate_char
+                            );
+                            // the resulting cursor position + line_height is the height of the bounds
+                            let checkedheight: i16 = c.pt.y as i16 + c.line_height as i16;
+
+                            // if less than one line of text, shrink the box
+                            let finalwidth = if c.pt.y == 0 {
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
+                                } else {
+                                    checkedwidth
+                                }
+                            } else {
+                                checkedwidth
+                            };
+                            let br = Point::new(tl.x + finalwidth, tl.y + checkedheight);
+                            log::trace!("br: {:?}, comp w: {}, comp h: {}", br, finalwidth, checkedheight);
+                            if clip_rect.intersects_point(br) {
+                                tv.bounds_computed = Some(Rectangle::new(
+                                    tl,
+                                    br,
+                                ));
+                                log::trace!("intersects, bounds_computed: {:?}", tv.bounds_computed);
+                            } else {
+                                log::trace!("does not intersect, clip_rect: {:?}, br: {:?}", clip_rect, br);
+                                tv.bounds_computed = None;
+                            }
                         },
                         TextBounds::GrowableFromBl(bl, width) => {
                             if !clip_rect.intersects_point(bl) {
@@ -248,8 +316,8 @@ fn xmain() -> ! {
 
                             // if less than one line of text, shrink the box
                             let finalwidth = if c.pt.y == 0 {
-                                if c.pt.x as i16 + tv.margin.x * 3 < checkedwidth {
-                                    c.pt.x as i16 + tv.margin.x * 3
+                                if c.pt.x as i16 + c.line_height as i16 + tv.margin.x < checkedwidth {
+                                    c.pt.x as i16 + c.line_height as i16 + tv.margin.x
                                 } else {
                                     checkedwidth
                                 }
@@ -305,14 +373,15 @@ fn xmain() -> ! {
                     stroke_color: bordercolor,
                     stroke_width: borderwidth,
                 };
-                if tv.rounded_border.is_some() {
-                    op::rounded_rectangle(display.native_buffer(),
-                        RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), Some(clear_rect));
-                } else {
-                    if debugtv { log::trace!("(TV): clearing rectangle {:?}", clear_rect); }
-                    op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
+                if !tv.dry_run() {
+                    if tv.rounded_border.is_some() {
+                        op::rounded_rectangle(display.native_buffer(),
+                            RoundedRectangle::new(clear_rect, tv.rounded_border.unwrap() as _), Some(clear_rect));
+                    } else {
+                        if debugtv { log::trace!("(TV): clearing rectangle {:?}", clear_rect); }
+                        op::rectangle(display.native_buffer(), clear_rect, tv.clip_rect);
+                    }
                 }
-
 
                 // compute the final clipping region for the string
                 clear_rect.margin(tv.margin);
@@ -360,7 +429,7 @@ fn xmain() -> ! {
             }
             Some(Opcode::Line) => msg_scalar_unpack!(msg, p1, p2, style, _, {
                 let l = Line::new_with_style(Point::from(p1), Point::from(p2), DrawStyle::from(style));
-                op::line(display.native_buffer(), l, screen_clip.into());
+                op::line(display.native_buffer(), l, screen_clip.into(), false);
             }),
             Some(Opcode::Rectangle) => msg_scalar_unpack!(msg, tl, br, style, _, {
                 let r = Rectangle::new_with_style(Point::from(tl), Point::from(br), DrawStyle::from(style));
@@ -397,6 +466,34 @@ fn xmain() -> ! {
                 if ena != 0 { display.set_devboot(true); }
                 else { display.set_devboot(false); }
             }),
+            Some(Opcode::RestartBulkRead) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                bulkread.from_offset = 0;
+                xous::return_scalar(msg.sender, 0).expect("couldn't ack that bulk read pointer was reset");
+            }),
+            Some(Opcode::BulkReadFonts) => {
+                let fontlen = fontmap::FONT_TOTAL_LEN as u32 + 8;
+                let mut buf = unsafe{ Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                //let mut bulkread = buf.as_flat::<BulkRead, _>().unwrap(); // try to skip the copy/init step by using a persistent structure
+                let fontslice = fontregion.as_slice::<u8>();
+                assert!(fontlen <= fontslice.len() as u32);
+                if bulkread.from_offset >= fontlen {
+                    log::error!("BulkReadFonts attempt to read out of bound on the font area; ignoring!");
+                    continue
+                }
+                let readlen = if bulkread.from_offset + bulkread.buf.len() as u32 > fontlen {
+                    // returns what is readable of the last bit; anything longer than the fontlen is undefined/invalid
+                    fontlen as usize - bulkread.from_offset as usize
+                } else {
+                    bulkread.buf.len()
+                };
+                for (&src, dst) in fontslice[bulkread.from_offset as usize .. bulkread.from_offset as usize + readlen].iter()
+                    .zip(bulkread.buf.iter_mut()) {
+                        *dst = src;
+                }
+                bulkread.len = readlen as u32;
+                bulkread.from_offset += readlen as u32;
+                buf.replace(bulkread).unwrap();
+            }
             Some(Opcode::Quit) => break,
             None => {log::error!("received opcode scalar that is not handled");}
         }

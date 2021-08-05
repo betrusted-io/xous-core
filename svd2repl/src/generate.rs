@@ -638,11 +638,13 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
     cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
     cs_peripherals.insert("sha512", "Miscellaneous.Sha512");
+    cs_peripherals.insert("spinor_soft_int", "Miscellaneous.SpinorSoftInt");
     cs_peripherals.insert("timer0", "Timers.LiteX_Timer_32");
     cs_peripherals.insert("trng_kernel", "Miscellaneous.BetrustedRNGKernel");
     cs_peripherals.insert("trng_server", "Miscellaneous.BetrustedRNGServer");
     cs_peripherals.insert("ticktimer", "Timers.TickTimer");
     cs_peripherals.insert("uart", "UART.LiteX_UART");
+    cs_peripherals.insert("wfi", "Miscellaneous.BetrustedWfi");
 
     print_header(dest).or(Err(ParseError::WriteError))?;
     print_peripherals(

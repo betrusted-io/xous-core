@@ -27,6 +27,9 @@ pub use string::*;
 pub use stringbuffer::*;
 pub use syscall::*;
 
+pub mod locale;
+pub use locale::LANG;
+
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use arch::ProcessArgsAsThread;
 
@@ -39,7 +42,7 @@ pub fn init() {
     panic::set_hook(Box::new(|arg| {
         println!("PANIC!");
         println!("Details: {:?}", arg);
-        // debug_here::debug_here!();
+        debug_here::debug_here!();
     }));
 }
 

@@ -32,7 +32,23 @@ fn put_pixel(fb: &mut LcdFB, x: i16, y: i16, color: PixelColor) {
     fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
 }
 
-pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>) {
+fn xor_pixel(fb: &mut LcdFB, x: i16, y: i16) {
+    let mut clip_y: usize = y as usize;
+    if clip_y >= LCD_LINES {
+        clip_y = LCD_LINES - 1;
+    }
+
+    let clip_x: usize = x as usize;
+    if clip_x >= LCD_PX_PER_LINE {
+        clip_y = LCD_PX_PER_LINE - 1;
+    }
+
+    fb[(clip_x + clip_y * LCD_WORDS_PER_LINE * 32) / 32] ^= 1 << (clip_x % 32);
+    // set the dirty bit on the line that contains the pixel
+    fb[clip_y * LCD_WORDS_PER_LINE + (LCD_WORDS_PER_LINE - 1)] |= 0x1_0000;
+}
+
+pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>, xor: bool) {
     let color: PixelColor;
     if l.style.stroke_color.is_some() {
         color = l.style.stroke_color.unwrap();
@@ -53,7 +69,11 @@ pub fn line(fb: &mut LcdFB, l: Line, clip: Option<Rectangle>) {
         /* loop */
         if x0 >= 0 && y0 >= 0 && x0 < (WIDTH as _) && y0 < (HEIGHT as _) {
             if clip.is_none() || (clip.unwrap().intersects_point(Point::new(x0, y0))) {
-                put_pixel(fb, x0 as _, y0 as _, color);
+                if !xor {
+                    put_pixel(fb, x0 as _, y0 as _, color);
+                } else {
+                    xor_pixel(fb, x0 as _, y0 as _);
+                }
             }
         }
         if x0 == x1 && y0 == y1 {

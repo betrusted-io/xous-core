@@ -285,6 +285,7 @@ impl FixedOutputDirty for Sha512 {
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Result(s) => {
+                    log::info!("bits hashed: {}", self.length);
                     if self.length != returned.length_in_bits.expect("hardware did not return a length field!") {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }

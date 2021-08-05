@@ -1,3 +1,5 @@
+use core::convert::TryInto;
+
 use rkyv::{ser::Serializer, Fallible};
 use xous::{
     map_memory, send_message, unmap_memory, Error, MemoryAddress, MemoryFlags, MemoryMessage,
@@ -55,6 +57,56 @@ impl<'a> Buffer<'a> {
             valid,
             offset: None,
             should_drop: true,
+            memory_message: None,
+        }
+    }
+
+    // use a volatile write to ensure a clear operation is not optimized out
+    // for ensuring that a buffer is cleared, e.g. at the exit of a function
+    pub fn volatile_clear(&mut self) {
+        let b = self.slice.as_mut_ptr();
+        for i in 0..self.slice.len() {
+            unsafe{b.add(i).write_volatile(core::mem::zeroed());}
+        }
+        // Ensure the compiler doesn't re-order the clear.
+        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+        // *reads*, but this method only *writes* to the locations.
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
+    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more complex argument structures.
+    #[allow(dead_code)]
+    pub unsafe fn to_raw_parts(&self) -> (usize, usize, usize) {
+        if let Some(offset) = self.offset {
+            (
+                self.valid.as_ptr() as usize,
+                self.valid.len(),
+                usize::from(offset),
+            )
+        } else {
+            (
+                self.valid.as_ptr() as usize,
+                self.valid.len(),
+                0
+            )
+        }
+    }
+
+    // use to serialize a buffer between process-local threads. mainly for spawning new threads with more complex argument structures.
+    #[allow(dead_code)]
+    pub unsafe fn from_raw_parts(address: usize, len: usize, offset: usize) -> Self {
+        let mem = MemoryRange::new(address, len).expect("invalid memory range args");
+        let off = if offset != 0 {
+            Some(offset.try_into().unwrap())
+        } else {
+            None
+        };
+        Buffer {
+            range: mem,
+            slice: core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()),
+            valid: mem,
+            offset: off,
+            should_drop: false,
             memory_message: None,
         }
     }

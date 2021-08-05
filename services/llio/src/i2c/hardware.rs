@@ -4,7 +4,6 @@ use utralib::*;
 
 use num_traits::ToPrimitive;
 use susres::{RegManager, RegOrField, SuspendResume};
-use heapless::spsc::Queue;
 
 #[derive(Eq, PartialEq)]
 enum I2cState {
@@ -55,7 +54,7 @@ pub(crate) struct I2cStateMachine {
     listener: Option<xous::SID>,
     error: bool, // set if the interrupt handler encountered some kind of error
 
-    workqueue: Queue<I2cTransaction, 8>,
+    workqueue: Vec<I2cTransaction>,
 }
 
 impl I2cStateMachine {
@@ -82,7 +81,7 @@ impl I2cStateMachine {
             listener: None,
             error: false,
 
-            workqueue: Queue::new(),
+            workqueue: Vec::new(),
         };
 
         // disable interrupt, just in case it's enabled from e.g. a warm boot
@@ -130,10 +129,8 @@ impl I2cStateMachine {
         if self.workqueue.is_empty() && self.state == I2cState::Idle && self.listener == None {
             self.checked_initiate(transaction)
         } else {
-            match self.workqueue.enqueue(transaction) {
-                Ok(_) => return I2cStatus::ResponseInProgress,
-                _ => return I2cStatus::ResponseBusy,
-            }
+            self.workqueue.push(transaction);
+            I2cStatus::ResponseInProgress
         }
     }
 
@@ -219,12 +216,13 @@ impl I2cStateMachine {
         } else {
             log::trace!("completed with transaction, but no listener! {:?}", trans);
         };
-        if let Some(work) = self.workqueue.dequeue() {
+        if self.workqueue.len() > 0 {
+            let work = self.workqueue.remove(0);
             if self.checked_initiate(work) != I2cStatus::ResponseInProgress {
                 log::error!("Unable to initiate I2C transaction even though machine should be idle: {:?}.", work);
                 log::error!("Probably, the I2C engine is going off the rails from here...");
             }
-        };
+        }
         Ok(())
     }
 

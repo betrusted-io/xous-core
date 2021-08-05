@@ -2,7 +2,7 @@ use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
 
-use heapless::FnvIndexMap;
+use std::collections::HashMap;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
@@ -44,7 +44,7 @@ pub struct CommonEnv {
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
+    cb_registrations: HashMap::<u32, String::<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
@@ -58,7 +58,7 @@ impl CommonEnv {
                 break;
             }
         }
-        self.cb_registrations.insert(key, verb).unwrap();
+        self.cb_registrations.insert(key, verb);
         key
     }
 }
@@ -132,7 +132,7 @@ impl CmdEnv {
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer: ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
-            cb_registrations: FnvIndexMap::new(),
+            cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };

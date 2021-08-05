@@ -7,7 +7,8 @@ use std::{
 
 type DynError = Box<dyn std::error::Error>;
 
-const TARGET: &str = "riscv32imac-unknown-none-elf";
+const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
+const KERNEL_TARGET: &str = "riscv32imac-unknown-none-elf";
 
 enum MemorySpec {
     SvdFile(String),
@@ -28,16 +29,10 @@ impl std::fmt::Display for BuildError {
 
 impl std::error::Error for BuildError {}
 
-fn main() {
-    if let Err(e) = try_main() {
-        eprintln!("{}", e);
-        std::process::exit(-1);
-    }
-}
-
-fn try_main() -> Result<(), DynError> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hw_pkgs = [
         "gam",
+        "status",
         "shellchat",
         "ime-frontend",
         "ime-plugin-shell",
@@ -55,6 +50,7 @@ fn try_main() -> Result<(), DynError> {
         "engine-sha512",
         "engine-25519",
         "spinor",
+        "root-keys",
     ];
     let benchmark_pkgs = [
         "benchmark",
@@ -111,29 +107,52 @@ fn try_main() -> Result<(), DynError> {
     let lkey = args.nth(3);
     let kkey = args.nth(4);
     match task.as_deref() {
-        Some("renode-image") => renode_image(false, &hw_pkgs)?,
-        Some("renode-test") => renode_image(false, &cbtest_pkgs)?,
+        Some("renode-image") => renode_image(false, &hw_pkgs, &[])?,
+        Some("renode-test") => renode_image(false, &cbtest_pkgs, &[])?,
         Some("libstd-test") => {
-            let mut pkgs = base_pkgs.to_vec();
+            let mut args = env::args();
+            args.nth(1);
+            let pkgs = base_pkgs.to_vec();
             let args: Vec<String> = args.collect();
+            let mut extra_packages = vec![];
             for program in &args {
-                pkgs.push(&program);
+                extra_packages.push(program.as_str());
             }
-            renode_image(false, &pkgs)?;
+            renode_image(false, &pkgs, extra_packages.as_slice())?;
         }
-        Some("renode-aes-test") => renode_image(false, &aestest_pkgs)?,
-        Some("renode-image-debug") => renode_image(true, &hw_pkgs)?,
+        Some("renode-aes-test") => renode_image(false, &aestest_pkgs, &[])?,
+        Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
         Some("run") => run(false, &hw_pkgs)?,
-        Some("hw-image") => build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None)?,
-        Some("benchmark") => {
-            build_hw_image(false, env::args().nth(2), &benchmark_pkgs, lkey, kkey, None)?
+        Some("hw-image") => {
+            build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
         }
-        Some("minimal") => {
-            build_hw_image(false, env::args().nth(2), &minimal_pkgs, lkey, kkey, None)?
-        }
-        Some("cbtest") => {
-            build_hw_image(false, env::args().nth(2), &cbtest_pkgs, lkey, kkey, None)?
-        }
+        Some("benchmark") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &benchmark_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
+        Some("minimal") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &minimal_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
+        Some("cbtest") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &cbtest_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
         Some("trng-test") => build_hw_image(
             false,
             env::args().nth(2),
@@ -141,6 +160,7 @@ fn try_main() -> Result<(), DynError> {
             lkey,
             kkey,
             Some(&["--features", "urandomtest"]),
+            &[],
         )?,
         Some("ro-test") => build_hw_image(
             false,
@@ -149,6 +169,7 @@ fn try_main() -> Result<(), DynError> {
             lkey,
             kkey,
             Some(&["--features", "ringosctest"]),
+            &[],
         )?,
         Some("av-test") => build_hw_image(
             false,
@@ -157,12 +178,16 @@ fn try_main() -> Result<(), DynError> {
             lkey,
             kkey,
             Some(&["--features", "avalanchetest"]),
+            &[],
         )?,
-        Some("sr-test") => build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None)?,
+        Some("sr-test") => {
+            build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
+        }
         Some("debug") => run(true, &hw_pkgs)?,
         Some("burn-kernel") => update_usb(true, false, false)?,
         Some("burn-loader") => update_usb(false, true, false)?,
         Some("burn-soc") => update_usb(false, false, true)?,
+        Some("generate-locales") => generate_locales()?,
         _ => print_help(),
     }
     Ok(())
@@ -189,6 +214,7 @@ sr-test [soc.svd]       builds the suspend/resume testing image
 burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
 burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
+generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
@@ -258,6 +284,7 @@ fn build_hw_image(
     lkey: Option<String>,
     kkey: Option<String>,
     extra_args: Option<&[&str]>,
+    extra_packages: &[&str],
 ) -> Result<(), DynError> {
     let svd_file = match svd {
         Some(s) => s,
@@ -271,31 +298,29 @@ fn build_hw_image(
 
     // Tools use this environment variable to know when to rebuild the UTRA crate.
     std::env::set_var("XOUS_SVD_FILE", path.canonicalize().unwrap());
+    println!("XOUS_SVD_FILE: {}", path.canonicalize().unwrap().display());
 
     // extract key file names; replace with defaults if not specified
-    let loaderkey_file = if let Some(lkf) = lkey {
-        lkf
-    } else {
-        String::from("devkey/dev.key")
-    };
-    let kernelkey_file = if let Some(kkf) = kkey {
-        kkf
-    } else {
-        String::from("devkey/dev.key")
-    };
+    let loaderkey_file = lkey.unwrap_or_else(|| "devkey/dev.key".into());
+    let kernelkey_file = kkey.unwrap_or_else(|| "devkey/dev.key".into());
 
     let kernel = build_kernel(debug)?;
     let mut init = vec![];
-    let base_path = build(packages, debug, Some(TARGET), None, extra_args)?;
+    let base_path = build(packages, debug, Some(PROGRAM_TARGET), None, extra_args)?;
     for pkg in packages {
         let mut pkg_path = base_path.clone();
+        pkg_path.push(pkg);
+        init.push(pkg_path);
+    }
+    for pkg in extra_packages {
+        let mut pkg_path = project_root();
         pkg_path.push(pkg);
         init.push(pkg_path);
     }
     let mut loader = build(
         &["loader"],
         debug,
-        Some(TARGET),
+        Some(KERNEL_TARGET),
         Some("loader".into()),
         None,
     )?;
@@ -389,8 +414,8 @@ fn build_hw_image(
     }
 
     println!();
-    println!("Signed loader at {}", loader_bin.to_str().unwrap());
-    println!("Signed kernel at {}", xous_img_path.to_str().unwrap());
+    println!("Signed loader at {}", loader_bin.display());
+    println!("Signed kernel at {}", xous_img_path.display());
 
     Ok(())
 }
@@ -406,7 +431,7 @@ fn sign_loader(in_path: Pathbuf, out_path: Pathbuf) -> Result<(), DynError> {
 
 }*/
 
-fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
+fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Result<(), DynError> {
     // Regenerate the Platform file
     let status = Command::new(cargo())
         .current_dir(project_root())
@@ -431,6 +456,7 @@ fn renode_image(debug: bool, packages: &[&str]) -> Result<(), DynError> {
         None,
         None,
         None,
+        extra_packages,
     )
 }
 
@@ -481,7 +507,7 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
     let mut path = build(
         &["kernel"],
         debug,
-        Some(TARGET),
+        Some(KERNEL_TARGET),
         Some("kernel".into()),
         None,
     )?;
@@ -527,6 +553,11 @@ fn build(
         dir.push(subdir);
     }
 
+    print!("    Command: cargo");
+    for arg in &args {
+        print!(" {}", arg);
+    }
+    println!();
     let status = Command::new(cargo())
         .current_dir(dir)
         .args(&args)
@@ -557,7 +588,7 @@ fn create_image(
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["run", "--package", "tools", "--bin", "create-image", "--"];
 
-    let output_file = format!("target/{}/{}/args.bin", TARGET, stream);
+    let output_file = format!("target/{}/{}/args.bin", PROGRAM_TARGET, stream);
     args.push(&output_file);
 
     args.push("--kernel");
@@ -583,7 +614,7 @@ fn create_image(
     if !status.success() {
         return Err("cargo build failed".into());
     }
-    Ok(project_root().join(&format!("target/{}/{}/args.bin", TARGET, stream)))
+    Ok(project_root().join(&format!("target/{}/{}/args.bin", PROGRAM_TARGET, stream)))
 }
 
 fn cargo() -> String {
@@ -596,6 +627,13 @@ fn project_root() -> PathBuf {
         .nth(1)
         .unwrap()
         .to_path_buf()
+}
+
+/// Force the locales to be regenerated. This simply `touches`
+/// the `build.rs` for locales, causing a rebuild next time.
+fn generate_locales() -> Result<(), std::io::Error> {
+    let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+    filetime::set_file_mtime("locales/src/lib.rs", ts)
 }
 
 // fn dist_dir() -> PathBuf {

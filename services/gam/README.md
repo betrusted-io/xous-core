@@ -100,6 +100,22 @@ the form of random lines drawn across the defaced area. This allows users
 to still read the text within the defaced area, but makes it more difficult
 to mistake this area for something trusted.
 
+### Trust Level Policy Implementation
+
+The `RegisterUx` opcode in `gam` is responsible for parceling out trust levels.
+
+At boot, there is only a "boot context" -- no user apps are allowed, and all
+contexts are assigned a high trust level. During the boot process, apps
+are registered and claim names out of the `tokens.rs` `EXPECTED_BOOT_CONTEXTS` name space.
+
+**Roadmap** (as of Xous 0.8.x): The idea is that once boot is thought to be completed, both `xous-names` and the `gam`
+are checked to ensure that all the available slots for boot processes are occupied.
+If this check passes, a flag should be set indicating we're
+done, and the max trust level assignable should drop. This process disallows
+future no-boot processes from registering as a trusted context, both in terms of their
+name space and their trust level.
+
+
 ### TextView
 
 A `TextView` object is a heavy data structure that contains both a `xous::String`
@@ -147,13 +163,13 @@ object such as a `Menu` or `List` to compose other UI elements.
 
 A `Menu` object encodes the state of a graphical menu. It's meant to be paired
 with a dedicated thread that serves as an event loop. You can look at the
-main menu implementation inside the GAM for ane example of how this is done.
-Most event loops will look about the same; it's not pulled into the object
-itself because there isn't a `safe` way yet in Xous to pass an object into
-a thread that the object spawns.
+main menu implementation inside the GAM for an example of how this is done.
+Most event loops will look about the same; if you do not want to build an
+event loop, you can use the `spawn_helper` API to create one for you (see below).
 
 Building a menu is fairly straight forward:
 
+- register your `Menu` object's name inside `services/gam/src/tokens.rs`. Currently, one can only register servers that are "expected" by the system; this is meant to prevent e.g. malicion code injection from conjuring UX elements.
 - create the `Menu` object by calling `Menu::new(name: &str)`. This will automatically
 register an empty `Menu` layout as a Ux element inside the GAM.
 - add menu items by calling `.add_item()` on your `Menu` object
@@ -167,3 +183,57 @@ so menu-actionable opcodes need to be revealed with a helper method on the targe
 - `action_payload`: an enum that encodes the payload of the Opcode. For now, only Scalar payloads are implemented,
 but the framework is there for some kind of a Frankenstein static-buffer to be passed on to targets
 - `close_on_select`: a boolean which indicates if the menu should automatically close once the item is selected
+
+### Modal
+
+A `Modal` object encodes the state of a modal dialog box. A modal dialog box is limited to
+this general format:
+
+- Top text: describe the request
+- Action: the interactive element
+- Bottom text: reserved for validator error messages
+
+The Action currently can be one of the following types:
+
+- TextEntry: for passwords, or for regular text
+- RadioButtons: for selecting one of many options
+- CheckBox: for selecting any of many options
+- Slider [NOT YET CODED]: for selecting a single numeric value along a range of values
+
+Creating a `Modal` follows the same general pattern as the `Menu`, with the exception that the `new()` function is meant to be "complete": instead of creating a skeleton of a menu, the `new()` function takes all the necessary arguments for the repsective top, bottom, and action fields and tries to build the modal all in one go. It is, however, possible to dynamically modify the modal once created, using the `modify()` and `remove()` methods.
+
+TextEntry supports an input validator; the validator takes as input the
+proposed payload string, and returns `None` if valid, or an error message
+that is plcaed into the dialog box's "bottom text" if the input is invalid.
+
+TextEntry also supports "password" mode. When selected, text visibility can
+be controlled by a three-selection horizontal radio control that can select
+between "fully visible", "partially visible", and "fully obscured" states.
+
+TextEntry is specifically coded so that its payload is cleared upon send,
+so that plaintext passwords are not left hanging around in the heap or stack.
+
+Example code:
+ - The `rtc` server contains an example of a modal that is dynamically modified with several states, and uses the helper mechanism.
+ - The `root-keys` server contains an example of a static password modal, and uses an explicitly coded helper thread.
+
+### Helper Threads
+
+A `Menu` or `Modal` needs to be able to respond to callbacks from the GAM. You can either do
+this with a separate, explicitly coded menu loop (as seen is the main menu and the emoji menus),
+or you can use the `spawn_helper` convenience call. To use `spawn_helper`, however, your
+local server need to implement three opcodes:
+
+- `Redraw` - calls the `.redraw()` method on the modal
+- `Rawkeys` - handles a set of key events destined for the modal
+- `Quit` - indicates that the server was told to quit for some reason (currently there's no good reason for this, but in the future once process destruction is supported, this will be important)
+
+Your local server's opcode IDs are arguments to `spawn_helper`, along with both the private
+and the public SIDs. The public SID is inside the `Menu` or `Modal` object; it's shared with the GAM. The
+private SID is the SID of your loop handler, which is normally masked by `xous-names`. The private
+SID should not be shared with untrusted processes. However, since `spawn_helper` is in your own
+memory space, it's OK to shaer the private SID with this thread.
+
+The TL;DR is that the helper thread is just a lookup table that maps UX opcodes to
+your thread's private opcode space, and it igonres any uknown opcodes.
+

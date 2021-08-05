@@ -29,8 +29,8 @@ aes-xous={path="../aes"}
 cipher = "0.3"
 engine-25519 = {path="../engine-25519"}
 spinor = {path="../spinor"}
+root-keys = {path="../root-keys"}
 
-heapless = "0.7"
 trng = {path = "../trng"}
 
 num-derive = {version = "0.3", default-features = false}
@@ -64,3 +64,6 @@ utralib = {path = "../../utralib"}
 [features]
 debugprint = []
 default = [] # "debugprint"
+
+[target.'cfg(any(windows,unix))'.dependencies]
+debug-here = "*"

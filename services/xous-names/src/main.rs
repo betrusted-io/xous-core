@@ -1,8 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-extern crate hash32_derive;
-
 mod api;
 use api::*;
 
@@ -12,7 +10,9 @@ use xous_ipc::{String, Buffer};
 
 use log::{error, info};
 
-#[cfg(target_os = "none")]
+use std::collections::HashMap;
+
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
 
@@ -48,7 +48,7 @@ mod implementation {
     }
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     pub struct D11cTimeout {}
     impl D11cTimeout {
@@ -75,7 +75,6 @@ and we can use heap-allocated Rust primitives...
 */
 #[derive(Debug, Copy, Clone)]
 struct Connection {
-    pub name: XousServerName,
     pub sid: xous::SID,
     pub current_conns: u32, // number of unauthenticated (inherentely trusted) connections
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
@@ -83,105 +82,86 @@ struct Connection {
     pub auth_conns: u32,  // number of authenticated connections
     pub token: Option<[u32; 4]>,  // a random number that must be presented to allow for disconnection for single-connection servers
 }
-struct SlowMap {
-    pub map: [Option<Connection>; 128],
+#[derive(Debug)]
+struct CheckedHashMap {
+    pub map: HashMap::<XousServerName, Connection>,
 }
-impl SlowMap {
+impl CheckedHashMap {
     pub fn new() -> Self {
-        SlowMap {
-            map: [None; 128],
+        CheckedHashMap {
+            map: HashMap::new(),
         }
     }
     pub fn insert(&mut self, name: XousServerName, sid: xous::SID, max_conns: Option<u32>) -> Result<(), xous::Error> {
-        let mut ok = false;
         let token = if max_conns == Some(1) {
             // for the special case of 1-connection servers, provision a one-time use token for disconnects
             Some(xous::create_server_id().expect("couldn't create token").to_array())
         } else {
             None
         };
-        for entry in self.map.iter_mut() {
-            if entry.is_none() {
-                *entry = Some(Connection {
-                    name,
-                    sid,
-                    current_conns: 0,
-                    max_conns,
-                    allow_authenticate: false, // for now, we don't support authenticated connections
-                    auth_conns: 0,
-                    token,
-                });
-                ok = true;
-                break;
-            }
-        }
-        if !ok {
-            Err(xous::Error::OutOfMemory)
-        } else {
-            Ok(())
-        }
+        self.map.insert(name, Connection {
+            sid,
+            current_conns: 0,
+            max_conns,
+            allow_authenticate: false, // for now, we don't support authenticated connections
+            auth_conns: 0,
+            token,
+        });
+        Ok(())
     }
     pub fn remove(&mut self, sid: xous::SID) -> Option<XousServerName> {
-        let mut name: Option<XousServerName> = None;
-        for entry in self.map.iter_mut() {
-            if let Some(mapping) = entry {
-                if mapping.sid == sid {
-                    name = Some(mapping.name);
-                    *entry = None;
-                }
+        // remove is expensive, because we have to do a full search for the sid, which is not our usual key
+        // however, for security reasons, you have to let us know your sid (which is a secret) in order to delete
+        // your entry; whereas the human-readable name is not at all a secret
+        let mut removed_name: Option<XousServerName> = None;
+        for (name, mapping) in self.map.iter_mut() {
+            if mapping.sid == sid {
+                removed_name = Some(*name);
                 break;
             }
         }
-        name
+        if let Some(name) = removed_name {
+            self.map.remove(&name);
+        }
+
+        removed_name
     }
     pub fn contains_key(&self, name: &XousServerName) -> bool {
-        for maybe_entry in self.map.iter() {
-            if let Some(entry) = maybe_entry {
-                if entry.name == *name {
-                    return true
-                }
-            }
-        }
-        return false
+        self.map.contains_key(name)
     }
     pub fn connect(&mut self, name: &XousServerName) -> (Option<&xous::SID>, Option<[u32; 4]>) {
-        for maybe_entry in self.map.iter_mut() {
-            if let Some(entry) = maybe_entry {
-                if *name == entry.name {
-                    if Some(1) == entry.max_conns {
-                        // single-connection case
-                        if entry.current_conns < 1 {
-                            (*entry).current_conns = 1;
-                            return (Some(&entry.sid), entry.token)
-                        } else {
-                            return (None, None)
-                        }
-                    }
-                    if let Some(max) = entry.max_conns {
-                        if entry.current_conns < max {
-                            (*entry).current_conns += 1;
-                            return (Some(&entry.sid), None);
-                        } else {
-                            return (None, None);
-                        }
-                    } else {
-                        // unlimited connections allowed
-                        (*entry).current_conns += 1;
-                        return (Some(&entry.sid), None);
-                    }
+        let maybe_entry = self.map.get_mut(name);
+        if let Some(entry) = maybe_entry {
+            if Some(1) == entry.max_conns {
+                // single-connection case
+                if entry.current_conns < 1 {
+                    (*entry).current_conns = 1;
+                    return (Some(&entry.sid), entry.token)
+                } else {
+                    return (None, None)
                 }
+            }
+            if let Some(max) = entry.max_conns {
+                if entry.current_conns < max {
+                    (*entry).current_conns += 1;
+                    return (Some(&entry.sid), None);
+                } else {
+                    return (None, None);
+                }
+            } else {
+                // unlimited connections allowed
+                (*entry).current_conns += 1;
+                return (Some(&entry.sid), None);
             }
         }
         (None, None)
     }
     pub fn trusted_init_done(&self) -> bool {
         let mut trusted_done = true;
-        for maybe_entry in self.map.iter() {
-            if let Some(entry) = maybe_entry {
-                if let Some(max) = entry.max_conns {
-                    if max != entry.current_conns {
-                        trusted_done = false;
-                    }
+        for (_name, entry) in self.map.iter() {
+            if let Some(max) = entry.max_conns {
+                if max != entry.current_conns {
+                    trusted_done = false;
                 }
             }
         }
@@ -194,14 +174,12 @@ impl SlowMap {
     // the caller can never talk to the server again.
     #[allow(dead_code)]
     pub fn disconnect(&mut self, sid: xous::SID) -> Option<XousServerName> {
-        for entry in self.map.iter_mut() {
-            if let Some(mapping) = entry {
-                if mapping.sid == sid {
-                    if mapping.current_conns > 0 {
-                        mapping.current_conns -= 1;
-                    }
-                    return Some(mapping.name);
+        for (name, mapping) in self.map.iter_mut() {
+            if mapping.sid == sid {
+                if mapping.current_conns > 0 {
+                    mapping.current_conns -= 1;
                 }
+                return Some(*name);
             }
         }
         None
@@ -209,15 +187,13 @@ impl SlowMap {
     // this is a safer version of disconnect. we track servers that allow exactly one connection at a time
     // and give them a one-time-use token that a connector can use to disconnect.
     pub fn disconnect_with_token(&mut self, name: &XousServerName, token: [u32; 4]) -> bool {
-        for maybe_entry in self.map.iter_mut() {
-            if let Some(entry) = maybe_entry {
-                if let Some(old_token) = entry.token {
-                    if (*name == entry.name) && (token == old_token) && (entry.current_conns == 1) {
-                        (*entry).current_conns = 0;
-                        // generate the token -- we should never re-use these!
-                        (*entry).token = Some(xous::create_server_id().expect("couldn't create token").to_array());
-                        return true
-                    }
+        if let Some(entry) = self.map.get_mut(name) {
+            if let Some(old_token) = entry.token {
+                if (token == old_token) && (entry.current_conns == 1) {
+                    (*entry).current_conns = 0;
+                    // generate the token -- we should never re-use these!
+                    (*entry).token = Some(xous::create_server_id().expect("couldn't create token").to_array());
+                    return true
                 }
             }
         }
@@ -239,7 +215,7 @@ fn xmain() -> ! {
 
     // this limits the number of available servers to be requested to 128...!
     //let mut name_table = FnvIndexMap::<XousServerName, xous::SID, 128>::new();
-    let mut name_table = SlowMap::new();
+    let mut name_table = CheckedHashMap::new();
 
     info!("started");
     loop {
@@ -278,6 +254,8 @@ fn xmain() -> ! {
                     info!("{} server has unregistered", name);
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
+                    log::error!("couldn't unregister {:?}", gid);
+                    log::error!("table: {:?}", name_table);
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
@@ -305,10 +283,8 @@ fn xmain() -> ! {
                                 "Can't find request '{}' in table, dumping table:",
                                 name
                             );
-                            for maybe_conn in name_table.map.iter() {
-                                if let Some(connection) = maybe_conn {
-                                    log::debug!("{:?}", connection);
-                                }
+                            for (_name, conn) in name_table.map.iter() {
+                                log::debug!("{:?}", conn);
                             }
                             d11ctimeout.hosted_delay();
                             response = api::Return::Failure
@@ -319,10 +295,8 @@ fn xmain() -> ! {
                         "Can't find request '{}' in table, dumping table:",
                         name
                     );
-                    for maybe_conn in name_table.map.iter() {
-                        if let Some(connection) = maybe_conn {
-                            log::debug!("{:?}", connection);
-                        }
+                    for (_name, conn) in name_table.map.iter() {
+                        log::debug!("{:?}", conn);
                     }
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                     let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();

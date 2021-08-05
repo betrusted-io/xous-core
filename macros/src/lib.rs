@@ -144,11 +144,19 @@ fn random_ident() -> Ident {
     let mut seed: [u8; 16] = [0; 16];
 
     for (i, v) in seed.iter_mut().take(8).enumerate() {
-        *v = ((secs >> (i * 8)) & 0xFF) as u8
+        if (i * 8) >= 64 {
+            *v = 0;
+        } else {
+            *v = ((secs >> (i * 8)) & 0xFF) as u8
+        }
     }
 
     for (i, v) in seed.iter_mut().skip(8).enumerate() {
-        *v = ((count >> (i * 8)) & 0xFF) as u8
+        if (i * 8) >= 32 {
+            *v = 0
+        } else {
+            *v = ((count >> (i * 8)) & 0xFF) as u8
+        }
     }
 
     let mut rng = rand::rngs::SmallRng::from_seed(seed);

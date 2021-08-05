@@ -9,7 +9,7 @@ use xous_ipc::Buffer;
 use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 
 use core::sync::atomic::{AtomicBool, Ordering};
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
@@ -451,7 +451,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::api::*;
     pub struct Spinor {
@@ -536,10 +536,10 @@ fn xmain() -> ! {
         Here is the list of servers allowed to access, and why:
           - shellchat (for testing ONLY, remove once done)
           - suspend/resume (for suspend locking/unlocking calls)
+          - keystore
           - PDDB (not yet written)
-          - keystore (not yet written)
     */
-    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(2)).expect("can't register server");
+    let spinor_sid = xns.register_name(api::SERVER_NAME_SPINOR, Some(3)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", spinor_sid);
 
     let handler_conn = xous::connect(spinor_sid).expect("couldn't create interrupt handler callback connection");
