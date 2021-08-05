@@ -552,7 +552,7 @@ impl RootKeys {
     fn debug_print_key(&self, offset: usize, num_bits: usize, name: &str) {
         use core::fmt::Write;
         let mut debugstr = xous_ipc::String::<4096>::new();
-        let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+        let sensitive_slice = self.sensitive_data.as_slice::<u32>();
         write!(debugstr, "{}", name).unwrap();
         for word in sensitive_slice[offset .. offset as usize + num_bits/(size_of::<u32>()*8)].iter() {
             for byte in word.to_be_bytes().iter() {
@@ -577,7 +577,7 @@ impl RootKeys {
 
         // now get the font plane data
         self.gfx.bulk_read_restart(); // reset the bulk read pointers on the gfx side
-        let mut bulkread = BulkRead::default();
+        let bulkread = BulkRead::default();
         let mut buf = xous_ipc::Buffer::into_buf(bulkread).expect("couldn't transform bulkread into aligned buffer");
         // this form of loop was chosen to avoid the multiple re-initializations and copies that would be entailed
         // in our usual idiom for pasing buffers around. instead, we create a single buffer, and re-use it for

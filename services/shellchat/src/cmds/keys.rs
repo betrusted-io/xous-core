@@ -69,7 +69,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
 
                     log::debug!("top of region: {:x?}", &region[0..8]);
                     // a region to stash a copy of the previous data in the testing area, so we can diff to confirm things worked!
-                    let reference_region = xous::syscall::map_memory(
+                    let mut reference_region = xous::syscall::map_memory(
                         None,
                         None,
                         TEST_SIZE,
