@@ -180,11 +180,11 @@ pub extern "C" fn trap_handler(
         // or returning from a handler or thread. If so, handle the exception
         // and return right away.
         match ex {
-            RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
+            RiscvException::StorePageFault(_pc, addr) | RiscvException::LoadPageFault(_pc, addr) => {
                 #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                 print!(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                    pid, ex, pc, addr
+                    pid, ex, _pc, addr
                 );
                 crate::arch::mem::ensure_page_exists_inner(addr)
                     .map(|_new_page| {
@@ -214,7 +214,11 @@ pub extern "C" fn trap_handler(
                 ArchProcess::with_current_mut(|p| {
                     // Adjust the program counter by the amount returned by the exception handler
                     let pc_adjust = a0 as isize;
-                    p.current_thread_mut().sepc += 4;
+                    if pc_adjust < 0 {
+                        p.current_thread_mut().sepc -= pc_adjust.abs() as usize;
+                    } else {
+                        p.current_thread_mut().sepc += pc_adjust.abs() as usize;
+                    }
 
                     crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
                 });
