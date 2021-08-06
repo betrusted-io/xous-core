@@ -197,9 +197,9 @@ impl Process {
     }
 
     /// Set the current thread number.
-    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
+    pub fn set_tid(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         let mut process = unsafe { &mut *PROCESS };
-        // println!("KERNEL({}:{}): Switching to thread {}", self.pid, process.hardware_thread - 1, thread);
+        klog!("Switching to thread {}", thread);
         assert!(
             thread <= process.threads.len(),
             "attempt to switch to an invalid thread {}",

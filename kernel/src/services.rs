@@ -5,6 +5,7 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
+use crate::arch::process::EXCEPTION_TID;
 use xous_kernel::MemoryRange;
 
 use core::num::NonZeroU8;
@@ -78,6 +79,10 @@ pub enum ProcessState {
     /// This process is processing an exception. When it is resumed, it will
     /// turn into `Ready(usize)`.
     Exception(usize),
+
+    /// This process is processing an exception, but is waiting for a response from
+    /// another Server. When it is resumed, it will turn into `Exception(usize)`.
+    BlockedException(usize),
 }
 
 impl core::fmt::Debug for ProcessState {
@@ -91,6 +96,7 @@ impl core::fmt::Debug for ProcessState {
             Running(rt) => write!(fmt, "Running({:b})", rt),
             Debug(rt) => write!(fmt, "Debug({:b})", rt),
             Exception(rt) => write!(fmt, "Exception({:b})", rt),
+            BlockedException(rt) => write!(fmt, "BlockedException({:b})", rt),
             Sleeping => write!(fmt, "Sleeping"),
         }
     }
@@ -120,7 +126,7 @@ pub struct Process {
     pub ppid: PID,
 
     /// The current thread ID
-    current_thread: TID,
+    pub current_thread: TID,
 
     /// The context number that was active before this process was switched
     /// away.
@@ -197,7 +203,10 @@ impl Default for ProcessInner {
 impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
-        matches!(self.state, ProcessState::Setup(_) | ProcessState::Ready(_))
+        matches!(
+            self.state,
+            ProcessState::Setup(_) | ProcessState::Ready(_) | ProcessState::Exception(_)
+        )
     }
 
     /// This process slot is unallocated and may be turn into a process
@@ -208,7 +217,7 @@ impl Process {
     pub fn activate(&self) -> Result<(), xous_kernel::Error> {
         crate::arch::process::set_current_pid(self.pid);
         self.mapping.activate()?;
-        let mut current_process = crate::arch::process::Process::current();
+        let mut current_process = ArchProcess::current();
         current_process.activate()
     }
 
@@ -226,7 +235,7 @@ impl Process {
         crate::irq::release_interrupts_for_pid(self.pid);
 
         // Remove this PID from the process table
-        crate::arch::process::Process::destroy(self.pid)?;
+        ArchProcess::destroy(self.pid)?;
         self.state = ProcessState::Free;
         Ok(())
     }
@@ -312,7 +321,7 @@ impl SystemServices {
         let init_offsets = {
             let mut init_count = 1;
             for arg in args.iter() {
-                if arg.name == make_type!("IniE") {
+                if arg.name == u32::from_le_bytes(*b"IniE") {
                     init_count += 1;
                 }
             }
@@ -417,10 +426,6 @@ impl SystemServices {
         Ok(&mut self.processes[pid_idx])
     }
 
-    // pub fn current_thread(&self, pid: PID) -> usize {
-    //     self.processes[pid.get() as usize - 1].current_thread as usize
-    // }
-
     pub fn current_pid(&self) -> PID {
         arch::process::current_pid()
         // PID0 doesn't exist -- process IDs are offset by 1.
@@ -455,7 +460,7 @@ impl SystemServices {
             let mut current = self
                 .get_process_mut(current_pid)
                 .expect("couldn't get current PID");
-            // println!("Finishing callback in PID {}", current_pid);
+            klog!("Finishing callback in PID {}", current_pid);
             // let old_state = current.state;
             current.state = match current.state {
                 ProcessState::Running(0) => ProcessState::Sleeping,
@@ -472,7 +477,6 @@ impl SystemServices {
         {
             let mut process = self.get_process_mut(pid)?;
             let ppid = process.ppid;
-            // let old_state = process.state;
             // Ensure the new context is available to be run
             let available_threads = match process.state {
                 ProcessState::Ready(x) if x & 1 << tid != 0 => x & !(1 << tid),
@@ -488,14 +492,19 @@ impl SystemServices {
                 ),
             };
             process.state = ProcessState::Running(available_threads);
+            // klog!(
+            //     "in resuming callback, process state went from {:?} to {:?}",
+            //     old_state,
+            //     process.state
+            // );
             // log_process_update(file!(), line!(), process, old_state);
             // process.current_thread = tid as u8;
             process.mapping.activate()?;
             process.activate()?;
 
             // Activate the current context
-            let mut arch_process = crate::arch::process::Process::current();
-            arch_process.set_thread(tid)?;
+            let mut arch_process = ArchProcess::current();
+            arch_process.set_tid(tid)?;
             process.current_thread = tid;
         }
         // self.pid = pid;
@@ -555,7 +564,7 @@ impl SystemServices {
                 | ProcessState::Running(x)
                 | ProcessState::Debug(x)
                 | ProcessState::Exception(x) => x,
-                ProcessState::Sleeping => 0,
+                ProcessState::Sleeping | ProcessState::BlockedException(_) => 0,
                 ProcessState::Free => panic!("process was not allocated"),
                 ProcessState::Setup(_) | ProcessState::Allocated => {
                     panic!("process hasn't been set up yet")
@@ -585,7 +594,7 @@ impl SystemServices {
             };
 
             // Activate the current context
-            arch_process.set_thread(arch::process::IRQ_TID).unwrap();
+            arch_process.set_tid(arch::process::IRQ_TID).unwrap();
 
             // Construct the new frame
             arch::syscall::invoke(
@@ -632,6 +641,10 @@ impl SystemServices {
             ProcessState::Ready(x) if x & (1 << tid) == 0 => ProcessState::Ready(x | (1 << tid)),
             ProcessState::Sleeping => ProcessState::Ready(1 << tid),
             ProcessState::Debug(x) if x & (1 << tid) == 0 => ProcessState::Debug(x | (1 << tid)),
+            ProcessState::Exception(ready_threads)
+            | ProcessState::BlockedException(ready_threads) => {
+                ProcessState::Exception(ready_threads | (1 << tid))
+            }
             other => panic!(
                 "PID {} was not in a state to wake thread {}: {:?}",
                 pid, tid, other
@@ -664,13 +677,16 @@ impl SystemServices {
             ProcessState::Free => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Sleeping => return Err(xous_kernel::Error::ProcessNotFound),
             ProcessState::Allocated => return Err(xous_kernel::Error::ProcessNotFound),
+            ProcessState::BlockedException(_) => {
+                panic!("tried to switch to an exception handler that was blocked")
+            }
             ProcessState::Debug(_) => return Err(xous_kernel::Error::DebugInProgress),
             ProcessState::Exception(x) => {
                 process.activate()?;
-                let mut p = crate::arch::process::Process::current();
+                let mut p = ArchProcess::current();
                 let tid = crate::arch::process::EXCEPTION_TID;
-                p.set_thread(tid)?;
-                process.current_thread = tid as _;
+                p.set_tid(tid)?;
+                // process.current_thread = tid as _;
                 ProcessState::Exception(x)
             }
             ProcessState::Setup(setup) => {
@@ -685,9 +701,9 @@ impl SystemServices {
                     }
                 }
 
-                let mut p = crate::arch::process::Process::current();
+                let mut p = ArchProcess::current();
                 p.setup_thread(INITIAL_TID, setup)?;
-                p.set_thread(INITIAL_TID)?;
+                p.set_tid(INITIAL_TID)?;
                 ArchProcess::with_inner_mut(|process_inner| process_inner.pid = pid);
                 process.current_thread = INITIAL_TID as _;
 
@@ -720,10 +736,10 @@ impl SystemServices {
                 };
 
                 process.activate()?;
-                let mut p = crate::arch::process::Process::current();
+                let mut p = ArchProcess::current();
                 // FIXME: What happens if this fails? We're currently in the new process
                 // but without a context to switch to.
-                p.set_thread(new_thread)?;
+                p.set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
 
                 // Remove the new context from the available context list
@@ -737,7 +753,7 @@ impl SystemServices {
                 ProcessState::Running(0)
             }
             ProcessState::Running(ready_threads) => {
-                let mut p = crate::arch::process::Process::current();
+                let mut p = ArchProcess::current();
                 // let current_thread = p.current_thread();
                 let new_thread = match tid {
                     None => {
@@ -768,7 +784,7 @@ impl SystemServices {
 
                 // Activate this process on this CPU
                 process.activate()?;
-                p.set_thread(new_thread)?;
+                p.set_tid(new_thread)?;
                 process.current_thread = new_thread as _;
                 ProcessState::Running(new_mask)
             }
@@ -784,18 +800,17 @@ impl SystemServices {
         Ok(())
     }
 
-    /// Switches away from the specified process ID.
-    /// If `can_resume` is `true`, then the current thread ID will be placed
-    /// in the list of available thread IDs.
+    /// Switches away from the specified process ID and ensures it won't
+    /// get scheduled again.
     /// If no thread IDs are available, the process will enter a `Sleeping` state.
     ///
     /// # Panics
     ///
     /// If the current process is not running.
-    pub fn switch_from_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
+    pub fn unschedule_thread(&mut self, pid: PID, tid: TID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // klog!(
-        //     "switch_from_thread({}:{}): Old state was {:?}",
+        //     "unschedule_thread({}:{}): Old state was {:?}",
         //     pid, tid, process.state
         // );
         // ArchProcess::with_current(|current| current.print_thread());
@@ -803,7 +818,7 @@ impl SystemServices {
         // let old_state = process.state;
         process.state = match process.state {
             ProcessState::Running(x) if x & (1 << tid) != 0 => panic!(
-                "PID {} thread {} was already queued for running when `switch_from_thread()` was called",
+                "PID {} thread {} was already queued for running when `unschedule_thread()` was called",
                 pid, tid
             ),
             ProcessState::Running(0) => {
@@ -813,7 +828,7 @@ impl SystemServices {
                     ProcessState::Running(0)
                 }
             }
-            ProcessState::Exception(x) => ProcessState::Exception(x),
+            ProcessState::Exception(x) => ProcessState::BlockedException(x),
             ProcessState::Running(x) => {
                 if cfg!(baremetal) {
                     ProcessState::Ready(x)
@@ -822,7 +837,6 @@ impl SystemServices {
                 }
             }
             other => {
-                // ::debug_here::debug_here!();
                 panic!(
                     "PID {} TID {} was not in a state to be switched from: {:?}",
                     pid, tid, other
@@ -831,7 +845,7 @@ impl SystemServices {
         };
         // log_process_update(file!(), line!(), process, old_state);
         // klog!(
-        //     "switch_from_thread({}:{}): New state is {:?}",
+        //     "unschedule_thread({}:{}): New state is {:?}",
         //     pid, tid, process.state
         // );
         Ok(())
@@ -867,7 +881,7 @@ impl SystemServices {
         {
             let target_process = self.get_process(pid)?;
             target_process.activate()?;
-            let mut arch_process = crate::arch::process::Process::current();
+            let mut arch_process = ArchProcess::current();
             arch_process.set_thread_result(tid, result);
         }
 
@@ -896,13 +910,12 @@ impl SystemServices {
         } else {
             klog!("Activating process {} thread ANY", new_pid);
         }
-        //ArchProcess::with_current(|current| current.print_thread());
 
         // Save state if the PID has changed.  This will activate the new memory
         // space.
         let new = self.get_process_mut(new_pid)?;
         if new_pid != previous_pid {
-            // println!("New state: {:?}", new.state);
+            klog!("New process original state: {:?}", new.state);
 
             // Ensure the new process can be run.
             match new.state {
@@ -912,7 +925,8 @@ impl SystemServices {
                 }
                 ProcessState::Setup(_) | ProcessState::Allocated => new_tid = INITIAL_TID,
                 ProcessState::Exception(_) => {
-                    new.current_thread = crate::arch::process::EXCEPTION_TID;
+                    new_tid = crate::arch::process::EXCEPTION_TID;
+                    // new.current_thread = new_tid;
                 }
                 ProcessState::Running(x) | ProcessState::Ready(x) => {
                     // If no new context is specified, take the previous
@@ -947,7 +961,9 @@ impl SystemServices {
                         new.current_thread = new_tid as _;
                     }
                 }
-                ProcessState::Sleeping | ProcessState::Debug(_) => {
+                ProcessState::Sleeping
+                | ProcessState::Debug(_)
+                | ProcessState::BlockedException(_) => {
                     // println!("PID {} was sleeping or being debugged", new_pid);
                     return Err(xous_kernel::Error::ProcessNotFound);
                 }
@@ -980,7 +996,10 @@ impl SystemServices {
                 }
                 ProcessState::Sleeping => ProcessState::Running(0),
                 ProcessState::Exception(x) => ProcessState::Exception(x),
-                ProcessState::Debug(_) => panic!("Process was being debugged"),
+                ProcessState::BlockedException(_) => {
+                    panic!("process was blocked handling an exception")
+                }
+                ProcessState::Debug(_) => panic!("process was being debugged"),
             };
             // log_process_update(file!(), line!(), new, old_state);
             new.activate()?;
@@ -1015,6 +1034,13 @@ impl SystemServices {
                         ProcessState::Ready(x)
                     }
                 }
+                ProcessState::Exception(ready_threads) => {
+                    if can_resume {
+                        ProcessState::Exception(ready_threads)
+                    } else {
+                        ProcessState::BlockedException(ready_threads)
+                    }
+                }
                 other => panic!(
                     "previous process PID {} was in an invalid state (not Running): {:?}",
                     previous_pid, other
@@ -1043,8 +1069,8 @@ impl SystemServices {
                     panic!("tried to switch to our own thread without resume (current_thread: {}  previous_tid: {}  new_tid: {})",
                             new.current_thread, previous_tid, new_tid);
                 }
-                let mut process = crate::arch::process::Process::current();
-                process.set_thread(new_tid).unwrap();
+                let mut process = ArchProcess::current();
+                process.set_tid(new_tid).unwrap();
                 new.current_thread = new_tid;
                 return Ok(new_tid);
             }
@@ -1085,10 +1111,17 @@ impl SystemServices {
             // log_process_update(file!(), line!(), new, old_state);
         }
 
-        let mut process = crate::arch::process::Process::current();
+        let mut process = ArchProcess::current();
 
         // Restore the previous thread, if one exists.
-        process.set_thread(new_tid)?;
+        process.set_tid(new_tid)?;
+
+        klog!(
+            "Activated process {}:{}, new state: {:?}",
+            new_pid,
+            new_tid,
+            self.get_process_mut(new_pid)?.state
+        );
 
         Ok(new_tid)
     }
@@ -1445,7 +1478,7 @@ impl SystemServices {
         {
             let target_process = self.get_process(dest_pid)?;
             target_process.activate()?;
-            let mut arch_process = crate::arch::process::Process::current();
+            let mut arch_process = ArchProcess::current();
             arch_process.return_memory(dest_tid, buf);
         }
         let target_process = self.get_process(current_pid)?;
@@ -1473,7 +1506,7 @@ impl SystemServices {
         let mut process = self.get_process_mut(pid)?;
         process.activate()?;
 
-        let mut arch_process = crate::arch::process::Process::current();
+        let mut arch_process = ArchProcess::current();
         let new_tid = arch_process
             .find_free_thread()
             .ok_or(xous_kernel::Error::ThreadNotAvailable)?;
@@ -1518,7 +1551,7 @@ impl SystemServices {
         };
 
         // Destroy the thread at a hardware level
-        let mut arch_process = crate::arch::process::Process::current();
+        let mut arch_process = ArchProcess::current();
         let return_value = arch_process.destroy_thread(tid).unwrap_or_default();
 
         // If there's another thread waiting on the return value of this thread,
@@ -1571,7 +1604,7 @@ impl SystemServices {
         }
 
         // If the target thread exists, put this thread to sleep.
-        let arch_process = crate::arch::process::Process::current();
+        let arch_process = ArchProcess::current();
         if arch_process.thread_exists(join_tid) {
             // The target thread exists -- put this thread to sleep
             let ppid = self.get_process(pid).unwrap().ppid;
@@ -2059,6 +2092,7 @@ impl SystemServices {
             ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
             ProcessState::Ready(tids) => ProcessState::Debug(tids),
             ProcessState::Exception(tids) => ProcessState::Exception(tids),
+            ProcessState::BlockedException(tids) => ProcessState::BlockedException(tids),
             ProcessState::Sleeping => ProcessState::Debug(0),
             ProcessState::Debug(tids) => ProcessState::Debug(tids),
             ProcessState::Running(tids) => {
@@ -2067,10 +2101,10 @@ impl SystemServices {
 
                 let parent_process = self.get_process_mut(parent_pid).unwrap();
                 parent_process.activate().unwrap();
-                let mut p = crate::arch::process::Process::current();
+                let mut p = ArchProcess::current();
                 // FIXME: What happens if this fails? We're currently in the new process
                 // but without a context to switch to.
-                p.set_thread(parent_process.previous_thread).unwrap();
+                p.set_tid(parent_process.previous_thread).unwrap();
                 parent_process.current_thread = parent_process.previous_thread;
 
                 // Ensure we don't switch back to the same process.
@@ -2097,7 +2131,8 @@ impl SystemServices {
             ProcessState::Setup(thread_init) => ProcessState::Setup(thread_init),
             ProcessState::Ready(tids) => ProcessState::Ready(tids),
             ProcessState::Sleeping => ProcessState::Sleeping,
-            ProcessState::Exception(x) => ProcessState::Ready(x),
+            ProcessState::Exception(x) => ProcessState::Exception(x),
+            ProcessState::BlockedException(tids) => ProcessState::BlockedException(tids),
             ProcessState::Debug(0) => ProcessState::Sleeping,
             ProcessState::Debug(tids) => ProcessState::Ready(tids),
             ProcessState::Running(tids) => ProcessState::Running(tids),
@@ -2150,10 +2185,14 @@ impl SystemServices {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
         process.state = match process.state {
-            ProcessState::Running(x) => ProcessState::Exception(x | 1 << process.current_thread),
+            ProcessState::Running(x) => ProcessState::Exception(x),
             ProcessState::Ready(x) => ProcessState::Exception(x),
             _ => return None,
         };
+        // Activate the current context
+        let mut arch_process = ArchProcess::current();
+        arch_process.set_tid(EXCEPTION_TID).ok()?;
+        // process.current_thread = EXCEPTION_TID;
         Some(handler)
     }
 
@@ -2162,12 +2201,11 @@ impl SystemServices {
     pub fn finish_exception_handler_and_resume(
         &mut self,
         pid: PID,
-        tid: TID,
     ) -> Result<(), xous_kernel::Result> {
         let process = self.get_process_mut(pid)?;
         if let ProcessState::Exception(threads) = process.state {
-            process.state = ProcessState::Running(threads & !(1 << tid));
-            process.current_thread = tid;
+            process.state = ProcessState::Running(threads);
+            ArchProcess::current().set_tid(process.current_thread)?;
         } else {
             return Err(xous_kernel::Error::ThreadNotAvailable.into());
         }
@@ -2179,7 +2217,7 @@ impl SystemServices {
     pub fn process_name(&self, pid: PID) -> Option<&str> {
         let args = crate::args::KernelArguments::get();
         for arg in args.iter() {
-            if arg.name != make_type!("PNam") {
+            if arg.name != u32::from_le_bytes(*b"PNam") {
                 continue;
             }
             let data = unsafe {

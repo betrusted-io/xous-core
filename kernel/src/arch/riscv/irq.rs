@@ -198,16 +198,13 @@ pub extern "C" fn trap_handler(
                             )
                         });
                     })
-                    .expect("Couldn't allocate page");
+                    .ok(); // If this fails, fall through.
             }
 
             RiscvException::InstructionPageFault(RETURN_FROM_EXCEPTION_HANDLER, _offset) => {
-                // The instruction handler finished. Retry the existing instruction.
-                let tid = ArchProcess::with_current(|process| process.current_tid());
-
                 // This address indicates the exception handler
                 SystemServices::with_mut(|ss| {
-                    ss.finish_exception_handler_and_resume(pid, tid)
+                    ss.finish_exception_handler_and_resume(pid)
                         .expect("unable to finish exception handler")
                 });
 
@@ -221,7 +218,7 @@ pub extern "C" fn trap_handler(
                         p.current_thread_mut().sepc += pc_adjust.abs() as usize;
                     }
 
-                    crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
+                    crate::arch::syscall::resume(pid.get() == 1, p.current_thread())
                 });
             }
 
@@ -247,7 +244,7 @@ pub extern "C" fn trap_handler(
                 let (previous_pid, previous_context) = unsafe {
                     PREVIOUS_PAIR
                         .take()
-                        .expect("got an instruction page fault with no previous PID")
+                        .expect("got RETURN_FROM_ISR with no previous PID")
                 };
                 // println!(
                 //     "ISR: Resuming previous pair of ({}, {})",
@@ -273,12 +270,18 @@ pub extern "C" fn trap_handler(
         // This exception is not due to something we're aware of. In this case,
         // determine if there is an exception handler in this particular program
         // and call that handler if so.
-        if let Some(handler) = SystemServices::with_mut(|ss| ss.begin_exception_handler(pid)) {
-            // If this is the sort of exception that may be able to be handled by
-            // the userspace program, generate a list of arguments to pass to
-            // the handler.
-            if let Some(args) = generate_exception_args(&ex) {
+        if let Some(args) = generate_exception_args(&ex) {
+            klog!("Generated exception args -- invoking handler");
+            if let Some(handler) = SystemServices::with_mut(|ss| ss.begin_exception_handler(pid)) {
+                klog!("Exception handler for process exists ({:x?})", handler);
+                // If this is the sort of exception that may be able to be handled by
+                // the userspace program, generate a list of arguments to pass to
+                // the handler.
                 // Invoke the handler in userspace and exit this exception handler.
+                klog!(
+                    "At start of exception, current thread was: {}",
+                    SystemServices::with(|ss| ss.get_process(pid).unwrap().current_thread)
+                );
                 ArchProcess::with_current_mut(|process| {
                     crate::arch::syscall::invoke(
                         process.thread_mut(crate::arch::process::EXCEPTION_TID),

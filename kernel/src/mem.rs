@@ -137,7 +137,7 @@ impl MemoryManager {
             );
         }
         assert!(
-            xarg_def.name == make_type!("XArg"),
+            xarg_def.name == u32::from_le_bytes(*b"XArg"),
             "mm: first tag wasn't XArg"
         );
         assert!(xarg_def.data[1] == 1, "mm: XArg had unexpected version");
@@ -147,7 +147,7 @@ impl MemoryManager {
 
         let mut mem_size = self.ram_size / PAGE_SIZE;
         for tag in args_iter {
-            if tag.name == make_type!("MREx") {
+            if tag.name == u32::from_le_bytes(*b"MREx") {
                 unsafe {
                     assert!(
                         EXTRA_REGIONS.is_empty(),
