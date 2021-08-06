@@ -1,8 +1,8 @@
 use xous::{Error, MemoryMessage, Result, CID};
 
 use core::pin::Pin;
-use rkyv::ser::Serializer;
 use rkyv::archived_value;
+use rkyv::ser::Serializer;
 use rkyv::ArchiveUnsized;
 use rkyv::SerializeUnsized;
 
@@ -25,16 +25,21 @@ impl<const N: usize> String<N> {
     pub fn volatile_clear(&mut self) {
         let b = self.bytes.as_mut_ptr();
         for i in 0..N {
-            unsafe{b.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                b.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         self.len = 0; // also set my length to 0
-        // Ensure the compiler doesn't re-order the clear.
-        // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
-        // *reads*, but this method only *writes* to the locations.
+                      // Ensure the compiler doesn't re-order the clear.
+                      // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
+                      // *reads*, but this method only *writes* to the locations.
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
 
-    pub fn from_str<T>(src: T) -> String<N> where T: AsRef<str> {
+    pub fn from_str<T>(src: T) -> String<N>
+    where
+        T: AsRef<str>,
+    {
         let src = src.as_ref();
         let mut s = Self::new();
         // Copy the string into our backing store.
@@ -130,12 +135,12 @@ impl<const N: usize> String<N> {
     /// awful, O(N) implementation because we have to iterate through the entire string
     /// and decode variable-length utf8 characters, until we can't.
     pub fn pop(&mut self) -> Option<char> {
-        if self.len() < 1 {
+        if self.is_empty() {
             return None;
         }
         // first, make a copy of the string
         let tempbytes: [u8; N] = self.bytes;
-        let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.len()]) }.clone();
+        let tempstr = &(*unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.len()]) });
         // clear our own string
         self.len = 0;
         self.bytes = [0; N];
@@ -211,6 +216,12 @@ impl<const N: usize> String<N> {
         } else {
             Err(Error::OutOfMemory)
         }
+    }
+}
+
+impl<const N: usize> Default for String<N> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
