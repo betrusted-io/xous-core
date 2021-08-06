@@ -249,27 +249,54 @@ impl MemoryManager {
     #[cfg(baremetal)]
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous_kernel::Error> {
         // Go through all RAM pages looking for a free page.
-        // Optimization: start from the previous address.
-        // println!("Allocating page for PID {}", pid);
+        println!("Allocating page for PID {}", pid);
         unsafe {
-            for index in self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE) {
-                // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-                if MEMORY_ALLOCATIONS[index].is_none() {
-                    MEMORY_ALLOCATIONS[index] = Some(pid);
+            let end_point = self.ram_size / PAGE_SIZE;
+            let starting_point = self.last_ram_page;
+            for (allocation, index) in MEMORY_ALLOCATIONS[starting_point..end_point]
+                .iter_mut()
+                .zip(starting_point..)
+                .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
+            {
+                println!(
+                    "    Checking {:08x}...",
+                    index * PAGE_SIZE + self.ram_start as usize
+                );
+                if allocation.is_none() {
+                    *allocation = Some(pid);
                     self.last_ram_page = index + 1;
+                    // if self.last_ram_page >= end_point {
+                    //     self.last_ram_page = 0;
+                    // }
                     let page = index * PAGE_SIZE + self.ram_start;
                     return Ok(page);
                 }
             }
-            for index in 0..self.last_ram_page {
-                // println!("    Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
-                if MEMORY_ALLOCATIONS[index].is_none() {
-                    MEMORY_ALLOCATIONS[index] = Some(pid);
-                    self.last_ram_page = index + 1;
-                    let page = index * PAGE_SIZE + self.ram_start;
-                    return Ok(page);
-                }
-            }
+            // for (index, allocation) in MEMORY_ALLOCATIONS
+            //     [self.last_ram_page..((self.ram_size as usize) / PAGE_SIZE)]
+            //     .iter_mut()
+            //     .enumerate()
+            // {
+            //     println!("    1. Checking {:08x}...", (self.last_ram_page + index) * PAGE_SIZE + self.ram_start as usize);
+            //     if allocation.is_none() {
+            //         *allocation = Some(pid);
+            //         self.last_ram_page = self.last_ram_page + index + 1;
+            //         let page = (self.last_ram_page + index) * PAGE_SIZE + self.ram_start;
+            //         return Ok(page);
+            //     }
+            // }
+            // for (index, allocation) in MEMORY_ALLOCATIONS[..self.last_ram_page]
+            //     .iter_mut()
+            //     .enumerate()
+            // {
+            //     println!("    2. Checking {:08x}...", index * PAGE_SIZE + self.ram_start as usize);
+            //     if allocation.is_none() {
+            //         *allocation = Some(pid);
+            //         self.last_ram_page = index + 1;
+            //         let page = index * PAGE_SIZE + self.ram_start;
+            //         return Ok(page);
+            //     }
+            // }
         }
         Err(xous_kernel::Error::OutOfMemory)
     }
@@ -386,7 +413,7 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }
+        Ok(unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }?)
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -490,7 +517,7 @@ impl MemoryManager {
             }
         }
 
-        unsafe { MemoryRange::new(virt as usize, size) }
+        Ok(unsafe { MemoryRange::new(virt as usize, size) }?)
     }
 
     /// Attempt to map the given physical address into the virtual address space
@@ -520,10 +547,10 @@ impl MemoryManager {
         let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
         crate::arch::mem::move_page_inner(
             self,
-            src_mapping,
+            &src_mapping,
             src_addr,
             dest_pid,
-            dest_mapping,
+            &dest_mapping,
             dest_addr,
         )?;
         self.claim_release_move(
@@ -552,10 +579,10 @@ impl MemoryManager {
         // the page while it's borrowed.
         crate::arch::mem::lend_page_inner(
             self,
-            src_mapping,
+            &src_mapping,
             src_addr as _,
             dest_pid,
-            dest_mapping,
+            &dest_mapping,
             dest_addr as _,
             mutable,
         )
@@ -576,10 +603,10 @@ impl MemoryManager {
         // the page while it's borrowed.
         crate::arch::mem::return_page_inner(
             self,
-            src_mapping,
+            &src_mapping,
             src_addr,
             dest_pid,
-            dest_mapping,
+            &dest_mapping,
             dest_addr,
         )
     }
@@ -647,8 +674,10 @@ impl MemoryManager {
         let addr = addr as usize;
 
         // Ensure the address lies on a page boundary
-        if cfg!(baremetal) && addr & 0xfff != 0 {
-            return Err(xous_kernel::Error::BadAlignment);
+        if cfg!(baremetal) {
+            if addr & 0xfff != 0 {
+                return Err(xous_kernel::Error::BadAlignment);
+            }
         }
 
         let mut offset = 0;
