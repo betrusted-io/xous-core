@@ -1,7 +1,7 @@
 use crate::{
-    pid_from_usize, CpuID, Error, MemoryAddress, MemoryFlags, MemoryMessage, MemoryRange,
-    MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs, ProcessInit,
-    Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
+    pid_from_usize, CpuID, Error, Exception, MemoryAddress, MemoryFlags, MemoryMessage,
+    MemoryRange, MemorySize, MemoryType, Message, MessageEnvelope, MessageSender, ProcessArgs,
+    ProcessInit, Result, ScalarMessage, SysCallResult, ThreadInit, CID, PID, SID, TID,
 };
 use core::convert::{TryFrom, TryInto};
 
@@ -1634,11 +1634,19 @@ pub fn join_thread(tid: TID) -> core::result::Result<usize, Error> {
     })
 }
 
+static EXCEPTION_HANDLER: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+fn handle_exception(exception_type: usize, arg1: usize, arg2: usize) -> isize {
+    let exception = crate::exceptions::Exception::new(exception_type, arg1, arg2);
+    let f = EXCEPTION_HANDLER.load(core::sync::atomic::Ordering::SeqCst);
+    let f = unsafe { core::mem::transmute::<usize, fn(Exception) -> isize>(f) };
+    f(exception)
+}
+
 /// Sets the given function as this process' Exception handler. This function
 /// will be called whenever an Exception occurs such as a memory fault,
 /// illegal instruction, or a child process terminating.
 pub fn set_exception_handler(
-    handler: fn(crate::ExceptionType, usize, usize) -> isize,
+    handler: fn(crate::Exception) -> isize,
 ) -> core::result::Result<(), Error> {
     #[cfg(feature = "bit-flags")]
     let flags = crate::MemoryFlags::R | crate::MemoryFlags::W | crate::MemoryFlags::RESERVE;
@@ -1646,8 +1654,9 @@ pub fn set_exception_handler(
     let flags = 0b0000_0010 | 0b0000_0100 | 0b0000_0001;
 
     let stack = crate::map_memory(None, None, 131_072, flags)?;
+    EXCEPTION_HANDLER.store(handler as usize, core::sync::atomic::Ordering::SeqCst);
     rsyscall(SysCall::SetExceptionHandler(
-        handler as usize,
+        handle_exception as usize,
         stack.as_ptr() as usize,
     ))
     .and_then(|result| {

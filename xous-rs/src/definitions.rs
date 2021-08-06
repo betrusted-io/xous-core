@@ -40,20 +40,8 @@ pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
 pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
-#[derive(Debug)]
-#[repr(usize)]
-pub enum ExceptionType {
-    InstructionAddressMisaligned = 0,
-    InstructionAccessFault = 1,
-    IllegalInstruction = 2,
-    LoadAddressMisaligned = 3,
-    LoadAccessFault = 4,
-    StoreAddressMisaligned = 5,
-    StoreAccessFault = 6,
-    InstructionPageFault = 7,
-    LoadPageFault = 8,
-    StorePageFault = 9,
-}
+pub mod exceptions;
+pub use exceptions::*;
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
