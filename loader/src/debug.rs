@@ -43,7 +43,6 @@ mod debug_print_hardware {
     #[allow(unused_variables)]
     macro_rules! print {
         ($($args:tt)+) => ({
-            ()
         });
     }
 }
