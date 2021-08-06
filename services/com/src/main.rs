@@ -10,7 +10,7 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
-use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, StringSer};
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
@@ -633,32 +633,23 @@ fn xmain() -> ! {
                 com.txrx(ComState::WLAN_LEAVE.verb);
             }
             Some(Opcode::WlanStatus) => {
-                const STATUS_MAX_LEN: usize = 160;
-                const RX_WORD_LEN: usize = STATUS_MAX_LEN/2;
                 let mut buffer = unsafe {
                     Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                 };
-                let mut rx: [u8; RX_WORD_LEN*2] = [0; RX_WORD_LEN*2];
                 com.txrx(ComState::WLAN_STATUS.verb);
-                let size = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as usize;
-                let size = if size > STATUS_MAX_LEN { STATUS_MAX_LEN } else { size as usize };
-                for i in 0..RX_WORD_LEN {
-                    let w = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u16;
-                    let n = i * 2;
-                    let (lsb, msb) = match 0 {
-                        _ if n + 1 < size => ((w & 0xff) as u8, (w >> 8) as u8),
-                        _ if n < size => ((w & 0xff) as u8, 0u8),
-                        _ => (0u8, 0u8),
-                    };
-                    rx[n] = lsb;
-                    rx[n+1] = msb;
+                let mut rx_buf: [u16; STR_64_WORDS] = [0; STR_64_WORDS];
+                for dest in rx_buf.iter_mut() {
+                    *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                 }
-                info!("size: {}", size);
-                info!("rx[0]: {}", rx[0] as u8);
-                let status = core::str::from_utf8(&rx[0..size])
-                    .unwrap_or("COM bus error:\nutf8 decode failed");
-                let status_str = String::<STATUS_MAX_LEN>::from_str(&status);
-                let _ = buffer.replace(status_str);
+                let mut des = StringDes::<STR_64_WORDS, STR_64_U8_SIZE>::new();
+                match des.decode_u16(&rx_buf) {
+                    Ok(status) => {
+                        info!("status: {}", status);
+                        let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
+                        let _ = buffer.replace(status_str);
+                    }
+                    _ => info!("status decode failed"),
+                };
             }
             None => {error!("unknown opcode"); break},
         }
