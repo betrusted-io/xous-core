@@ -52,7 +52,7 @@ impl MultiThreadOps for XousTarget {
         unsafe { HALTED = false };
         match default_resume_action {
             ResumeAction::Step | ResumeAction::StepWithSignal(_) => {
-                Err("single-stepping not supported")?
+                return Err("single-stepping not supported")
             }
             _ => (),
         }
@@ -380,7 +380,7 @@ impl core::fmt::Write for GUart {
             let hex = b"0123456789abcdef";
             let c = c as usize;
             let checksum = putc(checksum, hex[(c >> 4) & 0xf]);
-            putc(checksum, hex[(c >> 0) & 0xf])
+            putc(checksum, hex[c & 0xf])
         }
 
         // Can't write when we're halted
