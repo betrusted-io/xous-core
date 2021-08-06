@@ -1,1 +1,1 @@
-pub const LANG: &'static str = "en";
+pub const LANG: &str = "en";
