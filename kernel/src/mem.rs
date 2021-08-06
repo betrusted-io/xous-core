@@ -249,7 +249,7 @@ impl MemoryManager {
     #[cfg(baremetal)]
     pub fn alloc_page(&mut self, pid: PID) -> Result<usize, xous_kernel::Error> {
         // Go through all RAM pages looking for a free page.
-        println!("Allocating page for PID {}", pid);
+        // println!("Allocating page for PID {}", pid);
         unsafe {
             let end_point = self.ram_size / PAGE_SIZE;
             let starting_point = self.last_ram_page;
@@ -258,10 +258,10 @@ impl MemoryManager {
                 .zip(starting_point..)
                 .chain(MEMORY_ALLOCATIONS[..starting_point].iter_mut().zip(0..))
             {
-                println!(
-                    "    Checking {:08x}...",
-                    index * PAGE_SIZE + self.ram_start as usize
-                );
+                // println!(
+                //     "    Checking {:08x}...",
+                //     index * PAGE_SIZE + self.ram_start as usize
+                // );
                 if allocation.is_none() {
                     *allocation = Some(pid);
                     self.last_ram_page = index + 1;
