@@ -601,6 +601,7 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
     #[cfg(feature = "debug-print")]
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
 
+    #[allow(clippy::let_and_return)]
     let result = if in_irq && !call.can_call_from_interrupt() {
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
