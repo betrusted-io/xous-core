@@ -197,18 +197,12 @@ impl Default for ProcessInner {
 impl Process {
     /// This process has at least one context that may be run
     pub fn runnable(&self) -> bool {
-        match self.state {
-            ProcessState::Setup(_) | ProcessState::Ready(_) => true,
-            _ => false,
-        }
+        matches!(self.state, ProcessState::Setup(_) | ProcessState::Ready(_))
     }
 
     /// This process slot is unallocated and may be turn into a process
     pub fn free(&self) -> bool {
-        match self.state {
-            ProcessState::Free => true,
-            _ => false,
-        }
+        matches!(self.state, ProcessState::Free)
     }
 
     pub fn activate(&self) -> Result<(), xous_kernel::Error> {
@@ -261,7 +255,7 @@ static mut SYSTEM_SERVICES: SystemServices = SystemServices {
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        current_thread: 0 as TID,
+        current_thread: 0_usize,
         previous_thread: INITIAL_TID as TID,
         exception_handler: None,
     }; MAX_PROCESS_COUNT],
@@ -335,7 +329,7 @@ impl SystemServices {
         // KernelArguments value to a SystemServices Process value.
         for init in init_offsets.iter() {
             let pid = (init.satp >> 22) & ((1 << 9) - 1);
-            let ref mut process = self.processes[(pid - 1) as usize];
+            let process = &mut self.processes[(pid - 1) as usize];
             // println!(
             //     "Process: SATP: {:08x}  PID: {}  Memory: {:08x}  PC: {:08x}  SP: {:08x}  Index: {}",
             //     init.satp,
@@ -616,10 +610,10 @@ impl SystemServices {
                 _ => false,
             })
         } else {
-            Ok(match process.state {
-                ProcessState::Running(_) | ProcessState::Ready(_) | ProcessState::Sleeping => true,
-                _ => false,
-            })
+            Ok(matches!(
+                process.state,
+                ProcessState::Running(_) | ProcessState::Ready(_) | ProcessState::Sleeping
+            ))
         }
     }
 
@@ -1715,6 +1709,7 @@ impl SystemServices {
                 ArchProcess::with_inner_mut(|process_inner| {
                     // Look through the connection map for (1) a free slot, and (2) an
                     // existing connection
+                    #[allow(clippy::manual_flatten)]
                     for server_idx_opt in process_inner.connection_map.iter_mut() {
                         if let Some(client_server_idx) = server_idx_opt {
                             if client_server_idx.get() == (server_idx + 2) as _ {
@@ -2016,11 +2011,9 @@ impl SystemServices {
                             // Look through the connection map for a connection
                             // that matches this index. Note that connection map entries
                             // are offset by two, because 0 == free and 1 == "tombstone".
-                            for mapping in process_inner.connection_map.iter_mut() {
-                                if let Some(mapping) = mapping {
-                                    if mapping.get() == (idx as u8) + 2 {
-                                        *mapping = NonZeroU8::new(1).unwrap();
-                                    }
+                            for mapping in process_inner.connection_map.iter_mut().flatten() {
+                                if mapping.get() == (idx as u8) + 2 {
+                                    *mapping = NonZeroU8::new(1).unwrap();
                                 }
                             }
                         })
@@ -2036,6 +2029,7 @@ impl SystemServices {
         }
 
         // Now that the server has been "Disconnected", free the server entry.
+        #[allow(clippy::manual_flatten)]
         for server in self.servers.iter_mut() {
             if let Some(server_inner) = server {
                 if server_inner.pid == target_pid {
@@ -2196,7 +2190,7 @@ impl SystemServices {
             let mut offset = 0;
             while offset <= arg.size {
                 let check_pid = u32::from_le_bytes([
-                    data[offset + 0],
+                    data[offset],
                     data[offset + 1],
                     data[offset + 2],
                     data[offset + 3],
