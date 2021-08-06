@@ -64,11 +64,11 @@ impl From<usize> for SenderID {
     }
 }
 
-impl Into<usize> for SenderID {
-    fn into(self) -> usize {
-        (self.pid.map(|x| x.get() as usize).unwrap_or(0) << 24)
-            | ((self.sidx << 16) & 0x00ff0000)
-            | (self.idx & 0xffff)
+impl From<SenderID> for usize {
+    fn from(val: SenderID) -> Self {
+        (val.pid.map(|x| x.get() as usize).unwrap_or(0) << 24)
+            | ((val.sidx << 16) & 0x00ff0000)
+            | (val.idx & 0xffff)
     }
 }
 
@@ -78,9 +78,9 @@ impl From<MessageSender> for SenderID {
     }
 }
 
-impl Into<MessageSender> for SenderID {
-    fn into(self) -> MessageSender {
-        MessageSender::from_usize(self.into())
+impl From<SenderID> for MessageSender {
+    fn from(val: SenderID) -> Self {
+        MessageSender::from_usize(val.into())
     }
 }
 
@@ -247,12 +247,12 @@ impl QueuedMessage {
     /// not yet been responded to -- Messages that have not yet been seen by the
     /// Server will return `false`.
     fn is_in_server(&self) -> bool {
-        match self {
+        matches!(
+            self,
             &QueuedMessage::WaitingForget(_, _, _, _, _, _)
-            | &QueuedMessage::WaitingReturnMemory(_, _, _, _, _, _)
-            | &QueuedMessage::WaitingReturnScalar(_, _, _, _) => true,
-            _ => false,
-        }
+                | &QueuedMessage::WaitingReturnMemory(_, _, _, _, _, _)
+                | &QueuedMessage::WaitingReturnScalar(_, _, _, _)
+        )
     }
 }
 
@@ -331,9 +331,7 @@ impl Server {
                 // For `Empty` and `Scalar` messages, all we have to do is ignore them.
                 // The sending process will not be blocked. These messages will be dropped,
                 // and the server will never see them.
-                QueuedMessage::Empty | QueuedMessage::ScalarMessage(_, _, _, _, _, _, _, _, _) => {
-                    ()
-                }
+                QueuedMessage::Empty | QueuedMessage::ScalarMessage(_, _, _, _, _, _, _, _, _) => {}
 
                 // For `Send` messages, the Server has not yet seen these messages. Simply
                 // prevent this memory from getting mapped into the Server and free it.
@@ -352,10 +350,8 @@ impl Server {
                         let mut result = Ok(xous_kernel::Result::Ok);
                         let virt = server_memory_addr;
                         let size = memory_length;
-                        if !cfg!(baremetal) {
-                            if virt & 0xfff != 0 {
-                                return Err(xous_kernel::Error::BadAlignment);
-                            }
+                        if !cfg!(baremetal) && virt & 0xfff != 0 {
+                            return Err(xous_kernel::Error::BadAlignment);
                         }
                         for addr in (virt..(virt + size)).step_by(crate::mem::PAGE_SIZE) {
                             if let Err(e) = mm.unmap_page(addr as *mut usize) {
@@ -597,7 +593,7 @@ impl Server {
             let buf = buf.expect("memory message expected but no buffer passed!");
             if server_addr != buf.as_ptr() as usize || len != buf.len() {
                 // klog!("Memory is attached but the returned buffer doesn't match (len: {} vs {}), buf addr: {:08x} vs {:08x}", len, buf.len(), server_addr, buf.as_ptr() as usize);
-                Err(xous_kernel::Error::BadAddress)?;
+                return Err(xous_kernel::Error::BadAddress);
             }
         }
         *current_val = QueuedMessage::Empty;
@@ -988,7 +984,7 @@ impl Server {
         // If the head and the tail generations will end up the same, then
         // the queue is full.
         if self.tail_generation == self.head_generation.wrapping_sub(1) {
-            Err(xous_kernel::Error::ServerQueueFull)?;
+            return Err(xous_kernel::Error::ServerQueueFull);
         }
 
         // Look through the queue, beginning at the queue head, for an empty slot.
@@ -1008,7 +1004,7 @@ impl Server {
             }
         }
         if discovered_index.is_none() {
-            Err(xous_kernel::Error::ServerQueueFull)?;
+            return Err(xous_kernel::Error::ServerQueueFull);
         }
         let queue_idx = discovered_index.unwrap();
         let queue_entry = &mut self.queue[queue_idx];

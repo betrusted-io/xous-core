@@ -386,7 +386,7 @@ impl MemoryManager {
             // FIXME: Un-reserve addresses if we encounter an error here
             mm.reserve_address(self, virt, flags)?;
         }
-        Ok(unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }?)
+        unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -490,7 +490,7 @@ impl MemoryManager {
             }
         }
 
-        Ok(unsafe { MemoryRange::new(virt as usize, size) }?)
+        unsafe { MemoryRange::new(virt as usize, size) }
     }
 
     /// Attempt to map the given physical address into the virtual address space
@@ -520,10 +520,10 @@ impl MemoryManager {
         let phys_addr = crate::arch::mem::virt_to_phys(src_addr as usize)?;
         crate::arch::mem::move_page_inner(
             self,
-            &src_mapping,
+            src_mapping,
             src_addr,
             dest_pid,
-            &dest_mapping,
+            dest_mapping,
             dest_addr,
         )?;
         self.claim_release_move(
@@ -552,10 +552,10 @@ impl MemoryManager {
         // the page while it's borrowed.
         crate::arch::mem::lend_page_inner(
             self,
-            &src_mapping,
+            src_mapping,
             src_addr as _,
             dest_pid,
-            &dest_mapping,
+            dest_mapping,
             dest_addr as _,
             mutable,
         )
@@ -576,10 +576,10 @@ impl MemoryManager {
         // the page while it's borrowed.
         crate::arch::mem::return_page_inner(
             self,
-            &src_mapping,
+            src_mapping,
             src_addr,
             dest_pid,
-            &dest_mapping,
+            dest_mapping,
             dest_addr,
         )
     }
@@ -647,10 +647,8 @@ impl MemoryManager {
         let addr = addr as usize;
 
         // Ensure the address lies on a page boundary
-        if cfg!(baremetal) {
-            if addr & 0xfff != 0 {
-                return Err(xous_kernel::Error::BadAlignment);
-            }
+        if cfg!(baremetal) && addr & 0xfff != 0 {
+            return Err(xous_kernel::Error::BadAlignment);
         }
 
         let mut offset = 0;
