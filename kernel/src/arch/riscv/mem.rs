@@ -24,7 +24,7 @@ extern "C" {
 pub unsafe fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
     let mut i = 0;
     while i < n {
-        *s.add(i) = c as u8;
+        *s.offset(i as isize) = c as u8;
         i += 1;
     }
     s
@@ -59,7 +59,7 @@ impl core::fmt::Debug for MemoryMapping {
             self.satp,
             self.satp >> 31,
             self.satp >> 22 & ((1 << 9) - 1),
-            (self.satp & ((1 << 22) - 1)) << 12,
+            (self.satp >> 0 & ((1 << 22) - 1)) << 12,
         )
     }
 }
@@ -147,9 +147,11 @@ impl MemoryMapping {
             );
 
             // Page 1023 is only available to PID1
-            if i == 1023 && self.get_pid().get() != 1 {
-                println!("        <unavailable>");
-                continue;
+            if i == 1023 {
+                if self.get_pid().get() != 1 {
+                    println!("        <unavailable>");
+                    continue;
+                }
             }
             // let l0_pt_addr = ((l1_entry >> 10) << 12) as *const u32;
             let l0_pt = unsafe { &mut (*((PAGE_TABLE_OFFSET + i * 4096) as *mut LeafPageTable)) };
@@ -209,7 +211,7 @@ impl MemoryMapping {
             unsafe { memset(page_addr as *mut u8, 0, PAGE_SIZE) };
         }
 
-        let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+        let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
         let current_mapping = l0_pt.entries[vpn0];
         if current_mapping & 1 == 1 {
             return Ok(());
@@ -273,7 +275,7 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     let virt = virt as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = virt & ((1 << 12) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
 
     assert!(vpn1 < 1024);
     assert!(vpn0 < 1024);
@@ -282,12 +284,12 @@ pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let l1_pt = l1_pt.entries;
+    let ref mut l1_pt = l1_pt.entries;
 
     // Subsequent pagetables are defined as being mapped starting at
     // PAGE_TABLE_OFFSET
     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
 
     // If the level 1 pagetable doesn't exist, then this address isn't valid.
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
@@ -310,7 +312,7 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = virt & ((1 << 12) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
 
     assert!(vpn1 < 1024);
     assert!(vpn0 < 1024);
@@ -319,12 +321,12 @@ pub fn peek_memory<T>(addr: *mut T) -> Result<T, xous_kernel::Error> {
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let l1_pt = l1_pt.entries;
+    let ref mut l1_pt = l1_pt.entries;
 
     // Subsequent pagetables are defined as being mapped starting at
     // PAGE_TABLE_OFFSET
     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
 
     // If the level 1 pagetable doesn't exist, then this address isn't valid.
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
@@ -354,7 +356,7 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     let virt = addr as usize;
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = virt & ((1 << 12) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
 
     assert!(vpn1 < 1024);
     assert!(vpn0 < 1024);
@@ -363,21 +365,21 @@ pub fn poke_memory<T>(addr: *mut T, val: T) -> Result<(), xous_kernel::Error> {
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let l1_pt = l1_pt.entries;
+    let ref mut l1_pt = l1_pt.entries;
 
     // Subsequent pagetables are defined as being mapped starting at
     // PAGE_TABLE_OFFSET
     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
 
     // If the level 1 pagetable doesn't exist, then this address isn't valid.
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
-        return Err(xous_kernel::Error::BadAddress);
+        Err(xous_kernel::Error::BadAddress)?;
     }
 
     // Ensure the entry hasn't already been mapped.
     if l0_pt.entries[vpn0] & 1 == 0 {
-        return Err(xous_kernel::Error::BadAddress);
+        Err(xous_kernel::Error::BadAddress)?;
     }
 
     // Ensure we're allowed to read it.
@@ -419,11 +421,11 @@ pub fn map_page_inner(
 ) -> Result<(), xous_kernel::Error> {
     let ppn1 = (phys >> 22) & ((1 << 12) - 1);
     let ppn0 = (phys >> 12) & ((1 << 10) - 1);
-    let ppo = phys & ((1 << 12) - 1);
+    let ppo = (phys >> 0) & ((1 << 12) - 1);
 
     let vpn1 = (virt >> 22) & ((1 << 10) - 1);
     let vpn0 = (virt >> 12) & ((1 << 10) - 1);
-    let vpo = virt & ((1 << 12) - 1);
+    let vpo = (virt >> 0) & ((1 << 12) - 1);
 
     let flags = translate_flags(req_flags)
         | if map_user {
@@ -613,14 +615,14 @@ pub fn lend_page_inner(
     // If we try to share a page that's not ours, that's just wrong.
     if *entry & MMUFlags::VALID.bits() == 0 {
         // klog!("Not valid");
-        return Err(xous_kernel::Error::ShareViolation);
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // If we try to share a page that's already shared, that's a sharing
     // violation.
     if *entry & MMUFlags::S.bits() != 0 {
         // klog!("Already shared");
-        return Err(xous_kernel::Error::ShareViolation);
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // Strip the `VALID` flag, and set the `SHARED` flag.
@@ -670,7 +672,7 @@ pub fn return_page_inner(
 
     // If the page is not valid in this program, we can't return it.
     if *src_entry & MMUFlags::VALID.bits() == 0 {
-        return Err(xous_kernel::Error::ShareViolation);
+        Err(xous_kernel::Error::ShareViolation)?;
     }
 
     // Mark the page as `Free`, which unmaps it.
@@ -704,12 +706,12 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     // The root (l1) pagetable is defined to be mapped into our virtual
     // address space at this address.
     let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
-    let l1_pt = &mut l1_pt.entries;
+    let ref mut l1_pt = l1_pt.entries;
 
     // Subsequent pagetables are defined as being mapped starting at
     // offset 0x0020_0004, so 4 must be added to the ppn1 value.
     let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
-    let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+    let ref mut l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
 
     // If the level 1 pagetable doesn't exist, then this address is invalid
     if l1_pt[vpn1] & MMUFlags::VALID.bits() == 0 {
@@ -753,7 +755,7 @@ pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Er
     // the page isn't shared, then this is a reserved page. Allocate
     // a real page to back it and resume execution.
     if flags == 0 || flags & MMUFlags::S.bits() != 0 {
-        return Err(xous_kernel::Error::BadAddress);
+        Err(xous_kernel::Error::BadAddress)?;
     }
 
     let new_page = MemoryManager::with_mut(|mm| {
