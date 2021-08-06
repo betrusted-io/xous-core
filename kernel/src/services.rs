@@ -2131,6 +2131,14 @@ impl SystemServices {
         Ok(())
     }
 
+    /// Sets the exception handler for the given process ID. If an exception handler
+    /// exists, it will be silently overridden.
+    pub fn set_exception_handler(&mut self, pid: PID, pc: usize, sp: usize) -> Result<(), xous_kernel::Error> {
+        let process = self.get_process_mut(pid)?;
+        process.exception_handler = Some(ExceptionHandler { pc, sp });
+        Ok(())
+    }
+
     /// Causes the provided process to go into an exception state. This will fail
     /// if any of the following are true:
     ///     1. The process does not exist
