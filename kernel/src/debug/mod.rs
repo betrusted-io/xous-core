@@ -28,6 +28,7 @@ pub use crate::debug::debug_print_hardware::SUPERVISOR_UART_ADDR;
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
+        #[allow(unused_unsafe)]
         unsafe {
             if let Some(mut stream) = crate::debug::DEBUG_OUTPUT.as_mut() {
                 write!(&mut stream, $($args)+).unwrap();
@@ -75,9 +76,7 @@ impl Uart {
 
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // Wait until TXFULL is `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {
-            ()
-        }
+        while uart_csr.r(utra::uart::TXFULL) != 0 {}
         #[cfg(feature = "wrap-print")]
         unsafe {
             if c == b'\n' {
@@ -129,13 +128,11 @@ impl gdbstub::Connection for Uart {
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         if unsafe { DEBUG_OUTPUT.is_none() } {
-            Err(())?;
+            return Err(());
         }
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // Wait until TXFULL is not `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {
-            ()
-        }
+        while uart_csr.r(utra::uart::TXFULL) != 0 {}
         uart_csr.wo(utra::uart::RXTX, byte as u32);
         Ok(())
     }
@@ -305,7 +302,5 @@ macro_rules! klog
 #[cfg(not(feature = "debug-print"))]
 #[macro_export]
 macro_rules! klog {
-    ($($args:tt)+) => {{
-        ()
-    }};
+    ($($args:tt)+) => {{}};
 }
