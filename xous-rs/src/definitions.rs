@@ -40,6 +40,7 @@ pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
 pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
 pub const EC_REGION_LEN: u32 = 0x0008_0000;
 
+#[derive(Debug)]
 #[repr(usize)]
 pub enum ExceptionType {
     InstructionAddressMisaligned = 0,
