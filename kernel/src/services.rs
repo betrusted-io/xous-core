@@ -250,7 +250,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
         current_thread: 0 as TID,
         previous_thread: INITIAL_TID as TID,
-        exception_thread: None,
+        exception_handler: None,
     }; MAX_PROCESS_COUNT],
     // Note we can't use MAX_SERVER_COUNT here because of how Rust's
     // macro tokenization works
