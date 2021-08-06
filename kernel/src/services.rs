@@ -1573,7 +1573,7 @@ impl SystemServices {
 
         // We cannot wait on ourselves.
         if tid == join_tid {
-            return Err(xous_kernel::Error::ThreadNotAvailable)
+            return Err(xous_kernel::Error::ThreadNotAvailable);
         }
 
         // If the target thread exists, put this thread to sleep.
@@ -2133,9 +2133,17 @@ impl SystemServices {
 
     /// Sets the exception handler for the given process ID. If an exception handler
     /// exists, it will be silently overridden.
-    pub fn set_exception_handler(&mut self, pid: PID, pc: usize, sp: usize) -> Result<(), xous_kernel::Error> {
-        let process = self.get_process_mut(pid)?;
-        process.exception_handler = Some(ExceptionHandler { pc, sp });
+    pub fn set_exception_handler(
+        &mut self,
+        pid: PID,
+        pc: usize,
+        sp: usize,
+    ) -> Result<(), xous_kernel::Error> {
+        self.get_process_mut(pid)?.exception_handler = if pc != 0 && sp != 0 {
+            Some(ExceptionHandler { pc, sp })
+        } else {
+            None
+        };
         Ok(())
     }
 
@@ -2167,7 +2175,7 @@ impl SystemServices {
             process.state = ProcessState::Running(threads & !(1 << tid));
             process.current_thread = tid;
         } else {
-            return Err(xous_kernel::Error::ThreadNotAvailable.into())
+            return Err(xous_kernel::Error::ThreadNotAvailable.into());
         }
         Ok(())
     }
