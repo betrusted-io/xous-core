@@ -156,7 +156,7 @@ pub extern "C" fn trap_handler(
         });
 
         let response = crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
-            .unwrap_or_else(|e| xous_kernel::Result::Error(e));
+            .unwrap_or_else(xous_kernel::Result::Error);
 
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
@@ -180,7 +180,8 @@ pub extern "C" fn trap_handler(
         // or returning from a handler or thread. If so, handle the exception
         // and return right away.
         match ex {
-            RiscvException::StorePageFault(_pc, addr) | RiscvException::LoadPageFault(_pc, addr) => {
+            RiscvException::StorePageFault(_pc, addr)
+            | RiscvException::LoadPageFault(_pc, addr) => {
                 #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                 print!(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
@@ -295,22 +296,26 @@ pub extern "C" fn trap_handler(
             }
         }
 
-        // #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
-        // print!(
-        //     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-        //     pid, ex, pc, addr
-        // );
-
         // The exception was not handled. We should terminate the program here.
         // For now, let's halt the whole system instead so that it becomes
         // immediately obvious that we screwed up. On harware this will trigger
         // a watchdog reset.
-        println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
+        println!(
+            "{}: CPU Exception on PID {}: {}",
+            if sstatus::read().spp() == sstatus::SPP::Supervisor {
+                "!!! KERNEL FAILURE !!!"
+            } else {
+                "PROGRAM HALT"
+            },
+            pid,
+            ex
+        );
         ArchProcess::with_current(|process| {
             println!("Current thread {}:", process.current_tid());
             process.print_current_thread();
         });
         MemoryMapping::current().print_map();
+        #[allow(clippy::empty_loop)]
         loop {}
     } else {
         let irqs_pending = sip::read();
