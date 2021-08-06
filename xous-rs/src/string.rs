@@ -14,28 +14,6 @@ impl<const N: usize> String<N> {
         }
     }
 
-    pub fn from_str<T>(src: T) -> String<N>
-    where
-        T: AsRef<str>,
-    {
-        let src = src.as_ref();
-        let mut s = Self::new();
-        // Copy the string into our backing store.
-        for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.bytes) {
-            *dest_byte = src_byte;
-        }
-        // Set the string length to the length of the passed-in String,
-        // or the maximum possible length. Which ever is smaller.
-        s.len = s.bytes.len().min(src.as_bytes().len()) as u32;
-
-        // If the string is not valid, set its length to 0.
-        if s.as_str().is_err() {
-            s.len = 0;
-        }
-
-        s
-    }
-
     pub fn as_bytes(&self) -> [u8; N] {
         self.bytes
     }
@@ -60,41 +38,6 @@ impl<const N: usize> String<N> {
 
     pub fn to_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(&self.bytes[0..self.len()]) }
-    }
-
-    /// awful, O(N) implementation because we have to iterate through the entire string
-    /// and decode variable-length utf8 characters, until we can't.
-    pub fn pop(&mut self) -> Option<char> {
-        if self.is_empty() {
-            return None;
-        }
-        // first, make a copy of the string
-        let tempbytes: [u8; N] = self.bytes;
-        let tempstr = unsafe { core::str::from_utf8_unchecked(&tempbytes[0..self.len()]) }.clone();
-        // clear our own string
-        self.len = 0;
-        self.bytes = [0; N];
-
-        // now copy over character by character, until just before the last character
-        let mut char_iter = tempstr.chars();
-        let mut maybe_c = char_iter.next();
-        loop {
-            match maybe_c {
-                Some(c) => {
-                    let next_c = char_iter.next();
-                    match next_c {
-                        Some(_thing) => {
-                            self.push(c).unwrap(); // always succeeds because we're re-encoding our string
-                            maybe_c = next_c;
-                        }
-                        None => return next_c,
-                    }
-                }
-                None => {
-                    return None; // we should actually never get here because len() == 0 case already covered
-                }
-            }
-        }
     }
 
     pub fn push(&mut self, ch: char) -> core::result::Result<usize, Error> {
@@ -146,6 +89,32 @@ impl<const N: usize> String<N> {
         } else {
             Err(Error::OutOfMemory)
         }
+    }
+}
+
+impl<const N: usize> Default for String<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const N: usize> core::str::FromStr for String<N> {
+    type Err = &'static str;
+    fn from_str(src: &str) -> core::result::Result<String<N>, &'static str> {
+        let mut s = Self::new();
+        // Copy the string into our backing store.
+        for (&src_byte, dest_byte) in src.as_bytes().iter().zip(&mut s.bytes) {
+            *dest_byte = src_byte;
+        }
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        s.len = s.bytes.len().min(src.as_bytes().len()) as u32;
+
+        // If the string is not valid, set its length to 0.
+        if s.as_str().is_err() {
+            s.len = 0;
+        }
+        Ok(s)
     }
 }
 

@@ -145,9 +145,9 @@ impl From<&[u32; 4]> for SID {
     }
 }
 
-impl Into<[u32; 4]> for SID {
-    fn into(self) -> [u32; 4] {
-        self.0
+impl From<SID> for [u32; 4] {
+    fn from(s: SID) -> [u32; 4] {
+        s.0
     }
 }
 
