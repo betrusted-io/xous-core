@@ -54,10 +54,25 @@
         "zh": "准备重启...",
         "en-audio": "Preparing to reboot."
     },
-    "rootkeys.init.failure": {
-        "en": "Process failed, aborting!",
-        "zh": "正在初始化失败，中止!",
-        "en-audio": "Process failed, aborting"
+    "rootkeys.init.fail_verify": {
+        "en": "Verification failed,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "Verification failed, aborting"
+    },
+    "rootkeys.init.fail_key": {
+        "en": "FPGA key is wrong,\nborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "FPGA key is wrong, aborting"
+    },
+    "rootkeys.init.fail_burn": {
+        "en": "FLASH write problem,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "FLASH write problem, aborting"
+    },
+    "rootkeys.init.fail_alignment": {
+        "en": "Internal alignment error,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "Internal alignment error, aborting"
     },
     "rootkeys.init.confirmation": {
         "en": "This cannot be undone.\nContinue?",

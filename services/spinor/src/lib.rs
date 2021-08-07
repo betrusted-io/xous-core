@@ -68,7 +68,7 @@ impl Spinor {
     }
 
     #[cfg(not(test))]
-    fn send_write_region(&mut self, wr: &WriteRegion) -> Result<(), SpinorError> {
+    fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {
         let mut buf = Buffer::into_buf(*wr).or(Err(SpinorError::IpcError))?;
         buf.lend_mut(self.conn, Opcode::WriteRegion.to_u32().unwrap()).or(Err(SpinorError::IpcError))?;
 
@@ -88,7 +88,7 @@ impl Spinor {
     }
 
     #[cfg(test)]
-    fn send_write_region(&mut self, wr: &WriteRegion) -> Result<(), SpinorError> {
+    fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {
         let mut i = 0;
         if !wr.clean_patch {
             assert!((wr.start & 0xFFF) == 0, "erasing is required, but start address is not erase-sector aligned");
@@ -109,7 +109,7 @@ impl Spinor {
     ///     Aside from that, it's the wild west! Think of this as `dd` into a raw disk device node, and not a filesystem-abstracted `write`
     /// `region` is a slice that points to the target region that we wish to patch -- ostensibly we should have access to it, so this should
     ///     just be the MemoryRange turned into a slice.
-    /// `region_base` is the base address of `region`, given as an offset from base of FLASH (that is, physical address minus 0x2000_0000)
+    /// `region_base` is the physical base address of `region`, given as an offset from base of FLASH (that is, physical address minus 0x2000_0000)
     ///     this *must* be aligned to an erase sector.
     /// `patch_data` is a slice that contains exactly the data we want to have patched into FLASH. If you're lazy and you just send a large
     ///     amount of unchanged data with a couple small changes scattered about, this will not be "smart" about it and do a diff and
@@ -122,7 +122,7 @@ impl Spinor {
     ///  Notes:
     ///    - the server will entirely skip writing over 256-byte pages that are blank. So, if the goal is to erase a region,
     ///      call patch with data of all 0xFF - this will effectively only do an erase, but no subsequent writes.
-    pub fn patch(&mut self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) -> Result<(), SpinorError> {
+    pub fn patch(&self, region: &[u8], region_base: u32, patch_data: &[u8], patch_index: u32) -> Result<(), SpinorError> {
         let align_mask = self.erase_alignment() - 1;
         if (region_base & align_mask) != 0 {
             return Err(SpinorError::AlignmentError);

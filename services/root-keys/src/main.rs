@@ -3,7 +3,7 @@
 
 mod api;
 use api::*;
-use xous::{CID, msg_scalar_unpack, send_message, Message, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
 use xous_ipc::{String, Buffer};
 
 use num_traits::*;
@@ -188,7 +188,7 @@ fn xmain() -> ! {
 
                     xous::yield_slice(); // give some time to the GAM to render
 
-                    let success = keys.test(&mut rootkeys_modal, &mut progress_action);
+                    let _success = keys.test(&mut rootkeys_modal, &mut progress_action);
                 } else {
                     // overall flow:
                     //  - setup the init
@@ -217,6 +217,9 @@ fn xmain() -> ! {
                             Some(ActionType::Notification(dismiss_modal_action)),
                             Some(t!("rootkeys.setup", xous::LANG)), false,
                             None, true, None);
+
+                        ////// insert the "are you sure" message at this point in the flow -- don't call setup_key_init() until we're confirmed!
+
                         // setup_key_init() prepares the salt and other items necessary to receive a password safely
                         keys.setup_key_init();
                         // request the boot password first
@@ -280,45 +283,74 @@ fn xmain() -> ! {
                             xous::yield_slice(); // give some time to the GAM to render
 
                             // this routine will update the rootkeys_modal with the current Ux state
-                            let success = keys.do_key_init(&mut rootkeys_modal, &mut progress_action);
+                            let result = keys.do_key_init(&mut rootkeys_modal, &mut progress_action);
 
                             // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                             rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                             // at this point, we may want to pop up a modal indicating we are going to reboot?
                             // we also need to include a command that does the reboot.
-                            if success {
-                                dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
-                                rootkeys_modal.modify(
-                                    Some(ActionType::Notification(dismiss_modal_action)),
-                                    Some(t!("rootkeys.init.finished", xous::LANG)), false,
-                                    None, false, None);
-                                rootkeys_modal.activate();
-                                xous::yield_slice();
+                            match result {
+                                Ok(_) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.finished", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
 
-                                // TODO: insert the reboot code here
-                            } else {
-                                dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
-                                rootkeys_modal.modify(
-                                    Some(ActionType::Notification(dismiss_modal_action)),
-                                    Some(t!("rootkeys.init.failure", xous::LANG)), false,
-                                    None, false, None);
-                                rootkeys_modal.activate();
-                                xous::yield_slice();
+                                    // TODO: insert the reboot code here
+                                }
+                                Err(RootkeyResult::AlignmentError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::KeyError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::IntegrityError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::FlashError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
                             }
+
+                            // clear all the state, re-enable suspend/resume
+                            keys.finish_key_init();
                         }
                     }
                 } else {
                     log::error!("invalid UX state -- someone called init password return, but no password type was set!");
                 }
             },
-            /*
             Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
-                log::debug!("activating password modal");
-                keys.set_ux_password_type(PasswordType::Boot);
-                rootkeys_modal.activate();
-                //policy_menu.activate();
-            }),*/
+                keys.printkeys();
+            }),
             Some(Opcode::UxGetPolicy) => {
                 policy_menu.activate();
             }

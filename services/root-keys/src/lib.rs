@@ -5,7 +5,6 @@ pub mod api;
 use api::*;
 
 pub mod key2bits;
-use key2bits::*;
 
 use xous::{CID, send_message, Message};
 use num_traits::*;
@@ -106,13 +105,13 @@ impl RootKeys {
     pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
         unimplemented!();
     }
-    /*
+
     pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
             Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
-    }*/
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
