@@ -39,7 +39,7 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2021_7287 |   2,192,008 bytes                      |
 +-----------+----------------------------------------+
 + 2021_7288 |   Padding                              |
-+ 2027_7FFF |                                        |
++ 2027_7FFF |   (Last bytes contain signature record)|
 +-----------+----------------------------------------+
 + 2027_8000 |   csr.csv corresponding to bitstream   |
 + 2027_FFFF |   (32kiB max, see below)               |
