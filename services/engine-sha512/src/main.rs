@@ -385,9 +385,9 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::Finalize) => {
-                //if job_count % 100 == 0 {
+                if job_count % 100 == 0 {
                     log::info!("sha512 job {}", job_count); // leave this here for now so we can confirm HW accel is being used when we think it is!
-                //}
+                }
                 job_count += 1;
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut finalized = buffer.to_original::<Sha2Finalize, _>().unwrap();

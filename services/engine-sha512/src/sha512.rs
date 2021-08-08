@@ -187,15 +187,19 @@ pub struct Sha512 {
 }
 impl Sha512 {
     // use this function instead of default for more control over configuration of the hardware engine
-    pub fn new(maybe_strategy: Option<FallbackStrategy>) -> Self {
-        let strategy = if let Some(strat) = maybe_strategy {
-            strat
-        } else {
-            FallbackStrategy::HardwareThenSoftware
-        };
+    pub fn new() -> Self {
         Sha512 {
             use_soft: false,
-            strategy,
+            strategy: FallbackStrategy::HardwareThenSoftware,
+            engine: Engine512::new(&H512),
+            in_progress: false,
+            length: 0,
+        }
+    }
+    pub fn new_with_strategy(strat: FallbackStrategy) -> Self {
+        Sha512 {
+            use_soft: false,
+            strategy: strat,
             engine: Engine512::new(&H512),
             in_progress: false,
             length: 0,
@@ -207,7 +211,7 @@ impl Sha512 {
 
 impl Default for Sha512 {
     fn default() -> Self {
-        Sha512::new(Some(FallbackStrategy::HardwareThenSoftware))
+        Sha512::new_with_strategy(FallbackStrategy::HardwareThenSoftware)
         // xns should Drop here and release the connection allocated by it automatically
     }
 }
@@ -331,15 +335,19 @@ pub struct Sha512Trunc256 {
 }
 impl Sha512Trunc256 {
     // use this function instead of default for more control over configuration of the hardware engine
-    pub fn new(maybe_strategy: Option<FallbackStrategy>) -> Self {
-        let strategy = if let Some(strat) = maybe_strategy {
-            strat
-        } else {
-            FallbackStrategy::HardwareThenSoftware
-        };
+    pub fn new() -> Self {
         Sha512Trunc256 {
             use_soft: false,
-            strategy,
+            strategy: FallbackStrategy::HardwareThenSoftware,
+            engine: Engine512::new(&H512_TRUNC_256),
+            in_progress: false,
+            length: 0,
+        }
+    }
+    pub fn new_with_strategy(strat: FallbackStrategy) -> Self {
+        Sha512Trunc256 {
+            use_soft: false,
+            strategy: strat,
             engine: Engine512::new(&H512_TRUNC_256),
             in_progress: false,
             length: 0,
@@ -359,7 +367,7 @@ impl Drop for Sha512Trunc256 {
 
 impl Default for Sha512Trunc256 {
     fn default() -> Self {
-        Sha512Trunc256::new(Some(FallbackStrategy::HardwareThenSoftware))
+        Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware)
     }
 }
 

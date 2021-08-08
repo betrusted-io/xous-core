@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
 use num_traits::*;
 
-use engine_sha512::*;
+use sha2::*;
 use digest::Digest;
 
 use core::fmt::Write;
@@ -31,7 +31,7 @@ enum PackageType {
 }
 
 fn validate_package(pkg: &[u8], pkg_type: PackageType) -> bool {
-    let mut hasher = engine_sha512::Sha512Trunc256::new(Some(FallbackStrategy::HardwareThenSoftware));
+    let mut hasher = sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
     let mut temp: [u8; 4] = Default::default();
     temp.copy_from_slice(&pkg[0x20..0x24]);
     if pkg_type == PackageType::Ec {

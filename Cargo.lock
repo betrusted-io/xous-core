@@ -442,15 +442,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
-name = "cpufeatures"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed00c67cb5d0a7d64a44f6ad2668db7e7530311dd53ea79bcd4fb022c64911c8"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "crc"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -584,27 +575,6 @@ dependencies = [
  "rkyv 0.4.3",
  "susres",
  "ticktimer-server",
- "utralib",
- "xous",
- "xous-ipc",
- "xous-names",
-]
-
-[[package]]
-name = "engine-sha512"
-version = "0.1.0"
-dependencies = [
- "block-buffer",
- "digest",
- "log",
- "log-server",
- "num-derive",
- "num-traits",
- "opaque-debug",
- "rkyv 0.4.3",
- "susres",
- "ticktimer-server",
- "trng",
  "utralib",
  "xous",
  "xous-ipc",
@@ -1583,14 +1553,22 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b362ae5752fd2137731f9fa25fd4d9058af34666ca1966fb969119cc35719f12"
 dependencies = [
  "block-buffer",
- "cfg-if 1.0.0",
- "cpufeatures",
  "digest",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
  "opaque-debug",
+ "rkyv 0.4.3",
+ "susres",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
 ]
 
 [[package]]
@@ -1607,7 +1585,6 @@ dependencies = [
  "digest",
  "ed25519-dalek",
  "engine-25519",
- "engine-sha512",
  "gam",
  "graphics-server",
  "hex",

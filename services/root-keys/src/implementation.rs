@@ -13,7 +13,7 @@ use core::convert::TryInto;
 use ed25519_dalek::{Keypair, Signature, PublicKey, Signer, ExpandedSecretKey};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants;
-use sha2::{Sha512, Sha512Trunc256, Sha256};
+use sha2::{FallbackStrategy, Sha256, Sha512, Sha512Trunc256};
 use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
@@ -599,8 +599,7 @@ impl<'a> RootKeys {
         // expand the 24-byte (192-bit) bcrypt result into 256 bits, so we can use it directly as XOR key material
         // against 256-bit AES and curve25519 keys
         // for such a small hash, software is the most performant choice
-        //let mut hasher = Sha512Trunc256::new(Some(FallbackStrategy::SoftwareOnly));
-        let mut hasher = Sha512Trunc256::new();
+        let mut hasher = Sha512Trunc256::new_with_strategy(FallbackStrategy::SoftwareOnly);
         hasher.update(hashed_password);
         let digest = hasher.finalize();
 
@@ -1386,8 +1385,7 @@ impl<'a> RootKeys {
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
-        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
 
         // extract the secret key so we can prime the hash
         let expanded_key = ExpandedSecretKey::from(&signing_key.secret);
@@ -1427,8 +1425,7 @@ impl<'a> RootKeys {
         let r = Scalar::from_hash(hasher);
         let R = (&r * &constants::ED25519_BASEPOINT_TABLE).compress();
 
-        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
         hasher.update(R.as_bytes());
         hasher.update(signing_key.public.as_bytes());
 
@@ -1526,7 +1523,7 @@ impl<'a> RootKeys {
     }
 
     pub fn sign_gateware(&self, signing_key: &Keypair) -> (Signature, u32) {
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
         let gateware_region = self.gateware();
 
         // sign everything except a hole just big enough to fit the digital signature record
@@ -1544,12 +1541,11 @@ impl<'a> RootKeys {
         // read the public key directly out of the keyrom
         let pubkey = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
 
-        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
-        let mut hasher = Sha512::new();
+        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
         let gateware_region = self.gateware();
 
         // verify everything except a hole just big enough to fit the digital signature record
-        log::info!("hashing kernel");
+        log::info!("hashing gateware");
         hasher.update(&gateware_region[..CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()]);
         hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
         log::info!("hash done");
