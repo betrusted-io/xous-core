@@ -3,15 +3,17 @@ use crate::api::*;
 use core::num::NonZeroUsize;
 use num_traits::*;
 
-use gam::modal::{Modal, Slider};
+use gam::modal::{Modal, Slider, ProgressBar, ActionType};
 use locales::t;
 
 use crate::bcrypt::*;
 use crate::api::PasswordType;
 
 use core::convert::TryInto;
-use ed25519_dalek::{Keypair, Signature};
-use engine_sha512::*;
+use ed25519_dalek::{Keypair, Signature, PublicKey, Signer, ExpandedSecretKey};
+use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::constants;
+use sha2::{Sha512, Sha512Trunc256, Sha256};
 use digest::Digest;
 use graphics_server::BulkRead;
 use core::mem::size_of;
@@ -27,12 +29,19 @@ const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5
 /// Size of the total area allocated for signatures. It is equal to the size of one FLASH sector, which is the smallest
 /// increment that can be erased.
 const SIGBLOCK_SIZE: u32 = 0x1000;
+/// location of the csr.csv that's appended on gateware images, used for USB updates.
+const CSR_CSV_OFFSET: usize = 0x27_8000;
 
 #[repr(C)]
 struct SignatureInFlash {
     pub version: u32,
     pub signed_len: u32,
     pub signature: [u8; 64],
+}
+pub enum SignatureType {
+    Loader,
+    Gateware,
+    Kernel,
 }
 
 struct KeyRomLocs {}
@@ -133,6 +142,8 @@ struct BitstreamOracle<'a> {
     type2_absolute_offset: usize,
     /// start of type2 data as an offset relative to the start of ciphertext
     type2_ciphertext_offset: usize,
+    /// length of the undifferentiated plaintext header -- this is right up to the IV specifier
+    pt_header_len: usize,
 }
 impl<'a> BitstreamOracle<'a> {
     /// oracle supports separate encryption and decryption keys, so that it may
@@ -141,7 +152,7 @@ impl<'a> BitstreamOracle<'a> {
     pub fn new(dec_key: &'a[u8], enc_key: &'a[u8], bitstream: &'a[u8], base: u32) -> Result<BitstreamOracle<'a>, RootkeyResult> {
         let mut position: usize = 0;
 
-        // Search through the bitstream for the key words that define the IV and ciphertetx length.
+        // Search through the bitstream for the key words that define the IV and ciphertext length.
         // This is done so that if extra headers are added or modified, the code doesn't break (versus coding in static offsets).
         let mut iv_pos = 0;
         let mut cwd = 0;
@@ -185,6 +196,7 @@ impl<'a> BitstreamOracle<'a> {
             type2_count: 0,
             type2_absolute_offset: 0,
             type2_ciphertext_offset: 0,
+            pt_header_len: iv_pos, // plaintext header goes all the way up to the IV
         };
 
         // search forward for the "type 2" region in the first kilobyte of plaintext
@@ -227,6 +239,7 @@ impl<'a> BitstreamOracle<'a> {
 
         Ok(oracle)
     }
+    pub fn pt_header_len(&self) -> usize {self.pt_header_len as usize}
     pub fn base(&self) -> u32 {self.base}
     pub fn ciphertext_offset(&self) -> usize {
         self.ct_absolute_offset as usize
@@ -244,6 +257,11 @@ impl<'a> BitstreamOracle<'a> {
     pub fn clear(&mut self) {
         self.enc_cipher.clear();
         self.dec_cipher.clear();
+
+        for b in self.iv.iter_mut() {
+            *b = 0;
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Decrypts a portion of the bitstream starting at "from", of length output.
     /// Returns the actual number of bytes processed.
@@ -358,17 +376,6 @@ impl<'a> BitstreamOracle<'a> {
         self.ciphertext.len()
     }
 }
-/*
-impl<'a> Drop for BitstreamOracle<'a> {
-    fn drop(&mut self) {
-        self.enc_cipher.clear();
-        self.dec_cipher.clear();
-        for b in self.iv.iter_mut() {
-            *b = 0;
-        }
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    }
-}*/
 
 pub(crate) struct RootKeys {
     keyrom: utralib::CSR<u32>,
@@ -395,7 +402,7 @@ pub(crate) struct RootKeys {
     //ticktimer: ticktimer_server::Ticktimer,
 }
 
-impl RootKeys {
+impl<'a> RootKeys {
     pub fn new(xns: &xous_names::XousNames) -> RootKeys {
         let keyrom = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::keyrom::HW_KEYROM_BASE),
@@ -592,7 +599,8 @@ impl RootKeys {
         // expand the 24-byte (192-bit) bcrypt result into 256 bits, so we can use it directly as XOR key material
         // against 256-bit AES and curve25519 keys
         // for such a small hash, software is the most performant choice
-        let mut hasher = engine_sha512::Sha512Trunc256::new(Some(engine_sha512::FallbackStrategy::SoftwareOnly));
+        //let mut hasher = Sha512Trunc256::new(Some(FallbackStrategy::SoftwareOnly));
+        let mut hasher = Sha512Trunc256::new();
         hasher.update(hashed_password);
         let digest = hasher.finalize();
 
@@ -650,7 +658,7 @@ impl RootKeys {
             let sensitive_slice = self.sensitive_data.as_slice::<u32>();
             let mut key: [u8; 16] = [0; 16];
             for (word, &keyword) in key.chunks_mut(4).into_iter()
-                                                    .zip(sensitive_slice[KeyRomLocs::PEPPER as usize..KeyRomLocs::PEPPER as usize + 128/(size_of::<u32>()*8)].iter()) {
+            .zip(sensitive_slice[KeyRomLocs::PEPPER as usize..KeyRomLocs::PEPPER as usize + 128/(size_of::<u32>()*8)].iter()) {
                 for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
                     *dst = byte;
                 }
@@ -714,15 +722,42 @@ impl RootKeys {
     /// - verify the FPGA image hmac
     /// - sign the FPGA image
     /// - get ready for a reboot
-    ///   - returns true if we should reboot (everything succeeded)
-    ///   - returns false if we had an error condition (don't reboot)
-    pub fn do_key_init(&mut self, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
+    pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+        0, 100, 10, Some("%"), 0, true, true
+        );
+        progress_action.set_is_password(true);
+        // now show the init wait note...
+        rootkeys_modal.modify(
+            Some(ActionType::Slider(progress_action)),
+            Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+            None, true, None);
+        rootkeys_modal.activate();
+
+        xous::yield_slice(); // give some time to the GAM to render
+        // capture the progress bar elements in a convenience structure
+        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+
         // kick the progress bar to indicate we've entered the routine
-        update_progress(1, progress_modal, progress_action);
+        pb.set_percentage(1);
 
         // get access to the pcache and generate a keypair
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
-        let keypair: Keypair = Keypair::generate(&mut self.trng);
+        let keypair = if true { // true for production, false for debug (uses dev keys, so we can compare results)
+            Keypair::generate(&mut self.trng)
+        } else {
+            Keypair::from_bytes(
+                &[168, 167, 118, 92, 141, 162, 215, 147, 134, 43, 8, 176, 0, 222, 188, 167, 178, 14, 137, 237, 82, 199, 133, 162, 179, 235, 161, 219, 156, 182, 42, 39,
+                28, 155, 234, 227, 42, 234, 200, 117, 7, 193, 128, 148, 56, 126, 255, 28, 116, 97, 66, 130, 175, 253, 129, 82, 216, 113, 53, 46, 223, 63, 88, 187
+                ]
+            ).unwrap()
+        };
+        log::info!("keypair pubkey: {:?}", keypair.public.to_bytes());
+        log::info!("keypair pubkey: {:x?}", keypair.public.to_bytes());
+        #[cfg(feature = "hazardous-debug")]
+        log::info!("keypair privkey: {:?}", keypair.secret.to_bytes());
+        #[cfg(feature = "hazardous-debug")]
+        log::info!("keypair privkey: {:x?}", keypair.secret.to_bytes());
 
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in plaintext format
         // e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a 0's key and we'd later on set it)
@@ -748,7 +783,6 @@ impl RootKeys {
 
         // allocate a decryption oracle for the FPGA bitstream. This will fail early if the FPGA key is wrong.
         assert!(pcache.fpga_key_valid == 1);
-        // note to self: BitstreamOracle implements Drop which will clear the key schedule and iv
         let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
@@ -757,7 +791,7 @@ impl RootKeys {
             }
         };
 
-        update_progress(5, progress_modal, progress_action);
+        pb.set_percentage(5);
 
         // pub key is easy, no need to encrypt
         let public_key: [u8; ed25519_dalek::PUBLIC_KEY_LENGTH] = keypair.public.to_bytes();
@@ -769,6 +803,7 @@ impl RootKeys {
                 *dst = u32::from_be_bytes(src.try_into().unwrap())
             }
         }
+        log::info!("public key as computed: {:x?}", public_key);
 
         // extract the update password key from the cache, and apply it to the private key
         #[cfg(feature = "hazardous-debug")]
@@ -795,7 +830,7 @@ impl RootKeys {
             }
         }
 
-        update_progress(10, progress_modal, progress_action);
+        pb.set_percentage(10);
 
         // generate and store a root key (aka boot key), this is what is unlocked by the "boot password"
         // ironically, it's a "lower security" key because it just acts as a gatekeeper to further
@@ -825,17 +860,17 @@ impl RootKeys {
             }
         }
 
-        // sign the loader
-        progress_modal.modify(None, Some(t!("rootkeys.init.signing_loader", xous::LANG)), false, None, false, None);
-        update_progress(15, progress_modal, progress_action);
-        let (loader_sig, loader_len) = self.sign_loader(&keypair);
-
         // sign the kernel
-        progress_modal.modify(None, Some(t!("rootkeys.init.signing_kernel", xous::LANG)), false, None, false, None);
-        update_progress(20, progress_modal, progress_action);
+        pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+        pb.set_percentage(15);
         let (kernel_sig, kernel_len) = self.sign_kernel(&keypair);
 
-        update_progress(25, progress_modal, progress_action);
+        // sign the loader
+        pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+        pb.rebase_subtask_percentage(20, 30);
+        let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
+        log::info!("loader signature: {:x?}", loader_sig.to_bytes());
+        log::info!("loader len: {} bytes", loader_len);
 
         // set the "init" bit in the staging area
         {
@@ -853,48 +888,65 @@ impl RootKeys {
         // Because we're initializing keys for the *first* time, make a backup copy of the bitstream to
         // the staging area. Note that if we're doing an update, the update target would already be
         // in the staging area, so this step should be skipped.
-        progress_modal.modify(None, Some(t!("rootkeys.init.backup_gateware", xous::LANG)), false, None, false, None);
-        update_progress(30, progress_modal, progress_action);
-        self.make_gateware_backup(30, 50, progress_modal, progress_action)?;
+        pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
+        pb.rebase_subtask_percentage(30, 50);
+        self.make_gateware_backup(Some(&mut pb))?;
 
         let mut src_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
             Ok(o) => o,
             Err(e) => {
                 log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
+                dst_oracle.clear();
                 return Err(e);
             }
         };
 
         // compute the keyrom patch set for the bitstream
         // at this point the KEYROM as replicated in sensitive_slice should have all its assets in place
-        progress_modal.modify(None, Some(t!("rootkeys.init.patching_keys", xous::LANG)), false, None, false, None);
-        update_progress(50, progress_modal, progress_action);
+        pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
+        pb.rebase_subtask_percentage(50, 70);
 
-        self.gateware_copy_and_patch(&src_oracle, &dst_oracle, 50, 70, progress_modal, progress_action)?;
+        self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
 
         // verify that the patch worked
-        progress_modal.modify(None, Some(t!("rootkeys.init.verifying_gateware", xous::LANG)), false, None, false, None);
-        self.verify_gateware(&dst_oracle, 70, 90, progress_modal, progress_action)?;
-        update_progress(90, progress_modal, progress_action);
+        pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
+        pb.rebase_subtask_percentage(70, 90);
+        self.verify_gateware(&dst_oracle, Some(&mut pb))?;
 
         // sign the image, commit the signature
-        // --> add something to sign the gateware region here
-        // --> format the signatures and write them to FLASH
-        //////// this is 90%-100% task
+        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+        self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
+        log::info!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
+        pb.set_percentage(92);
+        self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
+        pb.set_percentage(95);
 
-        // these implement drop so they should implicitly clear, but -- doesn't hurt to call it explicitly
+        if !self.verify_selfsign_kernel() {
+            log::error!("kernel signature failed to verify, probably should not try to reboot!");
+            src_oracle.clear();
+            dst_oracle.clear();
+            return Err(RootkeyResult::IntegrityError);
+        }
+
+        pb.set_percentage(98);
+        let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
+        log::info!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+        self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+
+        // clean up the oracles
         src_oracle.clear();
         dst_oracle.clear();
 
         // finalize the progress bar on exit -- always leave at 100%
-        progress_modal.modify(None, Some(t!("rootkeys.init.finished", xous::LANG)), false, None, false, None);
-        update_progress(100, progress_modal, progress_action);
+        pb.update_text(t!("rootkeys.init.finished", xous::LANG));
+        pb.set_percentage(100);
 
         Ok(())
     }
 
+    #[cfg(feature = "hazardous-debug")]
     pub fn printkeys(&mut self) {
-        // setup the local cache
+        // dump the keystore -- used to confirm that patching worked right. does not get compiled in when hazardous-debug is not enable.
         let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
         for addr in 0..256 {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
@@ -903,7 +955,8 @@ impl RootKeys {
         }
     }
 
-    pub fn test(&mut self, progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+    #[cfg(feature = "hazardous-debug")]
+    pub fn test(&mut self) -> bool {
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
 
         // setup the local cache
@@ -945,18 +998,16 @@ impl RootKeys {
         let dst_oracle = BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()).unwrap();
 
         // TEST
-        if self.gateware_copy_and_patch(&src_oracle, &dst_oracle, 60, 80, progress_modal, progress_action).is_err() {
+        if self.gateware_copy_and_patch(&src_oracle, &dst_oracle, None).is_err() {
             log::error!("error occured in patch_keys.");
             return false;
         }
 
-        if self.verify_gateware(&dst_oracle, 80, 100, progress_modal, progress_action).is_err() {
+        if self.verify_gateware(&dst_oracle, None).is_err() {
             log::error!("error occurred in gateware verification");
             return false;
         }
-        // finalize the progress bar on exit -- always leave at 100%
-        progress_modal.modify(None, Some(t!("rootkeys.init.finished", xous::LANG)), false, None, false, None);
-        update_progress(100, progress_modal, progress_action);
+
         true
     }
 
@@ -967,15 +1018,13 @@ impl RootKeys {
     /// failure to do so would result in the erasure of all secret data.
     /// ASSUME: CSR appendix does not change during the copy (it is not copied/updated)
     fn gateware_copy_and_patch(&self, src_oracle: &BitstreamOracle, dst_oracle: &BitstreamOracle,
-    prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
-        let mut last_prog_update = 0;
-
+    mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
         let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
         if sensitive_slice[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
             // the keys weren't initialized, or are wrong. abort!
             return Err(RootkeyResult::KeyError);
         }
-        log::info!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
+        log::debug!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
             src_oracle.ciphertext_offset(), dst_oracle.ciphertext_offset(), src_oracle.ciphertext_len(), dst_oracle.ciphertext_len());
 
         // start with a naive implementation that simple goes through and re-encrypts and patches everything.
@@ -988,7 +1037,7 @@ impl RootKeys {
         let mut ct_sector: [u8; spinor::SPINOR_ERASE_SIZE as usize] = [0; spinor::SPINOR_ERASE_SIZE as usize];
         let mut flipper: [u8; spinor::SPINOR_ERASE_SIZE as usize] = [0; spinor::SPINOR_ERASE_SIZE as usize];
 
-        let mut hasher = engine_sha512::Sha256::new();
+        let mut hasher = Sha256::new();
         let hash_stop = src_oracle.ciphertext_len() - 320 - 160;
 
         // handle the special case of the first sector
@@ -1001,7 +1050,7 @@ impl RootKeys {
         .zip(pt_sector[0..32].iter().zip(pt_sector[32..64].iter())) {
             *dst = hm1 ^ mask;
         }
-        log::info!("recovered hmac: {:x?}", hmac_code);
+        log::debug!("recovered hmac: {:x?}", hmac_code);
         // hash the decrypt data; we assume we're not patching anything in the first sector.
         let mut bytes_hashed = spinor::SPINOR_ERASE_SIZE as usize - src_oracle.ciphertext_offset();
         bitflip(&pt_sector[..bytes_hashed], &mut flipper[..bytes_hashed]);
@@ -1013,15 +1062,28 @@ impl RootKeys {
             &pt_sector[..bytes_hashed],
             &mut ct_sector // full array, for space for plaintext header
         );
-        log::info!("sector 0 patch len: {}", bytes_hashed);
-        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base, &ct_sector, 0)
+
+        // restore the plaintext header from the *destination* -- in this case, the destination is the
+        // gateware boot location, and this contains the fuse configurations we need to boot from (e.g. eFuse
+        // or BBRAM). We also prefer our original header because we nominally trust in more than whatever header
+        // is being presented to us for the update.
+        assert!(src_oracle.pt_header_len() == dst_oracle.pt_header_len(), "source and destination gatewares have different header lengths. Check your vivado bitgen settings...");
+        for (&src, dst) in dst_oracle.bitstream[..dst_oracle.pt_header_len()].iter().zip(ct_sector.iter_mut()) {
+            *dst = src;
+        }
+
+        log::debug!("sector 0 patch len: {}", bytes_hashed);
+        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(), &ct_sector, 0)
         .map_err(|_| RootkeyResult::FlashError)?;
 
         // now we can patch the rest of the sectors as a loop
         let mut from = spinor::SPINOR_ERASE_SIZE - src_oracle.ciphertext_offset() as u32;
         let mut dummy_consume = 0;
-        let max_step = src_oracle.ciphertext[from as usize..].chunks(spinor::SPINOR_ERASE_SIZE as usize).into_iter().count();
-        for (step, _) in src_oracle.ciphertext[from as usize..].chunks(spinor::SPINOR_ERASE_SIZE as usize).into_iter().enumerate() {
+        if let Some(ref mut pb) = maybe_pb {
+            pb.rebase_subtask_work(0,
+                src_oracle.ciphertext()[from as usize..].chunks(spinor::SPINOR_ERASE_SIZE as usize).into_iter().count() as u32);
+        }
+        for _ in src_oracle.ciphertext()[from as usize..].chunks(spinor::SPINOR_ERASE_SIZE as usize).into_iter() {
             let decrypt_len = src_oracle.decrypt(from as usize, &mut pt_sector);
 
             // wrap the patch call with a range check, because the patch lookup search is pretty expensive
@@ -1039,7 +1101,7 @@ impl RootKeys {
                 hasher.update(&flipper[..hash_len]);
                 bytes_hashed += hash_len;
                 if hash_len != decrypt_len {
-                    log::info!("final short block len: {}", hash_len);
+                    log::debug!("final short block len: {}", hash_len);
                 }
             }
 
@@ -1048,27 +1110,25 @@ impl RootKeys {
                 &pt_sector[..decrypt_len],
                 &mut ct_sector[..decrypt_len],
             );
-            self.spinor.patch(dst_oracle.bitstream, dst_oracle.base,
+            self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(),
                 &ct_sector[..decrypt_len], from + dst_oracle.ciphertext_offset() as u32)
             .map_err(|_| RootkeyResult::FlashError)?;
 
             from += decrypt_len as u32;
-            let progress = ((prog_end - prog_start) * step as u32) / max_step as u32;
-            if progress != last_prog_update {
-                last_prog_update = progress;
-                update_progress(progress + prog_start, progress_modal, progress_action);
+            if let Some(ref mut pb) = maybe_pb {
+                pb.increment_work(1);
             }
         }
         // consume the dummy value, to ensure it's not optimized out by the compiler
-        log::info!("copy_and_patch dummy consume: 0x{:x}", dummy_consume);
+        log::debug!("copy_and_patch dummy consume: 0x{:x}", dummy_consume);
 
 
         // at this point, we've patched & encrypted all the sectors, but we've
         // encrypted the wrong hash at the end, so the HMAC won't work out. let's patch that.
         let h1_digest: [u8; 32] = hasher.finalize().try_into().unwrap();
-        log::info!("bytes hashed: {}, computed h1 hash: {:x?}", bytes_hashed, h1_digest);
+        log::debug!("bytes hashed: {}, computed h1 hash: {:x?}", bytes_hashed, h1_digest);
 
-        let mut hasher2 = engine_sha512::Sha256::new();
+        let mut hasher2 = Sha256::new();
         let footer_mask: [u8; 32] = [0x3A; 32];
         let mut masked_footer: [u8; 32] = [0; 32];
         for (dst, (&hm2, &mask)) in
@@ -1076,8 +1136,8 @@ impl RootKeys {
         .zip(hmac_code.iter().zip(footer_mask.iter())) {
             *dst = hm2 ^ mask;
         }
-        log::info!("masked_footer: {:x?}", masked_footer);
-        log::info!("footer_mask: {:x?}", footer_mask);
+        log::debug!("masked_footer: {:x?}", masked_footer);
+        log::debug!("footer_mask: {:x?}", footer_mask);
         let mut masked_footer_flipped: [u8; 32] = [0; 32];
         bitflip(&masked_footer, &mut masked_footer_flipped);
         let mut footer_mask_flipped: [u8; 32] = [0; 32];
@@ -1086,7 +1146,7 @@ impl RootKeys {
         hasher2.update(footer_mask_flipped);
         hasher2.update(h1_digest);
         let h2_digest: [u8; 32] = hasher2.finalize().try_into().unwrap();
-        log::info!("h2 hash: {:x?}", h2_digest);
+        log::debug!("h2 hash: {:x?}", h2_digest);
 
         // now encrypt and patch this final hashed value into the expected area
         let ct_end = dst_oracle.ciphertext_len();
@@ -1096,14 +1156,8 @@ impl RootKeys {
         let ct_last_block_loc = (ct_end & !(spinor::SPINOR_ERASE_SIZE as usize - 1)) - dst_oracle.ciphertext_offset();
         let pt_sector_len = ct_end - ct_last_block_loc;
 
-        log::info!("ct_end: {}, ct_last_block_loc {}, pt_sector_len {}", ct_end, ct_last_block_loc, pt_sector_len);
+        log::trace!("ct_end: {}, ct_last_block_loc {}, pt_sector_len {}", ct_end, ct_last_block_loc, pt_sector_len);
         src_oracle.decrypt(ct_last_block_loc, &mut pt_sector[..pt_sector_len]);
-        let mut temp = ct_last_block_loc;
-        for block in pt_sector[..pt_sector_len].chunks(32).into_iter() {
-            log::info!("{:x}: {:x?}", temp, block);
-            temp += 32;
-        }
-        //log::info!("last bytes: {:x?}", &pt_sector[pt_sector_len-256..pt_sector_len]);
 
         // patch in the hash at the very end
         let mut h2_digest_flipped: [u8; 32] = [0; 32];
@@ -1112,36 +1166,13 @@ impl RootKeys {
         .zip(pt_sector[pt_sector_len - 32..pt_sector_len].iter_mut()) {
             *dst = src;
         }
-        log::info!("last bytes patched: {:x?}", &pt_sector[pt_sector_len-256..pt_sector_len]);
+        log::debug!("last bytes patched: {:x?}", &pt_sector[pt_sector_len-256..pt_sector_len]);
 
         dst_oracle.encrypt_sector(ct_last_block_loc as i32, &pt_sector[..pt_sector_len], &mut ct_sector[..pt_sector_len]);
-        log::info!("hash patching from 0x{:x} len {}", ct_last_block_loc, pt_sector_len);
-        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base,
+        log::trace!("hash patching from 0x{:x} len {}", ct_last_block_loc, pt_sector_len);
+        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(),
             &ct_sector[..pt_sector_len], ct_last_block_loc as u32 + dst_oracle.ciphertext_offset() as u32)
         .map_err(|_| RootkeyResult::FlashError)?;
-
-        // read back for debug
-        log::info!("debug readback");
-        let dl = dst_oracle.decrypt(ct_last_block_loc, &mut pt_sector);
-        let mut temp = ct_last_block_loc;
-        for block in pt_sector[..dl].chunks(32).into_iter() {
-            log::info!("{:x}: {:x?}", temp, block);
-            temp += 32;
-        }
-        log::info!("dl: {} tl: {}", dl, dst_oracle.ciphertext_len());
-
-        let dl = dst_oracle.decrypt(0, &mut pt_sector);
-        let mut temp = 0;
-        for block in pt_sector[..dl].chunks(32).into_iter() {
-            log::info!("{:x}: {:x?}", temp, block);
-            temp += 32;
-        }
-        let dl = dst_oracle.decrypt(4096, &mut pt_sector);
-        let mut temp = 4096;
-        for block in pt_sector[..dl].chunks(32).into_iter() {
-            log::info!("{:x}: {:x?}", temp, block);
-            temp += 32;
-        }
 
         Ok(())
     }
@@ -1172,7 +1203,7 @@ impl RootKeys {
                     Some((patch, patch_inv)) => {
                         let mut flip: [u8; 4] = [0; 4];
                         bitflip(&patch.to_be_bytes(), &mut flip);
-                        log::info!("patching {} frame 0x{:x} offset {} 0x{:x} -> 0x{:x}", ct_offset, frame, frame_offset,
+                        log::trace!("patching {} frame 0x{:x} offset {} 0x{:x} -> 0x{:x}", ct_offset, frame, frame_offset,
                             u32::from_be_bytes(word[0..4].try_into().unwrap()), u32::from_be_bytes(flip));
                         for (&s, d) in flip.iter().zip(word.iter_mut()) {
                             *d = s;
@@ -1187,9 +1218,7 @@ impl RootKeys {
         dummy_consume
     }
 
-    fn verify_gateware(&self, oracle: &BitstreamOracle, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
-        let mut last_prog_update = 0;
-
+    fn verify_gateware(&self, oracle: &BitstreamOracle, mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
         let mut hmac_area = [0; 64];
         oracle.decrypt(0, &mut hmac_area);
         let mut hmac_code: [u8; 32] = [0; 32];
@@ -1201,7 +1230,7 @@ impl RootKeys {
         log::info!("hmac code: {:x?}", hmac_code);
 
         log::debug!("verifying gateware");
-        let mut hasher = engine_sha512::Sha256::new();
+        let mut hasher = Sha256::new();
         // magic number alert:
         // 160 = reserved space for the 2nd hash
         // 320 = some padding that is built into the file format, for whatever reason xilinx picked
@@ -1210,22 +1239,22 @@ impl RootKeys {
         // for now, very tiny optimization - use blocksize * 2 because that happens to be divisible by the bitstream parameters
         let mut decrypt = [0; AES_BLOCKSIZE*2];
         let mut flipped = [0; AES_BLOCKSIZE*2];
+        if let Some(ref mut pb) = maybe_pb {
+            pb.rebase_subtask_work(0, tot_len as u32);
+        }
         for index in (0..tot_len).step_by(AES_BLOCKSIZE*2) {
             oracle.decrypt(index, &mut decrypt);
             bitflip(&decrypt, &mut flipped);
             hasher.update(&flipped);
 
-            let progress = ((prog_end - prog_start) * index as u32) / tot_len as u32;
-            if progress != last_prog_update {
-                log::debug!("progress: {}", progress);
-                last_prog_update = progress;
-                update_progress(progress + prog_start, progress_modal, progress_action);
+            if let Some(ref mut pb) = maybe_pb {
+                pb.increment_work((AES_BLOCKSIZE*2) as u32);
             }
         }
         let h1_digest: [u8; 32] = hasher.finalize().try_into().unwrap();
         log::info!("computed hash of {} bytes: {:x?}", tot_len, h1_digest);
 
-        let mut hasher2 = engine_sha512::Sha256::new();
+        let mut hasher2 = Sha256::new();
         let footer_mask: [u8; 32] = [0x3A; 32];
         let mut masked_footer: [u8; 32] = [0; 32];
         for (dst, (&hm2, &mask)) in
@@ -1269,7 +1298,7 @@ impl RootKeys {
     }
 
 
-    fn make_gateware_backup(&self, prog_start: u32, prog_end: u32, progress_modal: &mut Modal, progress_action: &mut Slider) -> Result<(), RootkeyResult> {
+    fn make_gateware_backup(&self, mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
         let gateware_dest = self.staging();
         let mut gateware_dest_base = self.staging_base();
         let gateware_src = self.gateware();
@@ -1277,9 +1306,12 @@ impl RootKeys {
         log::trace!("src: {:x?}", &gateware_src[0..32]);
         log::trace!("dst: {:x?}", &gateware_dest[0..32]);
 
-        let mut last_prog_update = 0;
         const PATCH_CHUNK: usize = 65536; // this controls the granularity of the erase operation
         let mut prog_ctr = 0;
+        if let Some(ref mut pb) = maybe_pb {
+            pb.rebase_subtask_work(0, xous::SOC_STAGING_GW_LEN);
+        }
+
         for (dst, src) in
         gateware_dest.chunks(PATCH_CHUNK).into_iter()
         .zip(gateware_src.chunks(PATCH_CHUNK)) {
@@ -1289,10 +1321,8 @@ impl RootKeys {
             gateware_dest_base += PATCH_CHUNK as u32;
 
             prog_ctr += PATCH_CHUNK as u32;
-            let progress = ((prog_end - prog_start) * prog_ctr) / xous::SOC_STAGING_GW_LEN;
-            if progress != last_prog_update {
-                last_prog_update = progress;
-                update_progress(progress + prog_start, progress_modal, progress_action);
+            if let Some(ref mut pb) = maybe_pb {
+                pb.increment_work(PATCH_CHUNK as u32);
             }
         }
 
@@ -1327,7 +1357,28 @@ impl RootKeys {
         log::info!("{}", debugstr);
     }
 
-    pub fn sign_loader(&self, signing_key: &Keypair) -> (Signature, u32) {
+    /// Unfortunately we have to re-implement the signature details manually here.
+    /// these are based on copying the implementation out of the ed25519-dalek crate.
+    /// why, may you ask, do we do such a dangerous thing?
+    /// it's because the loader's memory space is shared between this crate, and the graphics crate
+    /// the font glyph data is part of the loader, it was put there because:
+    ///   - we need fonts early in boot to show data
+    ///   - like the loader, it's a large static data set that rarely changes
+    ///   - this helps keep kernel updates faster and lighter, at the trade-off of some inconvenience of loader updates
+    ///   - because we have virtual memory, we must "borrow" copies of the font data for signing
+    ///   - because we have limited physical memory, it's not a great idea to simply allocate a huge block of RAM
+    ///     and copy the loader + font data there and sign it; it means in low memory conditions we can't do signatures
+    /// The ideal solution for us is to pre-hash the entire loader region, and then have it signed.
+    /// the ed25519-dalek crate does support this, but, it's also not a "standard" hash and sign, because
+    /// it adds some good ideas to the signature. For entirely self-signed regions, we can use the ed25519-dalek's
+    /// version of the signature, but for interoperability we have to stick with the traditional signature.
+    /// Unfortunately, the traditional signature implementation only supports passing the entire region as a slice,
+    /// and not as a pre-hash. This is because the hash has to be primed with a nonce that's derived from the
+    /// secret key. So, we re-implement this, so we can interleave the hash as required to allow us to process
+    /// the font data in page-sized chunks that don't use a huge amount of RAM.
+    #[allow(non_snake_case)]
+    pub fn sign_loader(&self, signing_key: &Keypair, maybe_pb: Option<&mut ProgressBar>) -> (Signature, u32) {
+        let maybe_pb = maybe_pb.map(|pb| {pb.rebase_subtask_work(0, 2); pb});
         let loader_len =
             xous::LOADER_CODE_LEN
             - SIGBLOCK_SIZE
@@ -1335,53 +1386,228 @@ impl RootKeys {
             + 8; // two u32 words are appended to the end, which repeat the "version" and "length" fields encoded in the signature block
 
         // this is a huge hash, so, get a hardware hasher, even if it means waiting for it
-        let mut hasher = engine_sha512::Sha512::new(Some(engine_sha512::FallbackStrategy::WaitForHardware));
-        let loader_region = self.loader_code();
-        // the loader data starts one page in; the first page is reserved for the signature itself
-        hasher.update(&loader_region[SIGBLOCK_SIZE as usize..]);
+        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
+        let mut hasher = Sha512::new();
 
-        // now get the font plane data
-        self.gfx.bulk_read_restart(); // reset the bulk read pointers on the gfx side
-        let bulkread = BulkRead::default();
-        let mut buf = xous_ipc::Buffer::into_buf(bulkread).expect("couldn't transform bulkread into aligned buffer");
-        // this form of loop was chosen to avoid the multiple re-initializations and copies that would be entailed
-        // in our usual idiom for pasing buffers around. instead, we create a single buffer, and re-use it for
-        // every iteration of the loop.
-        loop {
-            buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op()).expect("couldn't do bulkread from gfx");
-            let br = buf.as_flat::<BulkRead, _>().unwrap();
-            hasher.update(&br.buf[..br.len as usize]);
-            if br.len != bulkread.buf.len() as u32 {
-                log::trace!("non-full block len: {}", br.len);
-            }
-            if br.len < bulkread.buf.len() as u32 {
-                // read until we get a buffer that's not fully filled
-                break;
-            }
-        }
-        if false { // this path is for debugging the loader hash. It spoils the loader signature in the process.
-            let digest = hasher.finalize();
-            log::info!("len: {}", loader_len);
-            log::info!("{:x?}", digest);
-            // fake hasher for now
-            let mut hasher = engine_sha512::Sha512::new(Some(engine_sha512::FallbackStrategy::WaitForHardware));
+        // extract the secret key so we can prime the hash
+        let expanded_key = ExpandedSecretKey::from(&signing_key.secret);
+        let nonce = &(expanded_key.to_bytes()[32..]);
+        let mut lower: [u8; 32] = [0; 32];
+        lower.copy_from_slice(&(expanded_key.to_bytes()[..32]));
+        let key = Scalar::from_bits(lower);
+        hasher.update(nonce);
+
+        { // this is the equivalent of hasher.update(&message)
+            let loader_region = self.loader_code();
+            // the loader data starts one page in; the first page is reserved for the signature itself
             hasher.update(&loader_region[SIGBLOCK_SIZE as usize..]);
-            (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the loader"), loader_len)
-        } else {
-            (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the loader"), loader_len)
+
+            // now get the font plane data
+            self.gfx.bulk_read_restart(); // reset the bulk read pointers on the gfx side
+            let bulkread = BulkRead::default();
+            let mut buf = xous_ipc::Buffer::into_buf(bulkread).expect("couldn't transform bulkread into aligned buffer");
+            // this form of loop was chosen to avoid the multiple re-initializations and copies that would be entailed
+            // in our usual idiom for pasing buffers around. instead, we create a single buffer, and re-use it for
+            // every iteration of the loop.
+            loop {
+                buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op()).expect("couldn't do bulkread from gfx");
+                let br = buf.as_flat::<BulkRead, _>().unwrap();
+                hasher.update(&br.buf[..br.len as usize]);
+                if br.len != bulkread.buf.len() as u32 {
+                    log::trace!("non-full block len: {}", br.len);
+                }
+                if br.len < bulkread.buf.len() as u32 {
+                    // read until we get a buffer that's not fully filled
+                    break;
+                }
+            }
         }
+        let maybe_pb = maybe_pb.map(|pb| {pb.increment_work(1); pb});
+
+        let r = Scalar::from_hash(hasher);
+        let R = (&r * &constants::ED25519_BASEPOINT_TABLE).compress();
+
+        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
+        let mut hasher = Sha512::new();
+        hasher.update(R.as_bytes());
+        hasher.update(signing_key.public.as_bytes());
+
+        { // this is the equivalent of hasher.update(&message)
+            let loader_region = self.loader_code();
+            // the loader data starts one page in; the first page is reserved for the signature itself
+            hasher.update(&loader_region[SIGBLOCK_SIZE as usize..]);
+
+            // now get the font plane data
+            self.gfx.bulk_read_restart(); // reset the bulk read pointers on the gfx side
+            let bulkread = BulkRead::default();
+            let mut buf = xous_ipc::Buffer::into_buf(bulkread).expect("couldn't transform bulkread into aligned buffer");
+            // this form of loop was chosen to avoid the multiple re-initializations and copies that would be entailed
+            // in our usual idiom for pasing buffers around. instead, we create a single buffer, and re-use it for
+            // every iteration of the loop.
+            loop {
+                buf.lend_mut(self.gfx.conn(), self.gfx.bulk_read_fontmap_op()).expect("couldn't do bulkread from gfx");
+                let br = buf.as_flat::<BulkRead, _>().unwrap();
+                hasher.update(&br.buf[..br.len as usize]);
+                if br.len != bulkread.buf.len() as u32 {
+                    log::trace!("non-full block len: {}", br.len);
+                }
+                if br.len < bulkread.buf.len() as u32 {
+                    // read until we get a buffer that's not fully filled
+                    break;
+                }
+            }
+        }
+        if let Some(pb) = maybe_pb {
+            pb.increment_work(1);
+        }
+
+        let k = Scalar::from_hash(hasher);
+        let s = &(&k * &key) + &r;
+
+        let mut signature_bytes: [u8; 64] = [0u8; 64];
+
+        signature_bytes[..32].copy_from_slice(&R.as_bytes()[..]);
+        signature_bytes[32..].copy_from_slice(&s.as_bytes()[..]);
+
+
+        #[cfg(feature = "hazardous-debug")]
+        log::info!("signing key: {:x?}", signing_key.secret.to_bytes());
+        log::info!("public key: {:x?}", signing_key.public.to_bytes());
+        (ed25519_dalek::ed25519::signature::Signature::from_bytes(&signature_bytes).unwrap(), loader_len)
     }
 
     pub fn sign_kernel(&self, signing_key: &Keypair) -> (Signature, u32) {
-        let mut hasher = engine_sha512::Sha512::new(Some(engine_sha512::FallbackStrategy::WaitForHardware));
         let kernel_region = self.kernel();
         // for the kernel length, we can't know/trust the given length in the signature field, so we sign the entire
         // length of the region. This will increase the time it takes to verify; however, at the current trend, we'll probably
         // use most of the available space for the kernel, so by the time we're done maybe only 10-20% of the space is empty.
         let kernel_len = kernel_region.len() - SIGBLOCK_SIZE as usize;
-        hasher.update(&kernel_region[SIGBLOCK_SIZE as usize ..]);
 
-        (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the kernel"), kernel_len as u32)
+        (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..]), kernel_len as u32)
+    }
+
+    /// the public key must already be in the cache
+    pub fn verify_selfsign_kernel(&self) -> bool {
+        let sensitive_slice = self.sensitive_data.as_slice::<u32>();
+        if sensitive_slice[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
+            log::info!("key cache was not initialized, can't verify the kernel with our self-signing key");
+            return false;
+        }
+
+        // read the public key directly out of the keyrom
+        let mut key: [u8; 32] = [0; 32];
+        log::info!("reading public key from cached area");
+        for (word, &keyword) in key.chunks_mut(4).into_iter()
+        .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter()) {
+            for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
+                *dst = byte;
+            }
+        }
+        log::info!("pubkey as reconstituted: {:x?}", key);
+        let pubkey = PublicKey::from_bytes(&key).expect("public key was not valid");
+
+        let kernel_region = self.kernel();
+        let sig_region = &kernel_region[..core::mem::size_of::<SignatureInFlash>()];
+        let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
+        let sig = Signature::new(sig_rec.signature);
+
+        let kern_len = sig_rec.signed_len as usize;
+        log::info!("recorded kernel len: {} bytes", kern_len);
+        log::info!("verifying with signature {:x?}", sig_rec.signature);
+        log::info!("verifying with pubkey {:x?}", pubkey.to_bytes());
+
+        match pubkey.verify_strict(&kernel_region[SIGBLOCK_SIZE as usize..], &sig) {
+            Ok(()) => true,
+            Err(e) => {
+                log::info!("error verifying signature: {:?}", e);
+                false
+            }
+        }
+    }
+
+    pub fn sign_gateware(&self, signing_key: &Keypair) -> (Signature, u32) {
+        let mut hasher = Sha512::new();
+        let gateware_region = self.gateware();
+
+        // sign everything except a hole just big enough to fit the digital signature record
+        let mut bytes_hashed = CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>();
+        hasher.update(&gateware_region[..bytes_hashed]);
+        bytes_hashed += gateware_region.len() - CSR_CSV_OFFSET;
+        hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
+
+        // note that we use the *prehash* version here, this produces a different signature than a straightforward ed25519 sign
+        (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the gateware"), bytes_hashed as u32)
+    }
+
+    pub fn verify_gateware_self_signature(&mut self) -> bool {
+        log::info!("verifying gateware self signature");
+        // read the public key directly out of the keyrom
+        let pubkey = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
+
+        //let mut hasher = Sha512::new(Some(FallbackStrategy::WaitForHardware));
+        let mut hasher = Sha512::new();
+        let gateware_region = self.gateware();
+
+        // verify everything except a hole just big enough to fit the digital signature record
+        log::info!("hashing kernel");
+        hasher.update(&gateware_region[..CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()]);
+        hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
+        log::info!("hash done");
+
+        let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
+        for (&src, dst) in gateware_region[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET].iter()
+        .zip(sig_region.iter_mut()) {
+            *dst = src;
+        }
+        let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
+        let sig = Signature::new(sig_rec.signature);
+        log::info!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
+        log::info!("sig: {:x?}", sig.to_bytes());
+        log::info!("pubkey: {:x?}", pubkey.to_bytes());
+
+        // note that we use the *prehash* version here, this has a different signature than a straightforward ed25519
+        match pubkey.verify_prehashed(hasher, None, &sig) {
+            Ok(_) => {
+                log::info!("gateware verified!");
+                true
+            }
+            Err(e) => {
+                log::info!("gateware did not verify! {:?}", e);
+                false
+            }
+        }
+    }
+
+    pub fn commit_signature(&self, sig: Signature, len: u32, sig_type: SignatureType) -> Result<(), RootkeyResult> {
+        let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
+        // map a structure onto the signature region, so we can do something sane when writing stuff to it
+        let mut signature: &mut SignatureInFlash = unsafe{(sig_region.as_mut_ptr() as *mut SignatureInFlash).as_mut().unwrap()}; // this pointer better not be null, we just created it!
+
+        signature.version = 1;
+        signature.signed_len = len;
+        signature.signature = sig.to_bytes();
+        log::info!("sig: {:x?}", sig.to_bytes());
+        log::info!("signature region to patch: {:x?}", sig_region);
+
+        match sig_type {
+            SignatureType::Loader => {
+                log::info!("loader sig area before: {:x?}", &(self.loader_code()[..0x100]));
+                self.spinor.patch(self.loader_code(), self.loader_base(), &sig_region, 0)
+                    .map_err(|_| RootkeyResult::FlashError)?;
+                log::info!("loader sig area after: {:x?}", &(self.loader_code()[..0x100]));
+            }
+            SignatureType::Kernel => {
+                log::info!("kernel sig area before: {:x?}", &(self.kernel()[..0x100]));
+                self.spinor.patch(self.kernel(), self.kernel_base(), &sig_region, 0)
+                    .map_err(|_| RootkeyResult::FlashError)?;
+                log::info!("kernel sig area after: {:x?}", &(self.kernel()[..0x100]));
+            }
+            SignatureType::Gateware => {
+                self.spinor.patch(self.gateware(), self.gateware_base(), &sig_region, (CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()) as u32)
+                    .map_err(|_| RootkeyResult::FlashError)?;
+            }
+        }
+        Ok(())
     }
 
     /// Called by the UX layer at the epilogue of the initialization run. Allows suspend/resume to resume,
@@ -1407,15 +1633,4 @@ impl RootKeys {
         // re-allow suspend/resume ops
         self.susres.set_suspendable(true).expect("couldn't re-allow suspend/resume");
     }
-}
-
-fn update_progress(new_state: u32, progress_modal: &mut Modal, progress_action: &mut Slider) {
-    log::info!("progress: {}", new_state);
-    progress_action.set_state(new_state);
-    progress_modal.modify(
-        Some(gam::modal::ActionType::Slider(*progress_action)),
-        None, false, None, false, None);
-    progress_modal.redraw(); // stage the modal box pixels to the back buffer
-    progress_modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
-    xous::yield_slice(); // this gives time for the GAM to do the sending
 }

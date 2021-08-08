@@ -72,11 +72,10 @@ impl RootKeys {
         unimplemented!();
     }
 
-    /// checks to see if the KEYROM entries are 0, and if so, generates keys. In the process of doing so, the user will be
-    /// prompted to enter passwords. It also automatically calls self_sign() -- presumably, if you were comfortable enough to
+    /// checks to see if the KEYROM has been initialized, and if not, generates keys. In the process of doing so, the user will be
+    /// prompted to enter passwords. It also automatically self-signs everything -- presumably, if you were comfortable enough to
     /// use this firmware to make your keys, you also trusted it.
     /// it will then update the bitstream with your keys.
-    /// if the KEYROM entries are not 0, it will abort without any user prompt, but with an error code.
     pub fn try_init_keys(&mut self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
@@ -104,6 +103,26 @@ impl RootKeys {
     //// initiates a self-signing of the firmwares using the ed25519 private key stored in the enclave
     pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
         unimplemented!();
+    }
+
+    /// this will check the signature on the gateware.
+    /// returns None if no keys have been initialized
+    /// returns true if the gateware passes, false if it fails
+    pub fn check_gateware_signature(&mut self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::CheckGatewareSignature.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 2 { // uninit keys case
+                Ok(None)
+            } else if result == 1 { // passed
+                Ok(Some(true))
+            } else { // everything else -- fail
+                Ok(Some(false))
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
     }
 
     pub fn test_ux(&mut self, arg: usize) {

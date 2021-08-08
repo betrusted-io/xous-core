@@ -141,10 +141,6 @@ fn xmain() -> ! {
     };
     let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
     dismiss_modal_action.set_is_password(true);
-    let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
-        0, 100, 10, Some("%"), 0, true, true
-    );
-    progress_action.set_is_password(true);
 
     let mut rootkeys_modal = Modal::new(
         crate::api::ROOTKEY_MODAL_NAME,
@@ -179,16 +175,8 @@ fn xmain() -> ! {
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if true { // short-circuit for testing subroutines
-                    rootkeys_modal.modify(
-                        Some(ActionType::Slider(progress_action)),
-                        Some(t!("rootkeys.setup_wait", xous::LANG)), false,
-                        None, true, None);
-                    rootkeys_modal.activate();
-
-                    xous::yield_slice(); // give some time to the GAM to render
-
-                    let _success = keys.test(&mut rootkeys_modal, &mut progress_action);
+                if false { // short-circuit for testing subroutines
+                    let _success = keys.test();
                 } else {
                     // overall flow:
                     //  - setup the init
@@ -273,17 +261,9 @@ fn xmain() -> ! {
                         }
                         PasswordType::Update => {
                             keys.set_ux_password_type(None);
-                            // now show the init wait note...
-                            rootkeys_modal.modify(
-                                Some(ActionType::Slider(progress_action)),
-                                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
-                                None, true, None);
-                            rootkeys_modal.activate();
-
-                            xous::yield_slice(); // give some time to the GAM to render
 
                             // this routine will update the rootkeys_modal with the current Ux state
-                            let result = keys.do_key_init(&mut rootkeys_modal, &mut progress_action);
+                            let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
 
                             // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                             rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
@@ -348,7 +328,18 @@ fn xmain() -> ! {
                     log::error!("invalid UX state -- someone called init password return, but no password type was set!");
                 }
             },
-            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
+            Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_initialized() {
+                    if keys.verify_gateware_self_signature() {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't send return value");
+                    } else {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't send return value");
+                    }
+                } else {
+                    xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
+                }
+            }),
+            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
                 keys.printkeys();
             }),
             Some(Opcode::UxGetPolicy) => {

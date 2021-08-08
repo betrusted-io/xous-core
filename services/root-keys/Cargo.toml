@@ -32,7 +32,8 @@ locales = {path = "../../locales"}
 graphics-server = {path = "../graphics-server"}
 
 # private keys
-engine-sha512 = {path="../engine-sha512"}
+sha2 = {version = "0.9.5", default-features = false, features = []}
+#sha2 = {path = "../engine-sha512", package = "engine-sha512"}
 digest = "0.9"
 aes-xous={path="../aes"}
 engine-25519 = {path="../engine-25519"}

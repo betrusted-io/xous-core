@@ -9,6 +9,8 @@ pub(crate) const ROOTKEY_MENU_NAME: &'static str = "rootkeys menu";
 pub(crate) enum Opcode {
     /// use to check if we've been initialized
     KeysInitialized,
+    /// check that the digital signature on the gateware
+    CheckGatewareSignature,
 
     TestUx,
 

@@ -374,7 +374,7 @@ pub fn main_menu_thread() {
     };
     menu.add_item(sleep_item);
 
-    let keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
+    let mut keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
     if !keys.is_initialized().unwrap() {
         let initkeys_item = MenuItem {
             name: String::<64>::from_str(t!("mainmenu.init_keys", xous::LANG)),
@@ -384,6 +384,18 @@ pub fn main_menu_thread() {
             close_on_select: true,
         };
         menu.add_item(initkeys_item);
+    } else {
+        log::info!("checking gateware signature...");
+        if let Some(pass) = keys.check_gateware_signature().expect("couldn't issue gateware check call") {
+            if pass {
+                log::info!("gateware passed self-signature check");
+            } else {
+                log::error!("gateware failed self-signature check. TODO: make a UX element to raise the issue to users!");
+                panic!("gateware self-signature failed, despite having keys initialized. This shouldn't happen.");
+            }
+        } else {
+            panic!("unexpected state: keys are initialized, but when checking signatures, we got a response saying the keys aren't initialized");
+        }
     }
 
     let setrtc_item = MenuItem {
