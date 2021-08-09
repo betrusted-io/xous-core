@@ -397,6 +397,7 @@ pub struct RadioButtons {
     pub action_payload: RadioButtonPayload, // the current "radio button" selection
     pub select_index: i16, // the current candidate to be selected
     pub max_items: i16,
+    pub is_password: bool,
 }
 impl RadioButtons {
     pub fn new(action_conn: xous::CID, action_opcode: u32) -> Self {
@@ -407,6 +408,7 @@ impl RadioButtons {
             action_payload: RadioButtonPayload::new(""),
             select_index: 0,
             max_items: 0,
+            is_password: false,
         }
     }
     pub fn add_item(&mut self, new_item: ItemName) -> Option<ItemName> {
@@ -423,6 +425,9 @@ impl RadioButtons {
         }
         return Some(new_item);
     }
+    fn is_password(&self) -> bool {
+        self.is_password
+    }
 }
 impl ActionApi for RadioButtons {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
@@ -432,9 +437,15 @@ impl ActionApi for RadioButtons {
         for item in self.items.iter() {
             if item.is_some(){ total_items += 1}
         }
-        (total_items + 1) * glyph_height + margin * 2 + 5 // +4 for some bottom margin slop
+        (total_items + 1) * glyph_height + margin * 2 + margin * 2 + 5 // +4 for some bottom margin slop
     }
     fn redraw(&self, at_height: i16, modal: &Modal) {
+        let color = if self.is_password {
+            PixelColor::Light
+        } else {
+            PixelColor::Dark
+        };
+
         // prime a textview with the correct general style parameters
         let mut tv = TextView::new(
             modal.canvas,
@@ -442,7 +453,7 @@ impl ActionApi for RadioButtons {
         );
         tv.ellipsis = true;
         tv.style = modal.style;
-        tv.invert = false;
+        tv.invert = self.is_password;
         tv.draw_border= false;
         tv.margin = Point::new(0, 0,);
         tv.insertion = None;
@@ -459,7 +470,7 @@ impl ActionApi for RadioButtons {
         let mut do_okay = true;
         for maybe_item in self.items.iter() {
             if let Some(item) = maybe_item {
-                let cur_y = at_height + cur_line * modal.line_height;
+                let cur_y = at_height + cur_line * modal.line_height + modal.margin * 2;
                 if cur_line == self.select_index {
                     // draw the cursor
                     tv.text.clear();
@@ -494,7 +505,7 @@ impl ActionApi for RadioButtons {
             }
         }
         cur_line += 1;
-        let cur_y = at_height + cur_line * modal.line_height;
+        let cur_y = at_height + cur_line * modal.line_height + modal.margin * 2;
         if do_okay {
             tv.text.clear();
             tv.bounds_computed = None;
@@ -515,9 +526,9 @@ impl ActionApi for RadioButtons {
 
         // divider lines
         modal.gam.draw_line(modal.canvas, Line::new_with_style(
-            Point::new(modal.margin, at_height),
-            Point::new(modal.canvas_width - modal.margin, at_height),
-            DrawStyle::new(PixelColor::Dark, PixelColor::Dark, 1))
+            Point::new(modal.margin, at_height + modal.margin),
+            Point::new(modal.canvas_width - modal.margin, at_height + modal.margin),
+            DrawStyle::new(color, color, 1))
             ).expect("couldn't draw entry line");
     }
     fn key_action(&mut self, k: char) -> (Option<xous_ipc::String::<512>>, bool) {

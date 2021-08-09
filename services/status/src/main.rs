@@ -444,7 +444,7 @@ pub fn main_menu_thread(keys_init: usize, key_conn: usize, key_op: usize, selfsi
     };
     menu.add_item(sleep_item);
 
-    if keys_init == 1 {
+    if keys_init == 0 {
         let initkeys_item = MenuItem {
             name: String::<64>::from_str(t!("mainmenu.init_keys", xous::LANG)),
             action_conn: key_conn as u32,

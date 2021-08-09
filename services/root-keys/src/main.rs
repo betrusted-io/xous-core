@@ -165,7 +165,7 @@ fn xmain() -> ! {
         Some(t!("rootkeys.bootpass", xous::LANG)),
         None,
         GlyphStyle::Small,
-        4
+        8
     );
     rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,
         Opcode::ModalRedraw.to_u32().unwrap(),
@@ -218,22 +218,48 @@ fn xmain() -> ! {
                             None, true, None);
                         keys.set_ux_password_type(None);
                     } else {
-                        dismiss_modal_action.set_action_opcode(Opcode::UxInitRequestPassword.to_u32().unwrap());
+                        dismiss_modal_action.set_action_opcode(Opcode::UxConfirmInitKeys.to_u32().unwrap());
                         rootkeys_modal.modify(
                             Some(ActionType::Notification(dismiss_modal_action)),
                             Some(t!("rootkeys.setup", xous::LANG)), false,
                             None, true, None);
-
-                        ////// insert the "are you sure" message at this point in the flow -- don't call setup_key_init() until we're confirmed!
-
-                        // setup_key_init() prepares the salt and other items necessary to receive a password safely
-                        keys.setup_key_init();
-                        // request the boot password first
-                        keys.set_ux_password_type(Some(PasswordType::Boot));
                     }
                     rootkeys_modal.activate();
+                    rootkeys_modal.redraw();
                 }
             }),
+            Some(Opcode::UxConfirmInitKeys) => {
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxConfirmation.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.yes", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.no", xous::LANG)));
+
+                ////// insert the "are you sure" message at this point in the flow -- don't call setup_key_init() until we're confirmed!
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.confirm", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxConfirmation) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.confirm.yes", xous::LANG) {
+                    // setup_key_init() prepares the salt and other items necessary to receive a password safely
+                    keys.setup_key_init();
+                    // request the boot password first
+                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxInitRequestPassword.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't send message to kick off the password request process");
+                } else {
+                    log::info!("init keys process aborted, no harm no foul");
+                    continue;
+                }
+            },
             Some(Opcode::UxInitRequestPassword) => {
                 password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
                 if let Some(pwt) = keys.get_ux_password_type() {

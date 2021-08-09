@@ -15,9 +15,24 @@
         "en-audio": "Root keys already initialized."
     },
     "rootkeys.setup": {
-        "en": "This will init the root keys.\nI'm going to need two\npasswords:\n 1. Device unlock\n 2. Software update",
+        "en": "This will init the root keys.\nI'm going to need two\npasswords:\n 1. Device unlock\n 2. Software update\nDo not lose them!",
         "zh": "这将初始化根密钥\n需要两个密码\n1.解锁\n2.软件更新",
         "en-audio": "This will initialize the root keys. We're going to need two passwords, one for device unlock, and one for software updates."
+    },
+    "rootkeys.confirm": {
+        "en": "You should only proceed\nif you have inspected\nyour device and are ready\nto trust it.",
+        "zh": "仅当您准备好信\n任此设备时才\n应继续",
+        "en-audio": "You should only proceed with this operation if you are ready to trust this device."
+    },
+    "rootkeys.confirm.yes": {
+        "en": "I'm ready!",
+        "zh": "确定",
+        "en-audio": "I'm ready!"
+    },
+    "rootkeys.confirm.no": {
+        "en": "Not yet, maybe later.",
+        "zh": "我先检查一下,稍后再试",
+        "en-audio": "I'll try again after inspecting my device."
     },
     "rootkeys.setup_wait": {
         "en": "Initializing keys.\nThis takes a few minutes.\nDo not reset or sleep!",
