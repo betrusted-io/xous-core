@@ -55,8 +55,8 @@ features = ["u32_backend", "rand"]
 utralib = { path = "../../utralib"}
 
 [features]
-hazardous-debug = []  # this feature enables the printing of secret materials
-default = ["hazardous-debug"]
+hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
+default = []
 
 [lib]
 test = true

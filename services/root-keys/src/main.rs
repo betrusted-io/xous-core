@@ -176,6 +176,7 @@ fn xmain() -> ! {
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
                 if false { // short-circuit for testing subroutines
+                    #[cfg(feature = "hazardous-debug")]
                     let _success = keys.test();
                 } else {
                     // overall flow:
@@ -340,7 +341,7 @@ fn xmain() -> ! {
                 }
             }),
             Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
-                keys.printkeys();
+                // empty test routine for now
             }),
             Some(Opcode::UxGetPolicy) => {
                 policy_menu.activate();

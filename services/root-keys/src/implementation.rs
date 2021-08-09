@@ -174,13 +174,13 @@ impl<'a> BitstreamOracle<'a> {
             log::error!("Padding is incorrect on the bitstream. Check append_csr.py for padding and make sure you are burning gateware with --raw-binary, and not --bitstream as the latter strips padding from the top of the file.");
             return Err(RootkeyResult::AlignmentError)
         }
-        log::info!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
+        log::debug!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
         let ciphertext = &bitstream[ciphertext_start..ciphertext_start + ciphertext_len as usize];
 
         let mut iv_bytes: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
         bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
-        log::info!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
-        log::info!("recovered iv           : {:x?}", &iv_bytes);
+        log::debug!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
+        log::debug!("recovered iv           : {:x?}", &iv_bytes);
 
         let dec_cipher = Aes256::new(dec_key.try_into().unwrap());
         let enc_cipher = Aes256::new(enc_key.try_into().unwrap());
@@ -235,7 +235,7 @@ impl<'a> BitstreamOracle<'a> {
         }
         oracle.type2_absolute_offset = pt_pos + ciphertext_start;
         oracle.type2_ciphertext_offset = pt_pos;
-        log::info!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
+        log::debug!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
 
         Ok(oracle)
     }
@@ -751,12 +751,12 @@ impl<'a> RootKeys {
                 ]
             ).unwrap()
         };
-        log::info!("keypair pubkey: {:?}", keypair.public.to_bytes());
-        log::info!("keypair pubkey: {:x?}", keypair.public.to_bytes());
+        log::debug!("keypair pubkey: {:?}", keypair.public.to_bytes());
+        log::debug!("keypair pubkey: {:x?}", keypair.public.to_bytes());
         #[cfg(feature = "hazardous-debug")]
-        log::info!("keypair privkey: {:?}", keypair.secret.to_bytes());
+        log::debug!("keypair privkey: {:?}", keypair.secret.to_bytes());
         #[cfg(feature = "hazardous-debug")]
-        log::info!("keypair privkey: {:x?}", keypair.secret.to_bytes());
+        log::debug!("keypair privkey: {:x?}", keypair.secret.to_bytes());
 
         // encrypt the FPGA key using the update password. in an un-init system, it is provided to us in plaintext format
         // e.g. in the case that we're doing a BBRAM boot (eFuse flow would give us a 0's key and we'd later on set it)
@@ -807,8 +807,8 @@ impl<'a> RootKeys {
         // extract the update password key from the cache, and apply it to the private key
         #[cfg(feature = "hazardous-debug")]
         {
-            log::info!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
-            log::info!("cached update password: {:x?}", pcache.hashed_update_pw);
+            log::debug!("cached boot passwords {:x?}", pcache.hashed_boot_pw);
+            log::debug!("cached update password: {:x?}", pcache.hashed_update_pw);
         }
         // private key must XOR with password before storing
         let mut private_key_enc: [u8; ed25519_dalek::SECRET_KEY_LENGTH] = [0; ed25519_dalek::SECRET_KEY_LENGTH];
@@ -868,8 +868,8 @@ impl<'a> RootKeys {
         pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
         pb.rebase_subtask_percentage(20, 30);
         let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
-        log::info!("loader signature: {:x?}", loader_sig.to_bytes());
-        log::info!("loader len: {} bytes", loader_len);
+        log::debug!("loader signature: {:x?}", loader_sig.to_bytes());
+        log::debug!("loader len: {} bytes", loader_len);
 
         // set the "init" bit in the staging area
         {
@@ -879,8 +879,8 @@ impl<'a> RootKeys {
 
         #[cfg(feature = "hazardous-debug")]
         {
-            log::info!("Self private key: {:x?}", keypair.secret.to_bytes());
-            log::info!("Self public key: {:x?}", keypair.public.to_bytes());
+            log::debug!("Self private key: {:x?}", keypair.secret.to_bytes());
+            log::debug!("Self public key: {:x?}", keypair.public.to_bytes());
             self.debug_staging();
         }
 
@@ -915,7 +915,7 @@ impl<'a> RootKeys {
         // sign the image, commit the signature
         pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
         self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
-        log::info!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
+        log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
         pb.set_percentage(92);
         self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
         pb.set_percentage(95);
@@ -929,7 +929,7 @@ impl<'a> RootKeys {
 
         pb.set_percentage(98);
         let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
-        log::info!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+        log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
         self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
 
         // clean up the oracles
@@ -1207,7 +1207,6 @@ impl<'a> RootKeys {
                         for (&s, d) in flip.iter().zip(word.iter_mut()) {
                             *d = s;
                         }
-                        //log::info!("patched 0x{:x}", u32::from_be_bytes(word[0..4].try_into().unwrap()));
                         dummy_consume ^= patch_inv; // consume the dummy value (to keep constant time properties)
                     }
                     None => {}
@@ -1226,7 +1225,7 @@ impl<'a> RootKeys {
         .zip(hmac_area[0..32].iter().zip(hmac_area[32..64].iter())) {
             *dst = hm1 ^ mask;
         }
-        log::info!("hmac code: {:x?}", hmac_code);
+        log::debug!("hmac code: {:x?}", hmac_code);
 
         log::debug!("verifying gateware");
         let mut hasher = Sha256::new();
@@ -1251,7 +1250,7 @@ impl<'a> RootKeys {
             }
         }
         let h1_digest: [u8; 32] = hasher.finalize().try_into().unwrap();
-        log::info!("computed hash of {} bytes: {:x?}", tot_len, h1_digest);
+        log::debug!("computed hash of {} bytes: {:x?}", tot_len, h1_digest);
 
         let mut hasher2 = Sha256::new();
         let footer_mask: [u8; 32] = [0x3A; 32];
@@ -1261,8 +1260,8 @@ impl<'a> RootKeys {
         .zip(hmac_code.iter().zip(footer_mask.iter())) {
             *dst = hm2 ^ mask;
         }
-        log::info!("masked_footer: {:x?}", masked_footer);
-        log::info!("footer_mask: {:x?}", footer_mask);
+        log::debug!("masked_footer: {:x?}", masked_footer);
+        log::debug!("footer_mask: {:x?}", footer_mask);
         let mut masked_footer_flipped: [u8; 32] = [0; 32];
         bitflip(&masked_footer, &mut masked_footer_flipped);
         let mut footer_mask_flipped: [u8; 32] = [0; 32];
@@ -1272,13 +1271,13 @@ impl<'a> RootKeys {
         hasher2.update(h1_digest);
         let h2_digest: [u8; 32] = hasher2.finalize().try_into().unwrap();
 
-        log::info!("h2 hash: {:x?}", h2_digest);
+        log::debug!("h2 hash: {:x?}", h2_digest);
         let mut ref_digest_flipped: [u8; 32] = [0; 32];
         oracle.decrypt(oracle.ciphertext_len() - 32, &mut ref_digest_flipped);
         let mut ref_digest: [u8; 32] = [0; 32];
-        log::info!("ref digest (flipped): {:x?}", ref_digest_flipped);
+        log::debug!("ref digest (flipped): {:x?}", ref_digest_flipped);
         bitflip(&ref_digest_flipped, &mut ref_digest);
-        log::info!("ref digest          : {:x?}", ref_digest);
+        log::debug!("ref digest          : {:x?}", ref_digest);
 
         let mut matching = true;
         for (&l, &r) in ref_digest.iter().zip(h2_digest.iter()) {
@@ -1291,7 +1290,7 @@ impl<'a> RootKeys {
             log::info!("gateware verified");
             Ok(())
         } else {
-            log::info!("gateware failed to verify");
+            log::error!("gateware failed to verify");
             Err(RootkeyResult::IntegrityError)
         }
     }
@@ -1466,10 +1465,6 @@ impl<'a> RootKeys {
         signature_bytes[..32].copy_from_slice(&R.as_bytes()[..]);
         signature_bytes[32..].copy_from_slice(&s.as_bytes()[..]);
 
-
-        #[cfg(feature = "hazardous-debug")]
-        log::info!("signing key: {:x?}", signing_key.secret.to_bytes());
-        log::info!("public key: {:x?}", signing_key.public.to_bytes());
         (ed25519_dalek::ed25519::signature::Signature::from_bytes(&signature_bytes).unwrap(), loader_len)
     }
 
@@ -1487,20 +1482,20 @@ impl<'a> RootKeys {
     pub fn verify_selfsign_kernel(&self) -> bool {
         let sensitive_slice = self.sensitive_data.as_slice::<u32>();
         if sensitive_slice[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
-            log::info!("key cache was not initialized, can't verify the kernel with our self-signing key");
+            log::warn!("key cache was not initialized, can't verify the kernel with our self-signing key");
             return false;
         }
 
         // read the public key directly out of the keyrom
         let mut key: [u8; 32] = [0; 32];
-        log::info!("reading public key from cached area");
+        log::debug!("reading public key from cached area");
         for (word, &keyword) in key.chunks_mut(4).into_iter()
         .zip(sensitive_slice[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter()) {
             for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
                 *dst = byte;
             }
         }
-        log::info!("pubkey as reconstituted: {:x?}", key);
+        log::debug!("pubkey as reconstituted: {:x?}", key);
         let pubkey = PublicKey::from_bytes(&key).expect("public key was not valid");
 
         let kernel_region = self.kernel();
@@ -1509,14 +1504,14 @@ impl<'a> RootKeys {
         let sig = Signature::new(sig_rec.signature);
 
         let kern_len = sig_rec.signed_len as usize;
-        log::info!("recorded kernel len: {} bytes", kern_len);
-        log::info!("verifying with signature {:x?}", sig_rec.signature);
-        log::info!("verifying with pubkey {:x?}", pubkey.to_bytes());
+        log::debug!("recorded kernel len: {} bytes", kern_len);
+        log::debug!("verifying with signature {:x?}", sig_rec.signature);
+        log::debug!("verifying with pubkey {:x?}", pubkey.to_bytes());
 
         match pubkey.verify_strict(&kernel_region[SIGBLOCK_SIZE as usize..], &sig) {
             Ok(()) => true,
             Err(e) => {
-                log::info!("error verifying signature: {:?}", e);
+                log::error!("error verifying signature: {:?}", e);
                 false
             }
         }
@@ -1545,10 +1540,10 @@ impl<'a> RootKeys {
         let gateware_region = self.gateware();
 
         // verify everything except a hole just big enough to fit the digital signature record
-        log::info!("hashing gateware");
+        log::debug!("hashing gateware");
         hasher.update(&gateware_region[..CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()]);
         hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
-        log::info!("hash done");
+        log::debug!("hash done");
 
         let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
         for (&src, dst) in gateware_region[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET].iter()
@@ -1557,9 +1552,9 @@ impl<'a> RootKeys {
         }
         let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()}; // this pointer better not be null, we just created it!
         let sig = Signature::new(sig_rec.signature);
-        log::info!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
-        log::info!("sig: {:x?}", sig.to_bytes());
-        log::info!("pubkey: {:x?}", pubkey.to_bytes());
+        log::debug!("sig_rec ({}): {:x?}", sig_rec.signed_len, sig_rec.signature);
+        log::debug!("sig: {:x?}", sig.to_bytes());
+        log::debug!("pubkey: {:x?}", pubkey.to_bytes());
 
         // note that we use the *prehash* version here, this has a different signature than a straightforward ed25519
         match pubkey.verify_prehashed(hasher, None, &sig) {
@@ -1568,7 +1563,7 @@ impl<'a> RootKeys {
                 true
             }
             Err(e) => {
-                log::info!("gateware did not verify! {:?}", e);
+                log::warn!("gateware did not verify! {:?}", e);
                 false
             }
         }
@@ -1582,25 +1577,27 @@ impl<'a> RootKeys {
         signature.version = 1;
         signature.signed_len = len;
         signature.signature = sig.to_bytes();
-        log::info!("sig: {:x?}", sig.to_bytes());
-        log::info!("signature region to patch: {:x?}", sig_region);
+        log::debug!("sig: {:x?}", sig.to_bytes());
+        log::debug!("signature region to patch: {:x?}", sig_region);
 
         match sig_type {
             SignatureType::Loader => {
-                log::info!("loader sig area before: {:x?}", &(self.loader_code()[..0x100]));
+                log::info!("loader sig area before: {:x?}", &(self.loader_code()[..0x80]));
                 self.spinor.patch(self.loader_code(), self.loader_base(), &sig_region, 0)
                     .map_err(|_| RootkeyResult::FlashError)?;
-                log::info!("loader sig area after: {:x?}", &(self.loader_code()[..0x100]));
+                log::info!("loader sig area after: {:x?}", &(self.loader_code()[..0x80]));
             }
             SignatureType::Kernel => {
-                log::info!("kernel sig area before: {:x?}", &(self.kernel()[..0x100]));
+                log::info!("kernel sig area before: {:x?}", &(self.kernel()[..0x80]));
                 self.spinor.patch(self.kernel(), self.kernel_base(), &sig_region, 0)
                     .map_err(|_| RootkeyResult::FlashError)?;
-                log::info!("kernel sig area after: {:x?}", &(self.kernel()[..0x100]));
+                log::info!("kernel sig area after: {:x?}", &(self.kernel()[..0x80]));
             }
             SignatureType::Gateware => {
+                log::info!("gateware sig area before: {:x?}", &(self.gateware()[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET]));
                 self.spinor.patch(self.gateware(), self.gateware_base(), &sig_region, (CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()) as u32)
                     .map_err(|_| RootkeyResult::FlashError)?;
+                log::info!("gateware sig area after: {:x?}", &(self.gateware()[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET]));
             }
         }
         Ok(())
