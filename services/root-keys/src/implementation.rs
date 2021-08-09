@@ -399,10 +399,12 @@ pub(crate) struct RootKeys {
     gfx: graphics_server::Gfx, // for reading out font planes for signing verification
     spinor: spinor::Spinor,
     ticktimer: ticktimer_server::Ticktimer,
+    xns: xous_names::XousNames,
 }
 
 impl<'a> RootKeys {
-    pub fn new(xns: &xous_names::XousNames) -> RootKeys {
+    pub fn new() -> RootKeys {
+        let xns = xous_names::XousNames::new().unwrap();
         let keyrom = xous::syscall::map_memory(
             xous::MemoryAddress::new(utra::keyrom::HW_KEYROM_BASE),
             None,
@@ -473,6 +475,7 @@ impl<'a> RootKeys {
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
+            xns,
         };
 
         keys
@@ -494,6 +497,16 @@ impl<'a> RootKeys {
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
 
+    fn xns_interlock(&self) {
+        loop {
+            if self.xns.trusted_init_done().expect("couldn't query init done status") {
+                break;
+            } else {
+                log::warn!("trusted init not finished, rootkeys is holding off on sensitive operations");
+                self.ticktimer.sleep_ms(650).expect("couldn't sleep");
+            }
+        }
+    }
     fn purge_password(&mut self, pw_type: PasswordType) {
         unsafe {
             let pcache_ptr: *mut PasswordCache = self.pass_cache.as_mut_ptr() as *mut PasswordCache;
@@ -686,6 +699,7 @@ impl<'a> RootKeys {
     /// Called by the UX layer to set up a key init run. It disables suspend/resume for the duration
     /// of the run, and also sets up some missing fields of KEYROM necessary to encrypt passwords.
     pub fn setup_key_init(&mut self) {
+        self.xns_interlock();
         // block suspend/resume ops during security-sensitive operations
         self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
         // in this block, keyrom data is copied into RAM.
@@ -720,6 +734,9 @@ impl<'a> RootKeys {
     /// - sign the FPGA image
     /// - get ready for a reboot
     pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        self.xns_interlock();
+        self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
+
         let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
         0, 100, 10, Some("%"), 0, true, true
         );
@@ -933,6 +950,7 @@ impl<'a> RootKeys {
         // clean up the oracles
         src_oracle.clear();
         dst_oracle.clear();
+        self.spinor.set_staging_write_protect(false).expect("couldn't un-protect the staging area");
 
         // finalize the progress bar on exit -- always leave at 100%
         pb.update_text(t!("rootkeys.init.finished", xous::LANG));

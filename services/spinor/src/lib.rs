@@ -66,6 +66,25 @@ impl Spinor {
             self.token[3] as usize,
         )).map(|_| ())
     }
+    pub fn set_staging_write_protect(&self, protect: bool) -> Result<(), xous::Error> {
+        if protect {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::SetStagingWriteProtect.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            )).map(|_| ())
+        } else {
+            send_message(self.conn,
+                Message::new_scalar(Opcode::ClearStagingWriteProtect.to_usize().unwrap(),
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
+                self.token[3] as usize,
+            )).map(|_| ())
+        }
+    }
 
     #[cfg(not(test))]
     fn send_write_region(&self, wr: &WriteRegion) -> Result<(), SpinorError> {

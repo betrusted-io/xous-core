@@ -38,7 +38,7 @@ mod implementation {
     }
 
     impl RootKeys {
-        pub fn new(xns: &xous_names::XousNames) -> RootKeys {
+        pub fn new() -> RootKeys {
             RootKeys {
                 password_type: None,
             }
@@ -103,16 +103,16 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     /*
        Connections allowed to the keys server:
-          1. Shellchat (to originate update test requests)
-          2. Password entry UX thread
-          3. Key purge timer
-          4. Main menu -> trigger initialization
-          5. (future) PDDB
+          0. Password entry UX thread (self, created without xns)
+          0. Key purge timer (self, created without xns)
+          1. Shellchat for test initiation
+          2. Main menu -> trigger initialization
+          3. (future) PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(4)).expect("can't register server");
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", keys_sid);
 
-    let mut keys = RootKeys::new(&xns);
+    let mut keys = RootKeys::new();
 
     log::trace!("ready to accept requests");
 
@@ -316,8 +316,8 @@ fn xmain() -> ! {
                             // we also need to include a command that does the reboot.
                             match result {
                                 Ok(_) => {
-                                    
                                     keys.finish_key_init();
+                                    // TODO: need to insert the reboot command here
                                 }
                                 Err(RootkeyResult::AlignmentError) => {
                                     dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());

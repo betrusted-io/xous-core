@@ -98,8 +98,8 @@ fn xmain() -> ! {
     log::trace!("|status: my canvas {:?}", status_gid);
 
     log::trace!("|status: registering GAM|status thread");
-    // should be only one connection here, from the status main loop
-    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(1)).expect("|status: can't register server");
+    // we have one connection, from the status main loop; but we make it with a local call, not using xns. so there's 0 in xns.
+    let status_sid = xns.register_name(SERVER_NAME_STATUS, Some(0)).expect("|status: can't register server");
     // create a connection for callback hooks
     unsafe{CB_TO_MAIN_CONN = Some(xous::connect(status_sid).unwrap())};
     let pump_conn = xous::connect(status_sid).unwrap();
@@ -204,7 +204,6 @@ fn xmain() -> ! {
             } else {
                 let mut sn = clone.lock().unwrap();
                 sn.insert("secnotes.state_fail".to_string(), t!("secnote.state_fail", xous::LANG).to_string());
-
             }
         }
         });

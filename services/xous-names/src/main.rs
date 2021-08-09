@@ -158,9 +158,10 @@ impl CheckedHashMap {
     }
     pub fn trusted_init_done(&self) -> bool {
         let mut trusted_done = true;
-        for (_name, entry) in self.map.iter() {
+        for (name, entry) in self.map.iter() {
             if let Some(max) = entry.max_conns {
                 if max != entry.current_conns {
+                    log::info!("server {} has {} conns but expects {}", name, entry.current_conns, max);
                     trusted_done = false;
                 }
             }
