@@ -15,9 +15,9 @@
         "en-audio": "Invalid key state"
     },
     "secnote.no_keys": {
-        "en": " Keystore uninitialized",
+        "en": " Root keys uninitialized",
         "zh": "密钥未初始化",
-        "en-audio": "Keystore unitialized"
+        "en-audio": "Root keys unitialized"
     },
     "secnote.allclear": {
         "en": " No security warnings",

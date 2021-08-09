@@ -225,7 +225,7 @@ fn xmain() -> ! {
     } else {
         stats_interval = 4;
         batt_interval = 4;
-        secnotes_interval = 2;
+        secnotes_interval = 4;
     }
     let mut battstats_phase = true;
     let mut needs_redraw = false;

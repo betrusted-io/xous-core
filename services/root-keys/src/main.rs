@@ -198,7 +198,7 @@ fn xmain() -> ! {
                 } else {
                     // overall flow:
                     //  - setup the init
-                    //  -------> TODO: add an abort option here, in case someone clicked on this item out of curiosity
+                    //  - check that the user is ready to proceed
                     //  - prompt for root password
                     //  - prompt for boot password
                     //  - create the keys
@@ -316,15 +316,8 @@ fn xmain() -> ! {
                             // we also need to include a command that does the reboot.
                             match result {
                                 Ok(_) => {
-                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
-                                    rootkeys_modal.modify(
-                                        Some(ActionType::Notification(dismiss_modal_action)),
-                                        Some(t!("rootkeys.init.finished", xous::LANG)), false,
-                                        None, false, None);
-                                    rootkeys_modal.activate();
-                                    xous::yield_slice();
-
-                                    // TODO: insert the reboot code here
+                                    
+                                    keys.finish_key_init();
                                 }
                                 Err(RootkeyResult::AlignmentError) => {
                                     dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());

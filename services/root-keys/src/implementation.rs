@@ -938,7 +938,7 @@ impl<'a> RootKeys {
         pb.update_text(t!("rootkeys.init.finished", xous::LANG));
         pb.set_percentage(100);
 
-        self.ticktimer.sleep_ms(1000).expect("couldn't show final message");
+        self.ticktimer.sleep_ms(2000).expect("couldn't show final message");
 
         Ok(())
     }
