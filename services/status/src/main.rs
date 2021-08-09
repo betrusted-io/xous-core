@@ -187,27 +187,27 @@ fn xmain() -> ! {
     if !debug_locked {
         sec_notes.lock().unwrap().insert("secnote.usb_unlock".to_string(), t!("secnote.usb_unlock", xous::LANG).to_string());
     }
-    let keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
-    if !keys.is_initialized().unwrap() {
+    let keys = Arc::new(Mutex::new(root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state")));
+    if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert("secnotes.no_keys".to_string(), t!("secnote.no_keys", xous::LANG).to_string());
     } else {
         log::info!("checking gateware signature...");
-        let sigstate = keys.check_gateware_signature().expect("couldn't issue gateware check call");
         thread::spawn({
             let clone = Arc::clone(&sec_notes);
+            let keys = Arc::clone(&keys);
             move || {
-            if let Some(pass) = sigstate {
-                if !pass {
+                if let Some(pass) = keys.lock().unwrap().check_gateware_signature().expect("couldn't issue gateware check call") {
+                    if !pass {
+                        let mut sn = clone.lock().unwrap();
+                        sn.insert("secnotes.gateware_fail".to_string(), t!("secnote.gateware_fail", xous::LANG).to_string());
+                    }
+                } else {
                     let mut sn = clone.lock().unwrap();
-                    sn.insert("secnotes.gateware_fail".to_string(), t!("secnote.gateware_fail", xous::LANG).to_string());
+                    sn.insert("secnotes.state_fail".to_string(), t!("secnote.state_fail", xous::LANG).to_string());
                 }
-            } else {
-                let mut sn = clone.lock().unwrap();
-                sn.insert("secnotes.state_fail".to_string(), t!("secnote.state_fail", xous::LANG).to_string());
             }
-        }
         });
-    }
+    };
 
     let mut stats_phase: usize = 0;
 
@@ -232,15 +232,15 @@ fn xmain() -> ! {
     log::debug!("starting main menu thread");
     let keys_init;
     let keys_op;
-    if keys.is_initialized().unwrap() {
+    if keys.lock().unwrap().is_initialized().unwrap() {
         keys_init = 1;
-        keys_op = keys.get_update_gateware_op();
+        keys_op = keys.lock().unwrap().get_update_gateware_op();
     } else {
         keys_init = 0;
-        keys_op = keys.get_try_init_keys_op();
+        keys_op = keys.lock().unwrap().get_try_init_keys_op();
     }
-    let sign_op = keys.get_try_selfsign_op();
-    xous::create_thread_4(main_menu_thread, keys_init, keys.conn() as usize, keys_op as usize, sign_op as usize)
+    let sign_op = keys.lock().unwrap().get_try_selfsign_op();
+    xous::create_thread_4(main_menu_thread, keys_init, keys.lock().unwrap().conn() as usize, keys_op as usize, sign_op as usize)
         .expect("couldn't create menu thread");
 
     info!("|status: starting main loop");

@@ -70,7 +70,7 @@
         "en-audio": "Committing signatures. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.finished": {
-        "en": "Preparing to reboot...\n\n",
+        "en": "Preparing to reboot...\n\n\n",
         "zh": "准备重启...\n\n",
         "en-audio": "Preparing to reboot."
     },
