@@ -28,6 +28,10 @@ mod implementation {
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use gam::modal::{Modal, Slider};
+    use locales::t;
+    use crate::api::*;
+    use gam::{ActionType, ProgressBar};
+    use num_traits::*;
 
     pub struct RootKeys {
         password_type: Option<PasswordType>,
@@ -55,22 +59,35 @@ mod implementation {
         }
         pub fn is_initialized(&self) -> bool {false}
         pub fn setup_key_init(&mut self) {}
-        pub fn do_key_init(&mut self,progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+            0, 100, 10, Some("%"), 0, true, true
+            );
+            progress_action.set_is_password(true);
+            // now show the init wait note...
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+
+            xous::yield_slice(); // give some time to the GAM to render
+            // capture the progress bar elements in a convenience structure
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+
             let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
             for i in 1..10 {
                 log::info!("fake progress: {}", i * 10);
-                progress_action.set_state(i);
-                progress_modal.modify(
-                    Some(gam::modal::ActionType::Slider(*progress_action)),
-                    None, false, None, false, None);
-                progress_modal.redraw(); // stage the modal box pixels to the back buffer
-                progress_modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
-                xous::yield_slice(); // this gives time for the GAM to do the sending
+                pb.set_percentage(i * 10);
                 ticktimer.sleep_ms(2000).unwrap();
             }
-            true
+            Ok(())
         }
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
+        pub fn finish_key_init(&mut self) {}
+        pub fn verify_gateware_self_signature(&mut self) -> bool {
+            true
+        }
     }
 }
 
@@ -328,6 +345,12 @@ fn xmain() -> ! {
                 } else {
                     log::error!("invalid UX state -- someone called init password return, but no password type was set!");
                 }
+            },
+            Some(Opcode::UxUpdateGateware) => {
+                unimplemented!();
+            },
+            Some(Opcode::UxSelfSignXous) => {
+                unimplemented!();
             },
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {

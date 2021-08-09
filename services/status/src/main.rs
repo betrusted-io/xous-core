@@ -13,6 +13,11 @@ use xous_ipc::String;
 use num_traits::*;
 
 use graphics_server::*;
+use locales::t;
+
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::collections::HashMap;
 
 const SERVER_NAME_STATUS: &str   = "_Status bar manager_";
 const SERVER_NAME_STATUS_GID: &str   = "_Status bar GID receiver_";
@@ -106,7 +111,6 @@ fn xmain() -> ! {
 
     log::trace!("|status: getting screen size");
     let screensize = gam.get_canvas_bounds(status_gid).expect("|status: Couldn't get canvas size");
-    //let screensize: Point = Point::new(0, 336);
 
     log::trace!("|status: building textview objects");
     // build uptime text view: left half of status bar
@@ -173,9 +177,38 @@ fn xmain() -> ! {
     security_tv.token = gam.claim_token("status").expect("couldn't request token"); // this is a shared magic word to identify this process
     security_tv.clear_area = true;
     security_tv.invert = true;
-    write!(&mut security_tv, " USB unlocked").unwrap();
+    write!(&mut security_tv, "{}", t!("secnote.startup", xous::LANG)).unwrap();
     gam.post_textview(&mut security_tv).unwrap();
     gam.redraw().unwrap();  // initial boot redraw
+
+    let sec_notes = Arc::new(Mutex::new(HashMap::new()));
+    let mut last_sec_note_index = 0;
+    let mut last_sec_note_size = 0;
+    if !debug_locked {
+        sec_notes.lock().unwrap().insert("secnote.usb_unlock".to_string(), t!("secnote.usb_unlock", xous::LANG).to_string());
+    }
+    let keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
+    if !keys.is_initialized().unwrap() {
+        sec_notes.lock().unwrap().insert("secnotes.no_keys".to_string(), t!("secnote.no_keys", xous::LANG).to_string());
+    } else {
+        log::info!("checking gateware signature...");
+        let sigstate = keys.check_gateware_signature().expect("couldn't issue gateware check call");
+        thread::spawn({
+            let clone = Arc::clone(&sec_notes);
+            move || {
+            if let Some(pass) = sigstate {
+                if !pass {
+                    let mut sn = clone.lock().unwrap();
+                    sn.insert("secnotes.gateware_fail".to_string(), t!("secnote.gateware_fail", xous::LANG).to_string());
+                }
+            } else {
+                let mut sn = clone.lock().unwrap();
+                sn.insert("secnotes.state_fail".to_string(), t!("secnote.state_fail", xous::LANG).to_string());
+
+            }
+        }
+        });
+    }
 
     let mut stats_phase: usize = 0;
 
@@ -183,19 +216,33 @@ fn xmain() -> ! {
     let charger_pump_interval = 180;
     let stats_interval;
     let batt_interval;
+    let secnotes_interval;
     if cfg!(feature = "slowstatus") {
         // lower the status output rate for braille mode, debugging, etc.
         stats_interval = 30;
         batt_interval = 60;
+        secnotes_interval = 30;
     } else {
         stats_interval = 4;
         batt_interval = 4;
+        secnotes_interval = 2;
     }
     let mut battstats_phase = true;
     let mut needs_redraw = false;
 
     log::debug!("starting main menu thread");
-    xous::create_thread_0(main_menu_thread).expect("couldn't create menu thread");
+    let keys_init;
+    let keys_op;
+    if keys.is_initialized().unwrap() {
+        keys_init = 1;
+        keys_op = keys.get_update_gateware_op();
+    } else {
+        keys_init = 0;
+        keys_op = keys.get_try_init_keys_op();
+    }
+    let sign_op = keys.get_try_selfsign_op();
+    xous::create_thread_4(main_menu_thread, keys_init, keys.conn() as usize, keys_op as usize, sign_op as usize)
+        .expect("couldn't create menu thread");
 
     info!("|status: starting main loop");
     loop {
@@ -217,14 +264,38 @@ fn xmain() -> ! {
             }),
             Some(StatusOpcode::Pump) => {
                 let (is_locked, force_update) = llio.debug_usb(None).unwrap();
-                if (debug_locked != is_locked) || force_update {
-                    debug_locked = is_locked;
-                    security_tv.clear_str();
-                    if debug_locked {
-                        write!(&mut security_tv, " USB secured").unwrap();
-                    } else {
-                        write!(&mut security_tv, " USB unlocked").unwrap();
+                if (debug_locked != is_locked) || force_update
+                || sec_notes.lock().unwrap().len() != last_sec_note_size
+                || (sec_notes.lock().unwrap().len() > 1) && ((stats_phase % secnotes_interval) == 0) {
+                    if debug_locked != is_locked {
+                        if debug_locked {
+                            sec_notes.lock().unwrap().remove(&"secnotes.usb_unlock".to_string());
+                        } else {
+                            sec_notes.lock().unwrap().insert("secnotes.usb_unlock".to_string(), t!("secnote.usb_unlock", xous::LANG).to_string());
+                        }
+                        debug_locked = is_locked;
                     }
+
+                    if sec_notes.lock().unwrap().len() != last_sec_note_size {
+                        last_sec_note_size = sec_notes.lock().unwrap().len();
+                        if last_sec_note_size > 0 {
+                            last_sec_note_index = last_sec_note_size - 1;
+                        }
+                    }
+
+                    security_tv.clear_str();
+                    if last_sec_note_size > 0 {
+                        for (index, v) in sec_notes.lock().unwrap().values().enumerate() {
+                            if index == last_sec_note_index {
+                                write!(&mut security_tv, "{}", v.as_str()).unwrap();
+                                last_sec_note_index = (last_sec_note_index + 1) % last_sec_note_size;
+                                break;
+                            }
+                        }
+                    } else {
+                        write!(&mut security_tv, "{}", t!("secnote.allclear", xous::LANG)).unwrap();
+                    }
+
                     // only post the view if something has actually changed
                     gam.post_textview(&mut security_tv).unwrap();
                     needs_redraw = true;
@@ -308,7 +379,7 @@ fn xmain() -> ! {
                     needs_redraw = false;
                 }
 
-                stats_phase = stats_phase + 1;
+                stats_phase = stats_phase.wrapping_add(1);
             }
             Some(StatusOpcode::DateTime) => {
                 //log::info!("got DateTime update");
@@ -336,10 +407,9 @@ fn xmain() -> ! {
 }
 
 use gam::*;
-use locales::t;
 // this is the provider for the main menu, it's built into the GAM so we always have at least this
 // root-level menu available
-pub fn main_menu_thread() {
+pub fn main_menu_thread(keys_init: usize, key_conn: usize, key_op: usize, selfsign_op: usize) {
     let mut menu = Menu::new(gam::api::MAIN_MENU_NAME);
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -374,28 +444,33 @@ pub fn main_menu_thread() {
     };
     menu.add_item(sleep_item);
 
-    let mut keys = root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state");
-    if !keys.is_initialized().unwrap() {
+    if keys_init == 1 {
         let initkeys_item = MenuItem {
             name: String::<64>::from_str(t!("mainmenu.init_keys", xous::LANG)),
-            action_conn: keys.conn(),
-            action_opcode: keys.get_try_init_keys_op(),
+            action_conn: key_conn as u32,
+            action_opcode: key_op as u32,
             action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
             close_on_select: true,
         };
         menu.add_item(initkeys_item);
     } else {
-        log::info!("checking gateware signature...");
-        if let Some(pass) = keys.check_gateware_signature().expect("couldn't issue gateware check call") {
-            if pass {
-                log::info!("gateware passed self-signature check");
-            } else {
-                log::error!("gateware failed self-signature check. TODO: make a UX element to raise the issue to users!");
-                panic!("gateware self-signature failed, despite having keys initialized. This shouldn't happen.");
-            }
-        } else {
-            panic!("unexpected state: keys are initialized, but when checking signatures, we got a response saying the keys aren't initialized");
-        }
+        let provision_item = MenuItem {
+            name: String::<64>::from_str(t!("mainmenu.provision_gateware", xous::LANG)),
+            action_conn: key_conn as u32,
+            action_opcode: key_op as u32, // this op is changed from init to provision when keys_init is 0...
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        };
+        menu.add_item(provision_item);
+
+        let selfsign_item = MenuItem {
+            name: String::<64>::from_str(t!("mainmenu.selfsign", xous::LANG)),
+            action_conn: key_conn as u32,
+            action_opcode: selfsign_op as u32,
+            action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
+            close_on_select: true,
+        };
+        menu.add_item(selfsign_item);
     }
 
     let setrtc_item = MenuItem {

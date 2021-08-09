@@ -45,7 +45,7 @@
         "en-audio": "Injecting new keys. This may take a while, don't reset or sleep the device."
     },
     "rootkeys.init.verifying_gateware": {
-        "en": "Verifying gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "en": "Verifying new gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
         "zh": "验证比特流\n可能还要等一下\n不要重置或睡眠!\n",
         "en-audio": "Verifying gateware. This may take a while, don't reset or sleep the device."
     },

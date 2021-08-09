@@ -44,6 +44,12 @@ impl RootKeys {
     pub fn get_try_init_keys_op(&self) -> u32 {
         Opcode::UxTryInitKeys.to_u32().unwrap()
     }
+    pub fn get_update_gateware_op(&self) -> u32 {
+        Opcode::UxUpdateGateware.to_u32().unwrap()
+    }
+    pub fn get_try_selfsign_op(&self) -> u32 {
+        Opcode::UxSelfSignXous.to_u32().unwrap()
+    }
 
     /// this function causes the staging gateware to be provisioned with a copy of our keys,
     /// while being encrypted to the AES key indicated inside the KEYROM
@@ -76,7 +82,7 @@ impl RootKeys {
     /// prompted to enter passwords. It also automatically self-signs everything -- presumably, if you were comfortable enough to
     /// use this firmware to make your keys, you also trusted it.
     /// it will then update the bitstream with your keys.
-    pub fn try_init_keys(&mut self) -> Result<(), xous::Error> {
+    pub fn try_init_keys(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
             0, 0, 0, 0)
@@ -108,7 +114,7 @@ impl RootKeys {
     /// this will check the signature on the gateware.
     /// returns None if no keys have been initialized
     /// returns true if the gateware passes, false if it fails
-    pub fn check_gateware_signature(&mut self) -> Result<Option<bool>, xous::Error> {
+    pub fn check_gateware_signature(&self) -> Result<Option<bool>, xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::CheckGatewareSignature.to_usize().unwrap(), 0, 0, 0, 0)
         )?;

@@ -396,10 +396,9 @@ pub(crate) struct RootKeys {
     cur_password_type: Option<PasswordType>, // for tracking which password we're dealing with at the UX layer
     susres: susres::Susres, // for disabling suspend/resume
     trng: trng::Trng,
-    //gam: gam::Gam, // for raising UX elements directly
     gfx: graphics_server::Gfx, // for reading out font planes for signing verification
     spinor: spinor::Spinor,
-    //ticktimer: ticktimer_server::Ticktimer,
+    ticktimer: ticktimer_server::Ticktimer,
 }
 
 impl<'a> RootKeys {
@@ -471,10 +470,9 @@ impl<'a> RootKeys {
             cur_password_type: None,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
             trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
-            //gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
-            //ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
+            ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
         };
 
         keys
@@ -939,6 +937,8 @@ impl<'a> RootKeys {
         // finalize the progress bar on exit -- always leave at 100%
         pb.update_text(t!("rootkeys.init.finished", xous::LANG));
         pb.set_percentage(100);
+
+        self.ticktimer.sleep_ms(1000).expect("couldn't show final message");
 
         Ok(())
     }
