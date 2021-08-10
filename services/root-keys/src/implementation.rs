@@ -400,6 +400,7 @@ pub(crate) struct RootKeys {
     spinor: spinor::Spinor,
     ticktimer: ticktimer_server::Ticktimer,
     xns: xous_names::XousNames,
+    //jtag: jtag::Jtag,
 }
 
 impl<'a> RootKeys {
@@ -454,6 +455,7 @@ impl<'a> RootKeys {
 
         let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
         spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
+        //let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to JTAG server");
 
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
@@ -476,6 +478,7 @@ impl<'a> RootKeys {
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             xns,
+            //jtag,
         };
 
         keys

@@ -35,12 +35,18 @@ mod implementation {
 
     pub struct RootKeys {
         password_type: Option<PasswordType>,
+        jtag: jtag::Jtag,
+        xns: xous_names::XousNames,
     }
 
     impl RootKeys {
         pub fn new() -> RootKeys {
+            let xns = xous_names::XousNames::new().unwrap();
             RootKeys {
                 password_type: None,
+                xns,
+                // must occupy tihs connection for the system to boot properly
+                jtag: jtag::Jtag::new(&xns).expect("couldn't connect to jtag server"),
             }
         }
         pub fn suspend(&self) {

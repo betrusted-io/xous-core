@@ -425,9 +425,6 @@ impl RadioButtons {
         }
         return Some(new_item);
     }
-    fn is_password(&self) -> bool {
-        self.is_password
-    }
 }
 impl ActionApi for RadioButtons {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}

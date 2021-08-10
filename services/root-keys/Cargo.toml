@@ -31,6 +31,9 @@ locales = {path = "../../locales"}
 # to access font maps for signing verification
 graphics-server = {path = "../graphics-server"}
 
+# for reboots and fuse operations
+jtag = {path = "../jtag"}
+
 # private keys
 #sha2 = {version = "0.9.5", default-features = false, features = []}
 sha2 = {path = "../engine-sha512"}

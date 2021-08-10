@@ -861,6 +861,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jtag"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
+]
+
+[[package]]
 name = "kernel-test"
 version = "0.1.0"
 dependencies = [
@@ -1441,6 +1456,7 @@ dependencies = [
  "gam",
  "graphics-server",
  "hex",
+ "jtag",
  "locales",
  "log",
  "log-server",
@@ -1590,6 +1606,7 @@ dependencies = [
  "hex",
  "ime-plugin-api",
  "ime-plugin-shell",
+ "jtag",
  "keyboard",
  "llio",
  "log",
