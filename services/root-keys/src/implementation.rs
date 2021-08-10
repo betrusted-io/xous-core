@@ -967,8 +967,8 @@ impl<'a> RootKeys {
         let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
         for addr in 0..256 {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
-            sensitive_slice[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
-            log::info!("{:02x}: 0x{:08x}", addr, sensitive_slice[addr as usize]);
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+            log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
         }
     }
 
@@ -980,8 +980,8 @@ impl<'a> RootKeys {
         let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
         for addr in 0..256 {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
-            sensitive_slice[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
-            log::info!("{:02x}: 0x{:08x}", addr, sensitive_slice[addr as usize]);
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+            log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
         }
 
         for (word, key) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
@@ -991,11 +991,11 @@ impl<'a> RootKeys {
             }
         }
         pcache.fpga_key_valid = 1;
-        sensitive_slice[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
-        sensitive_slice[0x30] = 0xc0de_600d;
-        sensitive_slice[0x31] = 0x1234_5678;
-        sensitive_slice[0x32] = 0x8000_0000;
-        sensitive_slice[0x33] = 0x5555_3333;
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x30] = 0xc0de_600d;
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x31] = 0x1234_5678;
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x32] = 0x8000_0000;
+        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x33] = 0x5555_3333;
 
         // one time only
         /*
