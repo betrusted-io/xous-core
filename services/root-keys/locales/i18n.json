@@ -69,10 +69,15 @@
         "zh": "保存签名\n可能还要等一下\n不要重置或睡眠!\n",
         "en-audio": "Committing signatures. This may take a while, don't reset or sleep the device."
     },
+    "rootkeys.init.unplug_power": {
+        "en": "Please unplug the charging\ncable so I can reboot!\n\n",
+        "zh": "拔下充电线以允许重启!",
+        "en-audio": "Unplug the charging cable so I can reboot!"
+    },
     "rootkeys.init.finished": {
-        "en": "Preparing to reboot...\n\n\n",
+        "en": "Reboot in 5 seconds...\n\n\n",
         "zh": "准备重启...\n\n",
-        "en-audio": "Preparing to reboot."
+        "en-audio": "Reboot in 5 seconds."
     },
     "rootkeys.init.fail_verify": {
         "en": "Verification failed,\naborting!",
