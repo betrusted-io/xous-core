@@ -32,14 +32,14 @@ locales = {path = "../../locales"}
 graphics-server = {path = "../graphics-server"}
 
 # private keys
-engine-sha512 = {path="../engine-sha512"}
+#sha2 = {version = "0.9.5", default-features = false, features = []}
+sha2 = {path = "../engine-sha512"}
 digest = "0.9"
 aes-xous={path="../aes"}
 engine-25519 = {path="../engine-25519"}
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 rand_core = "0.5"
 hex = {version = "0.4.3", default-features = false, features = []}
-sha2 = {version = "0.9.5", default-features = false, features = []}
 [dependencies.curve25519-dalek]
 version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
 default-features = false
@@ -55,8 +55,8 @@ features = ["u32_backend", "rand"]
 utralib = { path = "../../utralib"}
 
 [features]
-hazardous-debug = []  # this feature enables the printing of secret materials
-default = ["hazardous-debug"]
+hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
+default = []
 
 [lib]
 test = true

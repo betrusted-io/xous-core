@@ -1,7 +1,7 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
 
-use engine_sha512::*;
+use sha2::*;
 use digest::Digest;
 
 use num_traits::*;
@@ -71,8 +71,8 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             Some(BenchOp::StartSha512Hw) | Some(BenchOp::StartSha512Sw) => {
                 let mut hw_mode = true;
                 let mut hasher = match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(BenchOp::StartSha512Sw) => {hw_mode = false; engine_sha512::Sha512::new(Some(FallbackStrategy::SoftwareOnly))},
-                    _ => engine_sha512::Sha512::new(Some(FallbackStrategy::WaitForHardware)),
+                    Some(BenchOp::StartSha512Sw) => {hw_mode = false; sha2::Sha512::new_with_strategy(FallbackStrategy::SoftwareOnly)},
+                    _ => sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware),
                 };
                 let mut accumulator = [0 as u8; 64];
                 for i in 0..TEST_ITERS {
@@ -167,7 +167,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                     ];
 
                     let mut pass: bool = true;
-                    let mut hasher = engine_sha512::Sha512::new(Some(FallbackStrategy::WaitForHardware));
+                    let mut hasher = sha2::Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();
@@ -192,7 +192,7 @@ impl<'a> ShellCmdApi<'a> for Sha {
                      ];
 
                     let mut pass: bool = true;
-                    let mut hasher = engine_sha512::Sha512Trunc256::new(Some(FallbackStrategy::WaitForHardware));
+                    let mut hasher = sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::WaitForHardware);
 
                     hasher.update(K_DATA);
                     let digest = hasher.finalize();

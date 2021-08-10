@@ -30,12 +30,14 @@ def blob_sign(source, output, key, defile=False):
         m = hashlib.sha512()
         m.update(bytearray(source))
         print("hash of {}".format(m.hexdigest()))
+        print("signing key: [{}]".format(', '.join(hex(x) for x in key[-32:])))
 
         with open(output, "wb") as output_f:
             written = 0
             written += output_f.write(int(SIGNER_VERSION).to_bytes(4, 'little')) # version number record - mirrored inside the signed data, too
             written += output_f.write(len(source).to_bytes(4, 'little')) # record the length of the final signed record (which /also/ includes a length)
             written += output_f.write(signature.signature)
+            print("signature: [{}]".format(', '.join(hex(x) for x in list(signature.signature))))
             output_f.write(bytearray([0] * (4096 - written))) # pad out to one page beyond
             message = bytearray(signature.message)
             if defile is True:
@@ -48,10 +50,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="Sign binary images for Precursor")
     parser.add_argument(
-        "--loader-image", required=False, help="loader image", type=str, nargs='?', metavar=('loader image'), const='../target/riscv32imac-unknown-none-elf/release/loader_presign.bin'
+        "--loader-image", required=False, help="loader image", type=str, nargs='?', metavar=('loader image'), const='../target/riscv32imac-unknown-xous-elf/release/loader_presign.bin'
     )
     parser.add_argument(
-        "--kernel-image", required=False, help="kernel image", type=str, nargs='?', metavar=('kernel image'), const='../target/riscv32imac-unknown-none-elf/release/xous_presign.img'
+        "--kernel-image", required=False, help="kernel image", type=str, nargs='?', metavar=('kernel image'), const='../target/riscv32imac-unknown-xous-elf/release/xous_presign.img'
     )
     parser.add_argument(
         "--loader-key", required=False, help="loader signing key", type=str, nargs='?', metavar=('loader signing key'), const=DEVKEY_PATH

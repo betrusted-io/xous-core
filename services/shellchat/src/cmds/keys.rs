@@ -50,11 +50,11 @@ impl<'a> ShellCmdApi<'a> for Keys {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                /*"ux" => {
+                "ux" => {
                     self.rootkeys.test_ux(0);
                     //debug_here::debug_here!();
                     write!(ret, "show UX").unwrap();
-                }*/
+                }
                 "usblock" => {
                     env.llio.debug_usb(Some(true)).unwrap();
                     write!(ret, "USB debug port locked out; one word at 0x80000000 is disclosable via USB.").unwrap();

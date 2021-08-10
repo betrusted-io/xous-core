@@ -558,6 +558,7 @@ fn xmain() -> ! {
     let mut client_id: Option<[u32; 4]> = None;
     let mut soc_token: Option<[u32; 4]> = None;
     let mut ecc_errors: [Option<u32>; 4] = [None, None, None, None]; // just record the first few errors, until we can get `std` and a convenient Vec/Queue
+    let mut staging_write_protect: bool = false;
 
     loop {
         let mut msg = xous::receive_message(spinor_sid).unwrap();
@@ -578,6 +579,22 @@ fn xmain() -> ! {
                 // process to grab this token
                 if soc_token.is_none() {
                     soc_token = Some([id0 as u32, id1 as u32, id2 as u32, id3 as u32]);
+                }
+            }),
+            Some(Opcode::SetStagingWriteProtect)  => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
+                if let Some(token) = soc_token {
+                    if token[0] == id0 as u32 && token[1] == id1 as u32 &&
+                    token[2] == id2 as u32 && token[3] == id3 as u32 {
+                        staging_write_protect = true;
+                    }
+                }
+            }),
+            Some(Opcode::ClearStagingWriteProtect)  => msg_scalar_unpack!(msg, id0, id1, id2, id3, {
+                if let Some(token) = soc_token {
+                    if token[0] == id0 as u32 && token[1] == id1 as u32 &&
+                    token[2] == id2 as u32 && token[3] == id3 as u32 {
+                        staging_write_protect = false;
+                    }
                 }
             }),
             Some(Opcode::AcquireExclusive) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
@@ -618,7 +635,8 @@ fn xmain() -> ! {
                 let mut wr = buffer.to_original::<WriteRegion, _>().unwrap();
                 let mut authorized = true;
                 if let Some(st) = soc_token {
-                    if (wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC) {
+                    if staging_write_protect && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::LOADER_LOC)) ||
+                    !staging_write_protect && ((wr.start >= xous::SOC_REGION_LOC) && (wr.start < xous::SOC_STAGING_GW_LOC)) {
                         // if only the holder of the ID that matches the SoC token can write to the SOC flash area
                         // other areas are not as strictly controlled because signature checks ostensibly should catch
                         // attempts to modify them. However, access to the gateware definition would allow one to rewrite

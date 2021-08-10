@@ -3,7 +3,7 @@
 
 mod api;
 use api::*;
-use xous::{CID, msg_scalar_unpack, send_message, Message, msg_blocking_scalar_unpack};
+use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
 use xous_ipc::{String, Buffer};
 
 use num_traits::*;
@@ -28,13 +28,17 @@ mod implementation {
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use gam::modal::{Modal, Slider};
+    use locales::t;
+    use crate::api::*;
+    use gam::{ActionType, ProgressBar};
+    use num_traits::*;
 
     pub struct RootKeys {
         password_type: Option<PasswordType>,
     }
 
     impl RootKeys {
-        pub fn new(xns: &xous_names::XousNames) -> RootKeys {
+        pub fn new() -> RootKeys {
             RootKeys {
                 password_type: None,
             }
@@ -55,22 +59,35 @@ mod implementation {
         }
         pub fn is_initialized(&self) -> bool {false}
         pub fn setup_key_init(&mut self) {}
-        pub fn do_key_init(&mut self,progress_modal: &mut Modal, progress_action: &mut Slider) -> bool {
+        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+            0, 100, 10, Some("%"), 0, true, true
+            );
+            progress_action.set_is_password(true);
+            // now show the init wait note...
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+
+            xous::yield_slice(); // give some time to the GAM to render
+            // capture the progress bar elements in a convenience structure
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+
             let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
             for i in 1..10 {
                 log::info!("fake progress: {}", i * 10);
-                progress_action.set_state(i);
-                progress_modal.modify(
-                    Some(gam::modal::ActionType::Slider(*progress_action)),
-                    None, false, None, false, None);
-                progress_modal.redraw(); // stage the modal box pixels to the back buffer
-                progress_modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
-                xous::yield_slice(); // this gives time for the GAM to do the sending
+                pb.set_percentage(i * 10);
                 ticktimer.sleep_ms(2000).unwrap();
             }
-            true
+            Ok(())
         }
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
+        pub fn finish_key_init(&mut self) {}
+        pub fn verify_gateware_self_signature(&mut self) -> bool {
+            true
+        }
     }
 }
 
@@ -86,16 +103,16 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     /*
        Connections allowed to the keys server:
-          1. Shellchat (to originate update test requests)
-          2. Password entry UX thread
-          3. Key purge timer
-          4. Main menu -> trigger initialization
-          5. (future) PDDB
+          0. Password entry UX thread (self, created without xns)
+          0. Key purge timer (self, created without xns)
+          1. Shellchat for test initiation
+          2. Main menu -> trigger initialization
+          3. (future) PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(4)).expect("can't register server");
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", keys_sid);
 
-    let mut keys = RootKeys::new(&xns);
+    let mut keys = RootKeys::new();
 
     log::trace!("ready to accept requests");
 
@@ -141,10 +158,6 @@ fn xmain() -> ! {
     };
     let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
     dismiss_modal_action.set_is_password(true);
-    let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
-        0, 100, 10, Some("%"), 0, true, true
-    );
-    progress_action.set_is_password(true);
 
     let mut rootkeys_modal = Modal::new(
         crate::api::ROOTKEY_MODAL_NAME,
@@ -152,7 +165,7 @@ fn xmain() -> ! {
         Some(t!("rootkeys.bootpass", xous::LANG)),
         None,
         GlyphStyle::Small,
-        4
+        8
     );
     rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,
         Opcode::ModalRedraw.to_u32().unwrap(),
@@ -179,39 +192,74 @@ fn xmain() -> ! {
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
-                // overall flow:
-                //  - setup the init
-                //  - prompt for root password
-                //  - prompt for boot password
-                //  - create the keys
-                //  - write the keys
-                //  - clear the passwords
-                //  - reboot
-                // the following keys should be provisioned:
-                // - self-signing private key
-                // - self-signing public key
-                // - user root key
-                // - pepper
-                if keys.is_initialized() {
-                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
-                    rootkeys_modal.modify(
-                        Some(ActionType::Notification(dismiss_modal_action)),
-                        Some(t!("rootkeys.already_init", xous::LANG)), false,
-                        None, true, None);
-                    keys.set_ux_password_type(None);
+                if false { // short-circuit for testing subroutines
+                    #[cfg(feature = "hazardous-debug")]
+                    let _success = keys.test();
                 } else {
-                    dismiss_modal_action.set_action_opcode(Opcode::UxInitRequestPassword.to_u32().unwrap());
-                    rootkeys_modal.modify(
-                        Some(ActionType::Notification(dismiss_modal_action)),
-                        Some(t!("rootkeys.setup", xous::LANG)), false,
-                        None, true, None);
+                    // overall flow:
+                    //  - setup the init
+                    //  - check that the user is ready to proceed
+                    //  - prompt for root password
+                    //  - prompt for boot password
+                    //  - create the keys
+                    //  - write the keys
+                    //  - clear the passwords
+                    //  - reboot
+                    // the following keys should be provisioned:
+                    // - self-signing private key
+                    // - self-signing public key
+                    // - user root key
+                    // - pepper
+                    if keys.is_initialized() {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.already_init", xous::LANG)), false,
+                            None, true, None);
+                        keys.set_ux_password_type(None);
+                    } else {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxConfirmInitKeys.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.setup", xous::LANG)), false,
+                            None, true, None);
+                    }
+                    rootkeys_modal.activate();
+                    rootkeys_modal.redraw();
+                }
+            }),
+            Some(Opcode::UxConfirmInitKeys) => {
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxConfirmation.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.yes", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.no", xous::LANG)));
+
+                ////// insert the "are you sure" message at this point in the flow -- don't call setup_key_init() until we're confirmed!
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.confirm", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxConfirmation) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.confirm.yes", xous::LANG) {
                     // setup_key_init() prepares the salt and other items necessary to receive a password safely
                     keys.setup_key_init();
                     // request the boot password first
                     keys.set_ux_password_type(Some(PasswordType::Boot));
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxInitRequestPassword.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't send message to kick off the password request process");
+                } else {
+                    log::info!("init keys process aborted, no harm no foul");
+                    continue;
                 }
-                rootkeys_modal.activate();
-            }),
+            },
             Some(Opcode::UxInitRequestPassword) => {
                 password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
                 if let Some(pwt) = keys.get_ux_password_type() {
@@ -257,39 +305,86 @@ fn xmain() -> ! {
                         }
                         PasswordType::Update => {
                             keys.set_ux_password_type(None);
-                            // now show the init wait note...
-                            rootkeys_modal.modify(
-                                Some(ActionType::Slider(progress_action)),
-                                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
-                                None, true, None);
-                            rootkeys_modal.activate();
-
-                            xous::yield_slice(); // give some time to the GAM to render
 
                             // this routine will update the rootkeys_modal with the current Ux state
-                            let success = keys.do_key_init(&mut rootkeys_modal, &mut progress_action);
+                            let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
 
                             // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                             rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
                             // at this point, we may want to pop up a modal indicating we are going to reboot?
                             // we also need to include a command that does the reboot.
-                            if success {
-                                // do a reboot
+                            match result {
+                                Ok(_) => {
+                                    keys.finish_key_init();
+                                    // TODO: need to insert the reboot command here
+                                }
+                                Err(RootkeyResult::AlignmentError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::KeyError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::IntegrityError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::FlashError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
                             }
+
+                            // clear all the state, re-enable suspend/resume
+                            keys.finish_key_init();
                         }
                     }
                 } else {
                     log::error!("invalid UX state -- someone called init password return, but no password type was set!");
                 }
             },
-            /*
-            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, arg, _, _, _, {
-                log::debug!("activating password modal");
-                keys.set_ux_password_type(PasswordType::Boot);
-                rootkeys_modal.activate();
-                //policy_menu.activate();
-            }),*/
+            Some(Opcode::UxUpdateGateware) => {
+                unimplemented!();
+            },
+            Some(Opcode::UxSelfSignXous) => {
+                unimplemented!();
+            },
+            Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_initialized() {
+                    if keys.verify_gateware_self_signature() {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't send return value");
+                    } else {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't send return value");
+                    }
+                } else {
+                    xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
+                }
+            }),
+            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
+                // empty test routine for now
+            }),
             Some(Opcode::UxGetPolicy) => {
                 policy_menu.activate();
             }

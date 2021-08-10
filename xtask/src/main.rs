@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "rtc",
         "susres",
         "codec",
-        "engine-sha512",
+        "sha2",
         "engine-25519",
         "spinor",
         "root-keys",

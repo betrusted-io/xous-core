@@ -12,6 +12,9 @@ pub(crate) enum Opcode {
     ReleaseExclusive,
     /// a special token is reserved for writing to the SoC region, only one service is allowed to do that
     RegisterSocToken,
+    /// the SocToken holder can allow for writes to the staging area by other processes
+    SetStagingWriteProtect,
+    ClearStagingWriteProtect,
     /// program a region. Erase is accomplished by calling WriteRegion with all 0xFF's as data.
     WriteRegion,
 

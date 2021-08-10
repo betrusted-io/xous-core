@@ -406,6 +406,15 @@ macro_rules! define_aes_impl {
             pub fn key_size(&self) -> usize {
                 $key_bits as usize
             }
+            pub fn clear(&mut self) {
+                for b in self.enc_key.iter_mut() {
+                    *b = 0;
+                }
+                for b in self.dec_key.iter_mut() {
+                    *b = 0;
+                }
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+            }
         }
 
         impl NewBlockCipher for $name {

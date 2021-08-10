@@ -1,6 +1,6 @@
 [package]
-name = "engine-sha512"
-version = "0.1.0"
+name = "sha2"
+version = "0.9.5"
 authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Sha512 hardware accelerator engine"

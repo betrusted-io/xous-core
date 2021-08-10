@@ -5,7 +5,6 @@ pub mod api;
 use api::*;
 
 pub mod key2bits;
-use key2bits::*;
 
 use xous::{CID, send_message, Message};
 use num_traits::*;
@@ -45,6 +44,12 @@ impl RootKeys {
     pub fn get_try_init_keys_op(&self) -> u32 {
         Opcode::UxTryInitKeys.to_u32().unwrap()
     }
+    pub fn get_update_gateware_op(&self) -> u32 {
+        Opcode::UxUpdateGateware.to_u32().unwrap()
+    }
+    pub fn get_try_selfsign_op(&self) -> u32 {
+        Opcode::UxSelfSignXous.to_u32().unwrap()
+    }
 
     /// this function causes the staging gateware to be provisioned with a copy of our keys,
     /// while being encrypted to the AES key indicated inside the KEYROM
@@ -73,12 +78,11 @@ impl RootKeys {
         unimplemented!();
     }
 
-    /// checks to see if the KEYROM entries are 0, and if so, generates keys. In the process of doing so, the user will be
-    /// prompted to enter passwords. It also automatically calls self_sign() -- presumably, if you were comfortable enough to
+    /// checks to see if the KEYROM has been initialized, and if not, generates keys. In the process of doing so, the user will be
+    /// prompted to enter passwords. It also automatically self-signs everything -- presumably, if you were comfortable enough to
     /// use this firmware to make your keys, you also trusted it.
     /// it will then update the bitstream with your keys.
-    /// if the KEYROM entries are not 0, it will abort without any user prompt, but with an error code.
-    pub fn try_init_keys(&mut self) -> Result<(), xous::Error> {
+    pub fn try_init_keys(&self) -> Result<(), xous::Error> {
         send_message(self.conn,
             Message::new_scalar(Opcode::UxTryInitKeys.to_usize().unwrap(),
             0, 0, 0, 0)
@@ -106,13 +110,33 @@ impl RootKeys {
     pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
         unimplemented!();
     }
-    /*
+
+    /// this will check the signature on the gateware.
+    /// returns None if no keys have been initialized
+    /// returns true if the gateware passes, false if it fails
+    pub fn check_gateware_signature(&self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::CheckGatewareSignature.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 2 { // uninit keys case
+                Ok(None)
+            } else if result == 1 { // passed
+                Ok(Some(true))
+            } else { // everything else -- fail
+                Ok(Some(false))
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
             Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
-    }*/
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

@@ -89,7 +89,6 @@ pub(crate) struct UxContext {
     pub audioframe_id: Option<u32>,
 }
 const MAX_UX_CONTEXTS: usize = 6;
-pub(crate) const MAX_CANVASES: usize = 32;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
@@ -610,7 +609,11 @@ fn xmain() -> ! {
     let mut canvases: HashMap<Gid, Canvas> = HashMap::new();
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
-    let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
+    let small_height: i16 = if xous::LANG != "zh" {
+        gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16
+    } else {
+        gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16
+    };
 
     // the status canvas is special -- there can only be one, and it is ultimately trusted
     let status_canvas = Canvas::new(

@@ -361,7 +361,15 @@ def main():
 //!   - entirely different FPGA target (in which case, the db/ files also need to be regenerated
 //!     (this is a long process if you're not targting a prjxray pre-build target))
 //!   - bug fixes and enhancements to these routines
+""".format(str(datetime.now())))
 
+        f.write("""
+pub const PATCH_FRAMES: [u32; {}] = [\n""".format(len(patchdata_sorted)))
+        for frame_rec in patchdata_sorted:
+            f.write("    0x{:x},\n".format(frame_rec[0]))
+        f.write("];\n")
+
+        f.write("""
 #[derive(Copy,Clone)]
 pub struct PatchBit {{
     adr: u8,
@@ -399,7 +407,7 @@ pub struct PatchFrame {{
 /// returns a tuple of the value and its inverse; this is done to reduce the timing
 /// sidechannel. The inverse value needs to be consumed to prevent the compiler
 /// from optimizing out that path.
-pub fn patch_frame(frame: u32, offset: u32, rom: &[u32; 256]) -> (Option<u32>, Option<u32>) {{\n""".format(str(datetime.now()), patchlen))
+pub fn patch_frame(frame: u32, offset: u32, rom: &[u32]) -> Option<(u32, u32)> {{\n""".format(patchlen))
 
         for frame_rec in patchdata_sorted:
             frame = frame_rec[1]
@@ -440,13 +448,13 @@ pub fn patch_frame(frame: u32, offset: u32, rom: &[u32; 256]) -> (Option<u32>, O
                             data_inv |= 1 << bit;
                         }
                     }
-                    return (Some(data), Some(data_inv))
+                    return Some((data, data_inv))
                 }
             }
         }
     }
 
-    return (None, None)
+    return None
 }
 """)
 
@@ -493,10 +501,10 @@ mod tests {
                         bitvalue = (keyrom[coord[0]] & (1 << coord[1]))
                         if bitvalue != 0:
                             wordvalue |= (1 << bit)
-                    f.write('        assert_eq!(crate::patch_frame({}'.format(frame_rec[0]) + ', ' + '{}'.format(word) + ', ROM), (Some(' + '0x{:08x}'.format(wordvalue) + '), Some(!0x{:08x}'.format(wordvalue) + ')));\n')
+                    f.write('        assert_eq!(crate::patch_frame({}'.format(frame_rec[0]) + ', ' + '{}'.format(word) + ', &ROM), (Some(' + '0x{:08x}'.format(wordvalue) + '), Some(!0x{:08x}'.format(wordvalue) + ')));\n')
 
         f.write('        // also test the null case, frame 0 should typically have no mappings.\n')
-        f.write('        assert_eq!(crate::patch_frame(0x0, 0, ROM), (None, None) );\n')
+        f.write('        assert_eq!(crate::patch_frame(0x0, 0, &ROM), (None, None) );\n')
         f.write("""
     }
 }

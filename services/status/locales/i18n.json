@@ -1,4 +1,34 @@
 {
+    "secnote.usb_unlock": {
+        "en": " USB unlocked",
+        "zh": "USB解锁",
+        "en-audio": "USB unlocked"
+    },
+    "secnote.gateware_fail": {
+        "en": " Gateware selfsig fail",
+        "zh": "比特流签名失败",
+        "en-audio": "Gateware self signature failure"
+    },
+    "secnote.state_fail": {
+        "en": " Invalid key state",
+        "zh": "无效的根密钥",
+        "en-audio": "Invalid key state"
+    },
+    "secnote.no_keys": {
+        "en": " Root keys uninitialized",
+        "zh": "密钥未初始化",
+        "en-audio": "Root keys unitialized"
+    },
+    "secnote.allclear": {
+        "en": " No security warnings",
+        "zh": "没有警告",
+        "en-audio": "🔇"
+    },
+    "secnote.startup": {
+        "en": " Starting up...",
+        "zh": "现在开始...",
+        "en-audio": "🔇"
+    },
     "mainmenu.sleep": {
         "en": "Sleep now",
         "zh": "睡眠模式",
@@ -18,6 +48,16 @@
         "en": "Initialize root keys",
         "zh": "设置根密码",
         "en-audio": "Initialize root keys"
+    },
+    "mainmenu.provision_gateware": {
+        "en": "Install gateware update",
+        "zh": "安装比特流更新",
+        "en-audio": "Install gateware update"
+    },
+    "mainmenu.selfsign": {
+        "en": "Sign Xous update",
+        "zh": "数字签名Xous",
+        "en-audio": "Sign Xous update"
     },
     "mainmenu.set_rtc": {
         "en": "Set time",
