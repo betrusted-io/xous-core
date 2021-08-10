@@ -1,6 +1,6 @@
 /////////////////////// UART TYPE
 #[allow(dead_code)]  // we actually use this constant, but clippy insists that we don't
-pub(crate) const BOOT_UART: u32 = UartType::Kernel as u32;
+pub(crate) const BOOT_UART: u32 = UartType::Log as u32;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Eq)]
 pub enum UartType {

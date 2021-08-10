@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "engine-25519",
         "spinor",
         "root-keys",
-        //"jtag",
+        "jtag",
     ];
     let benchmark_pkgs = [
         "benchmark",

@@ -97,7 +97,7 @@ mod engine;   use engine::*;
 mod console;  use console::*;
 mod memtest;  use memtest::*;
 mod keys;     use keys::*;
-//mod jtag_cmd; use jtag_cmd::*;
+mod jtag_cmd; use jtag_cmd::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -122,7 +122,7 @@ pub struct CmdEnv {
     engine_cmd: Engine,
     memtest_cmd: Memtest,
     keys_cmd: Keys,
-    //jtag_cmd: JtagCmd,
+    jtag_cmd: JtagCmd,
 
     //fcc_cmd: Fcc,
 }
@@ -174,7 +174,7 @@ impl CmdEnv {
             engine_cmd: engine,
             memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
-            //jtag_cmd: JtagCmd::new(&xns),
+            jtag_cmd: JtagCmd::new(&xns),
 
             //fcc_cmd: fcc,
         }
@@ -210,7 +210,7 @@ impl CmdEnv {
             &mut console_cmd,
             &mut self.memtest_cmd,
             &mut self.keys_cmd,
-            //&mut self.jtag_cmd,
+            &mut self.jtag_cmd,
 
             //&mut self.fcc_cmd,
         ];
