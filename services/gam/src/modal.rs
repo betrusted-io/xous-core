@@ -1268,7 +1268,7 @@ impl<'a> Modal<'a> {
         xous::create_thread_3(crate::forwarding_thread, addr, size, offset).expect("couldn't spawn a helper thread");
     }
 
-    pub fn redraw(&mut self) {
+    pub fn redraw(&self) {
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
         let do_redraw = self.top_dirty || self.bot_dirty;
@@ -1404,6 +1404,8 @@ impl<'a> Modal<'a> {
         };
 
         let style = if let Some(style) = update_style {
+            self.top_dirty = true;
+            self.bot_dirty = true;
             style
         } else {
             self.style
@@ -1460,7 +1462,6 @@ impl<'a, 'b> ProgressBar<'a, 'b> {
                 Some(crate::ActionType::Slider(*self.slider)),
                 None, false, None, false, None);
             self.modal.redraw(); // stage the modal box pixels to the back buffer
-            self.modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
             xous::yield_slice(); // this gives time for the GAM to do the sending
             self.current_progress_percent = new_percent;
         }

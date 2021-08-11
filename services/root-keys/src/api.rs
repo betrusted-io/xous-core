@@ -24,6 +24,7 @@ pub(crate) enum Opcode {
     UxGetPolicy,
     UxPolicyReturn,
     UxTryReboot,
+    UxDoReboot,
     /// provision a gateware update with our secret data
     UxUpdateGateware,
     /// self-sign kernel/loader

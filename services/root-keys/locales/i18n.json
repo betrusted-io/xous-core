@@ -75,9 +75,9 @@
         "en-audio": "Unplug the charging cable so I can reboot!"
     },
     "rootkeys.init.finished": {
-        "en": "Reboot in 5 seconds...\n\n\n",
+        "en": "Rebooting now...\n\n\n",
         "zh": "准备重启...\n\n",
-        "en-audio": "Reboot in 5 seconds."
+        "en-audio": "Rebooting now."
     },
     "rootkeys.init.fail_verify": {
         "en": "Verification failed,\naborting!",

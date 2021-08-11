@@ -485,15 +485,15 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    pub struct JtagMach {
+    pub struct JtagPhy {
     }
 
-    impl JtagMach {
-        pub fn new() -> JtagMach {
-            JtagMach {
+    impl JtagPhy {
+        pub fn new() -> JtagPhy {
+            JtagPhy {
             }
         }
-        fn sync(&mut self, tdi: bool, tms: bool) -> bool {
+        pub fn sync(&mut self, tdi: bool, tms: bool) -> bool {
             false
         }
     }
