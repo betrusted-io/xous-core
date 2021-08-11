@@ -401,6 +401,7 @@ pub(crate) struct RootKeys {
     spinor: spinor::Spinor,
     ticktimer: ticktimer_server::Ticktimer,
     xns: xous_names::XousNames,
+    jtag: jtag::Jtag,
 }
 
 impl<'a> RootKeys {
@@ -455,6 +456,7 @@ impl<'a> RootKeys {
 
         let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
         spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
+        let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to JTAG server");
 
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
@@ -477,6 +479,7 @@ impl<'a> RootKeys {
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             xns,
+            jtag,
         };
 
         keys
@@ -721,6 +724,13 @@ impl<'a> RootKeys {
     /// is used to report the progress of the initialization routine. We assume the `Slider` box is set
     /// up to report progress on a range of 0-100%.
     ///
+    /// IMPORTANT ASSUMPTION: It is assumed that all the progress messages in the translations do not
+    /// end up changing the size of the dialog box. This is because such changes in size would trigger
+    /// a redraw message that cannot be handled by the thread (because it's busy doing this), and
+    /// if enough of them get issued, eventually the thread deadlocks. If you are doing translations,
+    /// review your messages and add \n characters on shorter messages so that the overall height
+    /// of the dialog box remains constant throughout the operation!
+    ///
     /// This routine dispatches the following activities:
     /// - generate signing private key (encrypted with update password)
     /// - generate rootkey (encrypted with boot password)
@@ -756,7 +766,17 @@ impl<'a> RootKeys {
         rootkeys_modal.activate();
 
         xous::yield_slice(); // give some time to the GAM to render
-        // capture the progress bar elements in a convenience structure
+
+        // Capture the progress bar elements in a convenience structure.
+        // NOTE: This is documented in the structure itself, but, it's worth repeating here:
+        // this routine only works because we don't resize the rootkeys_modal box as we
+        // advance progress. This allows us to do a local-only redraw without triggering
+        // a global GAM redraw operation. If we were to resize the dialog box, this would
+        // trigger the defacing algorithm to send back "redraw" messages into the main
+        // loop's queue. However, because the main loop is currently stuck running the code
+        // in this routine, the "redraw" messages never get serviced (even if they are
+        // effectively NOPs), and eventually, these messages would fill up the queue and can cause
+        // the system to deadlock once the queue is full.
         let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
 
         // kick the progress bar to indicate we've entered the routine
@@ -944,10 +964,12 @@ impl<'a> RootKeys {
         self.spinor.set_staging_write_protect(false).expect("couldn't un-protect the staging area");
 
         // finalize the progress bar on exit -- always leave at 100%
-        pb.update_text(t!("rootkeys.init.finished", xous::LANG));
         pb.set_percentage(100);
 
-        self.ticktimer.sleep_ms(2000).expect("couldn't show final message");
+        self.ticktimer.sleep_ms(500).expect("couldn't show final message");
+
+        // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+        rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
         Ok(())
     }
@@ -962,59 +984,86 @@ impl<'a> RootKeys {
         }
     }
 
-    #[cfg(feature = "hazardous-debug")]
-    pub fn test(&mut self) -> bool {
-        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+    pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+        0, 100, 10, Some("%"), 0, true, true
+        );
+        progress_action.set_is_password(true);
+        // now show the init wait note...
+        rootkeys_modal.modify(
+            Some(ActionType::Slider(progress_action)),
+            Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+            None, true, None);
+        rootkeys_modal.activate();
 
-        // setup the local cache
-        for addr in 0..256 {
-            self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
-            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
-            log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
+        xous::yield_slice(); // give some time to the GAM to render
+        // capture the progress bar elements in a convenience structure
+        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+
+        // kick the progress bar to indicate we've entered the routine
+        for i in 1..100 {
+            pb.set_percentage(i);
+            self.ticktimer.sleep_ms(50).unwrap();
         }
+        self.ticktimer.sleep_ms(1000).unwrap();
+        // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+        rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
-        for (word, key) in self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
-        .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
-            for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
-                *d = s;
+        #[cfg(feature = "hazardous-debug")]
+        {
+            let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+
+            // setup the local cache
+            let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
+            for addr in 0..256 {
+                self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
+                self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
+                log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
+            }
+
+            for (word, key) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
+            .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
+                for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
+                    *d = s;
+                }
+            }
+            pcache.fpga_key_valid = 1;
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x30] = 0xc0de_600d;
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x31] = 0x1234_5678;
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x32] = 0x8000_0000;
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x33] = 0x5555_3333;
+
+            // one time only
+            /*
+            match self.make_gateware_backup(30, 50, progress_modal, progress_action) {
+                Err(e) => {
+                    log::error!("got spinor error: {:?}", e);
+                    panic!("got spinor error, halting");
+                }
+                _ => ()
+            };*/
+
+            // make the oracles
+            assert!(pcache.fpga_key_valid == 1);
+            // copy from staging
+            let src_oracle = BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()).unwrap();
+            // write to gateware
+            let dst_oracle = BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()).unwrap();
+
+            // TEST
+            if self.gateware_copy_and_patch(&src_oracle, &dst_oracle, None).is_err() {
+                log::error!("error occured in patch_keys.");
+                return false;
+            }
+
+            if self.verify_gateware(&dst_oracle, None).is_err() {
+                log::error!("error occurred in gateware verification");
+                return false;
             }
         }
-        pcache.fpga_key_valid = 1;
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] |= keyrom_config::INITIALIZED.ms(1);
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x30] = 0xc0de_600d;
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x31] = 0x1234_5678;
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x32] = 0x8000_0000;
-        self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[0x33] = 0x5555_3333;
 
-        // one time only
-        /*
-        match self.make_gateware_backup(30, 50, progress_modal, progress_action) {
-            Err(e) => {
-                log::error!("got spinor error: {:?}", e);
-                panic!("got spinor error, halting");
-            }
-            _ => ()
-        };*/
-
-        // make the oracles
-        assert!(pcache.fpga_key_valid == 1);
-        // copy from staging
-        let src_oracle = BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()).unwrap();
-        // write to gateware
-        let dst_oracle = BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()).unwrap();
-
-        // TEST
-        if self.gateware_copy_and_patch(&src_oracle, &dst_oracle, None).is_err() {
-            log::error!("error occured in patch_keys.");
-            return false;
-        }
-
-        if self.verify_gateware(&dst_oracle, None).is_err() {
-            log::error!("error occurred in gateware verification");
-            return false;
-        }
-
-        true
+        Ok(())
     }
 
     /// copy data from a source region to a destination region, re-encrypting and patching as we go along.

@@ -1,10 +1,14 @@
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+// #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[repr(C)]
 pub struct LogRecord {
-    pub file: xous_ipc::String<128>,
+    pub file_length: u32,
+    pub file: [u8; 128],
     pub line: Option<u32>,
-    pub module: xous_ipc::String<128>,
+    pub module_length: u32,
+    pub module: [u8; 128],
     pub level: u32,
-    pub args: xous_ipc::String<2800>,
+    pub args_length: u32,
+    pub args: [u8; 3000],
 }
 
 #[derive(Debug, PartialEq, num_derive::FromPrimitive, num_derive::ToPrimitive)]

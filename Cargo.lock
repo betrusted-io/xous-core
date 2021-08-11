@@ -861,6 +861,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "jtag"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "kernel-test"
 version = "0.1.0"
 dependencies = [
@@ -962,7 +979,6 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
  "utralib",
  "vergen",
  "xous",
@@ -1434,6 +1450,7 @@ dependencies = [
  "aes-xous",
  "blowfish",
  "cipher",
+ "com",
  "curve25519-dalek",
  "digest",
  "ed25519-dalek",
@@ -1441,6 +1458,8 @@ dependencies = [
  "gam",
  "graphics-server",
  "hex",
+ "jtag",
+ "llio",
  "locales",
  "log",
  "log-server",
@@ -1448,6 +1467,7 @@ dependencies = [
  "num-traits",
  "rand_core 0.5.1",
  "rkyv 0.4.3",
+ "rtc",
  "sha2",
  "spinor",
  "susres",
@@ -1590,6 +1610,7 @@ dependencies = [
  "hex",
  "ime-plugin-api",
  "ime-plugin-shell",
+ "jtag",
  "keyboard",
  "llio",
  "log",

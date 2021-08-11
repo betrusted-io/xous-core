@@ -432,6 +432,7 @@ impl ContextManager {
             }
             // run the defacement before we redraw all the canvases
             deface(gfx, &self.trng, canvases);
+            log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
         }
     }
@@ -448,6 +449,7 @@ impl ContextManager {
             for maybe_context in self.contexts.iter() {
                 if let Some(context) = maybe_context {
                     if token == context.app_token {
+                        log::trace!("redraw msg to {}, id {}", context.listener, context.redraw_id);
                         return xous::send_message(context.listener,
                             xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
                         ).map(|_| ())
@@ -716,6 +718,7 @@ fn xmain() -> ! {
                             // we keep this here because it's a fail-safe in case prior routines missed an edge case. shoot out a warning noting the issue.
                             log::warn!("canvases were not defaced in order. running a defacement, but this could result in drawing optimizations failing.");
                             // try to redraw the trusted foreground apps after a defacement
+                            log::trace!("deface redraw");
                             context_mgr.redraw().expect("couldn't redraw after defacement");
                         }
                         log::trace!("flushing...");
@@ -733,7 +736,7 @@ fn xmain() -> ! {
                 log::trace!("rendertextview {:?}", tv);
                 match tv.get_op() {
                     TextOp::Nop => (),
-                    TextOp::Render | TextOp::ComputeBounds => {
+                    TextOp::Render => {
                         if tv.invert & tv.token.is_some() {
                             // an inverted text can only be made by secure processes. check that it has a valid token.
                             if !context_mgr.is_token_valid(tv.token.unwrap()) {
@@ -743,11 +746,7 @@ fn xmain() -> ! {
                         }
 
                         log::trace!("render request for {:?}", tv);
-                        if tv.get_op() == TextOp::ComputeBounds {
-                            tv.set_dry_run(true);
-                        } else {
-                            tv.set_dry_run(false);
-                        }
+                        tv.set_dry_run(false);
 
                         if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
                             // if we're requesting inverted text, this better be a "trusted canvas"
@@ -758,12 +757,9 @@ fn xmain() -> ! {
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
-                            if canvas.is_drawable() || tv.dry_run() { // dry runs should not move any pixels so they are OK to go through in any case
+                            if canvas.is_drawable() { // dry runs should not move any pixels so they are OK to go through in any case
                                 // set the clip rectangle according to the canvas' location
-                                let mut base_clip_rect = canvas.clip_rect();
-                                if tv.dry_run() {
-                                    base_clip_rect.normalize();
-                                }
+                                let base_clip_rect = canvas.clip_rect();
                                 tv.clip_rect = Some(base_clip_rect.into());
 
                                 // you have to clone the tv object, because if you don't the same block of
@@ -774,17 +770,12 @@ fn xmain() -> ! {
                                 // issue the draw command
                                 gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
                                 // copy back the fields that we want to be mutable
-                                if tv.dry_run() {
-                                    log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
-                                }
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
 
                                 let ret = api::Return::RenderReturn(tv);
                                 buffer.replace(ret).unwrap();
-                                if !tv.dry_run() {
-                                    canvas.do_drawn().expect("couldn't set canvas to drawn");
-                                }
+                                canvas.do_drawn().expect("couldn't set canvas to drawn");
                             } else {
                                 log::debug!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
                                 let ret = api::Return::NotCurrentlyDrawable;
@@ -795,6 +786,34 @@ fn xmain() -> ! {
                             // silently fail if a bogus Gid is given???
                         }
                     },
+                    TextOp::ComputeBounds => {
+                        log::trace!("render request for {:?}", tv);
+                        tv.set_dry_run(true);
+
+                        if tv.clip_rect.is_none() {
+                            // fill in the clip rect from the canvas
+                            if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
+                                // set the clip rectangle according to the canvas' location
+                                let mut base_clip_rect = canvas.clip_rect();
+                                base_clip_rect.normalize();
+                                tv.clip_rect = Some(base_clip_rect.into());
+                            } else {
+                                info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
+                                // silently fail if a bogus Gid is given???
+                                continue;
+                            }
+                        }
+                        let mut tv_clone = tv.clone();
+                        // issue the draw command
+                        gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
+                        // copy back the fields that we want to be mutable
+                        log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
+                        tv.cursor = tv_clone.cursor;
+                        tv.bounds_computed = tv_clone.bounds_computed;
+
+                        let ret = api::Return::RenderReturn(tv);
+                        buffer.replace(ret).unwrap();
+                    }
                 };
             }
             Some(Opcode::SetCanvasBounds) => {
@@ -811,6 +830,7 @@ fn xmain() -> ! {
                     // recompute the canvas orders based on the new layout
                     let recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
                     canvases = recomp_canvases;
+                    log::trace!("canvas bounds redraw");
                     context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
                 cb.granted = granted;

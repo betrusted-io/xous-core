@@ -83,6 +83,9 @@ impl Gam {
     /// the actual screen update is allowed
     pub fn post_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
         tv.set_op(TextOp::Render);
+        // force the clip_rect to none, in case a stale value from a previous bounds computation was hanging out
+        // the bounds should /always/ come from the GAM canvas when doing a "live fire" redraw
+        tv.clip_rect = None;
         let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;
         buf.lend_mut(self.conn, Opcode::RenderTextView.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
 
@@ -99,6 +102,9 @@ impl Gam {
         tv.set_op(TextOp::Nop);
         Ok(())
     }
+    /// Bounds computation does no checks on security since it's a non-drawing operation. While normal drawing always
+    /// takes the bounds from the canvas, the caller can specify a clip_rect in this tv, instead of drawing the
+    /// clip_rect from the Canvas associated with the tv.
     pub fn bounds_compute_textview(&self, tv: &mut TextView) -> Result<(), xous::Error> {
         tv.set_op(TextOp::ComputeBounds);
         let mut buf = Buffer::into_buf(tv.clone()).or(Err(xous::Error::InternalError))?;

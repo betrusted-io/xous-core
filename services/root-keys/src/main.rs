@@ -33,14 +33,23 @@ mod implementation {
     use gam::{ActionType, ProgressBar};
     use num_traits::*;
 
+    #[allow(dead_code)]
     pub struct RootKeys {
         password_type: Option<PasswordType>,
+        jtag: jtag::Jtag,
+        xns: xous_names::XousNames,
     }
 
+    #[allow(dead_code)]
     impl RootKeys {
         pub fn new() -> RootKeys {
+            let xns = xous_names::XousNames::new().unwrap();
+            let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to jtag server");
             RootKeys {
                 password_type: None,
+                xns,
+                // must occupy tihs connection for the system to boot properly
+                jtag,
             }
         }
         pub fn suspend(&self) {
@@ -88,6 +97,9 @@ mod implementation {
         pub fn verify_gateware_self_signature(&mut self) -> bool {
             true
         }
+        pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            Ok(())
+        }
     }
 }
 
@@ -113,6 +125,12 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new();
+
+    // create the servers necessary to coordinate an auto-reboot sequence...
+    let llio = llio::Llio::new(&xns).unwrap();
+    let rtc = rtc::Rtc::new(&xns).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let com = com::Com::new(&xns).unwrap();
 
     log::trace!("ready to accept requests");
 
@@ -173,9 +191,10 @@ fn xmain() -> ! {
         Opcode::ModalDrop.to_u32().unwrap(),
     );
 
+    let mut reboot_initiated = false;
     loop {
         let msg = xous::receive_message(keys_sid).unwrap();
-        log::trace!("message: {:?}", msg);
+        log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 keys.suspend();
@@ -193,8 +212,15 @@ fn xmain() -> ! {
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
                 if false { // short-circuit for testing subroutines
-                    #[cfg(feature = "hazardous-debug")]
-                    let _success = keys.test();
+                    let _success = keys.test(&mut rootkeys_modal, main_cid);
+
+                    keys.finish_key_init();
+                    log::info!("going to into reboot arc");
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate dialog box");
+
+                    continue;
                 } else {
                     // overall flow:
                     //  - setup the init
@@ -309,15 +335,17 @@ fn xmain() -> ! {
                             // this routine will update the rootkeys_modal with the current Ux state
                             let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
 
-                            // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
-                            rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+                            log::info!("set_ux_password result: {:?}", result);
 
-                            // at this point, we may want to pop up a modal indicating we are going to reboot?
-                            // we also need to include a command that does the reboot.
+                            // clear all the state, re-enable suspend/resume
+                            keys.finish_key_init();
+
                             match result {
                                 Ok(_) => {
-                                    keys.finish_key_init();
-                                    // TODO: need to insert the reboot command here
+                                    log::info!("going to into reboot arc");
+                                    send_message(main_cid,
+                                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("couldn't initiate dialog box");
                                 }
                                 Err(RootkeyResult::AlignmentError) => {
                                     dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
@@ -356,15 +384,71 @@ fn xmain() -> ! {
                                     xous::yield_slice();
                                 }
                             }
-
-                            // clear all the state, re-enable suspend/resume
-                            keys.finish_key_init();
                         }
                     }
                 } else {
                     log::error!("invalid UX state -- someone called init password return, but no password type was set!");
                 }
             },
+            Some(Opcode::UxTryReboot) => {
+                log::info!("entering reboot handler");
+                // ensure the boost is off so that the reboot will not fail
+                com.set_boost(false).unwrap();
+                llio.boost_on(false).unwrap();
+                ticktimer.sleep_ms(50).unwrap(); // give some time for the voltage to move
+
+                let vbus = (llio.adc_vbus().unwrap() as f64) * 0.005033;
+                log::info!("Vbus is: {:.3}V", vbus);
+                if vbus > 1.5 {
+                    // if power is plugged in, request that it be removed
+                    dismiss_modal_action.set_action_opcode(Opcode::UxTryReboot.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.init.unplug_power", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+
+                    log::info!("vbus is high, holding off on reboot");
+                } else {
+                    log::info!("initiating reboot");
+                    dismiss_modal_action.set_action_opcode(Opcode::UxTryReboot.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.init.finished", xous::LANG)), false,
+                        None, false, None);
+                    log::info!("calling activate");
+                    rootkeys_modal.activate();
+                    xous::yield_slice(); // these are necessary to get the messages in place to do a full redraw before the reboot happens
+                    rootkeys_modal.redraw();
+                    xous::yield_slice();
+                    log::info!("going to reboot state");
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxDoReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate dialog box");
+                }
+            }
+            Some(Opcode::UxDoReboot) => {
+                ticktimer.sleep_ms(1500).unwrap();
+                if !reboot_initiated {
+                    // set a wakeup alarm a couple seconds from now -- this is the coldboot
+                    rtc.set_wakeup_alarm(3).unwrap();
+
+                    // allow EC to snoop, so that it can wake up the system
+                    llio.allow_ec_snoop(true).unwrap();
+                    // allow the EC to power me down
+                    llio.allow_power_off(true).unwrap();
+                    // now send the power off command
+                    com.power_off_soc().unwrap(); // not that at this point, the screen freezes with the last thing displayed...
+
+                    log::info!("rebooting now!");
+                    reboot_initiated = true;
+                }
+
+                // refresh the message if it goes away
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate dialog box");
+            }
             Some(Opcode::UxUpdateGateware) => {
                 unimplemented!();
             },
