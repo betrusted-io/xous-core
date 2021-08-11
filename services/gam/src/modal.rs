@@ -425,9 +425,6 @@ impl RadioButtons {
         }
         return Some(new_item);
     }
-    fn is_password(&self) -> bool {
-        self.is_password
-    }
 }
 impl ActionApi for RadioButtons {
     fn set_action_opcode(&mut self, op: u32) {self.action_opcode = op}
@@ -1097,14 +1094,6 @@ pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
 fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
     // we need to set a "max" size to our modal box, so that the text computations don't fail later on
     let current_bounds = modal.gam.get_canvas_bounds(modal.canvas).expect("couldn't get current bounds");
-    let mut new_bounds = SetCanvasBoundsRequest {
-        requested: Point::new(current_bounds.x, crate::api::MODAL_Y_MAX),
-        granted: None,
-        token_type: TokenType::App,
-        token: modal.authtoken,
-    };
-    log::debug!("applying recomputed bounds of {:?}", new_bounds);
-    modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
 
     // method:
     //   - we assume the GAM gives us an initial modal with a "maximum" height setting
@@ -1128,6 +1117,9 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
         top_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
         top_tv.ellipsis = false;
         top_tv.invert = modal.inverted;
+        // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
+        // bounds are used, and the operation will fail if the text has to get bigger.
+        top_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), Point::new(current_bounds.x, crate::api::MODAL_Y_MAX)));
         write!(top_tv.text, "{}", top_str).unwrap();
 
         log::trace!("posting top tv: {:?}", top_tv);
@@ -1160,6 +1152,9 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
         bot_tv.margin = Point::new(0, 0,); // all margin already accounted for in the raw bounds of the text drawing
         bot_tv.ellipsis = false;
         bot_tv.invert = modal.inverted;
+        // specify a clip rect that's the biggest possible allowed. If we don't do this, the current canvas
+        // bounds are used, and the operation will fail if the text has to get bigger.
+        bot_tv.clip_rect = Some(Rectangle::new(Point::new(0, 0), Point::new(current_bounds.x, crate::api::MODAL_Y_MAX)));
         write!(bot_tv.text, "{}", bot_str).unwrap();
 
         log::trace!("posting bot tv: {:?}", bot_tv);
@@ -1182,8 +1177,12 @@ fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str
         token_type: TokenType::App,
         token: modal.authtoken,
     };
-    log::debug!("applying recomputed bounds of {:?}", new_bounds);
-    modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+    // don't send the request if there is no change in the size of things. This is because the request is expensive -- it will
+    // result in a redraw of everything, plus defacement, etc.
+    if new_bounds.requested != current_bounds {
+        log::debug!("applying recomputed bounds of {:?}", new_bounds);
+        modal.gam.set_canvas_bounds_request(&mut new_bounds).expect("couldn't call set bounds");
+    }
 }
 
 impl<'a> Modal<'a> {
@@ -1407,6 +1406,8 @@ impl<'a> Modal<'a> {
         };
 
         let style = if let Some(style) = update_style {
+            self.top_dirty = true;
+            self.bot_dirty = true;
             style
         } else {
             self.style
@@ -1455,6 +1456,15 @@ impl<'a, 'b> ProgressBar<'a, 'b> {
     pub fn update_text(&mut self, text: &str) {
         self.modal.modify(None, Some(text), false, None, false, None);
     }
+    /// There is a significant caveat for performance/stability for this routine.
+    /// This works well for a modal that is both managed and owned by the same thread so long as
+    /// one is not resizing the top or bottom text within the modal while changing the progress bar
+    /// However, if one triggers a redraw/resize of the text, then the system needs to re-run the
+    /// defacement computations on the underlying canvases. If one or two calls happen, this might
+    /// not be a big deal, but because the redraw requests that are looped back from the GAM as a
+    /// result of the defacement operation cannot be processed until the thread managing the progress
+    /// bar has finished and returned control to the main loop, redraw requests will eventually fill
+    /// up the server queue and cause a deadlock situation.
     fn update_ui(&mut self, new_percent: u32) {
         if new_percent != self.current_progress_percent {
             log::debug!("progress: {}", new_percent);
@@ -1463,7 +1473,6 @@ impl<'a, 'b> ProgressBar<'a, 'b> {
                 Some(crate::ActionType::Slider(*self.slider)),
                 None, false, None, false, None);
             self.modal.redraw(); // stage the modal box pixels to the back buffer
-            self.modal.gam.redraw().expect("couldn't cause back buffer to be sent to the screen");
             xous::yield_slice(); // this gives time for the GAM to do the sending
             self.current_progress_percent = new_percent;
         }

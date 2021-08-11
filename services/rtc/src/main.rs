@@ -582,7 +582,8 @@ fn xmain() -> ! {
     // - shellchat/rtc
     // - shellchat/sleep x2
     // - UX thread (self, created without xns, so does not count)
-    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(4)).expect("can't register server");
+    // - rootkeys (for coordinating reboot)
+    let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(5)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", rtc_sid);
     CB_TO_MAIN_CONN.store(xous::connect(rtc_sid).unwrap(), Ordering::Relaxed);
 

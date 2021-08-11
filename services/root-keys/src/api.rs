@@ -23,6 +23,8 @@ pub(crate) enum Opcode {
     UxGutter, // NOP for UX calls that require a destination
     UxGetPolicy,
     UxPolicyReturn,
+    UxTryReboot,
+    UxDoReboot,
     /// provision a gateware update with our secret data
     UxUpdateGateware,
     /// self-sign kernel/loader
