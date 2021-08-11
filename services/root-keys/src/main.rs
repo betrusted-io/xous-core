@@ -100,6 +100,8 @@ mod implementation {
         pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
             Ok(())
         }
+        pub fn is_jtag_working(&self) -> bool {false}
+        pub fn is_efuse_secured(&self) -> Option<bool> {None}
     }
 }
 
@@ -203,6 +205,24 @@ fn xmain() -> ! {
             }),
             Some(Opcode::KeysInitialized) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::IsEfuseSecured) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if let Some(secured) = keys.is_efuse_secured() {
+                    if secured {
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                    } else {
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    }
+                } else {
+                    xous::return_scalar(msg.sender, 2).unwrap();
+                }
+            }),
+            Some(Opcode::IsJtagWorking) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_jtag_working() {
                     xous::return_scalar(msg.sender, 1).unwrap();
                 } else {
                     xous::return_scalar(msg.sender, 0).unwrap();

@@ -131,6 +131,37 @@ impl RootKeys {
         }
     }
 
+    pub fn is_efuse_secured(&self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsEfuseSecured.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 2 {
+                Ok(None)
+            } else if result == 1 {
+                Ok(Some(true))
+            } else {
+                Ok(Some(false))
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn is_jtag_working(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsJtagWorking.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn test_ux(&mut self, arg: usize) {
         send_message(self.conn,
             Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),

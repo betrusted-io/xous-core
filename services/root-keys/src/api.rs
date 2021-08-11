@@ -11,6 +11,10 @@ pub(crate) enum Opcode {
     KeysInitialized,
     /// check that the digital signature on the gateware
     CheckGatewareSignature,
+    /// check if the efuse has been locked down
+    IsEfuseSecured,
+    /// quick check to see if the JTAG can read its IDCODE
+    IsJtagWorking,
 
     TestUx,
 

@@ -501,6 +501,31 @@ impl<'a> RootKeys {
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
 
+    /// returns None if there is an obvious problem with the JTAG interface
+    /// otherwise returns the result. "secured" would be the most paranoid setting
+    /// which is all the bits burned. There are other combinations that are also
+    /// totally valid based on your usage scenario, however, but the have yet to
+    /// be implemented (see the JTAG crate for more info); however, we reflect
+    /// all of the calls through rootkeys so we aren't exposing JTAG attack surface
+    /// to the rest of the world.
+    pub fn is_efuse_secured(&self) -> Option<bool> {
+        if self.jtag.get_id().unwrap() != jtag::XCS750_IDCODE {
+            return None;
+        }
+        if (self.jtag.get_raw_control_bits().expect("couldn't get control bits") & 0x3f) != 0x3F {
+            return Some(false)
+        } else {
+            return Some(true)
+        }
+    }
+    pub fn is_jtag_working(&self) -> bool {
+        if self.jtag.get_id().unwrap() == jtag::XCS750_IDCODE {
+            true
+        } else {
+            false
+        }
+    }
+
     fn xns_interlock(&self) {
         loop {
             if self.xns.trusted_init_done().expect("couldn't query init done status") {
