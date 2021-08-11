@@ -724,6 +724,13 @@ impl<'a> RootKeys {
     /// is used to report the progress of the initialization routine. We assume the `Slider` box is set
     /// up to report progress on a range of 0-100%.
     ///
+    /// IMPORTANT ASSUMPTION: It is assumed that all the progress messages in the translations do not
+    /// end up changing the size of the dialog box. This is because such changes in size would trigger
+    /// a redraw message that cannot be handled by the thread (because it's busy doing this), and
+    /// if enough of them get issued, eventually the thread deadlocks. If you are doing translations,
+    /// review your messages and add \n characters on shorter messages so that the overall height
+    /// of the dialog box remains constant throughout the operation!
+    ///
     /// This routine dispatches the following activities:
     /// - generate signing private key (encrypted with update password)
     /// - generate rootkey (encrypted with boot password)

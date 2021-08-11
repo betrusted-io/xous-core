@@ -39,6 +39,11 @@
         "zh": "现在正在初始化\n可能还要等一下\n不要重置或睡眠!\n",
         "en-audio": "Initializing keys. This may take a while, don't reset or sleep the device."
     },
+    "rootkeys.init.note_to_translator": {
+        "en": "It is important that every message in the `rootkeys.init` series have the same number of lines. Insert dummy \n characters if you require multi-line translations! Failure to do so can lead to a deadlock situation (read the code for more notes).",
+        "zh": "`rootkeys.init` 系列中的每条消息都具有相同的行数，这一点很重要。 如果您需要多行翻译，请插入虚拟 \n 字符！",
+        "en-audio": "It is important that every message in the `rootkeys.init` series have the same number of lines. Insert dummy \n characters if you require multi-line translations!"
+    },
     "rootkeys.init.signing_loader": {
         "en": "Signing loader.\nThis takes a few minutes.\nDo not reset or sleep!",
         "zh": "签名引导程序\n可能还要等一下\n不要重置或睡眠!\n",
