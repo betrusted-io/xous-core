@@ -9,7 +9,6 @@ version = "0.1.0"
 log = "0.4"
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
-rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 

@@ -2,9 +2,10 @@
 use core::fmt::Write;
 use core::sync::atomic::{AtomicBool, Ordering};
 use num_traits::ToPrimitive;
-use xous_ipc::{Buffer, String};
+use xous_ipc::Buffer;
 
 pub mod api;
+mod cursor;
 
 #[derive(Debug)]
 pub enum LogError {
@@ -20,12 +21,7 @@ struct XousLogger {
     locked: AtomicBool,
 }
 
-// static mut XOUS_LOGGER_BACKING: XousLoggerBacking = XousLoggerBacking {
-//     conn: 0,
-//     initialized: false,
-//     buffer: None,
-// };
-
+const BUFFER_SIZE: usize = 4096;
 static mut XOUS_LOGGER_BACKING: Option<XousLoggerBacking> = None;
 
 struct XousLoggerBacking<'a> {
@@ -37,8 +33,7 @@ impl<'a> XousLoggerBacking<'a> {
     pub fn new() -> Result<Self, xous::Error> {
         Ok(XousLoggerBacking {
             conn: xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap())?,
-            // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
-            buffer: Buffer::new(4000),
+            buffer: Buffer::new(BUFFER_SIZE),
         })
     }
 }
@@ -47,25 +42,37 @@ impl Default for XousLoggerBacking<'_> {
     fn default() -> Self {
         XousLoggerBacking {
             conn: xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap(),
-            // why 4000? tests non-power of 2 sizes in rkyv APIs. Could make it 4096 as well...
-            buffer: Buffer::new(4000),
+            buffer: Buffer::new(BUFFER_SIZE),
         }
     }
 }
 
 impl XousLoggerBacking<'_> {
     fn log_impl(&mut self, record: &log::Record) {
-        let mut args = String::<2800>::new();
-        write!(args, "{}", record.args()).unwrap();
-        let lr = api::LogRecord {
-            file: String::from_str(record.file().unwrap_or("")),
-            line: record.line(),
-            module: String::from_str(record.module_path().unwrap_or("")),
-            level: record.level() as u32,
-            args,
-        };
+        {
+            assert!(core::mem::size_of::<api::LogRecord>() < BUFFER_SIZE);
+            let log_record = unsafe { &mut *(self.buffer.as_mut_ptr() as *mut api::LogRecord) };
 
-        self.buffer.rewrite(lr).unwrap();
+            log_record.line = record.line();
+            log_record.level = record.level() as u32;
+
+            let file = record.file().unwrap_or_default().as_bytes();
+            log_record.file_length = file.len() as u32;
+            for (dest, src) in log_record.file.iter_mut().zip(file) {
+                *dest = *src;
+            }
+
+            let module = record.module_path().unwrap_or_default().as_bytes();
+            log_record.module_length = module.len() as u32;
+            for (dest, src) in log_record.module.iter_mut().zip(module) {
+                *dest = *src;
+            }
+
+            let mut wrapper = cursor::BufferWrapper::new(&mut log_record.args);
+            write!(wrapper, "{}", record.args()).unwrap();
+            log_record.args_length = wrapper.len() as u32;
+        }
+
         self.buffer
             .lend(self.conn, crate::api::Opcode::LogRecord.to_u32().unwrap())
             .unwrap();
