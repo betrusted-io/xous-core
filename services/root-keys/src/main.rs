@@ -97,6 +97,9 @@ mod implementation {
         pub fn verify_gateware_self_signature(&mut self) -> bool {
             true
         }
+        pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            Ok(())
+        }
     }
 }
 
@@ -106,7 +109,7 @@ fn xmain() -> ! {
     use crate::implementation::RootKeys;
 
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Debug);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -208,7 +211,7 @@ fn xmain() -> ! {
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
-                if true { // short-circuit for testing subroutines
+                if false { // short-circuit for testing subroutines
                     let _success = keys.test(&mut rootkeys_modal, main_cid);
 
                     keys.finish_key_init();

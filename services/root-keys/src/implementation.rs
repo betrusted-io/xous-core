@@ -752,7 +752,17 @@ impl<'a> RootKeys {
         rootkeys_modal.activate();
 
         xous::yield_slice(); // give some time to the GAM to render
-        // capture the progress bar elements in a convenience structure
+
+        // Capture the progress bar elements in a convenience structure.
+        // NOTE: This is documented in the structure itself, but, it's worth repeating here:
+        // this routine only works because we don't resize the rootkeys_modal box as we
+        // advance progress. This allows us to do a local-only redraw without triggering
+        // a global GAM redraw operation. If we were to resize the dialog box, this would
+        // trigger the defacing algorithm to send back "redraw" messages into the main
+        // loop's queue. However, because the main loop is currently stuck running the code
+        // in this routine, the "redraw" messages never get serviced (even if they are
+        // effectively NOPs), and eventually, these messages would fill up the queue and can cause
+        // the system to deadlock once the queue is full.
         let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
 
         // kick the progress bar to indicate we've entered the routine
