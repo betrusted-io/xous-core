@@ -22,6 +22,8 @@ use core::cell::RefCell;
 use aes_xous::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
+use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
+
 use root_keys::key2bits::*;
 
 // TODO: add hardware acceleration for BCRYPT so we can hit the OWASP target without excessive UX delay
@@ -31,7 +33,12 @@ const BCRYPT_COST: u32 = 7;   // 10 is the minimum recommended by OWASP; takes 5
 /// increment that can be erased.
 const SIGBLOCK_SIZE: u32 = 0x1000;
 /// location of the csr.csv that's appended on gateware images, used for USB updates.
-const CSR_CSV_OFFSET: usize = 0x27_8000;
+const METADATA_OFFSET: usize = 0x27_6000;
+#[allow(dead_code)]
+/// location of the csr.csv that's appended on gateware images, used for USB updates.
+const CSR_CSV_OFFSET: usize  = 0x27_7000;
+/// offset of the gateware self-signature area
+const SELFSIG_OFFSET: usize  = 0x27_F000;
 
 #[repr(C)]
 struct SignatureInFlash {
@@ -441,18 +448,25 @@ impl<'a> RootKeys {
             xous::MemoryFlags::R,
         ).expect("couldn't map in the kernel region");
 
-        let sensitive_data = xous::syscall::map_memory(
+        let mut sensitive_data = xous::syscall::map_memory(
             None,
             None,
             0x1000,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
-        let pass_cache = xous::syscall::map_memory(
+        let mut pass_cache = xous::syscall::map_memory(
             None,
             None,
             0x1000,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
         ).expect("couldn't map sensitive data page");
+        // make sure the caches start out as zeros
+        for w in pass_cache.as_slice_mut::<u32>().iter_mut() {
+            *w = 0;
+        }
+        for w in sensitive_data.as_slice_mut::<u32>().iter_mut() {
+            *w = 0;
+        }
 
         let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
         spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
@@ -721,6 +735,15 @@ impl<'a> RootKeys {
             true
         } else {
             false
+        }
+    }
+
+    pub fn is_pcache_update_password_valid(&self) -> bool {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_update_pw_valid == 0 {
+            false
+        } else {
+            true
         }
     }
 
@@ -1596,35 +1619,20 @@ impl<'a> RootKeys {
     }
 
     pub fn sign_gateware(&self, signing_key: &Keypair) -> (Signature, u32) {
-        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
         let gateware_region = self.gateware();
 
-        // sign everything except a hole just big enough to fit the digital signature record
-        let mut bytes_hashed = CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>();
-        hasher.update(&gateware_region[..bytes_hashed]);
-        bytes_hashed += gateware_region.len() - CSR_CSV_OFFSET;
-        hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
-
-        // note that we use the *prehash* version here, this produces a different signature than a straightforward ed25519 sign
-        (signing_key.sign_prehashed(hasher, None).expect("couldn't sign the gateware"), bytes_hashed as u32)
+        (signing_key.sign(&gateware_region[..SELFSIG_OFFSET]), SELFSIG_OFFSET as u32)
     }
 
+    /// This is a fast check on the gateware meant to be called on boot just to confirm that we're using a self-signed gateware
     pub fn verify_gateware_self_signature(&mut self) -> bool {
         log::info!("verifying gateware self signature");
         // read the public key directly out of the keyrom
         let pubkey = PublicKey::from_bytes(&self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)).expect("public key was not valid");
-
-        let mut hasher = Sha512::new_with_strategy(FallbackStrategy::WaitForHardware);
         let gateware_region = self.gateware();
 
-        // verify everything except a hole just big enough to fit the digital signature record
-        log::debug!("hashing gateware");
-        hasher.update(&gateware_region[..CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()]);
-        hasher.update(&gateware_region[CSR_CSV_OFFSET..]);
-        log::debug!("hash done");
-
         let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
-        for (&src, dst) in gateware_region[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET].iter()
+        for (&src, dst) in gateware_region[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()].iter()
         .zip(sig_region.iter_mut()) {
             *dst = src;
         }
@@ -1635,7 +1643,7 @@ impl<'a> RootKeys {
         log::debug!("pubkey: {:x?}", pubkey.to_bytes());
 
         // note that we use the *prehash* version here, this has a different signature than a straightforward ed25519
-        match pubkey.verify_prehashed(hasher, None, &sig) {
+        match pubkey.verify_strict(&gateware_region[..SELFSIG_OFFSET], &sig) {
             Ok(_) => {
                 log::info!("gateware verified!");
                 true
@@ -1645,6 +1653,87 @@ impl<'a> RootKeys {
                 false
             }
         }
+    }
+
+    /// This function does a comprehensive check of all the possible signature types in a specified gateware region
+    pub fn check_gateware_signature(&mut self, region_enum: GatewareRegion) -> SignatureResult {
+        let mut sig_region: [u8; core::mem::size_of::<SignatureInFlash>()] = [0; core::mem::size_of::<SignatureInFlash>()];
+        {
+            let region = match region_enum {
+                GatewareRegion::Boot => self.gateware(),
+                GatewareRegion::Staging => self.staging(),
+            };
+            for (&src, dst) in region[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()].iter()
+            .zip(sig_region.iter_mut()) {
+                *dst = src;
+            }
+        }
+        let sig_rec: &SignatureInFlash = unsafe{(sig_region.as_ptr() as *const SignatureInFlash).as_ref().unwrap()};
+        let sig = Signature::new(sig_rec.signature);
+
+        let mut sigtype = SignatureResult::SelfSignOk;
+        // check against all the known signature types in detail
+        loop {
+            let pubkey_bytes = match sigtype {
+                SignatureResult::SelfSignOk => {
+                    self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY)
+                },
+                SignatureResult::ThirdPartyOk => {
+                    self.read_key_256(KeyRomLocs::THIRDPARTY_PUBKEY)
+                },
+                SignatureResult::DevKeyOk => {
+                    self.read_key_256(KeyRomLocs::DEVELOPER_PUBKEY)
+                },
+                _ => {
+                    panic!("Invalid state during check gateware signature")
+                }
+            };
+            // check for uninitialized signature records
+            let mut all_zero = true;
+            for &b in pubkey_bytes.iter() {
+                if b != 0 {
+                    all_zero = false;
+                    break;
+                }
+            }
+            if all_zero {
+                match sigtype {
+                    SignatureResult::SelfSignOk => sigtype = SignatureResult::ThirdPartyOk,
+                    SignatureResult::ThirdPartyOk => sigtype = SignatureResult::DevKeyOk,
+                    _ => return SignatureResult::Invalid
+                }
+                continue;
+            }
+            let pubkey = PublicKey::from_bytes(&pubkey_bytes).expect("public key was not valid");
+
+            let region = match region_enum {
+                GatewareRegion::Boot => self.gateware(),
+                GatewareRegion::Staging => self.staging(),
+            };
+            match pubkey.verify_strict(&region[..SELFSIG_OFFSET], &sig) {
+                Ok(_) => break,
+                Err(_e) => {
+                    match sigtype {
+                        SignatureResult::SelfSignOk => sigtype = SignatureResult::ThirdPartyOk,
+                        SignatureResult::ThirdPartyOk => sigtype = SignatureResult::DevKeyOk,
+                        _ => return SignatureResult::Invalid
+                    }
+                    continue;
+                }
+            }
+        }
+        sigtype
+    }
+
+    pub fn fetch_gw_metadata(&self, region_enum: GatewareRegion) -> MetadataInFlash {
+        let region = match region_enum {
+            GatewareRegion::Boot => self.gateware(),
+            GatewareRegion::Staging => self.staging(),
+        };
+        let md_ptr: *const MetadataInFlash =
+            (&region[METADATA_OFFSET..METADATA_OFFSET + core::mem::size_of::<MetadataInFlash>()]).as_ptr() as *const MetadataInFlash;
+
+        unsafe{*md_ptr}.clone()
     }
 
     pub fn commit_signature(&self, sig: Signature, len: u32, sig_type: SignatureType) -> Result<(), RootkeyResult> {
@@ -1672,10 +1761,10 @@ impl<'a> RootKeys {
                 log::info!("kernel sig area after: {:x?}", &(self.kernel()[..0x80]));
             }
             SignatureType::Gateware => {
-                log::info!("gateware sig area before: {:x?}", &(self.gateware()[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET]));
-                self.spinor.patch(self.gateware(), self.gateware_base(), &sig_region, (CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()) as u32)
+                log::info!("gateware sig area before: {:x?}", &(self.gateware()[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()]));
+                self.spinor.patch(self.gateware(), self.gateware_base(), &sig_region, (SELFSIG_OFFSET) as u32)
                     .map_err(|_| RootkeyResult::FlashError)?;
-                log::info!("gateware sig area after: {:x?}", &(self.gateware()[CSR_CSV_OFFSET - core::mem::size_of::<SignatureInFlash>()..CSR_CSV_OFFSET]));
+                log::info!("gateware sig area after: {:x?}", &(self.gateware()[SELFSIG_OFFSET..SELFSIG_OFFSET + core::mem::size_of::<SignatureInFlash>()]));
             }
         }
         Ok(())

@@ -12,6 +12,8 @@ use gam::modal::*;
 use gam::menu::*;
 
 use locales::t;
+use std::format;
+use std::str;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation;
@@ -20,6 +22,54 @@ use implementation::*;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod bcrypt;
+
+pub enum SignatureResult {
+    SelfSignOk,
+    ThirdPartyOk,
+    DevKeyOk,
+    Invalid,
+}
+#[allow(dead_code)]
+pub enum GatewareRegion {
+    Boot,
+    Staging,
+}
+
+
+/// An "easily" parseable metadata structure in flash. There's nothing that guarantees the authenticity
+/// of the metadata in and of itself, other than the digital signature that wraps the entire gateware record.
+/// Thus we're relying on the person who signs the gateware to not inject false data here.
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct MetadataInFlash {
+    pub magic: u32,  // 0x6174656d 'atem'
+    pub version: u32,
+    /// git data, but formatted as binary integers
+    pub git_additional: u32, // commits beyond the tag
+    pub git_rev: u32,
+    pub git_min: u32,
+    pub git_maj: u32,
+    pub git_commit: u32,
+    /// md5sum of the dummy-encrypted source file; not meant to be secure, just for human-ID purposes
+    pub bin_checksum: [u8; 16],
+    /// md5sum of 'betrusted_soc.py'
+    pub src_checksum: [u8; 16],
+    /// date as free-form string (for human readable purposes)
+    pub date_len: u32,
+    pub date_str: [u8; 64],
+    /// the host on which the image was built
+    pub host_len: u32,
+    pub host_str: [u8; 64],
+    /// git tag info as a free-form string
+    pub tag_len: u32,
+    pub tag_str: [u8; 64],
+    /// git log info of the last commit, as a free-form string.
+    pub log_len: u32,
+    pub log_str: [u8; 512],
+    /// status of the build tree, as a free-form string.
+    pub status_len: u32,
+    pub status_str: [u8; 1024],
+}
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -32,6 +82,7 @@ mod implementation {
     use crate::api::*;
     use gam::{ActionType, ProgressBar};
     use num_traits::*;
+    use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
 
     #[allow(dead_code)]
     pub struct RootKeys {
@@ -66,7 +117,7 @@ mod implementation {
         pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
             self.password_type = cur_type;
         }
-        pub fn is_initialized(&self) -> bool {false}
+        pub fn is_initialized(&self) -> bool {true}
         pub fn setup_key_init(&mut self) {}
         pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
             let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
@@ -102,6 +153,35 @@ mod implementation {
         }
         pub fn is_jtag_working(&self) -> bool {false}
         pub fn is_efuse_secured(&self) -> Option<bool> {None}
+        pub fn check_gateware_signature(&mut self, region_enum: GatewareRegion) -> SignatureResult {
+            SignatureResult::DevKeyOk
+        }
+        pub fn is_pcache_update_password_valid(&self) -> bool {
+            false
+        }
+        pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
+            MetadataInFlash {
+                magic: 0x6174656d,
+                version: 1,
+                git_additional: 27,
+                git_rev: 2,
+                git_min: 8,
+                git_maj: 0,
+                git_commit: 0x12345678,
+                bin_checksum: [0; 16],
+                src_checksum: [0; 16],
+                date_len: 26,
+                date_str: [50, 48, 50, 49, 45, 48, 56, 45, 49, 50, 32, 50, 50, 58, 49, 53, 58, 53, 51, 46, 56, 49, 55, 51, 53, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                host_len: 14,
+                host_str: [98, 117, 110, 110, 105, 101, 45, 100, 101, 115, 107, 116, 111, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                tag_len: 19,
+                tag_str: [118, 48, 46, 56, 46, 50, 45, 55, 49, 45, 103, 102, 102, 98, 97, 52, 55, 102, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                log_len: 203,
+                log_str: [99, 111, 109, 109, 105, 116, 32, 102, 102, 98, 97, 52, 55, 102, 52, 98, 102, 55, 99, 52, 51, 50, 55, 54, 55, 50, 50, 56, 102, 101, 99, 52, 51, 53, 97, 56, 56, 48, 54, 54, 55, 53, 101, 52, 102, 49, 102, 10, 65, 117, 116, 104, 111, 114, 58, 32, 98, 117, 110, 110, 105, 101, 32, 60, 98, 117, 110, 110, 105, 101, 64, 107, 111, 115, 97, 103, 105, 46, 99, 111, 109, 62, 10, 68, 97, 116, 101, 58, 32, 32, 32, 84, 104, 117, 32, 65, 117, 103, 32, 49, 50, 32, 48, 52, 58, 52, 49, 58, 53, 49, 32, 50, 48, 50, 49, 32, 43, 48, 56, 48, 48, 10, 10, 32, 32, 32, 32, 109, 111, 100, 105, 102, 121, 32, 98, 111, 111, 116, 32, 116, 111, 32, 100, 111, 32, 102, 97, 108, 108, 98, 97, 99, 107, 32, 111, 110, 32, 115, 105, 103, 110, 97, 116, 117, 114, 101, 115, 10, 10, 77, 9, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 115, 114, 99, 47, 109, 97, 105, 110, 46, 114, 115, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                status_len: 512,
+                status_str: [79, 110, 32, 98, 114, 97, 110, 99, 104, 32, 109, 97, 105, 110, 10, 89, 111, 117, 114, 32, 98, 114, 97, 110, 99, 104, 32, 105, 115, 32, 117, 112, 32, 116, 111, 32, 100, 97, 116, 101, 32, 119, 105, 116, 104, 32, 39, 111, 114, 105, 103, 105, 110, 47, 109, 97, 105, 110, 39, 46, 10, 10, 67, 104, 97, 110, 103, 101, 115, 32, 110, 111, 116, 32, 115, 116, 97, 103, 101, 100, 32, 102, 111, 114, 32, 99, 111, 109, 109, 105, 116, 58, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 97, 100, 100, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 117, 112, 100, 97, 116, 101, 32, 119, 104, 97, 116, 32, 119, 105, 108, 108, 32, 98, 101, 32, 99, 111, 109, 109, 105, 116, 116, 101, 100, 41, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 114, 101, 115, 116, 111, 114, 101, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 100, 105, 115, 99, 97, 114, 100, 32, 99, 104, 97, 110, 103, 101, 115, 32, 105, 110, 32, 119, 111, 114, 107, 105, 110, 103, 32, 100, 105, 114, 101, 99, 116, 111, 114, 121, 41, 10, 32, 32, 40, 99, 111, 109, 109, 105, 116, 32, 111, 114, 32, 100, 105, 115, 99, 97, 114, 100, 32, 116, 104, 101, 32, 117, 110, 116, 114, 97, 99, 107, 101, 100, 32, 111, 114, 32, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 32, 105, 110, 32, 115, 117, 98, 109, 111, 100, 117, 108, 101, 115, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 97, 112, 112, 101, 110, 100, 95, 99, 115, 114, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 101, 116, 114, 117, 115, 116, 101, 100, 95, 115, 111, 99, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 97, 115, 115, 101, 109, 98, 108, 101, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 95, 116, 101, 115, 116, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 117, 105, 108, 100, 45, 100, 111, 99, 115, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 99, 104, 101, 99, 107, 45, 116, 105, 109, 105, 110, 103, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 99, 111, 109, 112, 105, 108, 101, 114, 95, 114, 116, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 101, 110, 99, 114, 121, 112, 116, 45, 98, 105, 116, 115, 116, 114, 101, 97, 109, 45, 112, 121, 116, 104, 111, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 103, 97, 116, 101, 119, 97, 114, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 100, 114, 97, 109, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 115, 99, 111, 112, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 120, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 109, 105, 103, 101, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 111, 112, 101, 110, 116, 105, 116, 97, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 115, 101, 114, 105, 97, 108, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 116, 104, 111, 110, 100, 97, 116, 97, 45, 99, 112, 117, 45, 118, 101, 120, 114, 105, 115, 99, 118, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 114, 111, 109, 45, 108, 111, 99, 97, 116, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102],
+           }
+        }
     }
 }
 
@@ -470,8 +550,142 @@ fn xmain() -> ! {
                 ).expect("couldn't initiate dialog box");
             }
             Some(Opcode::UxUpdateGateware) => {
-                unimplemented!();
+                // steps:
+                //  - check update signature "Inspecting gateware update, this will take a moment..."
+                //  - if no signature found: "No valid update found! (ok -> exit out)"
+                //  - inform user of signature status "Gatware signed with foo, do you want to see the metadata? (quick/all/no)"
+                //  - option to show metadata (multiple pages)
+                //  - proceed with update question "Proceed with update? (yes/no)"
+                //  - do the update
+                dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::Notification(dismiss_modal_action)),
+                    Some(t!("rootkeys.gwup.inspecting", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::UxUpdateGwCheckSig.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+            }
+            Some(Opcode::UxUpdateGwCheckSig) => {
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxUpdateGwShowInfo.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.gwup.short", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.gwup.details", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.gwup.none", xous::LANG)));
+
+                let prompt = match keys.check_gateware_signature(GatewareRegion::Staging) {
+                    SignatureResult::SelfSignOk => t!("rootkeys.gwup.viewinfo_ss", xous::LANG),
+                    SignatureResult::ThirdPartyOk => t!("rootkeys.gwup.viewinfo_tp", xous::LANG),
+                    SignatureResult::DevKeyOk => t!("rootkeys.gwup.viewinfo_dk", xous::LANG),
+                    _ => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.gwup.no_update_found", xous::LANG)), false,
+                            None, true, None);
+                        rootkeys_modal.activate();
+                        continue;
+                    }
+                };
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(prompt), false,
+                    None, true, None);
+                rootkeys_modal.activate();
             },
+            Some(Opcode::UxUpdateGwShowInfo) => {
+                let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
+                let info = format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
+                    gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                    gw_info.git_commit,
+                    str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
+                    str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
+                );
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.gwup.short", xous::LANG) {
+                    dismiss_modal_action.set_action_opcode(Opcode::UxUpdateGwConfirm.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(&info), false,
+                        None, true, None);
+                    rootkeys_modal.activate();
+                } else if payload.as_str() == t!("rootkeys.gwup.details", xous::LANG) {
+                    dismiss_modal_action.set_action_opcode(Opcode::UxUpdateGwShowLog.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(&info), false,
+                        None, true, None);
+                    rootkeys_modal.activate();
+                } else {
+                    // skip
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxUpdateGwConfirm.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
+                }
+            }
+            Some(Opcode::UxUpdateGwShowLog) => {
+                let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
+                let info = format!("{}", str::from_utf8(&gw_info.log_str[..gw_info.log_len as usize]).unwrap());
+                dismiss_modal_action.set_action_opcode(Opcode::UxUpdateGwShowStatus.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::Notification(dismiss_modal_action)),
+                    Some(&info), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxUpdateGwShowStatus) => {
+                let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
+                let info = format!("{}", str::from_utf8(&gw_info.status_str[..gw_info.status_len as usize]).unwrap());
+                dismiss_modal_action.set_action_opcode(Opcode::UxUpdateGwConfirm.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::Notification(dismiss_modal_action)),
+                    Some(&info), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxUpdateGwConfirm) => {
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxUpdateGwDecidePassword.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.gwup.yes", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.gwup.no", xous::LANG)));
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.gwup.proceed_confirm", xous::LANG)), false,
+                    None, true, None);
+                    rootkeys_modal.activate();
+                },
+            Some(Opcode::UxUpdateGwDecidePassword) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
+                    if keys.is_pcache_update_password_valid() {
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxUpdateGwRun.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).unwrap();
+                    } else {
+                        password_action.set_action_opcode(Opcode::UxUpdateGwRun.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::TextEntry(password_action)),
+                            Some(t!("rootkeys.get_update_password", xous::LANG)), false,
+                            None, true, None
+                        );
+                        rootkeys_modal.activate();
+                    }
+                } else {
+                    continue;
+                }
+            }
+            Some(Opcode::UxUpdateGwRun) => {
+                log::info!("now running software update");
+            }
             Some(Opcode::UxSelfSignXous) => {
                 unimplemented!();
             },

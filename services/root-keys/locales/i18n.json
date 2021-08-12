@@ -109,6 +109,66 @@
         "zh": "这无法撤消，要继续吗?",
         "en-audio": "This cannot be undone. Continue?"
     },
+    "rootkeys.gwup.no_update_found": {
+        "en": "No valid update found,\naborting!",
+        "zh": "未找到有效更新，正在中止!",
+        "en-audio": "No valid update found, aborting"
+    },
+    "rootkeys.gwup.inspecting": {
+        "en": "Inspecting gateware,\nPlease wait...",
+        "zh": "正在检查比特流，请稍候...",
+        "en-audio": "Inspecting gateware, please wait."
+    },
+    "rootkeys.gwup.viewinfo_ss": {
+        "en": "Self-signed image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.viewinfo_tp": {
+        "en": "Third party image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.viewinfo_dk": {
+        "en": "Devkey image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.details": {
+        "en": "All details",
+        "zh": "所有细节",
+        "en-audio": "All details"
+    },
+    "rootkeys.gwup.short": {
+        "en": "Short summary",
+        "zh": "简短的摘要",
+        "en-audio": "Short summary"
+    },
+    "rootkeys.gwup.none": {
+        "en": "Skip",
+        "zh": "跳过这步",
+        "en-audio": "Skip"
+    },
+    "rootkeys.gwup.proceed_confirm": {
+        "en": "Proceed with update?",
+        "zh": "继续更新？",
+        "en-audio": "Proceed with update?"
+    },
+    "rootkeys.gwup.yes": {
+        "en": "Yes",
+        "zh": "确定",
+        "en-audio": "Yes"
+    },
+    "rootkeys.gwup.no": {
+        "en": "No",
+        "zh": "取消",
+        "en-audio": "No"
+    },
+    "rootkeys.get_update_password": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical\nUse: Gateware update",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password, for authorizing a gateware update."
+    },
     "rootkeys.policy_clear": {
         "en": "Clear after use",
         "zh": "使用后删除",
