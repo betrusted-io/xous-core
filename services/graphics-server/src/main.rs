@@ -224,7 +224,10 @@ fn xmain() -> ! {
                                     br
                                 ));
                             } else {
-                                tv.bounds_computed = None;
+                                tv.bounds_computed = Some(Rectangle::new(
+                                    clip_rect.tl(),
+                                    br
+                                ));
                             }
                         },
                         TextBounds::GrowableFromTl(tl, width) => {
@@ -277,8 +280,11 @@ fn xmain() -> ! {
                                 ));
                                 log::trace!("intersects, bounds_computed: {:?}", tv.bounds_computed);
                             } else {
-                                log::trace!("does not intersect, clip_rect: {:?}, br: {:?}", clip_rect, br);
-                                tv.bounds_computed = None;
+                                log::warn!("does not intersect, clip_rect: {:?}, br: {:?}", clip_rect, br);
+                                tv.bounds_computed = Some(Rectangle::new(
+                                    tl,
+                                    clip_rect.br()
+                                ));
                             }
                         },
                         TextBounds::GrowableFromBl(bl, width) => {
@@ -331,7 +337,10 @@ fn xmain() -> ! {
                                     Point::new(bl.x + finalwidth, bl.y)
                                 ));
                             } else {
-                                tv.bounds_computed = None
+                                tv.bounds_computed = Some(Rectangle::new(
+                                    clip_rect.tl(),
+                                    Point::new(bl.x + finalwidth, bl.y)
+                                ));
                             }
                         },
                     }

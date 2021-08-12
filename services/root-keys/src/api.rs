@@ -33,6 +33,7 @@ pub(crate) enum Opcode {
     UxUpdateGwShowStatus,
     UxUpdateGwConfirm,
     UxUpdateGwDecidePassword,
+    UxUpdateGwPasswordPolicy,
     UxUpdateGwRun,
     // UxUpdateGatewarePasswordReturn,
     // UxUpdateGatwareDisplayInfo,
@@ -61,7 +62,7 @@ pub(crate) enum Opcode {
     Quit
 }
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
 pub enum PasswordRetentionPolicy {
     AlwaysKeep,
     EraseOnSuspend,

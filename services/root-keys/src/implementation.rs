@@ -103,7 +103,7 @@ pub(crate) mod keyrom_config {
 ///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
 /// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
 /// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply truncated.
-    #[repr(C)]
+#[repr(C)]
 struct PasswordCache {
     hashed_boot_pw: [u8; 32],
     hashed_boot_pw_valid: u32, // non-zero for valid
@@ -182,13 +182,13 @@ impl<'a> BitstreamOracle<'a> {
             log::error!("Padding is incorrect on the bitstream. Check append_csr.py for padding and make sure you are burning gateware with --raw-binary, and not --bitstream as the latter strips padding from the top of the file.");
             return Err(RootkeyResult::AlignmentError)
         }
-        log::debug!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
+        log::info!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
         let ciphertext = &bitstream[ciphertext_start..ciphertext_start + ciphertext_len as usize];
 
         let mut iv_bytes: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
         bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
-        log::debug!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
-        log::debug!("recovered iv           : {:x?}", &iv_bytes);
+        log::info!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
+        log::info!("recovered iv           : {:x?}", &iv_bytes);
 
         let dec_cipher = Aes256::new(dec_key.try_into().unwrap());
         let enc_cipher = Aes256::new(enc_key.try_into().unwrap());
@@ -243,7 +243,7 @@ impl<'a> BitstreamOracle<'a> {
         }
         oracle.type2_absolute_offset = pt_pos + ciphertext_start;
         oracle.type2_ciphertext_offset = pt_pos;
-        log::debug!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
+        log::info!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
 
         Ok(oracle)
     }
@@ -981,6 +981,11 @@ impl<'a> RootKeys {
 
         self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
 
+        // make a copy of the plaintext metadata and csr records
+        self.spinor.patch(self.gateware(), self.gateware_base(),
+        &self.staging()[METADATA_OFFSET..SELFSIG_OFFSET], METADATA_OFFSET as u32
+        ).map_err(|_| RootkeyResult::FlashError)?;
+
         // verify that the patch worked
         pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
         pb.rebase_subtask_percentage(70, 90);
@@ -994,6 +999,7 @@ impl<'a> RootKeys {
         self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
         pb.set_percentage(95);
 
+        // as a sanity check, check the kernel self signature
         if !self.verify_selfsign_kernel() {
             log::error!("kernel signature failed to verify, probably should not try to reboot!");
             src_oracle.clear();
@@ -1001,6 +1007,7 @@ impl<'a> RootKeys {
             return Err(RootkeyResult::IntegrityError);
         }
 
+        // sign the gateware
         pb.set_percentage(98);
         let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
         log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
@@ -1016,12 +1023,18 @@ impl<'a> RootKeys {
 
         self.ticktimer.sleep_ms(500).expect("couldn't show final message");
 
-        // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
-        rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+        // always purge, we're going to reboot; and if we don't, then there's shenanigans
+        for w in private_key_enc.iter_mut() {
+            *w = 0;
+        }
+        self.purge_password(PasswordType::Boot);
+        self.purge_password(PasswordType::Update);
+        self.purge_sensitive_data();
 
         Ok(())
     }
 
+    #[allow(dead_code)]
     #[cfg(feature = "hazardous-debug")]
     pub fn printkeys(&mut self) {
         // dump the keystore -- used to confirm that patching worked right. does not get compiled in when hazardous-debug is not enable.
@@ -1030,6 +1043,129 @@ impl<'a> RootKeys {
             self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
             log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
         }
+    }
+
+    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        // make sure the system is sane
+        self.xns_interlock();
+        self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
+
+        // setup Ux
+        let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+        0, 100, 10, Some("%"), 0, true, true
+        );
+        progress_action.set_is_password(true);
+        // now show the init wait note...
+        rootkeys_modal.modify(
+            Some(ActionType::Slider(progress_action)),
+            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+            None, true, None);
+        rootkeys_modal.activate();
+        xous::yield_slice(); // give some time to the GAM to render
+        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+        pb.set_percentage(1);
+
+        // decrypt the FPGA key using the stored password
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_update_pw_valid == 0 {
+            log::error!("no password was set going into the update routine");
+            #[cfg(feature = "hazardous-debug")]
+            log::info!("key: {:x?}", pcache.hashed_update_pw);
+            log::info!("valid: {}", pcache.hashed_update_pw_valid);
+
+            return Err(RootkeyResult::KeyError);
+        }
+        for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter().zip(pcache.fpga_key.iter_mut()) {
+            *dst = src;
+        }
+        for (fkey, &pw) in pcache.fpga_key.iter_mut().zip(pcache.hashed_update_pw.iter()) {
+            *fkey = *fkey ^ pw;
+        }
+        pcache.fpga_key_valid = 1;
+        // derive signing key
+        // probably should consider a way to resolve the ed25519 temporaries and ensure they get cleared...
+        let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
+        let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
+        for (key, (&enc_key, &pw)) in
+        keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
+        .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
+            *key = enc_key ^ pw;
+        }
+        for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
+        .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
+            *key = src;
+        }
+        #[cfg(feature = "hazardous-debug")]
+        log::info!("trying to make a keypair from {:x?}", keypair_bytes);
+        let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+        log::info!("keypair success");
+
+        pb.set_percentage(3);
+        let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
+            Ok(o) => o,
+            Err(e) => {
+                log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
+                return Err(e);
+            }
+        };
+        log::info!("destination oracle success");
+        pb.set_percentage(6);
+        // updates are always encrypted with the null key.
+        let dummy_key: [u8; 32] = [0; 32];
+        let mut src_oracle = match BitstreamOracle::new(&dummy_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
+            Ok(o) => o,
+            Err(e) => {
+                log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
+                dst_oracle.clear();
+                return Err(e);
+            }
+        };
+        log::info!("source oracle success");
+
+        pb.set_percentage(10);
+        pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
+        pb.rebase_subtask_percentage(10, 60);
+        self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
+
+        // make a copy of the plaintext metadata and csr records
+        self.spinor.patch(self.gateware(), self.gateware_base(),
+        &self.staging()[METADATA_OFFSET..SELFSIG_OFFSET], METADATA_OFFSET as u32
+        ).map_err(|_| RootkeyResult::FlashError)?;
+
+        // verify that the patch worked
+        pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
+        pb.rebase_subtask_percentage(60, 90);
+        self.verify_gateware(&dst_oracle, Some(&mut pb))?;
+
+        pb.set_percentage(92);
+
+        // commit signatures
+        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+        let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
+        log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+        self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+
+        // clean up the oracles
+        pb.set_percentage(95);
+        src_oracle.clear();
+        dst_oracle.clear();
+        self.spinor.set_staging_write_protect(false).expect("couldn't un-protect the staging area");
+        for b in keypair_bytes.iter_mut() {
+            *b = 0;
+        }
+        // check signatures
+        pb.set_percentage(96);
+        if !self.verify_gateware_self_signature() {
+            return Err(RootkeyResult::IntegrityError);
+        }
+
+        pb.set_percentage(100);
+
+        // check if we're to purge the password on completion
+        if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+            self.purge_password(PasswordType::Update);
+        }
+        Ok(())
     }
 
     pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
@@ -1062,14 +1198,13 @@ impl<'a> RootKeys {
             let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
 
             // setup the local cache
-            let sensitive_slice = self.sensitive_data.as_slice_mut::<u32>();
             for addr in 0..256 {
                 self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr);
                 self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[addr as usize] = self.keyrom.rf(utra::keyrom::DATA_DATA);
                 log::info!("{:02x}: 0x{:08x}", addr, self.sensitive_data.borrow_mut().as_slice::<u32>()[addr as usize]);
             }
 
-            for (word, key) in sensitive_slice[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
+            for (word, key) in self.sensitive_data.borrow().as_slice::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
             .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
                 for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
                     *d = s;
@@ -1102,12 +1237,12 @@ impl<'a> RootKeys {
             // TEST
             if self.gateware_copy_and_patch(&src_oracle, &dst_oracle, None).is_err() {
                 log::error!("error occured in patch_keys.");
-                return false;
+                return Err(RootkeyResult::FlashError);
             }
 
             if self.verify_gateware(&dst_oracle, None).is_err() {
                 log::error!("error occurred in gateware verification");
-                return false;
+                return Err(RootkeyResult::IntegrityError);
             }
         }
 
@@ -1120,13 +1255,9 @@ impl<'a> RootKeys {
     /// KEYROM patching data must previously have been staged in the sensitive area.
     /// failure to do so would result in the erasure of all secret data.
     /// ASSUME: CSR appendix does not change during the copy (it is not copied/updated)
-    fn gateware_copy_and_patch(&self, src_oracle: &BitstreamOracle, dst_oracle: &BitstreamOracle,
+    fn gateware_copy_and_patch(& self, src_oracle: &BitstreamOracle, dst_oracle: &BitstreamOracle,
     mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
-        if self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
-            // the keys weren't initialized, or are wrong. abort!
-            return Err(RootkeyResult::KeyError);
-        }
-        log::debug!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
+        log::info!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
             src_oracle.ciphertext_offset(), dst_oracle.ciphertext_offset(), src_oracle.ciphertext_len(), dst_oracle.ciphertext_len());
 
         // start with a naive implementation that simple goes through and re-encrypts and patches everything.
@@ -1152,7 +1283,7 @@ impl<'a> RootKeys {
         .zip(pt_sector[0..32].iter().zip(pt_sector[32..64].iter())) {
             *dst = hm1 ^ mask;
         }
-        log::debug!("recovered hmac: {:x?}", hmac_code);
+        log::info!("recovered hmac: {:x?}", hmac_code);
         // hash the decrypt data; we assume we're not patching anything in the first sector.
         let mut bytes_hashed = spinor::SPINOR_ERASE_SIZE as usize - src_oracle.ciphertext_offset();
         bitflip(&pt_sector[..bytes_hashed], &mut flipper[..bytes_hashed]);
@@ -1174,7 +1305,7 @@ impl<'a> RootKeys {
             *dst = src;
         }
 
-        log::debug!("sector 0 patch len: {}", bytes_hashed);
+        log::info!("sector 0 patch len: {}", bytes_hashed);
         self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(), &ct_sector, 0)
         .map_err(|_| RootkeyResult::FlashError)?;
 
