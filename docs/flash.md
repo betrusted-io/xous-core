@@ -60,12 +60,12 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2097_FFFF |                                        |
 +-----------+----------------------------------------+
 + 2098_0000 |   Xous kernel plus                     |
-+ 20AF_FFFF |   Initial/trusted server set           |
++ 20F7_FFFF |   Initial/trusted server set           |
 +-----------+----------------------------------------+
-+ 20B0_0000 |   Reserved                             |
-+ 20CF_FFFF |                                        |
++ 20F8_0000 |   Reserved                             |
++ 20FF_FFFF |                                        |
 +-----------+----------------------------------------+
-+ 20D0_0000 |   PDDB 'filesystem'                    |
++ 2100_0000 |   PDDB 'filesystem'                    |
 + 27F7_FFFF |                                        |
 +-----------+----------------------------------------+
 + 27F8_0000 |   512k reserved space for EC image     |
