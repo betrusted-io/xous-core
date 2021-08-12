@@ -47,8 +47,8 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2027_7000 |   csr.csv corresponding to bitstream   |
 + 2027_EFFF |   (32kiB max, see below)               |
 +-----------+----------------------------------------+
-+ 2027_F000 |   digital signature area               |
-+ 2027_FFFF |   (32kiB max, see below)               |
++ 2027_F000 |   digital signature page               |
++ 2027_FFFF |                                        |
 +-----------+----------------------------------------+
 + 2028_0000 |   Incoming update bitstream staging    |
 + 204F_FFFF |                                        |
