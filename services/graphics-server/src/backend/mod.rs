@@ -1,9 +1,9 @@
-#[cfg(not(target_os = "none"))]
+#[cfg(any(windows, unix))]
 mod minifb;
-#[cfg(not(target_os = "none"))]
+#[cfg(any(windows, unix))]
 pub use crate::backend::minifb::*;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod betrusted;
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub use crate::backend::betrusted::*;

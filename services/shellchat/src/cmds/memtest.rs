@@ -52,13 +52,13 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         log::debug!("memtest got msg {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(TestOp::StartBasic) => xous::msg_scalar_unpack!(msg, iters, _, _, _, {
-                let testsrc = xous::syscall::map_memory(
+                let mut testsrc = xous::syscall::map_memory(
                     None,
                     None,
                     256 * 1024, // min 128k so we are working through the L2 cache
                     xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
                 ).expect("couldn't allocate RAM for testing");
-                let testdst = xous::syscall::map_memory(
+                let mut testdst = xous::syscall::map_memory(
                     None,
                     None,
                     256 * 1024,

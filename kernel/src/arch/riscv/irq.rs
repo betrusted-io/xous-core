@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::arch::current_pid;
+use crate::arch::exception::RiscvException;
 use crate::arch::mem::MemoryMapping;
-use crate::arch::process::Process as ArchProcess;
+use crate::arch::process::{Process as ArchProcess, RETURN_FROM_EXCEPTION_HANDLER};
 use crate::arch::process::{Thread, EXIT_THREAD, RETURN_FROM_ISR};
 use crate::services::SystemServices;
 use riscv::register::{scause, sepc, sstatus, stval, vexriscv::sim, vexriscv::sip};
@@ -46,6 +47,63 @@ pub unsafe fn set_isr_return_pair(pid: PID, tid: TID) {
 
 pub unsafe fn take_isr_return_pair() -> Option<(PID, TID)> {
     PREVIOUS_PAIR.take()
+}
+
+/// Convert a RISC-V `Exception` into a Xous exception argument list.
+fn generate_exception_args(ex: &RiscvException) -> Option<[usize; 3]> {
+    match *ex {
+        RiscvException::InstructionAddressMisaligned(epc, addr) => Some([
+            xous_kernel::ExceptionType::InstructionAddressMisaligned as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::InstructionAccessFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::InstructionAccessFault as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::IllegalInstruction(epc, instruction) => Some([
+            xous_kernel::ExceptionType::IllegalInstruction as usize,
+            epc,
+            instruction,
+        ]),
+        RiscvException::LoadAddressMisaligned(epc, addr) => Some([
+            xous_kernel::ExceptionType::LoadAddressMisaligned as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::LoadAccessFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::LoadAccessFault as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::StoreAddressMisaligned(epc, addr) => Some([
+            xous_kernel::ExceptionType::StoreAddressMisaligned as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::StoreAccessFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::StoreAccessFault as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::InstructionPageFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::InstructionPageFault as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::LoadPageFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::LoadPageFault as usize,
+            epc,
+            addr,
+        ]),
+        RiscvException::StorePageFault(epc, addr) => Some([
+            xous_kernel::ExceptionType::StorePageFault as usize,
+            epc,
+            addr,
+        ]),
+        _ => None,
+    }
 }
 
 /// Trap entry point rust (_start_trap_rust)
@@ -98,7 +156,7 @@ pub extern "C" fn trap_handler(
         });
 
         let response = crate::syscall::handle(pid, tid, unsafe { PREVIOUS_PAIR.is_some() }, call)
-            .unwrap_or_else(|e| xous_kernel::Result::Error(e));
+            .unwrap_or_else(xous_kernel::Result::Error);
 
         // println!("Syscall Result: {:?}", response);
         ArchProcess::with_current_mut(|p| {
@@ -115,18 +173,19 @@ pub extern "C" fn trap_handler(
         });
     }
 
-    use crate::arch::exception::RiscvException;
     let ex = RiscvException::from_regs(sc.bits(), sepc::read(), stval::read());
     // println!("ex: {:?}", ex);
     if sc.is_exception() {
-        // If the CPU tries to store, look for a "reserved page" and provide
-        // it with one if necessary.
+        // See if it's a known exception, such as writing to a demand-paged area
+        // or returning from a handler or thread. If so, handle the exception
+        // and return right away.
         match ex {
-            RiscvException::StorePageFault(pc, addr) | RiscvException::LoadPageFault(pc, addr) => {
+            RiscvException::StorePageFault(_pc, addr)
+            | RiscvException::LoadPageFault(_pc, addr) => {
                 #[cfg(all(feature = "debug-print", feature = "print-panics"))]
                 print!(
                     "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                    pid, ex, pc, addr
+                    pid, ex, _pc, addr
                 );
                 crate::arch::mem::ensure_page_exists_inner(addr)
                     .map(|_new_page| {
@@ -139,15 +198,30 @@ pub extern "C" fn trap_handler(
                             )
                         });
                     })
-                    .expect("Couldn't allocate page");
-
-                #[cfg(all(not(feature = "debug-print"), feature = "print-panics"))]
-                print!(
-                    "KERNEL({}): RISC-V fault: {} @ {:08x}, addr {:08x} - ",
-                    pid, ex, pc, addr
-                );
-                println!("Page was not allocated");
+                    .ok(); // If this fails, fall through.
             }
+
+            RiscvException::InstructionPageFault(RETURN_FROM_EXCEPTION_HANDLER, _offset) => {
+                // This address indicates the exception handler
+                SystemServices::with_mut(|ss| {
+                    ss.finish_exception_handler_and_resume(pid)
+                        .expect("unable to finish exception handler")
+                });
+
+                // Resume the new thread within the same process.
+                ArchProcess::with_current_mut(|p| {
+                    // Adjust the program counter by the amount returned by the exception handler
+                    let pc_adjust = a0 as isize;
+                    if pc_adjust < 0 {
+                        p.current_thread_mut().sepc -= pc_adjust.abs() as usize;
+                    } else {
+                        p.current_thread_mut().sepc += pc_adjust.abs() as usize;
+                    }
+
+                    crate::arch::syscall::resume(pid.get() == 1, p.current_thread())
+                });
+            }
+
             RiscvException::InstructionPageFault(EXIT_THREAD, _offset) => {
                 let tid = ArchProcess::with_current(|process| process.current_tid());
 
@@ -162,6 +236,7 @@ pub extern "C" fn trap_handler(
                     crate::arch::syscall::resume(current_pid().get() == 1, p.current_thread())
                 });
             }
+
             RiscvException::InstructionPageFault(RETURN_FROM_ISR, _offset) => {
                 // If we hit this address, then an ISR has just returned.  Since
                 // we're in an interrupt context, it is safe to access this
@@ -169,7 +244,7 @@ pub extern "C" fn trap_handler(
                 let (previous_pid, previous_context) = unsafe {
                     PREVIOUS_PAIR
                         .take()
-                        .expect("got an instruction page fault with no previous PID")
+                        .expect("got RETURN_FROM_ISR with no previous PID")
                 };
                 // println!(
                 //     "ISR: Resuming previous pair of ({}, {})",
@@ -188,14 +263,62 @@ pub extern "C" fn trap_handler(
                     crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
                 });
             }
+
             _ => (),
         }
-        println!("SYSTEM HALT: CPU Exception on PID {}: {}", pid, ex);
+
+        // This exception is not due to something we're aware of. In this case,
+        // determine if there is an exception handler in this particular program
+        // and call that handler if so.
+        if let Some(args) = generate_exception_args(&ex) {
+            klog!("Generated exception args -- invoking handler");
+            if let Some(handler) = SystemServices::with_mut(|ss| ss.begin_exception_handler(pid)) {
+                klog!("Exception handler for process exists ({:x?})", handler);
+                // If this is the sort of exception that may be able to be handled by
+                // the userspace program, generate a list of arguments to pass to
+                // the handler.
+                // Invoke the handler in userspace and exit this exception handler.
+                klog!(
+                    "At start of exception, current thread was: {}",
+                    SystemServices::with(|ss| ss.get_process(pid).unwrap().current_thread)
+                );
+                ArchProcess::with_current_mut(|process| {
+                    crate::arch::syscall::invoke(
+                        process.thread_mut(crate::arch::process::EXCEPTION_TID),
+                        current_pid().get() == 1,
+                        handler.pc,
+                        handler.sp,
+                        RETURN_FROM_EXCEPTION_HANDLER,
+                        &args,
+                    );
+                    crate::arch::syscall::resume(
+                        current_pid().get() == 1,
+                        process.thread(crate::arch::process::EXCEPTION_TID),
+                    )
+                });
+            }
+        }
+
+        // The exception was not handled. We should terminate the program here.
+        // For now, let's halt the whole system instead so that it becomes
+        // immediately obvious that we screwed up. On harware this will trigger
+        // a watchdog reset.
+        println!(
+            "{}: CPU Exception on PID {}: {}",
+            if sstatus::read().spp() == sstatus::SPP::Supervisor {
+                "!!! KERNEL FAILURE !!!"
+            } else {
+                "PROGRAM HALT"
+            },
+            pid,
+            ex
+        );
         ArchProcess::with_current(|process| {
             println!("Current thread {}:", process.current_tid());
             process.print_current_thread();
         });
         MemoryMapping::current().print_map();
+        #[allow(clippy::empty_loop)]
         loop {}
     } else {
         let irqs_pending = sip::read();

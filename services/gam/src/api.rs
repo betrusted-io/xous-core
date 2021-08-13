@@ -2,6 +2,7 @@ use graphics_server::api::{Rectangle, TextView, Gid, Line, RoundedRectangle, Cir
 use xous_ipc::String;
 
 pub(crate) const SERVER_NAME_GAM: &str      = "_Graphical Abstraction Manager_";
+pub const MAIN_MENU_NAME: &'static str = "main menu";
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub enum GamObjectType {
@@ -50,6 +51,7 @@ pub struct SwitchToApp {
 pub enum UxType {
     Chat,
     Menu,
+    Modal,
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct UxRegistration {
@@ -160,4 +162,9 @@ pub(crate) enum Return {
     SetCanvasBoundsReturn(SetCanvasBoundsRequest),
     ContentCanvasReturn(Option<Gid>),
     Failure,
+    NotCurrentlyDrawable,
 }
+
+// small wart -- we have to reset the size of a modal to max size for resize computations
+// reveal the max size globally, since it's a constant
+pub const MODAL_Y_MAX: i16 = 450; // in absolute screen coords, not relative to top pad

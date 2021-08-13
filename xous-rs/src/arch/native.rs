@@ -143,8 +143,8 @@ pub fn process_to_args(call: usize, init: &ProcessInit) -> [usize; 8] {
         call,
         u32::from_le_bytes(init.key.0[0..4].try_into().unwrap()) as _,
         u32::from_le_bytes(init.key.0[4..8].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[8..12].try_into().unwrap()) as _,
-        u32::from_le_bytes(init.key.0[12..16].try_into().unwrap()) as _,
+        0,
+        0,
         0,
         0,
         0,
@@ -167,7 +167,7 @@ pub fn create_thread_0_pre<U>(f: &fn() -> U) -> core::result::Result<ThreadInit,
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(*f) };
+    let start = *f as usize;
     create_thread_n_pre(start, &0, &0, &0, &0)
 }
 
@@ -178,7 +178,7 @@ pub fn create_thread_0_post<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(f) };
+    let start = f as usize;
     create_thread_n_post(start, 0, 0, 0, 0, thread_id)
 }
 
@@ -189,7 +189,7 @@ pub fn create_thread_1_pre<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(*f) };
+    let start = *f as usize;
     create_thread_n_pre(start, arg1, &0, &0, &0)
 }
 
@@ -201,7 +201,7 @@ pub fn create_thread_1_post<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(f) };
+    let start = f as usize;
     create_thread_n_post(start, arg1, 0, 0, 0, thread_id)
 }
 
@@ -213,7 +213,7 @@ pub fn create_thread_2_pre<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(*f) };
+    let start = *f as usize;
     create_thread_n_pre(start, arg1, arg2, &0, &0)
 }
 
@@ -226,7 +226,7 @@ pub fn create_thread_2_post<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(f) };
+    let start = f as usize;
     create_thread_n_post(start, arg1, arg2, 0, 0, thread_id)
 }
 
@@ -239,7 +239,7 @@ pub fn create_thread_3_pre<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(*f) };
+    let start = *f as usize;
     create_thread_n_pre(start, arg1, arg2, arg3, &0)
 }
 
@@ -253,7 +253,7 @@ pub fn create_thread_3_post<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(f) };
+    let start = f as usize;
     create_thread_n_post(start, arg1, arg2, arg3, 0, thread_id)
 }
 
@@ -267,7 +267,7 @@ pub fn create_thread_4_pre<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(*f) };
+    let start = *f as usize;
     create_thread_n_pre(start, arg1, arg2, arg3, arg4)
 }
 
@@ -282,7 +282,7 @@ pub fn create_thread_4_post<U>(
 where
     U: Send + 'static,
 {
-    let start = unsafe { core::mem::transmute(f) };
+    let start = f as usize;
     create_thread_n_post(start, arg1, arg2, arg3, arg4, thread_id)
 }
 
@@ -295,7 +295,7 @@ where
     U: Send + 'static,
 {
     create_thread_n_pre(
-        unsafe { core::mem::transmute(*f) },
+        *f as usize,
         unsafe { core::mem::transmute(arg) },
         &0,
         &0,
@@ -313,7 +313,7 @@ where
     U: Send + 'static,
 {
     create_thread_n_post(
-        unsafe { core::mem::transmute(f) },
+        f as usize,
         unsafe { core::mem::transmute(&arg) },
         0,
         0,
@@ -321,9 +321,9 @@ where
         thread_id,
     )
     // If we succeeded, the variable will be moved into the caller. Drop it from here.
-    .and_then(|f| {
+    .map(|f| {
         core::mem::forget(arg);
-        Ok(f)
+        f
     })
 }
 

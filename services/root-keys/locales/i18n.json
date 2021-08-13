@@ -1,0 +1,132 @@
+{
+    "rootkeys.bootpass": {
+        "en": "Password request\nDevice unlock\nSecurity: Low\nTip: a convenience PIN is OK.",
+        "zh": "输入密码\n解锁\n安全含义:低",
+        "en-audio": "Enter unlock password"
+    },
+    "rootkeys.updatepass": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical\nTip: use a phrase instead of a word.",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password. This password is critically important."
+    },
+    "rootkeys.already_init": {
+        "en": "Root keys already initialized.",
+        "zh": "根密码已经设置",
+        "en-audio": "Root keys already initialized."
+    },
+    "rootkeys.setup": {
+        "en": "This will init the root keys.\nI'm going to need two\npasswords:\n 1. Device unlock\n 2. Software update\nDo not lose them!",
+        "zh": "这将初始化根密钥\n需要两个密码\n1.解锁\n2.软件更新",
+        "en-audio": "This will initialize the root keys. We're going to need two passwords, one for device unlock, and one for software updates."
+    },
+    "rootkeys.confirm": {
+        "en": "You should only proceed\nif you have inspected\nyour device and are ready\nto trust it.",
+        "zh": "仅当您准备好信\n任此设备时才\n应继续",
+        "en-audio": "You should only proceed with this operation if you are ready to trust this device."
+    },
+    "rootkeys.confirm.yes": {
+        "en": "I'm ready!",
+        "zh": "确定",
+        "en-audio": "I'm ready!"
+    },
+    "rootkeys.confirm.no": {
+        "en": "Not yet, maybe later.",
+        "zh": "我先检查一下,稍后再试",
+        "en-audio": "I'll try again after inspecting my device."
+    },
+    "rootkeys.setup_wait": {
+        "en": "Initializing keys.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "现在正在初始化\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Initializing keys. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.note_to_translator": {
+        "en": "It is important that every message in the `rootkeys.init` series have the same number of lines. Insert dummy \n characters if you require multi-line translations! Failure to do so can lead to a deadlock situation (read the code for more notes).",
+        "zh": "`rootkeys.init` 系列中的每条消息都具有相同的行数，这一点很重要。 如果您需要多行翻译，请插入虚拟 \n 字符！",
+        "en-audio": "It is important that every message in the `rootkeys.init` series have the same number of lines. Insert dummy \n characters if you require multi-line translations!"
+    },
+    "rootkeys.init.signing_loader": {
+        "en": "Signing loader.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "签名引导程序\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Signing loader. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.signing_kernel": {
+        "en": "Signing kernel.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "签名内核\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Signing kernel. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.backup_gateware": {
+        "en": "Backing up gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "备份比特流\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Backing up gateware. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.patching_keys": {
+        "en": "Injecting new keys.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "更换新钥匙\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Injecting new keys. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.verifying_gateware": {
+        "en": "Verifying new gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "验证比特流\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Verifying gateware. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.commit_signatures": {
+        "en": "Committing signatures.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "保存签名\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Committing signatures. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.init.unplug_power": {
+        "en": "Please unplug the charging\ncable so I can reboot!\n\n",
+        "zh": "拔下充电线以允许重启!",
+        "en-audio": "Unplug the charging cable so I can reboot!"
+    },
+    "rootkeys.init.finished": {
+        "en": "Rebooting now...\n\n\n",
+        "zh": "准备重启...\n\n",
+        "en-audio": "Rebooting now."
+    },
+    "rootkeys.init.fail_verify": {
+        "en": "Verification failed,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "Verification failed, aborting"
+    },
+    "rootkeys.init.fail_key": {
+        "en": "FPGA key is wrong,\nborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "FPGA key is wrong, aborting"
+    },
+    "rootkeys.init.fail_burn": {
+        "en": "FLASH write problem,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "FLASH write problem, aborting"
+    },
+    "rootkeys.init.fail_alignment": {
+        "en": "Internal alignment error,\naborting!",
+        "zh": "*missing*正在初始化失败，中止!",
+        "en-audio": "Internal alignment error, aborting"
+    },
+    "rootkeys.init.confirmation": {
+        "en": "This cannot be undone.\nContinue?",
+        "zh": "这无法撤消，要继续吗?",
+        "en-audio": "This cannot be undone. Continue?"
+    },
+    "rootkeys.policy_clear": {
+        "en": "Clear after use",
+        "zh": "使用后删除",
+        "en-audio": "Clear password after use"
+    },
+    "rootkeys.policy_suspend": {
+        "en": "Retain until sleep",
+        "zh": "睡眠后删除",
+        "en-audio": "Retain password until sleep"
+    },
+    "rootkeys.policy_idle": {
+        "en": "Retain until timeout",
+        "zh": "保留到延时",
+        "en-audio": "Retain until timeout"
+    },
+    "rootkeys.policy_keep": {
+        "en": "Retain until reboot",
+        "zh": "保留到启动",
+        "en-audio": "Retain until reboot"
+    }
+}

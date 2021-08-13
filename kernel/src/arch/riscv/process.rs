@@ -4,7 +4,8 @@
 use core::mem;
 static mut PROCESS: *mut ProcessImpl = 0xff80_1000 as *mut ProcessImpl;
 pub const MAX_THREAD: TID = 31;
-pub const INITIAL_TID: TID = 1;
+pub const EXCEPTION_TID: TID = 1;
+pub const INITIAL_TID: TID = 2;
 pub const IRQ_TID: TID = 0;
 use crate::arch::mem::PAGE_SIZE;
 use crate::services::ProcessInner;
@@ -20,6 +21,9 @@ pub const RETURN_FROM_ISR: usize = 0xff80_2000;
 
 /// This is the address a thread will return to when it exits.
 pub const EXIT_THREAD: usize = 0xff80_3000;
+
+/// This is the address a thread will return to when it finishes handling an exception.
+pub const RETURN_FROM_EXCEPTION_HANDLER: usize = 0xff80_4000;
 
 // Thread IDs have three possible meaning:
 // Logical Thread ID: What the user sees
@@ -193,9 +197,9 @@ impl Process {
     }
 
     /// Set the current thread number.
-    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
+    pub fn set_tid(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         let mut process = unsafe { &mut *PROCESS };
-        // println!("KERNEL({}:{}): Switching to thread {}", self.pid, process.hardware_thread - 1, thread);
+        klog!("Switching to thread {}", thread);
         assert!(
             thread <= process.threads.len(),
             "attempt to switch to an invalid thread {}",
@@ -374,7 +378,7 @@ impl Process {
         // println!("Setting up thread {}, pid {}", new_tid, pid);
         let sp = setup.stack.as_ptr() as usize + setup.stack.len();
         if sp <= 16 {
-            Err(xous_kernel::Error::BadAddress)?;
+            return Err(xous_kernel::Error::BadAddress);
         }
         crate::arch::syscall::invoke(
             thread,
@@ -399,7 +403,7 @@ impl Process {
 
         // Ensure this thread is valid
         if thread.sepc == 0 || tid == IRQ_TID {
-            Err(xous_kernel::Error::ThreadNotAvailable)?;
+            return Err(xous_kernel::Error::ThreadNotAvailable);
         }
 
         // thread.registers[0] == x1
@@ -421,7 +425,6 @@ impl Process {
 
     pub fn print_all_threads(&self) {
         let process = unsafe { &mut *PROCESS };
-        &mut process.threads[process.hardware_thread - 1];
         for (tid_idx, &thread) in process.threads.iter().enumerate() {
             let tid = tid_idx + 1;
             if thread.registers[1] != 0 {
@@ -433,7 +436,7 @@ impl Process {
     pub fn print_current_thread(&self) {
         let thread = self.current_thread();
         let tid = self.current_tid();
-        Self::print_thread(tid, &thread);
+        Self::print_thread(tid, thread);
     }
 
     pub fn print_thread(_tid: TID, _thread: &Thread) {

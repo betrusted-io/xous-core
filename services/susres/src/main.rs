@@ -30,7 +30,7 @@ macro_rules! println
 }
 
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     use crate::murmur3::murmur3_32;
@@ -397,7 +397,7 @@ mod implementation {
 
 }
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use num_traits::ToPrimitive;
 
@@ -443,23 +443,23 @@ static TIMEOUT_TIME: AtomicU32 = AtomicU32::new(2000);
 static TIMEOUT_CONN: AtomicU32 = AtomicU32::new(0);
 pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     use utralib::generated::*;
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let mut csr: Option<CSR::<u32>> = None;
     loop {
         let msg = xous::receive_message(sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
-            #[cfg(target_os = "none")]
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, base, _, _, _, {
                 csr = Some(CSR::new(base as *mut u32));
             }),
-            #[cfg(not(target_os = "none"))]
+            #[cfg(not(any(target_os = "none", target_os = "xous")))]
             Some(TimeoutOpcode::SetCsr) => msg_scalar_unpack!(msg, _base, _, _, _, {
                 // ignore the opcode in hosted mode
             }),
             Some(TimeoutOpcode::Run) => {
-                #[cfg(target_os = "none")]
+                #[cfg(any(target_os = "none", target_os = "xous"))]
                 {
                     // we have to re-implement the ticktimer time reading here because as we wait for the timeout,
                     // the ticktimer goes away! so we use the susres local copy with direct hardware ops to keep track of time in this phase

@@ -16,15 +16,15 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
     // NOTE: This will become an issue when running with multiple cores,
     // so this should be protected by a mutex.
     unsafe {
-        for irq_no in 0..IRQ_HANDLERS.len() {
+        for (irq_no, handler) in IRQ_HANDLERS.iter().enumerate() {
             if irqs_pending & (1 << irq_no) != 0 {
-                if let Some((pid, f, arg)) = IRQ_HANDLERS[irq_no] {
+                if let Some((pid, f, arg)) = handler {
                     return SystemServices::with_mut(|ss| {
                         // Disable all other IRQs and redirect into userspace
                         arch::irq::disable_all_irqs();
                         // println!("Making a callback to PID{}: {:x?} ({:08x}, {:x?})", pid, f, irq_no as usize, arg);
                         ss.make_callback_to(
-                            pid,
+                            *pid,
                             f.get() as *mut usize,
                             irq_no,
                             arg.map(|x| x.get() as *mut usize)
@@ -53,7 +53,7 @@ pub fn interrupt_claim(
     // Unsafe is required since we're accessing a static mut array.
     // However, we disable interrupts to prevent contention on this array.
     unsafe {
-        let result = if irq > IRQ_HANDLERS.len() {
+        if irq > IRQ_HANDLERS.len() {
             Err(xous_kernel::Error::InterruptNotFound)
         } else if IRQ_HANDLERS[irq].is_some() {
             Err(xous_kernel::Error::InterruptInUse)
@@ -61,8 +61,7 @@ pub fn interrupt_claim(
             IRQ_HANDLERS[irq] = Some((pid, f, arg));
             arch::irq::enable_irq(irq);
             Ok(())
-        };
-        result
+        }
     }
 }
 

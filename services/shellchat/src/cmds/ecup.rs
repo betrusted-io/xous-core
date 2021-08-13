@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 static CB_ID: AtomicU32 = AtomicU32::new(0);
 use num_traits::*;
 
-use engine_sha512::*;
+use sha2::*;
 use digest::Digest;
 
 use core::fmt::Write;
@@ -31,7 +31,7 @@ enum PackageType {
 }
 
 fn validate_package(pkg: &[u8], pkg_type: PackageType) -> bool {
-    let mut hasher = engine_sha512::Sha512Trunc256::new(Some(FallbackStrategy::HardwareThenSoftware));
+    let mut hasher = sha2::Sha512Trunc256::new_with_strategy(FallbackStrategy::HardwareThenSoftware);
     let mut temp: [u8; 4] = Default::default();
     temp.copy_from_slice(&pkg[0x20..0x24]);
     if pkg_type == PackageType::Ec {
@@ -186,28 +186,28 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         log::error!("couldn't acquire exclusive access to the EC updater mechanism. All other operations will fail!");
     }
 
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let ec_package = xous::syscall::map_memory(
         xous::MemoryAddress::new((xous::EC_FW_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let wf_package = xous::syscall::map_memory(
         xous::MemoryAddress::new((xous::EC_WF200_PKG_LOC + xous::FLASH_PHYS_BASE) as usize),
         None,
         xous::EC_WF200_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC wf200 package memory range");
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let ec_package = xous::syscall::map_memory(
         None,
         None,
         xous::EC_FW_PKG_LEN as usize,
         xous::MemoryFlags::R | xous::MemoryFlags::W,
     ).expect("couldn't map EC firmware package memory range");
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let wf_package = xous::syscall::map_memory(
         None,
         None,

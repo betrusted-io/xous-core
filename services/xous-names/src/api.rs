@@ -1,5 +1,3 @@
-use hash32::{Hash, Hasher};
-
 #[allow(dead_code)]
 pub const AUTHENTICATE_TIMEOUT: u32 = 10_000; // time in ms that a process has to respond to an authentication request
 
@@ -165,14 +163,14 @@ impl core::fmt::Write for XousServerName {
     }
 }
 
-impl hash32::Hash for XousServerName {
+impl std::hash::Hash for XousServerName {
     fn hash<H>(&self, state: &mut H)
     where
-        H: Hasher,
+        H: std::hash::Hasher,
     {
         assert!(self.length < self.value.len(), "incorret length on hash!");
-        Hash::hash(&self.value[..self.length as usize], state);
-        Hash::hash(&self.length, state)
+        std::hash::Hash::hash(&self.value[..self.length as usize], state);
+        std::hash::Hash::hash(&self.length, state)
     }
 }
 

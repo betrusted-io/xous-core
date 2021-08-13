@@ -74,3 +74,10 @@ pub(crate) enum SusResOps {
     /// exit the thread
     Quit,
 }
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FallbackStrategy {
+    HardwareThenSoftware,
+    WaitForHardware,
+    SoftwareOnly,
+}

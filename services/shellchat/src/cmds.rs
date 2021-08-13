@@ -2,7 +2,7 @@ use xous::{MessageEnvelope};
 use xous_ipc::String;
 use core::fmt::Write;
 
-use heapless::FnvIndexMap;
+use std::collections::HashMap;
 /////////////////////////// Common items to all commands
 pub trait ShellCmdApi<'a> {
     // user implemented:
@@ -44,7 +44,7 @@ pub struct CommonEnv {
     com: com::Com,
     ticktimer: ticktimer_server::Ticktimer,
     gam: gam::Gam,
-    cb_registrations: heapless::FnvIndexMap::<u32, String::<256>, 8>,
+    cb_registrations: HashMap::<u32, String::<256>>,
     trng: Trng,
     xns: xous_names::XousNames,
 }
@@ -58,7 +58,7 @@ impl CommonEnv {
                 break;
             }
         }
-        self.cb_registrations.insert(key, verb).unwrap();
+        self.cb_registrations.insert(key, verb);
         key
     }
 }
@@ -98,6 +98,7 @@ mod console;  use console::*;
 mod memtest;  use memtest::*;
 mod keys;     use keys::*;
 mod wlan;     use wlan::*;
+mod jtag_cmd; use jtag_cmd::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -122,6 +123,7 @@ pub struct CmdEnv {
     engine_cmd: Engine,
     memtest_cmd: Memtest,
     keys_cmd: Keys,
+    jtag_cmd: JtagCmd,
 
     //fcc_cmd: Fcc,
 }
@@ -133,7 +135,7 @@ impl CmdEnv {
             com: com::Com::new(&xns).expect("could't connect to COM"),
             ticktimer: ticktimer,
             gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
-            cb_registrations: FnvIndexMap::new(),
+            cb_registrations: HashMap::new(),
             trng: Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
         };
@@ -173,6 +175,7 @@ impl CmdEnv {
             engine_cmd: engine,
             memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
+            jtag_cmd: JtagCmd::new(&xns),
 
             //fcc_cmd: fcc,
         }
@@ -210,6 +213,7 @@ impl CmdEnv {
             &mut self.memtest_cmd,
             &mut self.keys_cmd,
             &mut wlan_cmd,
+            &mut self.jtag_cmd,
 
             //&mut self.fcc_cmd,
         ];

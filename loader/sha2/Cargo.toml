@@ -6,7 +6,7 @@ edition = "2018"
 description = "sha2 hardware accelerator engine"
 
 [dependencies]
-utralib = {path = "../../utralib"}
+utralib = {path = "../utralib"}
 
 # Rust-standard digest API dependencies
 digest = "0.9"
@@ -14,7 +14,7 @@ block-buffer = "0.9"
 opaque-debug = "0.3" # prevents internal hash state leakage from debug structures
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
-utralib = { path = "../../utralib"}
+utralib = { path = "../utralib"}
 
 [features]
 default = []

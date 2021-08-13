@@ -177,7 +177,7 @@ impl RiscvException {
     pub fn from_regs(cause: usize, epc: usize, tval: usize) -> RiscvException {
         use RiscvException::*;
 
-        if epc == 0 && tval == 0 {
+        if epc == 0 && tval == 0 && cause == 0 {
             return NoException;
         }
 

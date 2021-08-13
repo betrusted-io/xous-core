@@ -39,27 +39,33 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2021_7287 |   2,192,008 bytes                      |
 +-----------+----------------------------------------+
 + 2021_7288 |   Padding                              |
-+ 2027_7FFF |                                        |
++ 2027_5FFF |                                        |
 +-----------+----------------------------------------+
-+ 2027_8000 |   csr.csv corresponding to bitstream   |
-+ 2027_FFFF |   (32kiB max, see below)               |
++ 2027_6000 |   FPGA descriptive metadata area       |
++ 2027_6FFF |                                        |
 +-----------+----------------------------------------+
-+ 2028_0000 |   Incoming update bitstream staging    |
++ 2027_7000 |   csr.csv corresponding to bitstream   |
++ 2027_EFFF |   (32kiB max, see below)               |
++-----------+----------------------------------------+
++ 2027_F000 |   FPGA digital signature page          |
++ 2027_FFFF |                                        |
++-----------+----------------------------------------+
++ 2028_0000 |   Incoming FPGA update staging  area   |
 + 204F_FFFF |                                        |
 +-----------+----------------------------------------+
-+ 2050_0000 |  top 0x1000 is signature record        |
++ 2050_0000 |  Loader top 0x1000 is signature record |
 + 2051_FFFF |  0x2050_1000: loader.bin - Xous loader |
 +-----------+----------------------------------------+
-+ 2052_0000 |   Font planes                          |
-+ 2097_FFFF |                                        |
++ 2052_0000 |   Built-in font planes                 |
++ 2097_FFFF |   Extended fonts in PDDB               |
 +-----------+----------------------------------------+
 + 2098_0000 |   Xous kernel plus                     |
-+ 20AF_FFFF |   Initial/trusted server set           |
++ 20F7_FFFF |   Initial/trusted server set           |
 +-----------+----------------------------------------+
-+ 20B0_0000 |   Reserved                             |
-+ 20CF_FFFF |                                        |
++ 20F8_0000 |   Reserved                             |
++ 20FF_FFFF |                                        |
 +-----------+----------------------------------------+
-+ 20D0_0000 |   PDDB 'filesystem'                    |
++ 2100_0000 |   PDDB 'filesystem'                    |
 + 27F7_FFFF |                                        |
 +-----------+----------------------------------------+
 + 27F8_0000 |   512k reserved space for EC image     |

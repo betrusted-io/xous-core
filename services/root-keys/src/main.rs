@@ -1,0 +1,530 @@
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
+
+mod api;
+use api::*;
+use xous::{msg_scalar_unpack, send_message, msg_blocking_scalar_unpack};
+use xous_ipc::{String, Buffer};
+
+use num_traits::*;
+
+use gam::modal::*;
+use gam::menu::*;
+
+use locales::t;
+
+#[cfg(any(target_os = "none", target_os = "xous"))]
+mod implementation;
+#[cfg(any(target_os = "none", target_os = "xous"))]
+use implementation::*;
+
+#[cfg(any(target_os = "none", target_os = "xous"))]
+mod bcrypt;
+
+// a stub to try to avoid breaking hosted mode for as long as possible.
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
+mod implementation {
+    use crate::ROOTKEY_MODAL_NAME;
+    use crate::PasswordRetentionPolicy;
+    use crate::PasswordType;
+    use gam::modal::{Modal, Slider};
+    use locales::t;
+    use crate::api::*;
+    use gam::{ActionType, ProgressBar};
+    use num_traits::*;
+
+    #[allow(dead_code)]
+    pub struct RootKeys {
+        password_type: Option<PasswordType>,
+        jtag: jtag::Jtag,
+        xns: xous_names::XousNames,
+    }
+
+    #[allow(dead_code)]
+    impl RootKeys {
+        pub fn new() -> RootKeys {
+            let xns = xous_names::XousNames::new().unwrap();
+            let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to jtag server");
+            RootKeys {
+                password_type: None,
+                xns,
+                // must occupy tihs connection for the system to boot properly
+                jtag,
+            }
+        }
+        pub fn suspend(&self) {
+        }
+        pub fn resume(&self) {
+        }
+
+        pub fn update_policy(&mut self, policy: Option<PasswordRetentionPolicy>) {
+            log::info!("policy updated: {:?}", policy);
+        }
+        pub fn hash_and_save_password(&mut self, pw: &str) {
+            log::info!("got password plaintext: {}", pw);
+        }
+        pub fn set_ux_password_type(&mut self, cur_type: Option<PasswordType>) {
+            self.password_type = cur_type;
+        }
+        pub fn is_initialized(&self) -> bool {false}
+        pub fn setup_key_init(&mut self) {}
+        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+            0, 100, 10, Some("%"), 0, true, true
+            );
+            progress_action.set_is_password(true);
+            // now show the init wait note...
+            rootkeys_modal.modify(
+                Some(ActionType::Slider(progress_action)),
+                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                None, true, None);
+            rootkeys_modal.activate();
+
+            xous::yield_slice(); // give some time to the GAM to render
+            // capture the progress bar elements in a convenience structure
+            let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+
+            let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+            for i in 1..10 {
+                log::info!("fake progress: {}", i * 10);
+                pb.set_percentage(i * 10);
+                ticktimer.sleep_ms(2000).unwrap();
+            }
+            Ok(())
+        }
+        pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
+        pub fn finish_key_init(&mut self) {}
+        pub fn verify_gateware_self_signature(&mut self) -> bool {
+            true
+        }
+        pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            Ok(())
+        }
+    }
+}
+
+
+#[xous::xous_main]
+fn xmain() -> ! {
+    use crate::implementation::RootKeys;
+
+    log_server::init_wait().unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+    log::info!("my PID is {}", xous::process::id());
+
+    let xns = xous_names::XousNames::new().unwrap();
+    /*
+       Connections allowed to the keys server:
+          0. Password entry UX thread (self, created without xns)
+          0. Key purge timer (self, created without xns)
+          1. Shellchat for test initiation
+          2. Main menu -> trigger initialization
+          3. (future) PDDB
+    */
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
+    log::trace!("registered with NS -- {:?}", keys_sid);
+
+    let mut keys = RootKeys::new();
+
+    // create the servers necessary to coordinate an auto-reboot sequence...
+    let llio = llio::Llio::new(&xns).unwrap();
+    let rtc = rtc::Rtc::new(&xns).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let com = com::Com::new(&xns).unwrap();
+
+    log::trace!("ready to accept requests");
+
+    // register a suspend/resume listener
+    let main_cid = xous::connect(keys_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, main_cid).expect("couldn't create suspend/resume object");
+
+    // create a policy menu object
+    let mut policy_menu = gam::menu::Menu::new(crate::ROOTKEY_MENU_NAME);
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_keep", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysKeep.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_suspend", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::EraseOnSuspend.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.add_item(MenuItem {
+        name: String::<64>::from_str(t!("rootkeys.policy_clear", xous::LANG)),
+        action_conn: main_cid,
+        action_opcode: Opcode::UxPolicyReturn.to_u32().unwrap(),
+        action_payload: MenuPayload::Scalar([PasswordRetentionPolicy::AlwaysPurge.to_u32().unwrap(), 0, 0, 0,]),
+        close_on_select: true,
+    });
+    policy_menu.spawn_helper(keys_sid, policy_menu.sid,
+        Opcode::MenuRedraw.to_u32().unwrap(),
+        Opcode::MenuKeys.to_u32().unwrap(),
+        Opcode::MenuDrop.to_u32().unwrap());
+
+    let mut password_action = TextEntry {
+        is_password: true,
+        visibility: TextEntryVisibility::LastChars,
+        action_conn: main_cid,
+        action_opcode: Opcode::UxInitPasswordReturn.to_u32().unwrap(),
+        action_payload: TextEntryPayload::new(),
+        validator: None,
+    };
+    let mut dismiss_modal_action = Notification::new(main_cid, Opcode::UxGutter.to_u32().unwrap());
+    dismiss_modal_action.set_is_password(true);
+
+    let mut rootkeys_modal = Modal::new(
+        crate::api::ROOTKEY_MODAL_NAME,
+        ActionType::TextEntry(password_action),
+        Some(t!("rootkeys.bootpass", xous::LANG)),
+        None,
+        GlyphStyle::Small,
+        8
+    );
+    rootkeys_modal.spawn_helper(keys_sid, rootkeys_modal.sid,
+        Opcode::ModalRedraw.to_u32().unwrap(),
+        Opcode::ModalKeys.to_u32().unwrap(),
+        Opcode::ModalDrop.to_u32().unwrap(),
+    );
+
+    let mut reboot_initiated = false;
+    loop {
+        let msg = xous::receive_message(keys_sid).unwrap();
+        log::debug!("message: {:?}", msg);
+        match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
+                keys.suspend();
+                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                keys.resume();
+            }),
+            Some(Opcode::KeysInitialized) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_initialized() {
+                    xous::return_scalar(msg.sender, 1).unwrap();
+                } else {
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+
+            // UX flow opcodes
+            Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
+                if false { // short-circuit for testing subroutines
+                    let _success = keys.test(&mut rootkeys_modal, main_cid);
+
+                    keys.finish_key_init();
+                    log::info!("going to into reboot arc");
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate dialog box");
+
+                    continue;
+                } else {
+                    // overall flow:
+                    //  - setup the init
+                    //  - check that the user is ready to proceed
+                    //  - prompt for root password
+                    //  - prompt for boot password
+                    //  - create the keys
+                    //  - write the keys
+                    //  - clear the passwords
+                    //  - reboot
+                    // the following keys should be provisioned:
+                    // - self-signing private key
+                    // - self-signing public key
+                    // - user root key
+                    // - pepper
+                    if keys.is_initialized() {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.already_init", xous::LANG)), false,
+                            None, true, None);
+                        keys.set_ux_password_type(None);
+                    } else {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxConfirmInitKeys.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.setup", xous::LANG)), false,
+                            None, true, None);
+                    }
+                    rootkeys_modal.activate();
+                    rootkeys_modal.redraw();
+                }
+            }),
+            Some(Opcode::UxConfirmInitKeys) => {
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxConfirmation.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.yes", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.confirm.no", xous::LANG)));
+
+                ////// insert the "are you sure" message at this point in the flow -- don't call setup_key_init() until we're confirmed!
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.confirm", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxConfirmation) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.confirm.yes", xous::LANG) {
+                    // setup_key_init() prepares the salt and other items necessary to receive a password safely
+                    keys.setup_key_init();
+                    // request the boot password first
+                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxInitRequestPassword.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't send message to kick off the password request process");
+                } else {
+                    log::info!("init keys process aborted, no harm no foul");
+                    continue;
+                }
+            },
+            Some(Opcode::UxInitRequestPassword) => {
+                password_action.set_action_opcode(Opcode::UxInitPasswordReturn.to_u32().unwrap());
+                if let Some(pwt) = keys.get_ux_password_type() {
+                    match pwt {
+                        PasswordType::Boot => {
+                            rootkeys_modal.modify(
+                                Some(ActionType::TextEntry(password_action)),
+                                Some(t!("rootkeys.bootpass", xous::LANG)), false,
+                                None, true, None
+                            );
+                        }
+                        PasswordType::Update => {
+                            rootkeys_modal.modify(
+                                Some(ActionType::TextEntry(password_action)),
+                                Some(t!("rootkeys.updatepass", xous::LANG)), false,
+                                None, true, None
+                            );
+                        }
+                    }
+                    rootkeys_modal.activate();
+                } else {
+                    log::error!("init password ux request without a password type requested!");
+                }
+            }
+            Some(Opcode::UxInitPasswordReturn) => {
+                // assume:
+                //   - setup_key_init has also been called (exactly once, before anything happens)
+                //   - set_ux_password_type has been called already
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+
+                if let Some(pwt) = keys.get_ux_password_type() {
+                    match pwt {
+                        PasswordType::Boot => {
+                            // now grab the update password
+                            keys.set_ux_password_type(Some(PasswordType::Update));
+                            send_message(main_cid,
+                                xous::Message::new_scalar(Opcode::UxInitRequestPassword.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't initiate dialog box");
+                        }
+                        PasswordType::Update => {
+                            keys.set_ux_password_type(None);
+
+                            // this routine will update the rootkeys_modal with the current Ux state
+                            let result = keys.do_key_init(&mut rootkeys_modal, main_cid);
+
+                            log::info!("set_ux_password result: {:?}", result);
+
+                            // clear all the state, re-enable suspend/resume
+                            keys.finish_key_init();
+
+                            match result {
+                                Ok(_) => {
+                                    log::info!("going to into reboot arc");
+                                    send_message(main_cid,
+                                        xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("couldn't initiate dialog box");
+                                }
+                                Err(RootkeyResult::AlignmentError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::KeyError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::IntegrityError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                                Err(RootkeyResult::FlashError) => {
+                                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                                    rootkeys_modal.modify(
+                                        Some(ActionType::Notification(dismiss_modal_action)),
+                                        Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                                        None, false, None);
+                                    rootkeys_modal.activate();
+                                    xous::yield_slice();
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    log::error!("invalid UX state -- someone called init password return, but no password type was set!");
+                }
+            },
+            Some(Opcode::UxTryReboot) => {
+                log::info!("entering reboot handler");
+                // ensure the boost is off so that the reboot will not fail
+                com.set_boost(false).unwrap();
+                llio.boost_on(false).unwrap();
+                ticktimer.sleep_ms(50).unwrap(); // give some time for the voltage to move
+
+                let vbus = (llio.adc_vbus().unwrap() as f64) * 0.005033;
+                log::info!("Vbus is: {:.3}V", vbus);
+                if vbus > 1.5 {
+                    // if power is plugged in, request that it be removed
+                    dismiss_modal_action.set_action_opcode(Opcode::UxTryReboot.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.init.unplug_power", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+
+                    log::info!("vbus is high, holding off on reboot");
+                } else {
+                    log::info!("initiating reboot");
+                    dismiss_modal_action.set_action_opcode(Opcode::UxTryReboot.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.init.finished", xous::LANG)), false,
+                        None, false, None);
+                    log::info!("calling activate");
+                    rootkeys_modal.activate();
+                    xous::yield_slice(); // these are necessary to get the messages in place to do a full redraw before the reboot happens
+                    rootkeys_modal.redraw();
+                    xous::yield_slice();
+                    log::info!("going to reboot state");
+                    send_message(main_cid,
+                        xous::Message::new_scalar(Opcode::UxDoReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).expect("couldn't initiate dialog box");
+                }
+            }
+            Some(Opcode::UxDoReboot) => {
+                ticktimer.sleep_ms(1500).unwrap();
+                if !reboot_initiated {
+                    // set a wakeup alarm a couple seconds from now -- this is the coldboot
+                    rtc.set_wakeup_alarm(3).unwrap();
+
+                    // allow EC to snoop, so that it can wake up the system
+                    llio.allow_ec_snoop(true).unwrap();
+                    // allow the EC to power me down
+                    llio.allow_power_off(true).unwrap();
+                    // now send the power off command
+                    com.power_off_soc().unwrap(); // not that at this point, the screen freezes with the last thing displayed...
+
+                    log::info!("rebooting now!");
+                    reboot_initiated = true;
+                }
+
+                // refresh the message if it goes away
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0)
+                ).expect("couldn't initiate dialog box");
+            }
+            Some(Opcode::UxUpdateGateware) => {
+                unimplemented!();
+            },
+            Some(Opcode::UxSelfSignXous) => {
+                unimplemented!();
+            },
+            Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                if keys.is_initialized() {
+                    if keys.verify_gateware_self_signature() {
+                        xous::return_scalar(msg.sender, 1).expect("couldn't send return value");
+                    } else {
+                        xous::return_scalar(msg.sender, 0).expect("couldn't send return value");
+                    }
+                } else {
+                    xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
+                }
+            }),
+            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
+                // empty test routine for now
+            }),
+            Some(Opcode::UxGetPolicy) => {
+                policy_menu.activate();
+            }
+            Some(Opcode::UxPolicyReturn) => msg_scalar_unpack!(msg, policy_code, _, _, _, {
+                keys.update_policy(FromPrimitive::from_usize(policy_code));
+            }),
+            Some(Opcode::UxGutter) => {
+                // an intentional NOP for UX actions that require a destintation but need no action
+            },
+
+
+
+            // boilerplate Ux handlers
+            Some(Opcode::MenuRedraw) => {
+                policy_menu.redraw();
+            },
+            Some(Opcode::MenuKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                ];
+                policy_menu.key_event(keys);
+            }),
+            Some(Opcode::MenuDrop) => {
+                panic!("Menu handler for rootkeys quit unexpectedly");
+            },
+            Some(Opcode::ModalRedraw) => {
+                rootkeys_modal.redraw();
+            },
+            Some(Opcode::ModalKeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
+                let keys = [
+                    if let Some(a) = core::char::from_u32(k1 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k2 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k3 as u32) {a} else {'\u{0000}'},
+                    if let Some(a) = core::char::from_u32(k4 as u32) {a} else {'\u{0000}'},
+                ];
+                rootkeys_modal.key_event(keys);
+            }),
+            Some(Opcode::ModalDrop) => {
+                panic!("Password modal for rootkeys quit unexpectedly")
+            }
+            Some(Opcode::Quit) => {
+                log::warn!("password thread received quit, exiting.");
+                break
+            }
+            None => {
+                log::error!("couldn't convert opcode");
+            }
+        }
+    }
+    // clean up our program
+    log::trace!("main loop exit, destroying servers");
+    xns.unregister_server(keys_sid).unwrap();
+    xous::destroy_server(keys_sid).unwrap();
+    log::trace!("quitting");
+    xous::terminate_process(0)
+}

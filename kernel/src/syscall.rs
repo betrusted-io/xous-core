@@ -214,7 +214,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                 }
             } else if blocking && !cfg!(baremetal) {
                 klog!("Blocking client, since it sent a blocking message");
-                ss.switch_from_thread(pid, thread)?;
+                ss.unschedule_thread(pid, thread)?;
                 ss.switch_to_thread(server_pid, Some(server_tid))?;
                 ss.set_thread_result(
                     server_pid,
@@ -268,7 +268,7 @@ fn send_message(pid: PID, thread: TID, cid: CID, message: Message) -> SysCallRes
                     .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                     .unwrap_or(Err(xous_kernel::Error::ProcessNotFound))
             } else {
-                ss.switch_from_thread(pid, thread)?;
+                ss.unschedule_thread(pid, thread)?;
                 Ok(xous_kernel::Result::BlockedProcess)
             }
         } else {
@@ -380,7 +380,7 @@ fn return_memory(
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.unschedule_thread(server_pid, server_tid)?;
             ss.ready_thread(server_pid, server_tid)?;
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
@@ -451,7 +451,7 @@ fn return_scalar(
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.unschedule_thread(server_pid, server_tid)?;
             ss.ready_thread(server_pid, server_tid)?;
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
@@ -526,7 +526,7 @@ fn return_scalar2(
             Ok(xous_kernel::Result::Ok)
         } else {
             // Switch away from the server, but leave it as Runnable
-            ss.switch_from_thread(server_pid, server_tid)?;
+            ss.unschedule_thread(server_pid, server_tid)?;
             ss.ready_thread(server_pid, server_tid)?;
             ss.set_thread_result(server_pid, server_tid, xous_kernel::Result::Ok)?;
 
@@ -591,7 +591,7 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
         // For hosted targets, simply return `BlockedProcess` indicating we'll make
         // a callback to their socket at a later time.
         else {
-            ss.switch_from_thread(pid, tid)
+            ss.unschedule_thread(pid, tid)
                 .map(|_| xous_kernel::Result::BlockedProcess)
         }
     })
@@ -601,6 +601,7 @@ pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult 
     #[cfg(feature = "debug-print")]
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
 
+    #[allow(clippy::let_and_return)]
     let result = if in_irq && !call.can_call_from_interrupt() {
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
@@ -672,8 +673,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         };
                         // println!("Done zeroing out");
                     }
-                    for offset in
-                        (range.as_ptr() as usize..(range.as_ptr() as usize + range.len())).step_by(PAGE_SIZE)
+                    for offset in (range.as_ptr() as usize..(range.as_ptr() as usize + range.len()))
+                        .step_by(PAGE_SIZE)
                     {
                         // println!("Handing page to user");
                         crate::arch::mem::hand_page_to_user(offset as *mut u8)
@@ -688,10 +689,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             let mut result = Ok(xous_kernel::Result::Ok);
             let virt = range.as_ptr() as usize;
             let size = range.len();
-            if cfg!(baremetal) {
-                if virt & 0xfff != 0 {
-                    return Err(xous_kernel::Error::BadAlignment);
-                }
+            if cfg!(baremetal) && virt & 0xfff != 0 {
+                return Err(xous_kernel::Error::BadAlignment);
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
                 if let Err(e) = mm.unmap_page(addr as *mut usize) {
@@ -757,11 +756,8 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             //     "Activating process thread {} in pid {} coming from pid {} thread {}",
             //     new_context, new_pid, pid, tid
             // );
-            let result = ss
-                .activate_process_thread(tid, new_pid, new_context, true)
-                .map(|_ctx| xous_kernel::Result::ResumeProcess);
-            // println!("Done activating process thread: {:?}", result);
-            result
+            ss.activate_process_thread(tid, new_pid, new_context, true)
+                .map(|_ctx| xous_kernel::Result::ResumeProcess)
         }),
         SysCall::ClaimInterrupt(no, callback, arg) => {
             interrupt_claim(no, pid as definitions::PID, callback, arg)
@@ -770,9 +766,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Yield => do_yield(pid, tid),
         SysCall::ReturnToParent(_pid, _cpuid) => {
             unsafe {
-                SWITCHTO_CALLER.take().map(|(parent_pid, parent_ctx)| {
+                if let Some((parent_pid, parent_ctx)) = SWITCHTO_CALLER.take() {
                     crate::arch::irq::set_isr_return_pair(parent_pid, parent_ctx)
-                });
+                }
             };
             Ok(xous_kernel::Result::ResumeProcess)
         }
@@ -814,10 +810,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             ss.create_server(pid)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
-        SysCall::CreateServerId => SystemServices::with_mut(|ss| {
-            ss.create_server_id()
-                .map(|sid| xous_kernel::Result::ServerID(sid))
-        }),
+        SysCall::CreateServerId => {
+            SystemServices::with_mut(|ss| ss.create_server_id().map(xous_kernel::Result::ServerID))
+        }
         SysCall::TryConnect(sid) => SystemServices::with_mut(|ss| {
             ss.connect_to_server(sid)
                 .map(xous_kernel::Result::ConnectionID)
@@ -831,7 +826,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }
         SysCall::TrySendMessage(cid, message) => send_message(pid, tid, cid, message),
         SysCall::TerminateProcess(_ret) => SystemServices::with_mut(|ss| {
-            ss.switch_from_thread(pid, tid)?;
+            ss.unschedule_thread(pid, tid)?;
             ss.terminate_process(pid)?;
             // Clear out `SWITCHTO_CALLER` since we're resuming the parent process.
             unsafe { SWITCHTO_CALLER = None };
@@ -886,6 +881,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 ret
             })
         }
+        SysCall::SetExceptionHandler(pc, sp) => SystemServices::with_mut(|ss| {
+            ss.set_exception_handler(pid, pc, sp)
+                .and(Ok(xous_kernel::Result::Ok))
+        }),
         _ => Err(xous_kernel::Error::UnhandledSyscall),
     }
 }

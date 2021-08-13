@@ -4,8 +4,6 @@
 mod api;
 use api::*;
 
-use heapless::Vec;
-
 use log::info;
 
 use num_traits::*;
@@ -160,7 +158,7 @@ fn map_qwerty(code: RowCol) -> ScanCode {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
     use crate::api::*;
@@ -169,8 +167,6 @@ mod implementation {
     use xous::CID;
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
-
-    use heapless::Vec;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
@@ -411,7 +407,7 @@ mod implementation {
             krs
         }
 
-        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol, 16>>, keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
+        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol>>, keydowns: Option<Vec<RowCol>>) -> Vec<char> {
             /*
             Chording algorithm:
 
@@ -430,7 +426,7 @@ mod implementation {
                 }
             }
             log::trace!("self.chord: {:?}", self.chord);
-            let mut keystates: Vec<char, 4> = Vec::new();
+            let mut keystates: Vec<char> = Vec::new();
 
             let now = self.ticktimer.elapsed_ms();
             if was_idle && self.chord_active != 0 {
@@ -501,31 +497,31 @@ mod implementation {
                     _ => None,
                 };
                 if let Some(key) = keychar {
-                    keystates.push(key).unwrap();
+                    keystates.push(key);
                 }
 
                 let up = self.chord[6][4];
-                if up { keystates.push('↑').unwrap(); }
+                if up { keystates.push('↑'); }
 
                 let left = self.chord[8][3];
-                if left { keystates.push('←').unwrap(); }
+                if left { keystates.push('←'); }
                 let right = self.chord[3][6];
-                if right { keystates.push('→').unwrap(); }
+                if right { keystates.push('→'); }
                 let down = self.chord[8][2];
-                if down { keystates.push('↓').unwrap(); }
+                if down { keystates.push('↓'); }
                 let center = self.chord[5][2];
-                if center { keystates.push('∴').unwrap(); }
+                if center { keystates.push('∴'); }
 
                 let space = self.chord[2][3];
-                if space { keystates.push(' ').unwrap(); }
+                if space { keystates.push(' '); }
 
                 let esc = self.chord[8][6];
                 let bs: char = 0x8_u8.into();  // back space
-                if esc { keystates.push(bs).unwrap(); }
+                if esc { keystates.push(bs); }
 
                 let func = self.chord[7][5];
                 let cr: char = 0xd_u8.into();  // carriage return
-                if func { keystates.push(cr).unwrap(); }
+                if func { keystates.push(cr); }
 
                 log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
                     up, left, right, down, center, space, esc, func);
@@ -547,7 +543,7 @@ mod implementation {
             keystates
         }
 
-        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol, 16>>, keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
+        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol>>, keydowns: Option<Vec<RowCol>>) -> Vec<char> {
             /*
               "conventional" keyboard algorithm. The goals of this are to differentiate
               the cases of "shift", "alt", and "hold".
@@ -558,7 +554,7 @@ mod implementation {
               then for all others, we note the down time, and compare it to the current time
               to determine if a "hold" modifier applies
              */
-            let mut ks: Vec<char, 4> = Vec::new();
+            let mut ks: Vec<char> = Vec::new();
 
             // first check for shift and alt keys
             if let Some(kds) = &keydowns {
@@ -594,9 +590,9 @@ mod implementation {
                     }
                 }
             }
-            let keyups_noshift: Option<Vec<RowCol, 16>> =
+            let keyups_noshift: Option<Vec<RowCol>> =
                 if let Some(kus) = &keyups {
-                    let mut ku_ns: Vec<RowCol, 16> = Vec::new();
+                    let mut ku_ns: Vec<RowCol> = Vec::new();
                     for &rc in kus.iter() {
                         match self.map {
                             KeyMap::Azerty => {
@@ -611,7 +607,7 @@ mod implementation {
                                     }
                                     self.shift_down = false;
                                 } else {
-                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
+                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _});
                                 }
                             },
                             _ => { // the rest just have one color of shift
@@ -625,7 +621,7 @@ mod implementation {
                                     self.shift_down = false;
                                 } else {
                                     //info!("adding non-shift entry {:?}", rc);
-                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _}).unwrap();
+                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _});
                                 }
                             }
                         }
@@ -663,8 +659,6 @@ mod implementation {
                 hold = false;
             }
 
-            fn report_ok(k: char) -> Result<(), ()> { log::error!("ran out of space saving char: {}", k); Ok(()) }
-
             if let Some(kus) = &keyups_noshift {
                 for &rc in kus.iter() {
                     // info!("interpreting keyups_noshift entry {:?}", rc);
@@ -688,38 +682,38 @@ mod implementation {
                         KeyMap::Azerty => {
                             if self.shift_down || self.shift_up {
                                 if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode).or_else(report_ok).ok();
+                                    ks.push(shiftcode);
                                 } else if let Some(keycode) = code.key {
-                                    ks.push(keycode).or_else(report_ok).ok();
+                                    ks.push(keycode);
                                 }
                                 self.shift_down = false;
                                 self.shift_up = false;
                             } else if self.alt_down || self.alt_up {
                                 if let Some(altcode) = code.alt {
-                                    ks.push(altcode).or_else(report_ok).ok();
+                                    ks.push(altcode);
                                 } else if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode).or_else(report_ok).ok();
+                                    ks.push(shiftcode);
                                 } else if let Some(keycode) = code.key {
-                                    ks.push(keycode).or_else(report_ok).ok();
+                                    ks.push(keycode);
                                 }
                                 self.alt_down = false;
                                 self.alt_up = false;
                             } else if hold {
                                 if let Some(holdcode) = code.hold {
-                                    ks.push(holdcode).or_else(report_ok).ok();
+                                    ks.push(holdcode);
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
-                                    ks.push(keycode).or_else(report_ok).ok();
+                                    ks.push(keycode);
                                 }
                             }
                         },
                         _ => {
                             if self.shift_down || self.alt_down || self.shift_up || self.alt_up {
                                 if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode).or_else(report_ok).ok();
+                                    ks.push(shiftcode);
                                 } else if let Some(keycode) = code.key {
-                                    ks.push(keycode).or_else(report_ok).ok();
+                                    ks.push(keycode);
                                 }
                                 self.shift_down = false;
                                 self.alt_down = false;
@@ -727,12 +721,12 @@ mod implementation {
                                 self.alt_up = false;
                             } else if hold {
                                 if let Some(holdcode) = code.hold {
-                                    ks.push(holdcode).or_else(report_ok).ok();
+                                    ks.push(holdcode);
                                 }
                             } else {
                                 if let Some(keycode) = code.key {
                                     // info!("appeding normal key '{}'", keycode);
-                                    ks.push(keycode).or_else(report_ok).ok();
+                                    ks.push(keycode);
                                 }
                             }
                         }
@@ -744,7 +738,7 @@ mod implementation {
             if hold && ((now - self.rate_timestamp) >= self.rate as u64) && self.repeating_key.is_some() {
                 self.rate_timestamp = now;
                 if let Some(repeatkey) = self.repeating_key {
-                    ks.push(repeatkey).or_else(report_ok).ok();
+                    ks.push(repeatkey);
                 }
             }
 
@@ -754,9 +748,8 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    use heapless::Vec;
     use crate::api::*;
     //use crate::{map_dvorak, map_qwerty};
 
@@ -793,11 +786,11 @@ mod implementation {
             KeyRawStates::new()
         }
 
-        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol, 16>>, _keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
+        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol>>, _keydowns: Option<Vec<RowCol>>) -> Vec<char> {
             Vec::new()
         }
 
-        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol, 16>>, _keydowns: Option<Vec<RowCol, 16>>) -> Vec<char, 4> {
+        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol>>, _keydowns: Option<Vec<RowCol>>) -> Vec<char> {
             Vec::new()
         }
 
@@ -841,9 +834,9 @@ fn xmain() -> ! {
     // connections expected:
     //  - GAM
     //  - graphics (if building for hosted mode)
-    #[cfg(target_os = "none")]
+    #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(1)).expect("can't register server");
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
@@ -956,6 +949,8 @@ fn xmain() -> ! {
                 // send rawstates on to rawstate listeners
                 send_rawstates(&mut raw_conns, &rawstates);
 
+                ///// TODO: the comment below predates the addition of libstd to Xous. We need to fix this still,
+                ///// for now we have just refactored out the heapless crate.
                 // GROSS: we copy our IPC-compatible RowColVec type into a heapless::Vec for further processing
                 // this code can probably be cleaned up and improved quite a bit to reduce CPU time.
                 // We don't use heapless::Vec for the IPC because we can't serialize the object with a trait natively
@@ -965,16 +960,16 @@ fn xmain() -> ! {
                 // and push(), len() etc. which doesn't really make sense to re-implement. But, maybe someone much
                 // more clever than I could do extend RowColVec to have these feature and get rid of this ugly copy
                 // step and make the rest of this routine operate natively on RowColVec types....
-                let mut keyups_core: Vec<RowCol, 16> = Vec::new();
-                let mut keydowns_core: Vec<RowCol, 16> = Vec::new();
+                let mut keyups_core: Vec<RowCol> = Vec::new();
+                let mut keydowns_core: Vec<RowCol> = Vec::new();
                 for i in 0..rawstates.keyups.len() {
                     if let Some(rc) = rawstates.keyups.get(i) {
-                        keyups_core.push(rc).unwrap();
+                        keyups_core.push(rc);
                     }
                 }
                 for i in 0..rawstates.keydowns.len() {
                     if let Some(rc) = rawstates.keydowns.get(i) {
-                        keydowns_core.push(rc).unwrap();
+                        keydowns_core.push(rc);
                     }
                 }
                 let keyups = if keyups_core.len() > 0 {
@@ -990,7 +985,7 @@ fn xmain() -> ! {
 
                 // interpret scancodes
                 // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
-                let kc: Vec<char, 4> = match kbd.get_map() {
+                let kc: Vec<char> = match kbd.get_map() {
                     KeyMap::Braille => {
                         kbd.track_chord(keyups, keydowns)
                     },

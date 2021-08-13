@@ -125,28 +125,6 @@ impl<'a> StringBuffer<'a> {
         }
     }
 
-    pub fn from_str<T>(src: T) -> Self
-    where
-        T: AsRef<str>,
-    {
-        let src = src.as_ref();
-        let mut s = Self::with_capacity(src.len());
-        // Copy the string into our backing store.
-        for (dest_byte, src_byte) in s.bytes.as_mut().unwrap().iter_mut().zip(src.as_bytes()) {
-            *dest_byte = *src_byte;
-        }
-        // Set the string length to the length of the passed-in String,
-        // or the maximum possible length. Which ever is smaller.
-        s.length = s.as_bytes().len().min(src.as_bytes().len()) as u32;
-
-        // If the string is not valid, set its length to 0.
-        if s.as_str().is_err() {
-            s.length = 0;
-        }
-
-        s
-    }
-
     pub fn as_bytes(&self) -> &[u8] {
         if let Some(bytes) = &self.bytes {
             bytes
@@ -210,6 +188,10 @@ impl<'a> StringBuffer<'a> {
         }
     }
 
+    /// # Safety
+    ///
+    /// This can turn any `MemoryMessage` into a `StringBuffer`, so ensure
+    /// that this function is only called when the contents are a `StringBuffer`
     pub unsafe fn from_memory_message(mem: &'a MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
@@ -224,6 +206,10 @@ impl<'a> StringBuffer<'a> {
         }
     }
 
+    /// # Safety
+    ///
+    /// This can turn any `MemoryMessage` into a `StringBuffer`, so ensure
+    /// that this function is only called when the contents are a `StringBuffer`
     pub unsafe fn from_memory_message_mut(mem: &'a mut MemoryMessage) -> Self {
         StringBuffer {
             // range: mem.buf,
@@ -264,6 +250,33 @@ impl<'a> StringBuffer<'a> {
         // prevents it from being Dropped.
         self.should_free = false;
         Ok(result)
+    }
+}
+
+impl<'a> core::str::FromStr for StringBuffer<'a> {
+    type Err = &'static str;
+    fn from_str(src: &str) -> core::result::Result<StringBuffer<'a>, &'static str> {
+        let mut s = Self::with_capacity(src.len());
+        // Copy the string into our backing store.
+        for (dest_byte, src_byte) in s.bytes.as_mut().unwrap().iter_mut().zip(src.as_bytes()) {
+            *dest_byte = *src_byte;
+        }
+        // Set the string length to the length of the passed-in String,
+        // or the maximum possible length. Which ever is smaller.
+        s.length = s.as_bytes().len().min(src.as_bytes().len()) as u32;
+
+        // If the string is not valid, set its length to 0.
+        if s.as_str().is_err() {
+            s.length = 0;
+        }
+
+        Ok(s)
+    }
+}
+
+impl<'a> Default for StringBuffer<'a> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -314,7 +327,7 @@ impl<'a> Eq for StringBuffer<'a> {}
 
 impl<'a> Drop for StringBuffer<'a> {
     fn drop(&mut self) {
-        if self.should_free && self.as_bytes().len() != 0 {
+        if self.should_free && !self.as_bytes().is_empty() {
             let range = unsafe {
                 MemoryRange::new(self.as_bytes().as_ptr() as _, self.as_bytes().len()).unwrap()
             };

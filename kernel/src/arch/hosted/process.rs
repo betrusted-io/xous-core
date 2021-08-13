@@ -9,7 +9,8 @@ use std::net::TcpStream;
 use std::thread_local;
 use xous_kernel::{ProcessInit, ProcessKey, ThreadInit, PID, TID};
 
-pub const INITIAL_TID: usize = 1;
+pub const INITIAL_TID: usize = 2;
+pub const EXCEPTION_TID: usize = 1;
 pub const MAX_PROCESS_COUNT: usize = 32;
 
 pub struct Process {
@@ -241,7 +242,7 @@ impl Process {
     // }
 
     /// Set the current context number.
-    pub fn set_thread(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
+    pub fn set_tid(&mut self, thread: TID) -> Result<(), xous_kernel::Error> {
         assert!(thread > 0);
         PROCESS_TABLE.with(|pt| {
             let mut process_table = pt.borrow_mut();

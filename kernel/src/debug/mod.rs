@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use core::fmt::{Error, Write};
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 use utralib::generated::*;
 
 pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
@@ -10,7 +10,7 @@ pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 #[macro_use]
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub mod debug_print_hardware {
@@ -19,15 +19,16 @@ pub mod debug_print_hardware {
 }
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub use crate::debug::debug_print_hardware::SUPERVISOR_UART_ADDR;
 
-#[cfg(all(not(test), baremetal))]
+#[cfg(all(target_os = "none"))]
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
+        #[allow(unused_unsafe)]
         unsafe {
             if let Some(mut stream) = crate::debug::DEBUG_OUTPUT.as_mut() {
                 write!(&mut stream, $($args)+).unwrap();
@@ -36,7 +37,7 @@ macro_rules! print {
     }};
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! println
 {
@@ -51,15 +52,15 @@ macro_rules! println
 	});
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub struct Uart {}
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 pub static mut UART: Uart = Uart {};
 
-#[cfg(all(baremetal, feature = "wrap-print"))]
+#[cfg(all(target_os = "none", feature = "wrap-print"))]
 static mut CHAR_COUNT: usize = 0;
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 impl Uart {
     #[allow(dead_code)]
     pub fn init(self) {
@@ -75,9 +76,7 @@ impl Uart {
 
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // Wait until TXFULL is `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {
-            ()
-        }
+        while uart_csr.r(utra::uart::TXFULL) != 0 {}
         #[cfg(feature = "wrap-print")]
         unsafe {
             if c == b'\n' {
@@ -102,40 +101,34 @@ impl Uart {
         if unsafe { DEBUG_OUTPUT.is_none() } {
             return None;
         }
-        let uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
+        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // If EV_PENDING_RX is 1, return the pending character.
         // Otherwise, return None.
-        match uart_csr.rf(utra::uart::RXEMPTY_RXEMPTY) {
-            1 => None,
-            _ => Some(uart_csr.r(utra::uart::RXTX) as u8),
+        match uart_csr.rf(utra::uart::EV_PENDING_RX) {
+            0 => None,
+            _ => {
+                let ret = Some(uart_csr.r(utra::uart::RXTX) as u8);
+                uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
+                ret
+            },
         }
-    }
-
-    pub fn acknowledge_irq(&self) {
-        if unsafe { DEBUG_OUTPUT.is_none() } {
-            return;
-        }
-        let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
-        uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
     }
 }
 
-#[cfg(all(feature = "gdbserver", baremetal))]
+#[cfg(all(feature = "gdbserver", target_os = "none"))]
 mod gdb_server;
 
-#[cfg(all(feature = "gdbserver", baremetal))]
+#[cfg(all(feature = "gdbserver", target_os = "none"))]
 impl gdbstub::Connection for Uart {
     type Error = ();
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         if unsafe { DEBUG_OUTPUT.is_none() } {
-            Err(())?;
+            return Err(());
         }
         let mut uart_csr = CSR::new(crate::debug::SUPERVISOR_UART_ADDR as *mut u32);
         // Wait until TXFULL is not `0`
-        while uart_csr.r(utra::uart::TXFULL) != 0 {
-            ()
-        }
+        while uart_csr.r(utra::uart::TXFULL) != 0 {}
         uart_csr.wo(utra::uart::RXTX, byte as u32);
         Ok(())
     }
@@ -149,7 +142,7 @@ impl gdbstub::Connection for Uart {
 
 #[cfg(all(
     not(test),
-    baremetal,
+    target_os = "none",
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
@@ -157,11 +150,11 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
     while let Some(b) = uart.getc() {
         process_irq_character(b);
     }
-    uart.acknowledge_irq();
+    // uart.acknowledge_irq();
 }
 
 fn process_irq_character(b: u8) {
-    #[cfg(all(feature = "gdbserver", baremetal))]
+    #[cfg(all(feature = "gdbserver", target_os = "none"))]
     if gdb_server::handle(b) {
         return;
     }
@@ -257,7 +250,7 @@ fn process_irq_character(b: u8) {
             });
             println!("{} k total", total_bytes / 1024);
         }
-        #[cfg(all(feature = "gdbserver", baremetal))]
+        #[cfg(all(feature = "gdbserver", target_os = "none"))]
         b'g' => {
             println!("Starting GDB server -- attach your debugger now");
             gdb_server::setup();
@@ -266,7 +259,7 @@ fn process_irq_character(b: u8) {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");
-            #[cfg(all(feature = "gdbserver", baremetal))]
+            #[cfg(all(feature = "gdbserver", target_os = "none"))]
             println!(" g  | enter the gdb server");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
@@ -277,7 +270,7 @@ fn process_irq_character(b: u8) {
     }
 }
 
-#[cfg(baremetal)]
+#[cfg(target_os = "none")]
 impl Write for Uart {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         for c in s.bytes() {
@@ -305,7 +298,5 @@ macro_rules! klog
 #[cfg(not(feature = "debug-print"))]
 #[macro_export]
 macro_rules! klog {
-    ($($args:tt)+) => {{
-        ()
-    }};
+    ($($args:tt)+) => {{}};
 }

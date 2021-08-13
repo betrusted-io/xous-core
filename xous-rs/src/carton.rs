@@ -84,7 +84,7 @@ impl<'a> AsRef<MemoryRange> for Carton<'a> {
 
 impl<'a> AsRef<[u8]> for Carton<'a> {
     fn as_ref(&self) -> &[u8] {
-        &self.slice
+        self.slice
     }
 }
 

@@ -5,19 +5,20 @@ use xous_ipc::String;
 pub struct Keys {
     testing_range: xous::MemoryRange,
     spinor: spinor::Spinor,
+    rootkeys: root_keys::RootKeys,
 }
 const TEST_SIZE: usize = 0x4000;
 const TEST_BASE: usize = 0x608_0000;
 impl Keys {
     pub fn new(xns: &xous_names::XousNames) -> Keys {
-        #[cfg(target_os = "none")]
+        #[cfg(any(target_os = "none", target_os = "xous"))]
         let testing_range = xous::syscall::map_memory(
             Some(core::num::NonZeroUsize::new(TEST_BASE + xous::FLASH_PHYS_BASE as usize).unwrap()), // occupy the 44.1khz short sample area for testing
             None,
             TEST_SIZE,
             xous::MemoryFlags::R,
         ).expect("couldn't map in testing range");
-        #[cfg(not(target_os = "none"))] // just make a dummy mapping to keep things from crashing in hosted mode
+        #[cfg(not(any(target_os = "none", target_os = "xous")))] // just make a dummy mapping to keep things from crashing in hosted mode
         let testing_range = xous::syscall::map_memory(
             None,
             None,
@@ -32,6 +33,7 @@ impl Keys {
         Keys {
             testing_range,
             spinor,
+            rootkeys: root_keys::RootKeys::new(&xns).expect("couldn't allocate rootkeys API"),
         }
     }
 }
@@ -48,6 +50,11 @@ impl<'a> ShellCmdApi<'a> for Keys {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                "ux" => {
+                    self.rootkeys.test_ux(0);
+                    //debug_here::debug_here!();
+                    write!(ret, "show UX").unwrap();
+                }
                 "usblock" => {
                     env.llio.debug_usb(Some(true)).unwrap();
                     write!(ret, "USB debug port locked out; one word at 0x80000000 is disclosable via USB.").unwrap();
@@ -62,7 +69,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
 
                     log::debug!("top of region: {:x?}", &region[0..8]);
                     // a region to stash a copy of the previous data in the testing area, so we can diff to confirm things worked!
-                    let reference_region = xous::syscall::map_memory(
+                    let mut reference_region = xous::syscall::map_memory(
                         None,
                         None,
                         TEST_SIZE,

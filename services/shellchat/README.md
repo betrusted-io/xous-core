@@ -14,7 +14,8 @@ Other facilities for handling system-level messages, such as menu configurations
 and network events, have yet to be implemented. However, they will likely end up
 with a demo in this application first.
 
-To make your own command, copy the `echo.rs` template or snag the one below, and put
+To make your own command, copy the `ver.rs` template (for an example with argument parsing),
+or snag the very simple echo template below, and put
 it in the services/shellchat/src/cmds/ directory:
 
 ```Rust

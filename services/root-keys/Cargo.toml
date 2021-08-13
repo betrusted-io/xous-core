@@ -1,0 +1,72 @@
+[package]
+name = "root-keys"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "Xous root keys server"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+susres = {path = "../susres"}
+trng = {path= "../trng"}
+spinor = {path="../spinor"}
+llio = {path="../llio"}
+rtc = {path="../rtc"}
+com = {path="../com"}
+
+xous-ipc = {path = "../../xous-ipc"}
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
+
+# bcrypt
+cipher = "0.3"
+blowfish = { version = "0.8", features = ["bcrypt"] }
+
+# password modals - keep them in this crate to minimize plaintext password manipulations
+gam = {path = "../gam"}
+locales = {path = "../../locales"}
+
+# to access font maps for signing verification
+graphics-server = {path = "../graphics-server"}
+
+# for reboots and fuse operations
+jtag = {path = "../jtag"}
+
+# private keys
+#sha2 = {version = "0.9.5", default-features = false, features = []}
+sha2 = {path = "../engine-sha512"}
+digest = "0.9"
+aes-xous={path="../aes"}
+engine-25519 = {path="../engine-25519"}
+# hardware acceleration adaptations are inserted into a fork of the main branch.
+rand_core = "0.5"
+hex = {version = "0.4.3", default-features = false, features = []}
+[dependencies.curve25519-dalek]
+version = "3.1.0" # note this is patched to our fork in ./Cargo.toml
+default-features = false
+features = ["u32_backend", "betrusted"]
+
+[dependencies.ed25519-dalek]
+version = "1.0.1"
+#path = "../../../ed25519-dalek"
+default-features = false
+features = ["u32_backend", "rand"]
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
+default = []
+
+[lib]
+test = true
+
+[[bin]]
+name = "root-keys"
+test = false

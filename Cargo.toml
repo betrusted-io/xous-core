@@ -8,6 +8,7 @@ default-members = [
   "services/com",
   "services/trng",
   "services/gam",
+  "services/status",
   "imports/blitstr-ref",
   "imports/com_rs-ref",
   "services/ime-plugin-api",
@@ -29,6 +30,8 @@ default-members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/root-keys",
+  "services/jtag",
 ]
 members = [
   "xous-ipc",
@@ -45,6 +48,7 @@ members = [
   "services/kernel-test",
   "services/trng",
   "services/gam",
+  "services/status",
   "services/benchmark",
   "services/benchmark-target",
   "services/ime-frontend",
@@ -71,6 +75,8 @@ members = [
   "services/aes",
   "services/test-stub",
   "services/spinor",
+  "services/root-keys",
+  "services/jtag",
 ]
 resolver = "2"
 
@@ -82,6 +88,7 @@ exclude = [
   "kernel",
   "loader",
   "utralib",  # Exclude UTRA, since it is machine-generated.
+  "locales",  # exclude because it is machine-generated
 ]
 
 [profile.release]
@@ -94,8 +101,10 @@ lto = "fat"
 [patch.crates-io]
 xous = {path = "xous-rs"}
 xous-macros = {path = "macros"}
+
 # prefer hardware-accelerated versions of services
-sha2 = {path = "services/engine-sha512", package = "engine-sha512"}
+[patch.crates-io.sha2]
+path = "services/engine-sha512"
 
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"

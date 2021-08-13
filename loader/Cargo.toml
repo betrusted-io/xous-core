@@ -6,7 +6,7 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
-utralib = {path = "../utralib"}
+utralib = {path = "utralib"}
 
 [dependencies.com_rs]
 git="https://github.com/betrusted-io/com_rs"
@@ -42,7 +42,7 @@ debug = true # symbols are nice and they don't increase the size on Flash
 lto = "fat"
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = { path = "../utralib"}
+utralib = { path = "utralib"}
 
 # patch key references into our local name space
 [patch.crates-io.sha2]
@@ -51,7 +51,7 @@ package = "sha2"
 default-features = false
 
 [patch.crates-io.utralib]
-path = "../utralib"
+path = "utralib"
 
 [patch.crates-io.curve25519-dalek]
 git="https://github.com/betrusted-io/curve25519-dalek.git"

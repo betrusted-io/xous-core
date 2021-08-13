@@ -234,25 +234,36 @@ impl MiniElf {
         // Turn the satp address into a pointer
         println!("    Pagetable @ {:08x}", satp_address);
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
-        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W);
+        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
 
         // Allocate thread 1 for this process
         let thread_address = allocator.alloc() as usize;
         println!("    Thread 1 @ {:08x}", thread_address);
-        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
         allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Allocate stack pages.
         println!("    Stack");
         for i in 0..STACK_PAGE_COUNT {
-            let sp_page = allocator.alloc() as usize;
-            allocator.map_page(
-                satp,
-                sp_page,
-                (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
-                FLG_U | FLG_R | FLG_W,
-            );
-            allocator.change_owner(pid as XousPid, sp_page);
+            if i == 0 {
+                // For the initial stack frame, allocate a valid page
+                let sp_page = allocator.alloc() as usize;
+                allocator.map_page(
+                    satp,
+                    sp_page,
+                    (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    FLG_U | FLG_R | FLG_W | FLG_VALID,
+                );
+                allocator.change_owner(pid as XousPid, sp_page);
+            } else {
+                // Reserve every other stack page other than the 1st page.
+                allocator.map_page(
+                    satp,
+                    0,
+                    (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    FLG_U | FLG_R | FLG_W,
+                );
+            }
         }
 
         // Example: Page starts at 0xf0c0 and is 8192 bytes long.
@@ -272,6 +283,7 @@ impl MiniElf {
             if VDBG {println!("    Section @ {:08x}", section.virt as usize);}
             let flag_defaults = FLG_U
                 | FLG_R
+                | FLG_VALID
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
                 | if section.flags() & 4 == 4 { FLG_X } else { 0 };
 
@@ -411,7 +423,7 @@ impl ProgramDescription {
         println!("Mapping PID {} into offset {:08x}", pid, load_offset);
         let pid_idx = (pid - 1) as usize;
         let is_kernel = pid == 1;
-        let flag_defaults = FLG_R | FLG_W | if is_kernel { 0 } else { FLG_U };
+        let flag_defaults = FLG_R | FLG_W | FLG_VALID | if is_kernel { 0 } else { FLG_U };
         let stack_addr = USER_STACK_TOP - 16;
         if is_kernel {
             assert!(self.text_offset as usize == KERNEL_LOAD_OFFSET);
@@ -437,12 +449,12 @@ impl ProgramDescription {
 
         // Turn the satp address into a pointer
         let satp = unsafe { &mut *(satp_address as *mut PageTable) };
-        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W);
+        allocator.map_page(satp, satp_address, PAGE_TABLE_ROOT_OFFSET, FLG_R | FLG_W | FLG_VALID);
         allocator.change_owner(pid as XousPid, satp_address as usize);
 
         // Allocate context for this process
         let thread_address = allocator.alloc() as usize;
-        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W);
+        allocator.map_page(satp, thread_address, CONTEXT_OFFSET, FLG_R | FLG_W | FLG_VALID);
         allocator.change_owner(pid as XousPid, thread_address as usize);
 
         // Allocate stack pages.
@@ -451,14 +463,24 @@ impl ProgramDescription {
         } else {
             STACK_PAGE_COUNT
         } {
-            let sp_page = allocator.alloc() as usize;
-            allocator.map_page(
-                satp,
-                sp_page,
-                (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
-                flag_defaults,
-            );
-            allocator.change_owner(pid as XousPid, sp_page);
+            if i == 0 {
+                let sp_page = allocator.alloc() as usize;
+                allocator.map_page(
+                    satp,
+                    sp_page,
+                    (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    flag_defaults,
+                );
+                allocator.change_owner(pid as XousPid, sp_page);
+            } else {
+                // Reserve every page other than the 1st stack page
+                allocator.map_page(
+                    satp,
+                    0,
+                    (stack_addr - PAGE_SIZE * i) & !(PAGE_SIZE - 1),
+                    flag_defaults & !FLG_VALID,
+                );
+            }
 
             // If it's the kernel, also allocate an exception page
             if is_kernel {
@@ -497,7 +519,7 @@ impl ProgramDescription {
                 satp,
                 load_offset + offset + rounded_data_bss,
                 self.text_offset as usize + offset,
-                flag_defaults | FLG_X,
+                flag_defaults | FLG_X | FLG_VALID,
             );
             allocator.change_owner(pid as XousPid, load_offset + offset + rounded_data_bss);
         }
@@ -523,7 +545,7 @@ impl ProgramDescription {
 
         // Our "earlyprintk" equivalent
         if cfg!(feature = "earlyprintk") && is_kernel {
-            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W);
+            allocator.map_page(satp, 0xF000_2000, 0xffcf_0000, FLG_R | FLG_W | FLG_VALID);
             allocator.change_owner(pid as XousPid, 0xF000_2000);
         }
 
@@ -965,7 +987,7 @@ impl BootConfig {
         }
         let previous_flags = l0_pt[vpn0] & 0xf;
         l0_pt[vpn0] =
-            (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_VALID | FLG_D | FLG_A;
+            (ppn1 << 20) | (ppn0 << 10) | flags | previous_flags | FLG_D | FLG_A;
 
         // If we had to allocate a level 1 pagetable entry, ensure that it's
         // mapped into our address space, owned by PID 1.
@@ -979,7 +1001,7 @@ impl BootConfig {
                 root,
                 addr.get(),
                 PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE,
-                FLG_R | FLG_W,
+                FLG_R | FLG_W | FLG_VALID,
             );
             self.change_owner(1 as XousPid, addr.get());
             println!("<<< Done mapping new address");
@@ -1197,6 +1219,7 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     if !clean {
         // cold boot path
         println!("no suspend marker found, doing a cold boot!");
+        clear_ram(&mut cfg);
         phase_1(&mut cfg);
         phase_2(&mut cfg);
         println!("done initializing for cold boot.");
@@ -1372,6 +1395,19 @@ fn check_resume(cfg: &mut BootConfig) -> (bool, bool, u32) {
     (clean, was_forced_suspend, pid)
 }
 
+fn clear_ram(cfg: &mut BootConfig) {
+    // clear RAM on a cold boot.
+    // RAM is persistent and battery-backed. This means secret material could potentiall
+    // stay there forever, if not explicitly cleared. This clear adds a couple seconds
+    // to a cold boot, but it's probably worth it. Note that it doesn't happen on a suspend/resume.
+    let ram: *mut u32 = cfg.sram_start as *mut u32;
+    unsafe {
+        for addr in 0..(cfg.sram_size - 8192) / 4 { // 8k is reserved for our own stack
+            ram.add(addr).write_volatile(0);
+        }
+    }
+}
+
 fn phase_1(cfg: &mut BootConfig) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
@@ -1467,7 +1503,7 @@ pub fn phase_2(cfg: &mut BootConfig) {
             satp,
             addr + krn_struct_start,
             addr + KERNEL_ARGUMENT_OFFSET,
-            FLG_R | FLG_W,
+            FLG_R | FLG_W | FLG_VALID,
         );
         cfg.change_owner(1 as XousPid, (addr + krn_struct_start) as usize);
     }

@@ -11,28 +11,37 @@ pub type Connection = usize;
 
 pub const MAX_CID: usize = 34;
 
-pub const FLASH_PHYS_BASE:    u32 = 0x2000_0000;
-pub const SOC_REGION_LOC:     u32 = 0x0000_0000;
-pub const SOC_MAIN_GW_LOC:    u32 = 0x0000_0000;
-pub const SOC_MAIN_GW_LEN:    u32 = 0x0028_0000;
-pub const SOC_SEC_GW_LOC:     u32 = 0x0028_0000;
-pub const SOC_SEC_GW_LEN:     u32 = 0x0028_0000;
-pub const LOADER_LOC:         u32 = 0x0050_0000;
-pub const LOADER_LEN:         u32 = 0x0048_0000;
-pub const KERNEL_LOC:         u32 = 0x0098_0000;
-pub const KERNEL_LEN:         u32 = 0x0038_0000;
-pub const SOC_REGION_LEN:     u32 = 0x00D0_0000;
+pub const FLASH_PHYS_BASE: u32 = 0x2000_0000;
+pub const SOC_REGION_LOC: u32 = 0x0000_0000;
+pub const SOC_REGION_LEN: u32 = 0x00D0_0000; // gw + staging + loader + kernel
 
-pub const PDDB_LOC:           u32 = 0x00D0_0000;
-pub const PDDB_LEN:           u32 = 0x0530_0000; // this reserves space for testing structures
-// pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
+pub const SOC_MAIN_GW_LOC: u32 = 0x0000_0000; // gateware - primary loading address
+pub const SOC_MAIN_GW_LEN: u32 = 0x0028_0000;
+pub const SOC_STAGING_GW_LOC: u32 = 0x0028_0000; // gateware - staging copy
+pub const SOC_STAGING_GW_LEN: u32 = 0x0028_0000;
 
-pub const EC_REGION_LOC:    u32 = 0x07F8_0000;
+pub const LOADER_LOC: u32 = 0x0050_0000; // loader - base
+pub const LOADER_CODE_LEN: u32 = 0x0002_0000; // code region only
+pub const LOADER_FONT_LOC: u32 = 0x0052_0000; // should be the same as graphics-server/src/fontmap.rs/FONT_BASE
+pub const LOADER_FONT_LEN: u32 = 0x0046_0000; // length of font region only
+pub const LOADER_TOTAL_LEN: u32 = 0x0048_0000; // code + font
+
+pub const KERNEL_LOC: u32 = 0x0098_0000; // kernel start
+pub const KERNEL_LEN: u32 = 0x0038_0000; // max kernel length
+
+pub const PDDB_LOC: u32 = 0x00D0_0000; // PDDB start
+pub const PDDB_LEN: u32 = 0x0530_0000; // this reserves space for testing structures
+                                       // pub const PDDB_LEN:        u32 = 0x0728_0000; // length without testing structure
+
+pub const EC_REGION_LOC: u32 = 0x07F8_0000; // EC update staging area
 pub const EC_WF200_PKG_LOC: u32 = 0x07F8_0000;
 pub const EC_WF200_PKG_LEN: u32 = 0x0004_E000;
-pub const EC_FW_PKG_LOC:    u32 = 0x07FC_E000;
-pub const EC_FW_PKG_LEN:    u32 = 0x0003_2000;
-pub const EC_REGION_LEN:    u32 = 0x0008_0000;
+pub const EC_FW_PKG_LOC: u32 = 0x07FC_E000;
+pub const EC_FW_PKG_LEN: u32 = 0x0003_2000;
+pub const EC_REGION_LEN: u32 = 0x0008_0000;
+
+pub mod exceptions;
+pub use exceptions::*;
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
@@ -67,7 +76,7 @@ impl core::fmt::Display for MessageSender {
 }
 
 /// Server ID
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct SID([u32; 4]);
 impl SID {
     pub fn from_bytes(b: &[u8]) -> Option<SID> {
@@ -125,9 +134,9 @@ impl From<&[u32; 4]> for SID {
     }
 }
 
-impl Into<[u32; 4]> for SID {
-    fn into(self) -> [u32; 4] {
-        self.0
+impl From<SID> for [u32; 4] {
+    fn from(s: SID) -> [u32; 4] {
+        s.0
     }
 }
 
@@ -194,7 +203,7 @@ pub fn pid_from_usize(src: usize) -> core::result::Result<PID, Error> {
     if src > u8::MAX as _ {
         return Err(Error::InvalidPID);
     }
-    Ok(PID::new(src as u8).ok_or(Error::InvalidPID)?)
+    PID::new(src as u8).ok_or(Error::InvalidPID)
 }
 
 #[repr(usize)]
@@ -484,7 +493,7 @@ impl Message {
 
     pub fn memory_message(&self) -> Option<&MemoryMessage> {
         match self {
-            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => Some(&mem),
+            Message::MutableBorrow(mem) | Message::Borrow(mem) | Message::Move(mem) => Some(mem),
             Message::BlockingScalar(_) | Message::Scalar(_) => None,
         }
     }
@@ -499,7 +508,7 @@ impl Message {
     pub fn scalar_message(&self) -> Option<&ScalarMessage> {
         match self {
             Message::MutableBorrow(_) | Message::Borrow(_) | Message::Move(_) => None,
-            Message::BlockingScalar(scalar) | Message::Scalar(scalar) => Some(&scalar),
+            Message::BlockingScalar(scalar) | Message::Scalar(scalar) => Some(scalar),
         }
     }
 
@@ -623,6 +632,11 @@ impl Drop for MessageEnvelope {
 }
 
 impl MemoryRange {
+    /// # Safety
+    ///
+    /// This allows for creating a `MemoryRange` from any arbitrary pointer,
+    /// so it is imperitive that this only be used to point to valid, page-aligned
+    /// ranges.
     pub unsafe fn new(addr: usize, size: usize) -> core::result::Result<MemoryRange, Error> {
         assert!(
             addr != 0,
@@ -678,7 +692,7 @@ impl MemoryRange {
     /// For example, if the allocation is 4096 bytes, then the resulting
     /// `&[u8]` would have 4096 elements, `&[u16]` would have 2048, and
     /// `&[u32]` would have 1024. Values are rounded down.
-    pub fn as_slice_mut<T>(&self) -> &mut [T] {
+    pub fn as_slice_mut<T>(&mut self) -> &mut [T] {
         // This is safe because the pointer and length are guaranteed to
         // be valid, as long as the user hasn't already called `as_ptr()`
         // and done something unsound with the resulting pointer.

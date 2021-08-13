@@ -3,16 +3,6 @@
 
 use core::fmt;
 
-/// Convert a four-letter string into a 32-bit int.
-#[macro_export]
-macro_rules! make_type {
-    ($fcc:expr) => {{
-        let mut c: [u8; 4] = Default::default();
-        c.copy_from_slice($fcc.as_bytes());
-        u32::from_le_bytes(c)
-    }};
-}
-
 static mut KERNEL_ARGUMENTS_BASE: *const u32 = 0 as *const u32;
 
 pub struct KernelArguments {

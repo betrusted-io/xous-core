@@ -2,12 +2,12 @@
 #![cfg_attr(not(target_os = "none"), allow(unused_imports))]
 #![cfg_attr(not(target_os = "none"), allow(unused_variables))]
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod hosted;
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 pub use crate::i2c::hosted::*;
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod hardware;
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub(crate) use crate::i2c::hardware::*;

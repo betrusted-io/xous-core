@@ -7,10 +7,9 @@ version = "0.1.0"
 
 [dependencies]
 blitstr-ref = {path = "../../imports/blitstr-ref"}
-com = {path = "../com"}
+com = {path = "../com"} # used by the backlight setting on the main menu thread
 content-plugin-api = {path = "../content-plugin-api"}
 graphics-server = {path = "../graphics-server"}
-heapless = "0.7" # used for creating a sortable heap of canvas objects
 ime-plugin-api = {path = "../ime-plugin-api"}
 ime-plugin-shell = {path = "../ime-plugin-shell"}
 keyboard = {path = "../keyboard"}
@@ -18,8 +17,6 @@ log = "0.4"
 log-server = {path = "../log-server"}
 ticktimer-server = {path = "../ticktimer-server"}
 trng = {path = "../trng"}
-rtc = {path = "../rtc"}
-llio = {path = "../llio"}
 xous = {path = "../../xous-rs"}
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}
@@ -31,13 +28,10 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 susres = {path = "../susres"} # used for the sleep now menu item
 
 enum_dispatch = "0.3.7" # used for trait-based dispatch off of multiple layout objects.
+locales = {path = "../../locales"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = {path = "../../utralib"}
-
-# short circuit the datetime call on hosted mode
-[target.'cfg(any(windows,unix))'.dependencies]
-chrono = "0.4"
 
 [features]
 debugprint = []

@@ -4,14 +4,14 @@
 mod api;
 use api::*;
 
-#[cfg(baremetal)]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 #[macro_use]
 mod debug;
 
 use core::fmt::Write;
 use num_traits::FromPrimitive;
 
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use core::fmt::{Error, Write};
     use std::sync::mpsc::{channel, Receiver, Sender};
@@ -111,7 +111,7 @@ mod implementation {
     }
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use core::fmt::{Error, Write};
     use utralib::generated::*;
@@ -258,7 +258,7 @@ fn handle_scalar(
         }
         1200 => writeln!(output, "Terminating process").unwrap(),
         2000 => {
-            #[cfg(target_os = "none")]
+            #[cfg(any(target_os = "none", target_os = "xous"))]
             crate::debug::DEFAULT.enable_rx();
             writeln!(output, "Resuming logger").unwrap();
         }
@@ -281,7 +281,7 @@ fn handle_opcode(
         match opcode {
             api::Opcode::LogRecord => {
                 let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
-                let lr: LogRecord = buffer.to_original::<LogRecord, _>().unwrap();
+                let lr = unsafe { &*(buffer.as_ptr() as *const LogRecord) };
                 let level = if log::Level::Error as u32 == lr.level {
                     "ERR "
                 } else if log::Level::Warn as u32 == lr.level {
@@ -295,16 +295,39 @@ fn handle_opcode(
                 } else {
                     "UNKNOWN"
                 };
-                if let Some(line) = lr.line {
-                    writeln!(
-                        output,
-                        "{}:{}: {} ({}:{})",
-                        level, lr.module, lr.args, lr.file, line
-                    )
-                    .unwrap();
-                } else {
-                    writeln!(output, "{}:{}: {} ({})", level, lr.module, lr.args, lr.file).unwrap();
+                if lr.file_length as usize >= lr.file.len() {
+                    return;
                 }
+                if lr.args_length as usize >= lr.args.len() {
+                    return;
+                }
+                if lr.module_length as usize > lr.module.len() {
+                    return;
+                }
+
+                let file_slice = &lr.file[0..lr.file_length as usize];
+
+                let args_slice = &lr.args[0..lr.args_length as usize];
+
+                let module_slice = &lr.module[0..lr.module_length as usize];
+
+                write!(output, "{}:", level).ok();
+                for c in module_slice {
+                    output.putc(*c);
+                }
+                write!(output, ": ").ok();
+                for c in args_slice {
+                    output.putc(*c);
+                }
+
+                write!(output, " (").ok();
+                for c in file_slice {
+                    output.putc(*c);
+                }
+                if let Some(line) = lr.line {
+                    write!(output, ":{}", line).ok();
+                }
+                writeln!(output, ")").ok();
             }
             api::Opcode::StandardOutput | api::Opcode::StandardError => {
                 // let mut buffer_start_offset = mem.offset.map(|o| o.get()).unwrap_or(0);

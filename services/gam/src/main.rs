@@ -3,8 +3,6 @@
 
 mod api;
 use api::*;
-mod status;
-use status::*;
 mod canvas;
 use canvas::*;
 
@@ -18,7 +16,7 @@ use ime_plugin_api::{ImeFrontEndApi, ImefDescriptor};
 
 use log::info;
 
-use heapless::FnvIndexMap;
+use std::collections::HashMap;
 
 use num_traits::*;
 use xous_ipc::{Buffer, String};
@@ -28,8 +26,6 @@ use xous::{msg_scalar_unpack, msg_blocking_scalar_unpack};
 use core::{sync::atomic::{AtomicU32, Ordering}};
 
 use enum_dispatch::enum_dispatch;
-
-use gam::{MenuItem, MenuPayload, Menu, MenuOpcode};
 
 //// todo:
 // - add auth tokens to audio streams, so less trusted processes can make direct connections to the codec and reduce latency
@@ -44,16 +40,16 @@ pub(crate) enum LayoutBehavior {
 
 #[enum_dispatch]
 pub(crate) trait LayoutApi {
-    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<(), xous::Error>;
+    fn clear(&self, gfx: &graphics_server::Gfx, canvases: &mut HashMap<Gid, Canvas>) -> Result<(), xous::Error>;
     // for Chats, this resizes the height of the input area; for menus, it resizes the overall height
-    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>) -> Result<Point, xous::Error>;
+    fn resize_height(&mut self, gfx: &graphics_server::Gfx, new_height: i16, status_canvas: &Canvas, canvases: &mut HashMap<Gid, Canvas>) -> Result<Point, xous::Error>;
     fn get_input_canvas(&self) -> Option<Gid> { None }
     fn get_prediction_canvas(&self) -> Option<Gid> { None }
     fn get_content_canvas(&self) -> Gid; // layouts always have a content canvas
     // when the argument is true, the context is moved "onscreen" by moving the canvases into the screen clipping rectangle
     // when false, the context is moved "offscreen" by moving the canvases outside the screen clipping rectangle
     // note that this visibility state is an independent variable from the trust level draw-ability
-    fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut FnvIndexMap<Gid, Canvas, {crate::MAX_CANVASES}>);
+    fn set_visibility_state(&mut self, onscreen: bool, canvases: &mut HashMap<Gid, Canvas>);
     fn behavior(&self) -> LayoutBehavior;
 }
 
@@ -62,6 +58,7 @@ pub(crate) trait LayoutApi {
 pub(crate) enum UxLayout {
     ChatLayout,
     MenuLayout,
+    ModalLayout,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -91,10 +88,9 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 4;
-pub(crate) const MAX_CANVASES: usize = 32;
+const MAX_UX_CONTEXTS: usize = 6;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
-pub const MAIN_MENU_NAME: &'static str = "main menu";
+pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
 
 /*
@@ -113,6 +109,8 @@ struct ContextManager {
     imef_active: bool,
     kbd: keyboard::Keyboard,
     main_menu_app_token: Option<[u32; 4]>, // app_token of the main menu, if it has been registered
+    /// for internal generation of deface states
+    pub trng: trng::Trng,
 }
 impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -132,6 +130,7 @@ impl ContextManager {
             imef_active: false,
             kbd,
             main_menu_app_token: None,
+            trng: trng::Trng::new(&xns).expect("couldn't connect to trng"),
         }
     }
     pub(crate) fn claim_token(&mut self, name: &str) -> Option<[u32; 4]> {
@@ -147,7 +146,7 @@ impl ContextManager {
                 gfx: &graphics_server::Gfx,
                 trng: &trng::Trng,
                 status_canvas: &Canvas,
-                canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+                canvases: &mut HashMap<Gid, Canvas>,
                 trust_level: u8,
                 registration: UxRegistration)
             -> Option<[u32; 4]> {
@@ -186,7 +185,7 @@ impl ContextManager {
                         trust_level, canvases).expect("couldn't create menu layout");
                     // default to off-screen for all layouts
                     menulayout.set_visibility_state(false, canvases);
-                    log::debug!("debug layout: {:?}", menulayout);
+                    log::debug!("debug menu layout: {:?}", menulayout);
                     let ux_context = UxContext {
                         layout: UxLayout::MenuLayout(menulayout),
                         predictor: None,
@@ -214,6 +213,33 @@ impl ContextManager {
                         }
                     }
                 }
+                UxType::Modal => {
+                    let mut modallayout = ModalLayout::init(&gfx, &trng,
+                        trust_level, canvases).expect("couldn't create modal layout");
+                    // default to off-screen for all layouts
+                    modallayout.set_visibility_state(false, canvases);
+                    log::debug!("debug modal layout: {:?}", modallayout);
+                    let ux_context = UxContext {
+                        layout: UxLayout::ModalLayout(modallayout),
+                        predictor: None,
+                        app_token: token,
+                        gam_token: [trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), trng.get_u32().unwrap(), ],
+                        trust_level,
+                        listener: xous::connect(xous::SID::from_array(registration.listener)).unwrap(),
+                        redraw_id: registration.redraw_id,
+                        gotinput_id: None,
+                        audioframe_id: None,
+                        rawkeys_id: registration.rawkeys_id,
+                        vibe: false,
+                    };
+                    for maybe_context in self.contexts.iter_mut() {
+                        if maybe_context.is_none() {
+                            *maybe_context = Some(ux_context);
+                            found_slot = true;
+                            break;
+                        }
+                    }
+                }
             }
         } else {
             // at the moment, we don't allow contexts that are not part of the boot set.
@@ -225,6 +251,13 @@ impl ContextManager {
         if found_slot {
             maybe_token
         } else {
+            // Note: for the most paranoid modes, you probably want exactly as many UX contexts
+            // as you expect to use. This cap helps prevent rouge processes from registering
+            // UX contexts that it shouldn't.
+            //
+            // That being said, if you are to run "generic apps from the internet" you can't
+            // put a proper bound on this number.
+            log::error!("Ran out of UX contexts: try increasing MAX_UX_CONTEXTS in gam.rs");
             None
         }
     }
@@ -243,7 +276,7 @@ impl ContextManager {
         gam_token: [u32; 4],
         new_height: i16,
         status_canvas: &Canvas,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Option<Point> {
+        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
@@ -261,7 +294,7 @@ impl ContextManager {
         app_token: [u32; 4],
         new_height: i16,
         status_canvas: &Canvas,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>) -> Option<Point> {
+        canvases: &mut HashMap<Gid, Canvas>) -> Option<Point> {
 
         for maybe_context in self.contexts.iter_mut() {
             if let Some(context) = maybe_context {
@@ -295,7 +328,7 @@ impl ContextManager {
     }
     pub(crate) fn activate(&mut self,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
         token: [u32; 4],
         clear: bool,
     ) {
@@ -392,16 +425,20 @@ impl ContextManager {
                 // revert the keyboard vibe state
                 self.kbd.set_vibe(context.vibe).expect("couldn't restore keyboard vibe");
 
+                log::debug!("raised focus to: {:?}", context);
                 let last_token = context.app_token;
                 self.last_context = self.focused_context;
                 self.focused_context = Some(last_token);
             }
+            // run the defacement before we redraw all the canvases
+            deface(gfx, &self.trng, canvases);
+            log::trace!("activate redraw");
             self.redraw().expect("couldn't redraw the currently focused app");
         }
     }
     pub(crate) fn revert_focus(&mut self,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         if let Some(last) = self.last_context {
             self.activate(gfx, canvases, last, false);
@@ -412,6 +449,7 @@ impl ContextManager {
             for maybe_context in self.contexts.iter() {
                 if let Some(context) = maybe_context {
                     if token == context.app_token {
+                        log::trace!("redraw msg to {}, id {}", context.listener, context.redraw_id);
                         return xous::send_message(context.listener,
                             xous::Message::new_scalar(context.redraw_id as usize, 0, 0, 0, 0)
                         ).map(|_| ())
@@ -457,7 +495,7 @@ impl ContextManager {
     }
     pub(crate) fn key_event(&mut self, keys: [char; 4],
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         // only pop up the menu if the primary key hit is the menu key (search just the first entry of keys); reject multi-key hits
         // only pop up the menu if it isn't already popped up
@@ -522,7 +560,7 @@ impl ContextManager {
     pub(crate) fn raise_menu(&mut self,
         name: &str,
         gfx: &graphics_server::Gfx,
-        canvases: &mut FnvIndexMap<Gid, Canvas, MAX_CANVASES>,
+        canvases: &mut HashMap<Gid, Canvas>,
     ) {
         log::debug!("looking for menu {}", name);
         if let Some(token) = self.find_app_token_by_name(name) {
@@ -570,34 +608,43 @@ fn xmain() -> ! {
     let mut context_mgr = ContextManager::new(&xns);
 
     // a map of canvases accessable by Gid
-    let mut canvases: FnvIndexMap<Gid, Canvas, MAX_CANVASES> = FnvIndexMap::new();
+    let mut canvases: HashMap<Gid, Canvas> = HashMap::new();
 
     let screensize = gfx.screen_size().expect("Couldn't get screen size");
-    let small_height: i16 = gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16;
+    let small_height: i16 = if xous::LANG != "zh" {
+        gfx.glyph_height_hint(GlyphStyle::Small).expect("couldn't get glyph height") as i16
+    } else {
+        gfx.glyph_height_hint(GlyphStyle::Regular).expect("couldn't get glyph height") as i16
+    };
 
     // the status canvas is special -- there can only be one, and it is ultimately trusted
     let status_canvas = Canvas::new(
         Rectangle::new_coords(0, 0, screensize.x, small_height * 2),
         255, &trng, None
     ).expect("couldn't create status canvas");
-    canvases.insert(status_canvas.gid(), status_canvas).expect("can't store status canvus");
+    canvases.insert(status_canvas.gid(), status_canvas);
     canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
 
-    // make a thread to manage the status bar -- this needs to start late, after the IMEF and most other things are initialized
-    // the status bar is a trusted element managed by the OS, and we are chosing to domicile this in the GAM process for now
+    // initialize the status bar -- this needs to start late, after the IMEF and most other things are initialized
+    // this used to be domiciled in the GAM, but we split it out because this started to pull too much functionality
+    // into the GAM and was causing circular crate conflicts with sub-functions that the status bar relies upon.
+    // we do a hack to try and push a GID to the status bar "securely": we introduce a race condition where we hope
+    // that the GAM is the first thing to talk to the status bar, and the first message is its GID to render on.
+    // generally should be OK, because during boot, all processes are trusted...
     let status_gid = status_canvas.gid().gid();
-    log::trace!("starting status thread with gid {:?}", status_gid);
-    xous::create_thread_4(status_thread, status_gid[0] as _, status_gid[1] as _, status_gid[2] as _, status_gid[3] as _).expect("couldn't create status thread");
-
-    // make a thread to manage the main menu.
-    log::trace!("starting menu thread");
-    xous::create_thread_0(main_menu_thread).expect("couldn't create menu thread");
+    log::trace!("initializing status bar with gid {:?}", status_gid);
+    let status_conn = xns.request_connection_blocking("_Status bar GID receiver_").expect("couldn't connect to status bar GID receiver");
+    xous::send_message(status_conn,
+        xous::Message::new_scalar(0, // message type doesn't matter because there is only one message it should ever receive
+        status_gid[0] as usize, status_gid[1] as usize, status_gid[2] as usize, status_gid[3] as usize
+        )
+    ).expect("couldn't set status GID");
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer.elapsed_ms();
     log::trace!("entering main loop");
 
-    #[cfg(not(target_os = "none"))]
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     {
         log::info!("********************************************************************************");
         log::info!("USAGE:");
@@ -668,7 +715,10 @@ fn xmain() -> ! {
                         last_time = elapsed_time;
 
                         if deface(&gfx, &trng, &mut canvases) {
-                            // redraw the trusted foreground apps after a defacement
+                            // we keep this here because it's a fail-safe in case prior routines missed an edge case. shoot out a warning noting the issue.
+                            log::warn!("canvases were not defaced in order. running a defacement, but this could result in drawing optimizations failing.");
+                            // try to redraw the trusted foreground apps after a defacement
+                            log::trace!("deface redraw");
                             context_mgr.redraw().expect("couldn't redraw after defacement");
                         }
                         log::trace!("flushing...");
@@ -686,7 +736,7 @@ fn xmain() -> ! {
                 log::trace!("rendertextview {:?}", tv);
                 match tv.get_op() {
                     TextOp::Nop => (),
-                    TextOp::Render | TextOp::ComputeBounds => {
+                    TextOp::Render => {
                         if tv.invert & tv.token.is_some() {
                             // an inverted text can only be made by secure processes. check that it has a valid token.
                             if !context_mgr.is_token_valid(tv.token.unwrap()) {
@@ -696,22 +746,21 @@ fn xmain() -> ! {
                         }
 
                         log::trace!("render request for {:?}", tv);
-                        if tv.get_op() == TextOp::ComputeBounds {
-                            tv.dry_run = true;
-                        } else {
-                            tv.dry_run = false;
-                        }
+                        tv.set_dry_run(false);
 
                         if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
                             // if we're requesting inverted text, this better be a "trusted canvas"
-                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL) {
+                            // BOOT_CONTEXT_TRUSTLEVEL is reserved for the "status bar"
+                            // BOOT_CONTEXT_TRUSTLEVEL - 1 is where e.g. password modal dialog boxes end up
+                            if tv.invert & (canvas.trust_level() < BOOT_CONTEXT_TRUSTLEVEL - 1) {
                                 log::error!("Attempt to draw inverted text without sufficient trust level. Aborting.");
                                 continue;
                             }
                             // first, figure out if we should even be drawing to this canvas.
-                            if canvas.is_drawable() {
+                            if canvas.is_drawable() { // dry runs should not move any pixels so they are OK to go through in any case
                                 // set the clip rectangle according to the canvas' location
-                                tv.clip_rect = Some(canvas.clip_rect().into());
+                                let base_clip_rect = canvas.clip_rect();
+                                tv.clip_rect = Some(base_clip_rect.into());
 
                                 // you have to clone the tv object, because if you don't the same block of
                                 // memory gets passed on to the graphics_server(). Which is efficient, but,
@@ -721,7 +770,6 @@ fn xmain() -> ! {
                                 // issue the draw command
                                 gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
                                 // copy back the fields that we want to be mutable
-                                log::trace!("got computed cursor of {:?}", tv_clone.cursor);
                                 tv.cursor = tv_clone.cursor;
                                 tv.bounds_computed = tv_clone.bounds_computed;
 
@@ -729,13 +777,43 @@ fn xmain() -> ! {
                                 buffer.replace(ret).unwrap();
                                 canvas.do_drawn().expect("couldn't set canvas to drawn");
                             } else {
-                                info!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                log::debug!("attempt to draw TextView on non-drawable canvas. Not fatal, but request ignored. {:?}", tv);
+                                let ret = api::Return::NotCurrentlyDrawable;
+                                buffer.replace(ret).unwrap();
                             }
                         } else {
                             info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
                             // silently fail if a bogus Gid is given???
                         }
                     },
+                    TextOp::ComputeBounds => {
+                        log::trace!("render request for {:?}", tv);
+                        tv.set_dry_run(true);
+
+                        if tv.clip_rect.is_none() {
+                            // fill in the clip rect from the canvas
+                            if let Some(canvas) = canvases.get_mut(&tv.get_canvas_gid()) {
+                                // set the clip rectangle according to the canvas' location
+                                let mut base_clip_rect = canvas.clip_rect();
+                                base_clip_rect.normalize();
+                                tv.clip_rect = Some(base_clip_rect.into());
+                            } else {
+                                info!("bogus GID {:?} in TextView {}, not doing anything in response to draw request.", tv.get_canvas_gid(), tv.text);
+                                // silently fail if a bogus Gid is given???
+                                continue;
+                            }
+                        }
+                        let mut tv_clone = tv.clone();
+                        // issue the draw command
+                        gfx.draw_textview(&mut tv_clone).expect("text view draw could not complete.");
+                        // copy back the fields that we want to be mutable
+                        log::trace!("got computed cursor of {:?}, bounds {:?}", tv_clone.cursor, tv_clone.bounds_computed);
+                        tv.cursor = tv_clone.cursor;
+                        tv.bounds_computed = tv_clone.bounds_computed;
+
+                        let ret = api::Return::RenderReturn(tv);
+                        buffer.replace(ret).unwrap();
+                    }
                 };
             }
             Some(Opcode::SetCanvasBounds) => {
@@ -752,6 +830,7 @@ fn xmain() -> ! {
                     // recompute the canvas orders based on the new layout
                     let recomp_canvases = recompute_canvases(&canvases, Rectangle::new(Point::new(0, 0), screensize));
                     canvases = recomp_canvases;
+                    log::trace!("canvas bounds redraw");
                     context_mgr.redraw().expect("can't redraw after new canvas bounds");
                 }
                 cb.granted = granted;
@@ -810,7 +889,7 @@ fn xmain() -> ! {
                         }
                         canvas.do_drawn().expect("couldn't set canvas to drawn");
                     } else {
-                        info!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored.");
+                        log::debug!("attempt to draw Object on non-drawable canvas. Not fatal, but request ignored: {:?}", obj);
                     }
                 } else {
                     info!("bogus GID in Object, not doing anything in response to draw request.");
@@ -920,6 +999,12 @@ fn xmain() -> ! {
                             context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
                         }
                     }
+                } else if let Some(modal_token) = context_mgr.find_app_token_by_name(ROOTKEY_MODAL_NAME) {
+                    if modal_token == switchapp.token {
+                        if let Some(new_app_token) = context_mgr.find_app_token_by_name(switchapp.app_name.as_str().unwrap()) {
+                            context_mgr.activate(&gfx, &mut canvases, new_app_token, false);
+                        }
+                    }
                 }
             },
             Some(Opcode::RaiseMenu) => {
@@ -946,95 +1031,4 @@ fn xmain() -> ! {
     xous::destroy_server(gam_sid).unwrap();
     log::trace!("quitting");
     xous::terminate_process(0)
-}
-
-
-// this is the provider for the main menu, it's built into the GAM so we always have at least this
-// root-level menu available
-pub fn main_menu_thread() {
-    let mut menu = Menu::new(crate::MAIN_MENU_NAME);
-
-    let xns = xous_names::XousNames::new().unwrap();
-    let susres = susres::Susres::new_without_hook(&xns).unwrap();
-    let com = com::Com::new(&xns).unwrap();
-
-    let blon_item = MenuItem {
-        name: String::<64>::from_str("Backlight on"),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([191 >> 3, 191 >> 3, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(blon_item);
-
-    let bloff_item = MenuItem {
-        name: String::<64>::from_str("Backlight off"),
-        action_conn: com.conn(),
-        action_opcode: com.getop_backlight(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(bloff_item);
-
-    let sleep_item = MenuItem {
-        name: String::<64>::from_str("Sleep now"),
-        action_conn: susres.conn(),
-        action_opcode: susres.getop_suspend(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: true,
-    };
-    menu.add_item(sleep_item);
-
-    let close_item = MenuItem {
-        name: String::<64>::from_str("Close Menu"),
-        action_conn: menu.gam.conn(),
-        action_opcode: menu.gam.getop_revert_focus(),
-        action_payload: MenuPayload::Scalar([0, 0, 0, 0]),
-        close_on_select: false, // don't close because we're already closing
-    };
-    menu.add_item(close_item);
-
-    loop {
-        let msg = xous::receive_message(menu.sid).unwrap();
-        log::trace!("message: {:?}", msg);
-        match FromPrimitive::from_usize(msg.body.id()) {
-            Some(MenuOpcode::Redraw) => {
-                menu.redraw();
-            },
-            Some(MenuOpcode::Rawkeys) => msg_scalar_unpack!(msg, k1, k2, k3, k4, {
-                let keys = [
-                    if let Some(a) = core::char::from_u32(k1 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k2 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k3 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                    if let Some(a) = core::char::from_u32(k4 as u32) {
-                        a
-                    } else {
-                        '\u{0000}'
-                    },
-                ];
-                menu.key_event(keys);
-            }),
-            Some(MenuOpcode::Quit) => {
-                break;
-            },
-            None => {
-                log::error!("unknown opcode {:?}", msg.body.id());
-            }
-        }
-    }
-    log::trace!("menu thread exit, destroying servers");
-    // do we want to add a deregister_ux call to the system?
-    xous::destroy_server(menu.sid).unwrap();
 }

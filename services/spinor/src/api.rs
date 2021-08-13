@@ -1,6 +1,6 @@
 pub(crate) const SERVER_NAME_SPINOR: &str     = "_SPINOR Hardware Interface Server_";
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 pub const SPINOR_SIZE_BYTES: u32 = 128 * 1024 * 1024; // physical size of the device, used for hardware sanity checks on requests
 pub const SPINOR_ERASE_SIZE: u32 = 0x1000; // this is the smallest sector size. 64k sectors also exist, but this implementation does not use them.
 // note: logical lengths of regions are in xous::definitions
@@ -12,6 +12,9 @@ pub(crate) enum Opcode {
     ReleaseExclusive,
     /// a special token is reserved for writing to the SoC region, only one service is allowed to do that
     RegisterSocToken,
+    /// the SocToken holder can allow for writes to the staging area by other processes
+    SetStagingWriteProtect,
+    ClearStagingWriteProtect,
     /// program a region. Erase is accomplished by calling WriteRegion with all 0xFF's as data.
     WriteRegion,
 

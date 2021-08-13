@@ -15,7 +15,7 @@ use num_traits::{ToPrimitive, FromPrimitive};
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use crate::api::*;
     use log::{error, info};
@@ -272,9 +272,24 @@ mod implementation {
         }
         pub fn set_uart_mux(&mut self, mux: UartType) {
             match mux {
-                UartType::Kernel => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0),
-                UartType::Log => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1),
-                UartType::Application => self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2),
+                UartType::Kernel => {
+                    log::warn!("disabling WFI so that kernel console works as expected");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0);
+                },
+                UartType::Log => {
+                    // this is a command mainly for debugging, so we'll accept the chance that we re-enabled WFI e.g.
+                    // during a critical operation like SPINOR flashing because we swapped consoles at a bad time. Should be
+                    // very rare and only affect devs...
+                    log::warn!("unsafe re-enabling WFI -- if you issued this command at a bad time, could have side effects");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1)
+                },
+                UartType::Application => {
+                    log::warn!("disabling WFI so that app console works as expected");
+                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+                    self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 2)
+                },
                 _ => info!("invalid UART type specified for mux, doing nothing."),
             }
         }
@@ -465,7 +480,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use llio::api::*;
     use log::{error, info};
@@ -642,12 +657,13 @@ fn xmain() -> ! {
     // - shellchat/sleep
     // - shellchat/environment
     // - spinor (for turning off wfi during writes)
-    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(6)).expect("can't register server");
+    // - rootkeys (for reboots)
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(7)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
     // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(6)).expect("can't register I2C thread");
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(7)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");

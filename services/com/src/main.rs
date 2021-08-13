@@ -30,7 +30,7 @@ fn return_battstats(cid: CID, stats: api::BattStats) -> Result<(), xous::Error> 
     ).map(|_| ())
 }
 
-#[cfg(target_os = "none")]
+#[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
@@ -41,15 +41,13 @@ mod implementation {
     use utralib::generated::*;
     use susres::{RegManager, RegOrField, SuspendResume};
 
-    use heapless::Vec;
-
     const STD_TIMEOUT: u32 = 100;
 
     pub struct XousCom {
         csr: utralib::CSR<u32>,
         susres: RegManager::<{utra::com::COM_NUMREGS}>,
         ticktimer: ticktimer_server::Ticktimer,
-        pub workqueue: Vec<WorkRequest, 64>,
+        pub workqueue: Vec<WorkRequest>,
         busy: bool,
         stby_current: Option<i16>,
     }
@@ -79,9 +77,6 @@ mod implementation {
                 ticktimer,
                 workqueue: Vec::new(),
                 busy: false,
-                //tx_queue: Vec::new(),
-                //rx_queue: Vec::new(),
-                //in_progress: false,
                 stby_current: None,
             };
 
@@ -151,7 +146,7 @@ mod implementation {
         pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
-                let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
+                let work_descriptor = self.workqueue.remove(0);
                 let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
                     match return_battstats(work_descriptor.sender, stats) {
@@ -198,7 +193,7 @@ mod implementation {
 }
 
 // a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(target_os = "none"))]
+#[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use crate::api::BattStats;
     use crate::return_battstats;
@@ -207,10 +202,8 @@ mod implementation {
     use com_rs::*;
     use log::error;
 
-    use heapless::Vec;
-
     pub struct XousCom {
-        pub workqueue: Vec<WorkRequest, 64>,
+        pub workqueue: Vec<WorkRequest>,
         busy: bool,
     }
 
@@ -245,7 +238,7 @@ mod implementation {
         pub fn process_queue(&mut self) -> Option<xous::CID> {
             if !self.workqueue.is_empty() && !self.busy {
                 self.busy = true;
-                let work_descriptor = self.workqueue.swap_remove(0); // not quite FIFO, but Vec does not support FIFO (best we can do with "heapless")
+                let work_descriptor = self.workqueue.remove(0);
                 let ret = if work_descriptor.work.verb == ComState::STAT.verb {
                     let stats = self.get_battstats();
                     match return_battstats(work_descriptor.sender, stats) {
@@ -488,8 +481,8 @@ fn xmain() -> ! {
                             .push(WorkRequest {
                                 work: ComState::STAT,
                                 sender: conn,
-                            })
-                            .unwrap();
+                            });
+                            //.unwrap();
                     }
                 }
             }
