@@ -90,7 +90,7 @@
         "en-audio": "Verification failed, aborting"
     },
     "rootkeys.init.fail_key": {
-        "en": "FPGA key is wrong:\nPerhaps the update password\nwas entered incorrectly?",
+        "en": "FPGA key is wrong:\nPerhaps the update\npassword was entered\nincorrectly?",
         "zh": "*missing*正在初始化失败，中止!",
         "en-audio": "FPGA key is wrong, perhaps the update password was entered incorrectly?"
     },
@@ -177,7 +177,17 @@
     "rootkeys.gwup.finished": {
         "en": "Gateware update finished.\nReboot to apply.",
         "zh": "更新完成重启应用",
-        "en-audio": "Gatewaer update finished. Reboot to apply."
+        "en-audio": "Gateware update finished. Reboot to apply."
+    },
+    "rootkeys.get_signing_password": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical\nWhy: Sign Xous",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password, in order to authorize a gateware update."
+    },
+    "rootkeys.signxous.finished": {
+        "en": "Xous signing finished.\nReboot to apply.",
+        "zh": "更新完成重启应用",
+        "en-audio": "Xous signing finished. Reboot to apply."
     },
     "rootkeys.policy_request": {
         "en": "Please pick a password\nretention policy:",

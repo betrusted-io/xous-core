@@ -200,17 +200,15 @@ impl<'a> BitstreamOracle<'a> {
             log::error!("Padding is incorrect on the bitstream. Check append_csr.py for padding and make sure you are burning gateware with --raw-binary, and not --bitstream as the latter strips padding from the top of the file.");
             return Err(RootkeyResult::AlignmentError)
         }
-        log::info!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
+        log::debug!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
         let ciphertext = &bitstream[ciphertext_start..ciphertext_start + ciphertext_len as usize];
 
         let mut iv_bytes: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
         bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
-        log::info!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
-        log::info!("recovered iv           : {:x?}", &iv_bytes);
+        log::debug!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
+        log::debug!("recovered iv           : {:x?}", &iv_bytes);
 
-        log::info!("AES decryption key: {:x?}", dec_key);
         let dec_cipher = Aes256::new(dec_key.try_into().unwrap());
-        log::info!("AES encryption key: {:x?}", enc_key);
         let enc_cipher = Aes256::new(enc_key.try_into().unwrap());
 
         let mut oracle = BitstreamOracle {
@@ -265,7 +263,7 @@ impl<'a> BitstreamOracle<'a> {
         }
         oracle.type2_absolute_offset = pt_pos + ciphertext_start;
         oracle.type2_ciphertext_offset = pt_pos;
-        log::info!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
+        log::debug!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
 
         // read the boot source out of the ciphertext
         let mut bytes = first_block.chunks(4).into_iter();
@@ -433,16 +431,12 @@ impl<'a> BitstreamOracle<'a> {
                     pos += 4;
                     // the bit we want to patch is in MSB of the value, just patch it directly since
                     // the pos pointer is at this byte.
-                    log::info!("patching pt header orig:    {:x}", output_sector[pos]);
-                    log::info!("output_sector: {:x?}", &output_sector[pos..pos+4]);
-                    log::info!("source {:?}", self.dec_from_key);
-                    log::info!("target {:?}", self.enc_to_key);
+                    log::debug!("output_sector: {:x?}", &output_sector[pos..pos+4]);
                     match self.enc_to_key {
                         FpgaKeySource::Bbram => output_sector[pos] &= 0x7f,
                         FpgaKeySource::Efuse => output_sector[pos] |= 0x80,
                     }
-                    log::info!("patching pt header patched: {:x}", output_sector[pos]);
-                    log::info!("{:x?}", &output_sector[pos..pos+4]);
+                    log::debug!("patched {:x?}", &output_sector[pos..pos+4]);
                     patchcount += 1;
                     if patchcount  >= 2 {
                         break; // short circuit the checking when we're done
@@ -460,18 +454,15 @@ impl<'a> BitstreamOracle<'a> {
                     pos += 4;
                     // the bit we want to patch is in MSB of the value, just patch it directly since
                     // the pos pointer is at this byte.
-                    log::info!("patching ct header orig:    {:x}", input_plaintext[pos+3]);
-                    log::info!("{:x?}", &input_plaintext[pos..pos+4]);
-                    log::info!("source {:?}", self.dec_from_key);
-                    log::info!("target {:?}", self.enc_to_key);
+                    log::debug!("patching ct header orig:    {:x}", input_plaintext[pos+3]);
+                    log::debug!("{:x?}", &input_plaintext[pos..pos+4]);
                     if cwd == BITSTREAM_CTL0_CMD_FLIP {
                         match self.enc_to_key {
                             FpgaKeySource::Bbram => input_plaintext[pos+3] &= 0xfe,
                             FpgaKeySource::Efuse => input_plaintext[pos+3] |= 0x01, // bit 31 is at byte 3 "lsb" in the flipped version
                         }
                     }
-                    log::info!("patching ct header patched: {:x}", input_plaintext[pos+3]);
-                    log::info!("{:x?}", &input_plaintext[pos..pos+4]);
+                    log::debug!("{:x?}", &input_plaintext[pos..pos+4]);
                     break;
                 }
                 pos += 4;
@@ -483,22 +474,24 @@ impl<'a> BitstreamOracle<'a> {
         }
 
         // 3. search for the encryption key source setting only in the last blocks
-        if from > 0x21_5000 {
-            log::info!("type2 count: {} offset: {}", self.type2_count, self.type2_ciphertext_offset);
-            log::info!("searching for second key setting starting from 0x{:x}", from);
+        if from > ((self.type2_count as i32 * 4 + self.type2_ciphertext_offset as i32) & 0x7FFF_F000) - 0x1000 {
+            // maybe that complex math above would be better replaced with the the constant 0x21_5000. it never changes...?
+            // I guess it might be helpful if someone ported this code to a new FPGA type.
+            log::debug!("type2 count: {} offset: {}", self.type2_count, self.type2_ciphertext_offset);
+            log::debug!("searching for second key setting starting from 0x{:x}", from);
             let mut bytes = input_plaintext.chunks_mut(4).into_iter();
             loop {
                 if let Some(b) = bytes.next() {
                     let word = u32::from_be_bytes(b[..4].try_into().unwrap());
                     if word == BITSTREAM_CTL0_CMD_FLIP {
-                        log::info!("patching the second key setting inside block starting at 0x{:x}", from);
+                        log::debug!("patching the second key setting inside block starting at 0x{:x}", from);
                         if let Some(val) = bytes.next() {
-                            log::info!("{:x?}", val);
+                            log::debug!("{:x?}", val);
                             match self.enc_to_key {
                                 FpgaKeySource::Bbram => val[3] &= 0xfe,
                                 FpgaKeySource::Efuse => val[3] |= 0x01, // bit 31 is at byte 3 "lsb" in the flipped version
                             }
-                            log::info!("{:x?}", val);
+                            log::debug!("{:x?}", val);
                         } else {
                             log::error!("didn't decrypt enough memory to find the ctl0 encrypted settings");
                         }
@@ -998,6 +991,7 @@ impl<'a> RootKeys {
         // get access to the pcache and generate a keypair
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         let keypair = if true { // true for production, false for debug (uses dev keys, so we can compare results)
+            // keypair zeroizes on drop
             Keypair::generate(&mut self.trng)
         } else {
             Keypair::from_bytes(
@@ -1034,7 +1028,7 @@ impl<'a> RootKeys {
 
         // allocate a decryption oracle for the FPGA bitstream. This will fail early if the FPGA key is wrong.
         assert!(pcache.fpga_key_valid == 1);
-        log::info!("making destination oracle");
+        log::debug!("making destination oracle");
         let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
@@ -1051,7 +1045,7 @@ impl<'a> RootKeys {
         .zip(self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter_mut()) {
             *dst = u32::from_be_bytes(src.try_into().unwrap())
         }
-        log::info!("public key as computed: {:x?}", public_key);
+        log::debug!("public key as computed: {:x?}", public_key);
 
         // extract the update password key from the cache, and apply it to the private key
         #[cfg(feature = "hazardous-debug")]
@@ -1061,7 +1055,7 @@ impl<'a> RootKeys {
         }
         // private key must XOR with password before storing
         let mut private_key_enc: [u8; ed25519_dalek::SECRET_KEY_LENGTH] = [0; ed25519_dalek::SECRET_KEY_LENGTH];
-        // we do this from to try and avoid making as few copies of the hashed password as possible
+        // I don't think this loop should make any extra copies of the secret key, but might be good to check in godbolt!
         for (dst, (plain, key)) in
         private_key_enc.iter_mut()
         .zip(keypair.secret.to_bytes().iter()
@@ -1119,8 +1113,8 @@ impl<'a> RootKeys {
 
         #[cfg(feature = "hazardous-debug")]
         {
-            log::info!("Self private key: {:x?}", keypair.secret.to_bytes());
-            log::info!("Self public key: {:x?}", keypair.public.to_bytes());
+            log::debug!("Self private key: {:x?}", keypair.secret.to_bytes());
+            log::debug!("Self public key: {:x?}", keypair.public.to_bytes());
             self.debug_staging();
         }
 
@@ -1131,7 +1125,7 @@ impl<'a> RootKeys {
         pb.rebase_subtask_percentage(30, 50);
         self.make_gateware_backup(Some(&mut pb))?;
 
-        log::info!("making source oracle");
+        log::debug!("making source oracle");
         let mut src_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
             Ok(o) => o,
             Err(e) => {
@@ -1166,23 +1160,24 @@ impl<'a> RootKeys {
         self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
         pb.set_percentage(95);
 
-        // as a sanity check, check the kernel self signature
-        if !self.verify_selfsign_kernel() {
-            log::error!("kernel signature failed to verify, probably should not try to reboot!");
-            src_oracle.clear();
-            dst_oracle.clear();
-            return Err(RootkeyResult::IntegrityError);
-        }
-
-        // sign the gateware
-        pb.set_percentage(98);
-        let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
-        log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
-        self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
-
-        // clean up the oracles
+        // clean up the oracles as soon as we're done to avoid some borrow checker issues
         src_oracle.clear();
         dst_oracle.clear();
+
+        // as a sanity check, check the kernel self signature
+        let ret = if !self.verify_selfsign_kernel(false) {
+            log::error!("kernel signature failed to verify, probably should not try to reboot!");
+            Err(RootkeyResult::IntegrityError)
+        } else {
+            // sign the gateware
+            pb.set_percentage(98);
+            let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
+            log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+            self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+            Ok(())
+        };
+
+        // clear the write protects
         self.spinor.set_staging_write_protect(false).expect("couldn't un-protect the staging area");
 
         // finalize the progress bar on exit -- always leave at 100%
@@ -1191,14 +1186,15 @@ impl<'a> RootKeys {
         self.ticktimer.sleep_ms(500).expect("couldn't show final message");
 
         // always purge, we're going to reboot; and if we don't, then there's shenanigans
-        for w in private_key_enc.iter_mut() {
+        for w in private_key_enc.iter_mut() { // it's encrypted. but i still want it turned to zeroes.
             *w = 0;
         }
         self.purge_password(PasswordType::Boot);
         self.purge_password(PasswordType::Update);
         self.purge_sensitive_data();
+        // ed25519 keypair zeroizes on drop
 
-        Ok(())
+        ret
     }
 
     #[allow(dead_code)]
@@ -1235,26 +1231,26 @@ impl<'a> RootKeys {
         // decrypt the FPGA key using the stored password
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         if pcache.hashed_update_pw_valid == 0 {
+            self.purge_password(PasswordType::Update);
             log::error!("no password was set going into the update routine");
             #[cfg(feature = "hazardous-debug")]
-            log::info!("key: {:x?}", pcache.hashed_update_pw);
-            log::info!("valid: {}", pcache.hashed_update_pw_valid);
+            log::debug!("key: {:x?}", pcache.hashed_update_pw);
+            log::debug!("valid: {}", pcache.hashed_update_pw_valid);
 
             return Err(RootkeyResult::KeyError);
         }
         for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter().zip(pcache.fpga_key.iter_mut()) {
             *dst = src;
         }
-        log::info!("fpga key (encrypted): {:x?}", &pcache.fpga_key);
+        log::debug!("fpga key (encrypted): {:x?}", &pcache.fpga_key);
         for (fkey, &pw) in pcache.fpga_key.iter_mut().zip(pcache.hashed_update_pw.iter()) {
             *fkey = *fkey ^ pw;
         }
         pcache.fpga_key_valid = 1;
         #[cfg(feature = "hazardous-debug")]
-        log::info!("fpga key (reconstituted): {:x?}", &pcache.fpga_key);
+        log::debug!("fpga key (reconstituted): {:x?}", &pcache.fpga_key);
 
         // derive signing key
-        // probably should consider a way to resolve the ed25519 temporaries and ensure they get cleared...
         let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
         let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
         for (key, (&enc_key, &pw)) in
@@ -1267,38 +1263,41 @@ impl<'a> RootKeys {
             *key = src;
         }
         #[cfg(feature = "hazardous-debug")]
-        log::info!("trying to make a keypair from {:x?}", keypair_bytes);
+        log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
+        // Keypair zeroizes on drop
         let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
-        log::info!("keypair success");
+        log::debug!("keypair success");
 
         // stage the keyrom data for patching
         self.populate_sensitive_data();
 
         pb.set_percentage(3);
-        log::info!("making destination oracle");
+        log::debug!("making destination oracle");
         let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
+                self.purge_password(PasswordType::Update);
                 log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
                 return Err(e);
             }
         };
-        log::info!("destination oracle success");
+        log::debug!("destination oracle success");
         let keysource = dst_oracle.get_original_key_type();
         dst_oracle.set_target_key_type(keysource);
         pb.set_percentage(6);
         // updates are always encrypted with the null key.
         let dummy_key: [u8; 32] = [0; 32];
-        log::info!("making source oracle");
+        log::debug!("making source oracle");
         let mut src_oracle = match BitstreamOracle::new(&dummy_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
             Ok(o) => o,
             Err(e) => {
                 log::error!("couldn't create oracle (most likely FPGA key mismatch): {:?}", e);
                 dst_oracle.clear();
+                self.purge_password(PasswordType::Update);
                 return Err(e);
             }
         };
-        log::info!("source oracle success");
+        log::debug!("source oracle success");
 
         pb.set_percentage(10);
         pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
@@ -1313,7 +1312,7 @@ impl<'a> RootKeys {
         // verify that the patch worked
         pb.update_text(t!("rootkeys.init.verifying_gateware", xous::LANG));
         pb.rebase_subtask_percentage(60, 90);
-        log::info!("making verification oracle");
+        log::debug!("making verification oracle");
         let verify_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
@@ -1321,11 +1320,6 @@ impl<'a> RootKeys {
                 return Err(e);
             }
         };
-        // dump first page or so of data for checking
-        log::info!("check data");
-        for b in self.gateware()[..4352].chunks(128).into_iter() {
-            log::info!("{:3?}", b);
-        }
 
         self.verify_gateware(&verify_oracle, Some(&mut pb))?;
 
@@ -1346,6 +1340,8 @@ impl<'a> RootKeys {
         for b in keypair_bytes.iter_mut() {
             *b = 0;
         }
+        // ed25519 keypair zeroizes on drop
+
         // check signatures
         pb.set_percentage(96);
         if !self.verify_gateware_self_signature() {
@@ -1360,6 +1356,110 @@ impl<'a> RootKeys {
         }
         Ok(())
     }
+
+    pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        // make sure the system is sane
+        self.xns_interlock();
+
+        // setup Ux
+        let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
+        0, 100, 10, Some("%"), 0, true, true
+        );
+        progress_action.set_is_password(true);
+        // now show the init wait note...
+        rootkeys_modal.modify(
+            Some(ActionType::Slider(progress_action)),
+            Some(t!("rootkeys.gwup_starting", xous::LANG)), false,
+            None, true, None);
+        rootkeys_modal.activate();
+        xous::yield_slice(); // give some time to the GAM to render
+        let mut pb = ProgressBar::new(rootkeys_modal, &mut progress_action);
+        pb.set_percentage(1);
+
+        // derive signing key
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_update_pw_valid == 0 {
+            self.purge_password(PasswordType::Update);
+            log::error!("no password was set going into the update routine");
+            #[cfg(feature = "hazardous-debug")]
+            log::debug!("key: {:x?}", pcache.hashed_update_pw);
+            log::debug!("valid: {}", pcache.hashed_update_pw_valid);
+
+            return Err(RootkeyResult::KeyError);
+        }
+        let mut keypair_bytes: [u8; ed25519_dalek::KEYPAIR_LENGTH] = [0; ed25519_dalek::KEYPAIR_LENGTH];
+        let enc_signing_key = self.read_key_256(KeyRomLocs::SELFSIGN_PRIVKEY);
+        for (key, (&enc_key, &pw)) in
+        keypair_bytes[..ed25519_dalek::SECRET_KEY_LENGTH].iter_mut()
+        .zip(enc_signing_key.iter().zip(pcache.hashed_update_pw.iter())) {
+            *key = enc_key ^ pw;
+        }
+        for (key, &src) in keypair_bytes[ed25519_dalek::SECRET_KEY_LENGTH..].iter_mut()
+        .zip(self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY).iter()) {
+            *key = src;
+        }
+        // Keypair zeroizes the secret key on drop.
+        let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+
+        // check if the keypair is valid by signing and verifying a short message
+        let test_data = "whiskey made me do it";
+        let test_sig = keypair.sign(test_data.as_bytes());
+        match keypair.verify(&test_data.as_bytes(), &test_sig) {
+            Ok(_) => (),
+            Err(e) => {
+                log::warn!("update password was not connect ({:?})", e);
+                self.purge_password(PasswordType::Update);
+                for b in keypair_bytes.iter_mut() {
+                    *b = 0;
+                }
+                return Err(RootkeyResult::KeyError);
+            }
+        }
+
+        // sign the kernel
+        pb.update_text(t!("rootkeys.init.signing_kernel", xous::LANG));
+        pb.set_percentage(35);
+        let (kernel_sig, kernel_len) = self.sign_kernel(&keypair);
+
+        // sign the loader
+        pb.update_text(t!("rootkeys.init.signing_loader", xous::LANG));
+        pb.rebase_subtask_percentage(35, 85);
+        let (loader_sig, loader_len) = self.sign_loader(&keypair, Some(&mut pb));
+        log::debug!("loader signature: {:x?}", loader_sig.to_bytes());
+        log::debug!("loader len: {} bytes", loader_len);
+
+        // commit the signatures
+        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+        self.commit_signature(loader_sig, loader_len, SignatureType::Loader)?;
+        log::debug!("loader {} bytes, sig: {:x?}", loader_len, loader_sig.to_bytes());
+        pb.set_percentage(90);
+        self.commit_signature(kernel_sig, kernel_len, SignatureType::Kernel)?;
+        pb.set_percentage(92);
+
+        // as a sanity check, check the kernel self signature
+        let ret = if !self.verify_selfsign_kernel(true) {
+            log::error!("kernel signature failed to verify, probably should not try to reboot!");
+            Err(RootkeyResult::IntegrityError)
+        } else {
+            Ok(())
+        };
+
+        // check if we're to purge the password on completion
+        if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+            self.purge_password(PasswordType::Update);
+        }
+        // purge the temporaries that we can
+        for b in keypair_bytes.iter_mut() {
+            *b = 0;
+        }
+        // ed25519 keypair zeroizes on drop
+
+        pb.set_percentage(100);
+        self.ticktimer.sleep_ms(250).expect("couldn't show final message");
+
+        ret
+    }
+
 
     pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
         let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
@@ -1450,7 +1550,7 @@ impl<'a> RootKeys {
     /// ASSUME: CSR appendix does not change during the copy (it is not copied/updated)
     fn gateware_copy_and_patch(&self, src_oracle: &BitstreamOracle, dst_oracle: &BitstreamOracle,
     mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
-        log::info!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
+        log::debug!("sanity checks: src_offset {}, dst_offset {}, src_len {}, dst_len {}",
             src_oracle.ciphertext_offset(), dst_oracle.ciphertext_offset(), src_oracle.ciphertext_len(), dst_oracle.ciphertext_len());
 
         // start with a naive implementation that simple goes through and re-encrypts and patches everything.
@@ -1476,8 +1576,8 @@ impl<'a> RootKeys {
         .zip(pt_sector[0..32].iter().zip(pt_sector[32..64].iter())) {
             *dst = hm1 ^ mask;
         }
-        log::info!("recovered hmac: {:x?}", hmac_code);
-        log::info!("hmac constant: {:x?}", &pt_sector[32..64]);
+        log::debug!("recovered hmac: {:x?}", hmac_code);
+        log::debug!("hmac constant: {:x?}", &pt_sector[32..64]);
         let mut bytes_hashed = spinor::SPINOR_ERASE_SIZE as usize - src_oracle.ciphertext_offset();
 
         // encrypt and patch the data to disk
@@ -1492,8 +1592,8 @@ impl<'a> RootKeys {
         bitflip(&pt_sector[..bytes_hashed], &mut flipper[..bytes_hashed]);
         hasher.update(&flipper[..bytes_hashed]);
 
-        log::info!("sector 0 patch len: {}", bytes_hashed);
-        log::info!("sector 0 header: {:x?}", &ct_sector[..dst_oracle.ciphertext_offset()]);
+        log::debug!("sector 0 patch len: {}", bytes_hashed);
+        log::debug!("sector 0 header: {:x?}", &ct_sector[..dst_oracle.ciphertext_offset()]);
         self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(), &ct_sector, 0)
         .map_err(|_| RootkeyResult::FlashError)?;
 
@@ -1650,9 +1750,9 @@ impl<'a> RootKeys {
         .zip(hmac_area[0..32].iter().zip(hmac_area[32..64].iter())) {
             *dst = hm1 ^ mask;
         }
-        log::info!("hmac code: {:x?}", hmac_code);
+        log::debug!("hmac code: {:x?}", hmac_code);
 
-        log::info!("verifying gateware");
+        log::debug!("verifying gateware");
         let mut hasher = Sha256::new();
         // magic number alert:
         // 160 = reserved space for the 2nd hash
@@ -1675,7 +1775,7 @@ impl<'a> RootKeys {
             }
         }
         let h1_digest: [u8; 32] = hasher.finalize().try_into().unwrap();
-        log::info!("computed hash of {} bytes: {:x?}", tot_len, h1_digest);
+        log::debug!("computed hash of {} bytes: {:x?}", tot_len, h1_digest);
 
         let mut hasher2 = Sha256::new();
         let footer_mask: [u8; 32] = [0x3A; 32];
@@ -1685,8 +1785,8 @@ impl<'a> RootKeys {
         .zip(hmac_code.iter().zip(footer_mask.iter())) {
             *dst = hm2 ^ mask;
         }
-        log::info!("masked_footer: {:x?}", masked_footer);
-        log::info!("footer_mask: {:x?}", footer_mask);
+        log::debug!("masked_footer: {:x?}", masked_footer);
+        log::debug!("footer_mask: {:x?}", footer_mask);
         let mut masked_footer_flipped: [u8; 32] = [0; 32];
         bitflip(&masked_footer, &mut masked_footer_flipped);
         let mut footer_mask_flipped: [u8; 32] = [0; 32];
@@ -1696,13 +1796,13 @@ impl<'a> RootKeys {
         hasher2.update(h1_digest);
         let h2_digest: [u8; 32] = hasher2.finalize().try_into().unwrap();
 
-        log::info!("h2 hash: {:x?}", h2_digest);
+        log::debug!("h2 hash: {:x?}", h2_digest);
         let mut ref_digest_flipped: [u8; 32] = [0; 32];
         oracle.decrypt(oracle.ciphertext_len() - 32, &mut ref_digest_flipped);
         let mut ref_digest: [u8; 32] = [0; 32];
-        log::info!("ref digest (flipped): {:x?}", ref_digest_flipped);
+        log::debug!("ref digest (flipped): {:x?}", ref_digest_flipped);
         bitflip(&ref_digest_flipped, &mut ref_digest);
-        log::info!("ref digest          : {:x?}", ref_digest);
+        log::debug!("ref digest          : {:x?}", ref_digest);
 
         let mut matching = true;
         for (&l, &r) in ref_digest.iter().zip(h2_digest.iter()) {
@@ -1712,7 +1812,7 @@ impl<'a> RootKeys {
         }
 
         if matching {
-            log::info!("gateware verified");
+            log::debug!("gateware verified");
             Ok(())
         } else {
             log::error!("gateware failed to verify");
@@ -1902,21 +2002,25 @@ impl<'a> RootKeys {
         (signing_key.sign(&kernel_region[SIGBLOCK_SIZE as usize..]), kernel_len as u32)
     }
 
-    /// the public key must already be in the cache
-    pub fn verify_selfsign_kernel(&self) -> bool {
-        if self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
-            log::warn!("key cache was not initialized, can't verify the kernel with our self-signing key");
-            return false;
-        }
-
-        // read the public key directly out of the keyrom
+    /// the public key must already be in the cache -- this version is used by the init routine, before the keys are written
+    pub fn verify_selfsign_kernel(&mut self, is_system_initialized: bool) -> bool {
         let mut key: [u8; 32] = [0; 32];
-        log::debug!("reading public key from cached area");
-        for (word, &keyword) in key.chunks_mut(4).into_iter()
-        .zip(self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter()) {
-            for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
-                *dst = byte;
+        if !is_system_initialized {
+            if self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::CONFIG as usize] & keyrom_config::INITIALIZED.ms(1) == 0 {
+                log::warn!("key cache was not initialized, can't verify the kernel with our self-signing key");
+                return false;
             }
+
+            // read the public key directly out of the keyrom
+            log::debug!("reading public key from cached area");
+            for (word, &keyword) in key.chunks_mut(4).into_iter()
+            .zip(self.sensitive_data.borrow_mut().as_slice::<u32>()[KeyRomLocs::SELFSIGN_PUBKEY as usize..KeyRomLocs::SELFSIGN_PUBKEY as usize + 256/(size_of::<u32>()*8)].iter()) {
+                for (&byte, dst) in keyword.to_be_bytes().iter().zip(word.iter_mut()) {
+                    *dst = byte;
+                }
+            }
+        } else {
+            key = self.read_key_256(KeyRomLocs::SELFSIGN_PUBKEY);
         }
         log::debug!("pubkey as reconstituted: {:x?}", key);
         let pubkey = PublicKey::from_bytes(&key).expect("public key was not valid");

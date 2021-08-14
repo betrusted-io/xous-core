@@ -796,8 +796,113 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::UxSelfSignXous) => {
-                unimplemented!();
+                if keys.is_pcache_update_password_valid() {
+                    // indicate that there should be no change to the policy
+                    let payload = gam::RadioButtonPayload::new("no change");
+                    let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
+                    buf.send(main_cid, Opcode::UxSignXousRun.to_u32().unwrap())
+                    .map(|_| ()).expect("couldn't send action message");
+                } else {
+                    keys.set_ux_password_type(Some(PasswordType::Update));
+                    password_action.set_action_opcode(Opcode::UxSignXousPasswordPolicy.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action)),
+                        Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
+                        None, true, None
+                    );
+                    rootkeys_modal.activate();
+                }
             },
+            Some(Opcode::UxSignXousPasswordPolicy) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxSignXousRun.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.policy_request", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxSignXousRun) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                } else if payload.as_str() == "no change" {
+                    // don't change the policy
+                } else {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                }
+                keys.set_ux_password_type(None);
+
+                let result = keys.do_sign_xous(&mut rootkeys_modal, main_cid);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                match result {
+                    Ok(_) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.signxous.finished", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                }
+            }
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {
                     if keys.verify_gateware_self_signature() {

@@ -102,12 +102,7 @@ impl RootKeys {
     }
 
     /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
-    pub fn try_update_password(&mut self, which: PasswordType) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
-    //// initiates a self-signing of the firmwares using the ed25519 private key stored in the enclave
-    pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
+    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
     }
 

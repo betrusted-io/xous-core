@@ -35,11 +35,11 @@ pub(crate) enum Opcode {
     UxUpdateGwDecidePassword,
     UxUpdateGwPasswordPolicy,
     UxUpdateGwRun,
-    // UxUpdateGatewarePasswordReturn,
-    // UxUpdateGatwareDisplayInfo,
 
     /// self-sign kernel/loader
     UxSelfSignXous,
+    UxSignXousPasswordPolicy,
+    UxSignXousRun,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
