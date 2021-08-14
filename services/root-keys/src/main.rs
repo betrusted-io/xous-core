@@ -686,9 +686,11 @@ fn xmain() -> ! {
                 let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                 if payload.as_str() == t!("rootkeys.gwup.yes", xous::LANG) {
                     if keys.is_pcache_update_password_valid() {
-                        send_message(main_cid,
-                            xous::Message::new_scalar(Opcode::UxUpdateGwRun.to_usize().unwrap(), 0, 0, 0, 0)
-                        ).unwrap();
+                        // indicate that there should be no change to the policy
+                        let payload = gam::RadioButtonPayload::new("no change");
+                        let buf = Buffer::into_buf(payload).expect("couldn't convert message to payload");
+                        buf.send(main_cid, Opcode::UxUpdateGwRun.to_u32().unwrap())
+                        .map(|_| ()).expect("couldn't send action message");
                     } else {
                         keys.set_ux_password_type(Some(PasswordType::Update));
                         password_action.set_action_opcode(Opcode::UxUpdateGwPasswordPolicy.to_u32().unwrap());
@@ -732,6 +734,8 @@ fn xmain() -> ! {
                     keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
                 } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
                     keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                } else if payload.as_str() == "no change" {
+                    // don't change the policy
                 } else {
                     keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
                 }
@@ -761,6 +765,8 @@ fn xmain() -> ! {
                         xous::yield_slice();
                     }
                     Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
                         dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
                         rootkeys_modal.modify(
                             Some(ActionType::Notification(dismiss_modal_action)),
