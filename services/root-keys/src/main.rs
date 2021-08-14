@@ -74,7 +74,6 @@ pub struct MetadataInFlash {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    use crate::ROOTKEY_MODAL_NAME;
     use crate::PasswordRetentionPolicy;
     use crate::PasswordType;
     use gam::modal::{Modal, Slider};
@@ -121,7 +120,7 @@ mod implementation {
         }
         pub fn is_initialized(&self) -> bool {true}
         pub fn setup_key_init(&mut self) {}
-        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        fn fake_progress(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, msg: &str) -> Result<(), RootkeyResult> {
             let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
             0, 100, 10, Some("%"), 0, true, true
             );
@@ -129,7 +128,7 @@ mod implementation {
             // now show the init wait note...
             rootkeys_modal.modify(
                 Some(ActionType::Slider(progress_action)),
-                Some(t!("rootkeys.setup_wait", xous::LANG)), false,
+                Some(msg), false,
                 None, true, None);
             rootkeys_modal.activate();
 
@@ -145,17 +144,28 @@ mod implementation {
             }
             Ok(())
         }
+        pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
+        }
+        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
+        }
+        pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+            self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.init.signing_kernel", xous::LANG))
+        }
+        pub fn purge_password(&mut self, _ptype: PasswordType) {}
+
         pub fn get_ux_password_type(&self) -> Option<PasswordType> {self.password_type}
         pub fn finish_key_init(&mut self) {}
         pub fn verify_gateware_self_signature(&mut self) -> bool {
             true
         }
-        pub fn test(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        pub fn test(&mut self, _rootkeys_modal: &mut Modal, _main_cid: xous::CID) -> Result<(), RootkeyResult> {
             Ok(())
         }
         pub fn is_jtag_working(&self) -> bool {false}
         pub fn is_efuse_secured(&self) -> Option<bool> {None}
-        pub fn check_gateware_signature(&mut self, region_enum: GatewareRegion) -> SignatureResult {
+        pub fn check_gateware_signature(&mut self, _region_enum: GatewareRegion) -> SignatureResult {
             log::info!("faking gateware check...");
             self.ticktimer.sleep_ms(4000).unwrap();
             log::info!("done");
@@ -164,6 +174,7 @@ mod implementation {
         pub fn is_pcache_update_password_valid(&self) -> bool {
             false
         }
+
         pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
             MetadataInFlash {
                 magic: 0x6174656d,

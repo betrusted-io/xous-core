@@ -16,6 +16,7 @@ use graphics_server::*;
 use locales::t;
 
 use std::sync::{Arc, Mutex};
+#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(unused_imports))]
 use std::thread;
 use std::collections::HashMap;
 

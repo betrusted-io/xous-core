@@ -493,7 +493,7 @@ mod implementation {
             JtagPhy {
             }
         }
-        pub fn sync(&mut self, tdi: bool, tms: bool) -> bool {
+        pub fn sync(&mut self, _tdi: bool, _tms: bool) -> bool {
             false
         }
     }
