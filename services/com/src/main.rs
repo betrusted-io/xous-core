@@ -10,6 +10,7 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
@@ -575,6 +576,73 @@ fn xmain() -> ! {
                     }
                 }
                 buffer.replace(ssid_str).unwrap();
+            }
+            Some(Opcode::WlanOn) => {
+                info!("TODO: implement WlanOn");
+                com.txrx(ComState::WLAN_ON.verb);
+            }
+            Some(Opcode::WlanOff) => {
+                info!("TODO: implement WlanOff");
+                com.txrx(ComState::WLAN_OFF.verb);
+            }
+            Some(Opcode::WlanSetSSID) => {
+                const WF200_SSID_LEN: usize = 32;
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let ssid = buffer.to_original::<String::<WF200_SSID_LEN>, _>().unwrap();
+                info!("WlanSetSSID: {}", ssid);
+                let mut str_ser = StringSer::<STR_32_WORDS>::new();
+                match str_ser.encode(&ssid.to_str()) {
+                    Ok(tx_words) => {
+                        com.txrx(ComState::WLAN_SET_SSID.verb);
+                        for w in tx_words.iter() {
+                            com.txrx(*w);
+                        }
+                    }
+                    _ => info!("WlanSetSSID FAIL"),
+                }
+            }
+            Some(Opcode::WlanSetPass) => {
+                const WF200_PASS_LEN: usize = 64;
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let pass = buffer.to_original::<String::<WF200_PASS_LEN>, _>().unwrap();
+                info!("WlanSetPass: {}", pass);
+                let mut str_ser = StringSer::<STR_64_WORDS>::new();
+                match str_ser.encode(&pass.to_str()) {
+                    Ok(tx_words) => {
+                        com.txrx(ComState::WLAN_SET_PASS.verb);
+                        for w in tx_words.iter() {
+                            com.txrx(*w);
+                        }
+                    }
+                    _ => info!("WlanSetPASS FAIL"),
+                }
+            }
+            Some(Opcode::WlanJoin) => {
+                info!("TODO: implement WlanJoin");
+                com.txrx(ComState::WLAN_JOIN.verb);
+            }
+            Some(Opcode::WlanLeave) => {
+                info!("TODO: implement WlanLeave");
+                com.txrx(ComState::WLAN_LEAVE.verb);
+            }
+            Some(Opcode::WlanStatus) => {
+                let mut buffer = unsafe {
+                    Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                };
+                com.txrx(ComState::WLAN_STATUS.verb);
+                let mut rx_buf: [u16; STR_64_WORDS] = [0; STR_64_WORDS];
+                for dest in rx_buf.iter_mut() {
+                    *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                }
+                let mut des = StringDes::<STR_64_WORDS, STR_64_U8_SIZE>::new();
+                match des.decode_u16(&rx_buf) {
+                    Ok(status) => {
+                        info!("status: {}", status);
+                        let status_str = String::<STR_64_U8_SIZE>::from_str(&status);
+                        let _ = buffer.replace(status_str);
+                    }
+                    _ => info!("status decode failed"),
+                };
             }
             None => {error!("unknown opcode"); break},
         }

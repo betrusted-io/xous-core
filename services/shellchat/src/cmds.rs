@@ -97,6 +97,7 @@ mod engine;   use engine::*;
 mod console;  use console::*;
 mod memtest;  use memtest::*;
 mod keys;     use keys::*;
+mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
 
 //mod fcc;      use fcc::*;
@@ -184,6 +185,7 @@ impl CmdEnv {
         let mut ret = String::<1024>::new();
 
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
+        let mut wlan_cmd = Wlan {};
         let mut ver_cmd = Ver{};
         let mut backlight_cmd = Backlight{};
         let mut accel_cmd = Accel{};
@@ -210,6 +212,7 @@ impl CmdEnv {
             &mut console_cmd,
             &mut self.memtest_cmd,
             &mut self.keys_cmd,
+            &mut wlan_cmd,
             &mut self.jtag_cmd,
 
             //&mut self.fcc_cmd,
