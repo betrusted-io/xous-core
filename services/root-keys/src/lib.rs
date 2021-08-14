@@ -102,12 +102,7 @@ impl RootKeys {
     }
 
     /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
-    pub fn try_update_password(&mut self, which: PasswordType) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
-    //// initiates a self-signing of the firmwares using the ed25519 private key stored in the enclave
-    pub fn self_sign(&mut self, which: ImageType) -> Result<(), xous::Error> {
+    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
@@ -125,6 +120,37 @@ impl RootKeys {
                 Ok(Some(true))
             } else { // everything else -- fail
                 Ok(Some(false))
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn is_efuse_secured(&self) -> Result<Option<bool>, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsEfuseSecured.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 2 {
+                Ok(None)
+            } else if result == 1 {
+                Ok(Some(true))
+            } else {
+                Ok(Some(false))
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    pub fn is_jtag_working(&self) -> Result<bool, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IsJtagWorking.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar1(result) = response {
+            if result == 1 {
+                Ok(true)
+            } else {
+                Ok(false)
             }
         } else {
             Err(xous::Error::InternalError)

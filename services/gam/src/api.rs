@@ -167,4 +167,4 @@ pub(crate) enum Return {
 
 // small wart -- we have to reset the size of a modal to max size for resize computations
 // reveal the max size globally, since it's a constant
-pub const MODAL_Y_MAX: i16 = 450; // in absolute screen coords, not relative to top pad
+pub const MODAL_Y_MAX: i16 = 350; // in absolute screen coords, not relative to top pad

@@ -197,7 +197,7 @@ class PrecursorUsb:
         )
 
     def load_csrs(self):
-        LOC_CSRCSV = 0x20278000 # this address shouldn't change because it's how we figure out our version number
+        LOC_CSRCSV = 0x20277000 # this address shouldn't change because it's how we figure out our version number
 
         csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
         hasher = hashlib.sha512()

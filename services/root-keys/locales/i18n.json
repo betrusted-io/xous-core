@@ -90,9 +90,9 @@
         "en-audio": "Verification failed, aborting"
     },
     "rootkeys.init.fail_key": {
-        "en": "FPGA key is wrong,\nborting!",
+        "en": "FPGA key is wrong:\nPerhaps the update\npassword was entered\nincorrectly?",
         "zh": "*missing*正在初始化失败，中止!",
-        "en-audio": "FPGA key is wrong, aborting"
+        "en-audio": "FPGA key is wrong, perhaps the update password was entered incorrectly?"
     },
     "rootkeys.init.fail_burn": {
         "en": "FLASH write problem,\naborting!",
@@ -108,6 +108,91 @@
         "en": "This cannot be undone.\nContinue?",
         "zh": "这无法撤消，要继续吗?",
         "en-audio": "This cannot be undone. Continue?"
+    },
+    "rootkeys.gwup.no_update_found": {
+        "en": "No valid update found,\naborting!",
+        "zh": "未找到有效更新，正在中止!",
+        "en-audio": "No valid update found, aborting"
+    },
+    "rootkeys.gwup.inspecting": {
+        "en": "Inspecting update,\nplease wait...",
+        "zh": "正在检查比特流，请稍候...",
+        "en-audio": "Inspecting update, please wait."
+    },
+    "rootkeys.gwup.viewinfo_ss": {
+        "en": "Self-signed image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.viewinfo_tp": {
+        "en": "Third party image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.viewinfo_dk": {
+        "en": "Devkey image found.\nReview details?",
+        "zh": "**missing**查看更新的详细信息?",
+        "en-audio": "Self-signed image found. Review details?"
+    },
+    "rootkeys.gwup.details": {
+        "en": "All details",
+        "zh": "所有细节",
+        "en-audio": "All details"
+    },
+    "rootkeys.gwup.short": {
+        "en": "Short summary",
+        "zh": "简短的摘要",
+        "en-audio": "Short summary"
+    },
+    "rootkeys.gwup.none": {
+        "en": "Skip",
+        "zh": "跳过这步",
+        "en-audio": "Skip"
+    },
+    "rootkeys.gwup.proceed_confirm": {
+        "en": "Proceed with update?",
+        "zh": "继续更新？",
+        "en-audio": "Proceed with update?"
+    },
+    "rootkeys.gwup.yes": {
+        "en": "Yes",
+        "zh": "确定",
+        "en-audio": "Yes"
+    },
+    "rootkeys.gwup.no": {
+        "en": "No",
+        "zh": "取消",
+        "en-audio": "No"
+    },
+    "rootkeys.gwup_starting": {
+        "en": "Updating gateware.\nThis takes a few minutes.\nDo not reset or sleep!",
+        "zh": "现在正在初始化\n可能还要等一下\n不要重置或睡眠!\n",
+        "en-audio": "Updating gateware. This may take a while, don't reset or sleep the device."
+    },
+    "rootkeys.get_update_password": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical\nWhy: Gateware update",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password, in order to authorize a gateware update."
+    },
+    "rootkeys.gwup.finished": {
+        "en": "Gateware update finished.\nReboot to apply.",
+        "zh": "更新完成重启应用",
+        "en-audio": "Gateware update finished. Reboot to apply."
+    },
+    "rootkeys.get_signing_password": {
+        "en": "Password request\nSoftware update key\nSecurity: Critical\nWhy: Sign Xous",
+        "zh": "输入密码\n软件更新\n安全含义:至关重要 ",
+        "en-audio": "Enter update password, in order to authorize a gateware update."
+    },
+    "rootkeys.signxous.finished": {
+        "en": "Xous signing finished.\nReboot to apply.",
+        "zh": "更新完成重启应用",
+        "en-audio": "Xous signing finished. Reboot to apply."
+    },
+    "rootkeys.policy_request": {
+        "en": "Please pick a password\nretention policy:",
+        "zh": "请选择密码保留策略:",
+        "en-audio": "Please pick a passowrd retention policy."
     },
     "rootkeys.policy_clear": {
         "en": "Clear after use",
