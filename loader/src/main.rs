@@ -283,6 +283,7 @@ impl MiniElf {
             if VDBG {println!("    Section @ {:08x}", section.virt as usize);}
             let flag_defaults = FLG_U
                 | FLG_R
+                | FLG_X
                 | FLG_VALID
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
                 | if section.flags() & 4 == 4 { FLG_X } else { 0 };
