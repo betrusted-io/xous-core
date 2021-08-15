@@ -185,9 +185,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
         }
         Some("debug") => run(true, &hw_pkgs)?,
-        Some("burn-kernel") => update_usb(true, false, false)?,
-        Some("burn-loader") => update_usb(false, true, false)?,
-        Some("burn-soc") => update_usb(false, false, true)?,
+        Some("burn-kernel") => update_usb(true, false, false, false)?,
+        Some("burn-loader") => update_usb(false, true, false, false)?,
+        Some("nuke-soc") => update_usb(false, false, true, false)?,
+        Some("burn-soc") => update_usb(false, false, false, true)?,
         Some("generate-locales") => generate_locales()?,
         _ => print_help(),
     }
@@ -214,7 +215,8 @@ av-test [soc.svd]       builds an image for avalanche generater only TRNG testin
 sr-test [soc.svd]       builds the suspend/resume testing image
 burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
-burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
+burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
+nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
 generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
@@ -222,12 +224,12 @@ Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_up
     )
 }
 
-fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynError> {
+fn update_usb(do_kernel: bool, do_loader: bool, nuke_soc: bool, stage_soc: bool) -> Result<(), DynError> {
     use std::io::{BufRead, BufReader, Error, ErrorKind};
     use std::process::Stdio;
 
     if do_kernel {
-        println!("Burning kernel");
+        println!("Burning kernel. After this is done, you must select 'Sign xous update' to self-sign the image.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-k")
@@ -243,7 +245,7 @@ fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynE
             .for_each(|line| println!("{}", line.unwrap()));
     }
     if do_loader {
-        println!("Burning loader");
+        println!("Burning loader. After this is done, you must select 'Sign xous update' to self-sign the image.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-l")
@@ -258,11 +260,27 @@ fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynE
             .lines()
             .for_each(|line| println!("{}", line.unwrap()));
     }
-    if do_soc {
-        println!("Burning SoC gateware");
+    if stage_soc {
+        println!("Staging SoC gateware. After this is done, you must select 'Install Gateware Update' from the root menu of your Precursor device.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-s")
+            .arg("precursors/soc_csr.bin")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+
+        let reader = BufReader::new(stdout);
+        reader
+            .lines()
+            .for_each(|line| println!("{}", line.unwrap()));
+    }
+    if nuke_soc {
+        println!("Installing factory-reset SoC gateware (secrets will be lost)!");
+        let stdout = Command::new("python3")
+            .arg("tools/usb_update.py")
+            .arg("--soc")
             .arg("precursors/soc_csr.bin")
             .stdout(Stdio::piped())
             .spawn()?
