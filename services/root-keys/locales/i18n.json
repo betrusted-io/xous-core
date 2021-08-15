@@ -175,9 +175,9 @@
         "en-audio": "Enter update password, in order to authorize a gateware update."
     },
     "rootkeys.gwup.finished": {
-        "en": "Gateware update finished.\nReboot to apply.",
+        "en": "Gateware update finished\nReboot at your earliest\nconvenience.",
         "zh": "更新完成重启应用",
-        "en-audio": "Gateware update finished. Reboot to apply."
+        "en-audio": "Gateware update finished. Reboot at your earliest convenience."
     },
     "rootkeys.get_signing_password": {
         "en": "Password request\nSoftware update key\nSecurity: Critical\nWhy: Sign Xous",
@@ -185,9 +185,9 @@
         "en-audio": "Enter update password, in order to authorize a gateware update."
     },
     "rootkeys.signxous.finished": {
-        "en": "Xous signing finished.\nReboot to apply.",
+        "en": "Xous signing finished.\nReboot at your earliest\nconvenience.",
         "zh": "更新完成重启应用",
-        "en-audio": "Xous signing finished. Reboot to apply."
+        "en-audio": "Xous signing finished. Reboot at your earliest convenience."
     },
     "rootkeys.policy_request": {
         "en": "Please pick a password\nretention policy:",

@@ -344,7 +344,10 @@ def auto_int(x):
 def main():
     parser = argparse.ArgumentParser(description="Update/upload to a Precursor device running Xous 0.8/0.9")
     parser.add_argument(
-        "-s", "--soc", required=False, help="SoC gateware", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
+        "--soc", required=False, help="SoC gateware. Note: this will overwrite any secret keys stored in your device!", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
+    )
+    parser.add_argument(
+        "-s", "--staging", required=False, help="Stage an update to apply", type=str, nargs='?', metavar=('SoC gateware file for staging'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
         "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
@@ -377,10 +380,10 @@ def main():
         "-i", "--image", required=False, help="Manually specify an image and address. Offset is relative to bottom of flash.", type=str, nargs=2, metavar=('IMAGEFILE', 'ADDR')
     )
     parser.add_argument(
-        "-n", "--no-verify", help="Skip readback verification (may be necessary for large files to avoid WDT timeout). Only honored with -i.", action='store_true'
+        "--verify", help="Readback verification. May fail for large files due to WDT timeout.", default=False, action='store_true'
     )
     parser.add_argument(
-        "-f", "--force", help="Ignore gitrev version on SoC and try to burn an image anyways", action="store_true"
+        "--force", help="Ignore gitrev version on SoC and try to burn an image anyways", action="store_true"
     )
     parser.add_argument(
         "--bounce", help="cycle the device through a reset", action="store_true"
@@ -403,10 +406,10 @@ def main():
 
     pc_usb = PrecursorUsb(dev)
 
-    if args.no_verify:
-        verify = False
-    else:
+    if args.verify:
         verify = True
+    else:
+        verify = False
 
     if args.peek:
         pc_usb.peek(args.peek, display=True)
@@ -430,6 +433,16 @@ def main():
     pc_usb.load_csrs() # prime the CSR values
     if "v0.8" in pc_usb.gitrev:
         LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
+        LOC_LOADER = 0x00500000
+        LOC_KERNEL = 0x00980000
+        LOC_WF200  = 0x07F80000
+        LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
+    elif "v0.9" in pc_usb.gitrev:
+        LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
         LOC_LOADER = 0x00500000
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
@@ -439,6 +452,7 @@ def main():
     elif args.force == True:
         # try the v0.8 offsets
         LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
         LOC_LOADER = 0x00500000
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
@@ -466,31 +480,40 @@ def main():
         print("Staging EC firmware package '{}' in SOC memory space...".format(args.ec))
         with open(args.ec, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_EC, image)
+            pc_usb.flash_program(LOC_EC, image, verify=verify)
 
     if args.wf200 != None:
         print("Staging WF200 firmware package '{}' in SOC memory space...".format(args.wf200))
         with open(args.wf200, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_WF200, image)
+            pc_usb.flash_program(LOC_WF200, image, verify=verify)
+
+    if args.staging != None:
+        print("Programming SoC gateware {}".format(args.soc))
+        with open(args.staging, "rb") as f:
+            image = f.read()
+            pc_usb.flash_program(LOC_STAGING, image, verify=verify)
 
     if args.kernel != None:
         print("Programming kernel image {}".format(args.kernel))
         with open(args.kernel, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_KERNEL, image)
+            pc_usb.flash_program(LOC_KERNEL, image, verify=verify)
 
     if args.loader != None:
         print("Programming loader image {}".format(args.loader))
         with open(args.loader, "rb") as f:
             image = f.read()
-            pc_usb.flash_program(LOC_LOADER, image)
+            pc_usb.flash_program(LOC_LOADER, image, verify=verify)
 
     if args.soc != None:
-        print("Programming SoC gateware {}".format(args.soc))
-        with open(args.soc, "rb") as f:
-            image = f.read()
-            pc_usb.flash_program(LOC_SOC, image)
+        print("This will overwrite any secret keys in your device. Continue? (y/n)")
+        confirm = input()
+        if len(confirm) > 0 and confirm.lower()[:1] == 'y':
+            print("Programming SoC gateware {}".format(args.soc))
+            with open(args.soc, "rb") as f:
+                image = f.read()
+                pc_usb.flash_program(LOC_SOC, image, verify=verify)
 
     if args.audiotest != None:
         print("Loading audio test clip {}".format(args.audiotest))
@@ -499,7 +522,7 @@ def main():
             if len(image) >= LEN_AUDIO:
                 print("audio file is too long, aborting audio burn!")
             else:
-                pc_usb.flash_program(LOC_AUDIO, image)
+                pc_usb.flash_program(LOC_AUDIO, image, verify=verify)
 
     print("Resuming CPU.")
     pc_usb.poke(vexdbg_addr, 0x02000000)

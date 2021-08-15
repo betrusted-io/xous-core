@@ -133,6 +133,7 @@ mod implementation {
                         }
                         if blank {
                             // skip over pages that are entirely blank
+                            cur_addr += page.len() as u32;
                             continue;
                         }
                         // enable writes: set wren mode
@@ -391,6 +392,11 @@ mod implementation {
         }
 
         pub(crate) fn write_region(&mut self, wr: &mut WriteRegion) -> SpinorError {
+            /*let log_level = log::max_level();
+            if wr.start >= 0x27_5000 && wr.start <= 0x28_8000 { // trigger a debug if we are doing a certain type of transaction
+                log::set_max_level(log::LevelFilter::Trace);
+            }*/
+
             // log::trace!("processing write_region with {:x?}", wr);
             if wr.start + wr.len > SPINOR_SIZE_BYTES { // basic security check. this is necessary so we don't have wrap-around attacks on the SoC gateware region
                 return SpinorError::InvalidRequest;
@@ -406,7 +412,7 @@ mod implementation {
                     return SpinorError::AlignmentError;
                 }
                 self.cur_op = Some(FlashOp::EraseSector(wr.start));
-                log::trace!("erase: {:x?}", self.cur_op);
+                log::trace!("erase: {:x?}", wr.start);
                 let erase_result = self.call_spinor_context_blocking();
                 if erase_result & 0x40 != 0 {
                     log::error!("E_FAIL set, erase failed: result 0x{:02x}, sector addr 0x{:08x}", erase_result, wr.start);
@@ -415,12 +421,16 @@ mod implementation {
 
                 // now write the data sector
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
-                log::trace!("write: len:{}, {:x?}", wr.len, self.cur_op);
+                log::trace!("write: len:{}, start:{:x}", wr.len, wr.start);
+                //let logsize = if wr.len < 0x80 { wr.len as usize } else { 0x80 };
+                //log::trace!("write data begin: {:02x?}", &wr.data[..logsize]);
+                //log::trace!("write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as usize]);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
                     log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
                     return SpinorError::WriteFailed;
                 }
+                //log::set_max_level(log_level);
                 SpinorError::NoError
             } else {
                 // clean patch path:
@@ -429,12 +439,16 @@ mod implementation {
                 // here, almost any data alignment and length is acceptable -- we can patch even just two bytes using
                 // this call.
                 self.cur_op = Some(FlashOp::WritePages(wr.start, wr.data, wr.len as usize));
-                log::trace!("clean write: len:{}, {:x?}", wr.len, self.cur_op);
+                log::trace!("clean write: len:{}, start: {:x}", wr.len, wr.start);
+                //let logsize = if wr.len < 0x80 { wr.len as usize } else { 0x80 };
+                //log::trace!("clean write data begin: {:02x?}", &wr.data[..logsize]);
+                //log::trace!("clean write data end: {:02x?}", &wr.data[wr.len as usize - logsize..wr.len as usize]);
                 let write_result = self.call_spinor_context_blocking();
                 if write_result & 0x20 != 0 {
                     log::error!("P_FAIL set, program failed/partial abort: result 0x{:02x}, sector addr 0x{:08x}", write_result, wr.start);
                     return SpinorError::WriteFailed;
                 }
+                //log::set_max_level(log_level);
                 SpinorError::NoError
             }
         }
