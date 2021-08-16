@@ -557,6 +557,7 @@ pub(crate) struct RootKeys {
     ticktimer: ticktimer_server::Ticktimer,
     xns: xous_names::XousNames,
     jtag: jtag::Jtag,
+    fake_key: [u8; 32], // a base set of random numbers used to respond to invalid keyloc requests in AES operations
 }
 
 impl<'a> RootKeys {
@@ -619,6 +620,13 @@ impl<'a> RootKeys {
         let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
         spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
         let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to JTAG server");
+        let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG server");
+        // respond to invalid key indices with a "fake" AES key. We try to foil attempts to "probe out" the
+        // oracle to discover the presence of null keys.
+        let mut fake_key: [u8; 32] = [0; 32];
+        for k in fake_key.chunks_exact_mut(8) {
+            k.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
+        }
 
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
@@ -636,12 +644,13 @@ impl<'a> RootKeys {
             boot_password_policy: PasswordRetentionPolicy::AlwaysKeep,
             cur_password_type: None,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
-            trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
+            trng,
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             xns,
             jtag,
+            fake_key,
         };
 
         keys
@@ -662,6 +671,67 @@ impl<'a> RootKeys {
         self.kernel_mr.as_slice::<u8>()
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
+
+    /// This implementation creates and destroys the AES key schedule on every function call
+    /// However, Rootkey operations are not meant to be used for streaming operations; they are typically
+    /// used to secure subkeys, so a bit of overhead on each call is OK in order to not keep excess secret
+    /// data laying around.
+    /// ASSUME: the caller has confirmed that the user password is valid and in cache
+    pub fn aes_op(&mut self, key_index: u8, op_type: AesOpType, block: &mut [u8; 16]) {
+        let key = match key_index {
+            KeyRomLocs::USER_KEY => {
+                let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                    *key = *key ^ pw;
+                }
+                key_enc
+            },
+            _ => {
+                // within a single boot, return a stable, non-changing fake ky based off of a single root
+                // fake key. This will make it a bit harder for an attacker to "probe out" an oracle and see
+                // which keys are null or which are populated.
+                self.fake_key[0] = key_index;
+                self.fake_key
+            }
+        };
+        let cipher = Aes256::new(GenericArray::from_slice(&key));
+        match op_type {
+            AesOpType::Decrypt => cipher.decrypt_block(block.try_into().unwrap()),
+            AesOpType::Encrypt => cipher.encrypt_block(block.try_into().unwrap())
+        }
+    }
+    pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut[[u8; 16]; 16]) {
+        let key = match key_index {
+            KeyRomLocs::USER_KEY => {
+                let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                    *key = *key ^ pw;
+                }
+                key_enc
+            },
+            _ => {
+                self.fake_key[0] = key_index;
+                self.fake_key
+            }
+        };
+        let cipher = Aes256::new(GenericArray::from_slice(&key));
+        match op_type {
+            AesOpType::Decrypt => {
+                for block in blocks.iter_mut() {
+                    cipher.decrypt_block(block.try_into().unwrap());
+                }
+            },
+            AesOpType::Encrypt => {
+                for block in blocks.iter_mut() {
+                    cipher.encrypt_block(block.try_into().unwrap());
+                }
+            }
+        }
+    }
 
     /// returns None if there is an obvious problem with the JTAG interface
     /// otherwise returns the result. "secured" would be the most paranoid setting

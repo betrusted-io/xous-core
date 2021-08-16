@@ -15,6 +15,8 @@ pub(crate) enum Opcode {
     IsEfuseSecured,
     /// quick check to see if the JTAG can read its IDCODE
     IsJtagWorking,
+    /// initiate an AES operation
+    AesOperation,
 
     TestUx,
 
@@ -40,6 +42,10 @@ pub(crate) enum Opcode {
     UxSelfSignXous,
     UxSignXousPasswordPolicy,
     UxSignXousRun,
+
+    /// Ux AES calls
+    //UxAesRequestPw,
+    //UxAesRun,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
@@ -86,4 +92,52 @@ pub enum RootkeyResult {
     KeyError,
     IntegrityError,
     FlashError,
+}
+
+/// AES operation definitions
+pub use cipher::{BlockCipher, consts::U16};
+
+/// Selects which key to use for the decryption/encryption oracle.
+/// currently only one type is available, the User key, but dozens more
+/// could be accommodated.
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
+pub enum AesRootkeyType {
+    User0 = 0x28,
+    NoneSpecified = 0xff,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub enum AesBlockType {
+    SingleBlock([u8; 16]),
+    ParBlock([[u8; 16]; 16]),
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub enum AesOpType {
+    Encrypt,
+    Decrypt,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+pub struct AesOp {
+    /// the caller can try to request "any" index, but it's checked inside the oracle first.
+    pub key_index: u8,
+    pub block: AesBlockType,
+    pub aes_op: AesOpType,
+}
+impl AesOp {
+    pub fn clear(&mut self) {
+        match self.block {
+            AesBlockType::SingleBlock(mut blk) => {
+                for b in blk.iter_mut() {
+                    *b = 0;
+                }
+            }
+            AesBlockType::ParBlock(mut blks) => {
+                for blk in blks.iter_mut() {
+                    for b in blk.iter_mut() {
+                        *b = 0;
+                    }
+                }
+            }
+        }
+    }
 }

@@ -1,4 +1,5 @@
 use crate::{ShellCmdApi, CommonEnv};
+use root_keys::api::AesRootkeyType;
 use xous_ipc::String;
 
 #[derive(Debug)]
@@ -33,7 +34,7 @@ impl Keys {
         Keys {
             testing_range,
             spinor,
-            rootkeys: root_keys::RootKeys::new(&xns).expect("couldn't allocate rootkeys API"),
+            rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("couldn't allocate rootkeys API"),
         }
     }
 }

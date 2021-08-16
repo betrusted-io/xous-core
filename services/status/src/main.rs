@@ -188,7 +188,7 @@ fn xmain() -> ! {
     if !debug_locked {
         sec_notes.lock().unwrap().insert("secnote.usb_unlock".to_string(), t!("secnote.usb_unlock", xous::LANG).to_string());
     }
-    let keys = Arc::new(Mutex::new(root_keys::RootKeys::new(&xns).expect("couldn't connect to root_keys to query initialization state")));
+    let keys = Arc::new(Mutex::new(root_keys::RootKeys::new(&xns, None).expect("couldn't connect to root_keys to query initialization state")));
     if !keys.lock().unwrap().is_initialized().unwrap() {
         sec_notes.lock().unwrap().insert("secnotes.no_keys".to_string(), t!("secnote.no_keys", xous::LANG).to_string());
     } else {

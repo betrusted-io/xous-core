@@ -325,6 +325,28 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
+            Some(Opcode::AesOperation) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                // as_flat saves a copy step, but we have to deserialize some enums manually
+                let aes_op = buffer.as_flat::<AesOp, _>().unwrap();
+                // deserialize the specifier
+                let optype = match aes_op.aes_op {
+                    ArchivedAesOpType::Decrypt => {
+                        AesOpType::Decrypt
+                    },
+                    ArchivedAesOpType::Encrypt => {
+                        AesOpType::Encrypt
+                    }
+                };
+                match aes_op.block {
+                    ArchivedAesBlockType::SingleBlock(mut b) => {
+                        keys.aes_op(aes_op.key_index, optype, &mut b);
+                    }
+                    ArchivedAesBlockType::ParBlock(mut pb) => {
+                        keys.aes_par_op(aes_op.key_index, optype, &mut pb);
+                    }
+                }
+            },
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {

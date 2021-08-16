@@ -7,15 +7,11 @@ use api::*;
 pub mod key2bits;
 
 use xous::{CID, send_message, Message};
+use xous_ipc::Buffer;
 use num_traits::*;
+use std::convert::TryInto;
 
 pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, consts::U16};
-
-/// 128-bit AES block
-pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
-
-/// 16 x 128-bit AES blocks to be processed in bulk
-pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
 
 pub enum ImageType {
     All,
@@ -29,15 +25,20 @@ pub enum ImageType {
 pub struct RootKeys {
     conn: CID,
     // index of the key to use for the next encrypt/decrypt ops
-    key_index: Option<u8>,
+    key_index: AesRootkeyType,
 }
 impl RootKeys {
-    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames, key_index: Option<AesRootkeyType>) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("Can't connect to Keys server");
+        let index = if let Some(ki) = key_index {
+            ki
+        } else {
+            AesRootkeyType::NoneSpecified
+        };
         Ok(RootKeys {
             conn,
-            key_index: None,
+            key_index: index,
         })
     }
     pub fn conn(&self) -> CID {self.conn}
@@ -50,6 +51,7 @@ impl RootKeys {
     pub fn get_try_selfsign_op(&self) -> u32 {
         Opcode::UxSelfSignXous.to_u32().unwrap()
     }
+
 
     /// this function causes the staging gateware to be provisioned with a copy of our keys,
     /// while being encrypted to the AES key indicated inside the KEYROM
@@ -179,6 +181,10 @@ impl Drop for RootKeys {
     }
 }
 
+/// 128-bit AES block
+pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
+/// 16 x 128-bit AES blocks to be processed in bulk
+pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
 
 impl BlockCipher for RootKeys {
     type BlockSize = U16;   // 128-bit cipher
@@ -187,19 +193,83 @@ impl BlockCipher for RootKeys {
 
 impl BlockEncrypt for RootKeys {
     fn encrypt_block(&self, block: &mut Block) {
-        // put data in a buf, send it to the server for encryption
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            aes_op: AesOpType::Encrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
+            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
+                *dst = src;
+            }
+        }
     }
     fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-
+        let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+            for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
+                *dst = src;
+            }
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::ParBlock(pb_buf),
+            aes_op: AesOpType::Encrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
+            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+                for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
+                    *dst = src;
+                }
+            }
+        }
     }
 }
 
 impl BlockDecrypt for RootKeys {
     fn decrypt_block(&self, block: &mut Block) {
-
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            aes_op: AesOpType::Decrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
+            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
+                *dst = src;
+            }
+        }
     }
     fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-
+        let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+            for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
+                *dst = src;
+            }
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::ParBlock(pb_buf),
+            aes_op: AesOpType::Decrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
+            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+                for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
+                    *dst = src;
+                }
+            }
+        }
     }
 }
 
