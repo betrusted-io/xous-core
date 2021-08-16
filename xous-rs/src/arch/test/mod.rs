@@ -7,7 +7,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
 use std::thread_local;
 
-use crate::{Result, PID, TID};
+use crate::{Result, SysCall, SysCallResult, PID, TID};
 
 mod mem;
 pub use mem::*;
@@ -526,22 +526,11 @@ fn xous_connect_impl(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-#[no_mangle]
-pub fn _xous_syscall(
-    nr: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
-    ret: &mut Result,
-) {
+pub fn syscall(call: SysCall) -> SysCallResult {
+    let mut ret = Result::Ok;
     XOUS_SERVER_CONNECTION.with(|xsc| {
         THREAD_ID.with(|tid| {
-            let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
+            let [nr, a1, a2, a3, a4, a5, a6, a7] = call.as_args();
             {
                 CALL_FOR_THREAD.with(|cft| {
                     let cft_rc = cft.borrow();
@@ -568,14 +557,16 @@ pub fn _xous_syscall(
                     &call,
                     xsc_asmut
                 );
-                _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
-                if *ret != Result::WouldBlock {
-                    return;
+                _xous_syscall_result(&mut ret, *tid.borrow(), xsc_asmut);
+                match ret {
+                    Result::Error(e) => return Err(e),
+                    Result::RetryCall => (),
+                    other => return Ok(other),
                 }
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                        std::thread::sleep(std::time::Duration::from_millis(50));
             }
         })
-    });
+    })
 }
 
 fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &ServerConnection) {
@@ -648,7 +639,7 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
 
         // If we got a `WouldBlock`, then we need to retry the whole call
         // again. Return and retry.
-        if response == Result::WouldBlock {
+        if response == Result::RetryCall {
             // If the incoming message was for this thread, return it directly.
             if msg_thread_id == thread_id {
                 *ret = response;
@@ -691,7 +682,8 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                     assert_eq!(data.len(), data.capacity());
                     let len = data.len();
                     let addr = data.as_mut_ptr();
-                    memory_message.buf = unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
+                    memory_message.buf =
+                        unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
                 }
                 _ => (),
             }
