@@ -12,6 +12,7 @@ pub fn map_memory_pre(
     Ok(())
 }
 
+#[allow(unused_mut)]
 pub fn map_memory_post(
     _phys: Option<MemoryAddress>,
     _virt: Option<MemoryAddress>,

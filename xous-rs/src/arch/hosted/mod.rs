@@ -4,14 +4,161 @@ use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread_local;
 
-use crate::{Result, PID, TID};
+use crate::{Result, SysCall, SysCallResult, PID, TID};
 
 mod mem;
 pub use mem::*;
 
+lazy_static::lazy_static! {
+    static ref NETWORK_CONNECT_ADDRESS: SocketAddr = {
+        std::env::var("XOUS_SERVER")
+        .map(|s| {
+            s.to_socket_addrs()
+                .expect("invalid server address")
+                .next()
+                .expect("unable to resolve server address")
+        })
+        .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
+    };
+    static ref PROCESS_KEY: ProcessKey = {
+        std::env::var("XOUS_PROCESS_KEY")
+        .map(|s| {
+            let mut base = ProcessKey([0u8; 16]);
+            hex::decode_to_slice(s, &mut base.0).unwrap();
+            base
+        })
+        .unwrap_or(ProcessKey([0u8; 16]))
+    };
+
+    static ref SERVER_CONNECTION: ServerConnection = {
+        // By the time we get our process' key, it should not be zero
+        assert_ne!(&PROCESS_KEY.0, &[0u8; 16]);
+
+        // Note: &* is required due to how `lazy_static` works behind the scenes:
+        // https://github.com/rust-lang-nursery/lazy-static.rs/issues/119#issuecomment-419595818
+        let mut conn = TcpStream::connect(&*NETWORK_CONNECT_ADDRESS).expect("unable to connect to Xous kernel");
+
+        // Disable Nagel's algorithm, since we're running locally and managing buffers ourselves
+        conn.set_nodelay(true).unwrap();
+
+        // Send key to authenticate us as a known process
+        conn.write_all(&PROCESS_KEY.0).unwrap();
+        conn.flush().unwrap();
+
+        // Read the 8-bit process ID and verify it matches what we were told.
+        let mut pid = [0u8];
+        conn.read_exact(&mut pid).unwrap();
+        assert_eq!(pid[0], PROCESS_ID.get(), "process ID mismatch");
+
+        let call_mem_tracker = Arc::new(Mutex::new(HashMap::new()));
+        // let call_tracker = Arc::new(Mutex::new(HashMap::new()));
+        // let response_tracker = Arc::new(Mutex::new(HashMap::new()));
+        let mailbox = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+
+        let mut reader_conn = conn.try_clone().unwrap();
+        let reader_call_mem_tracker = call_mem_tracker.clone();
+        // let reader_call_tracker = call_tracker.clone();
+        // let reader_response_tracker = response_tracker.clone();
+        let reader_mailbox = mailbox.clone();
+        let _network_watcher = std::thread::spawn(move || {
+            loop {
+                let (tid, response) = read_next_syscall_result(&mut reader_conn, &reader_call_mem_tracker);
+                // assert!(reader_call_tracker.lock().unwrap().remove(&tid).is_some());
+                // assert!(reader_response_tracker.lock().unwrap().insert(tid, ()).is_none());
+                let (lock, cv) = &*reader_mailbox;
+                let existing = lock.lock().unwrap().insert(tid, response);
+                assert!(existing.is_none(), "got two responses for the same thread");
+                cv.notify_all();
+            }
+        });
+
+        ServerConnection {
+            send: Arc::new(Mutex::new(conn)),
+            mailbox,
+            call_mem_tracker,
+            // call_tracker,
+            // response_tracker,
+        }
+    };
+
+    /// The ID of the current process
+    static ref PROCESS_ID: PID = {
+        use std::str::FromStr;
+        PID::from_str(&std::env::var("XOUS_PID")
+            .expect("missing environment variable XOUS_PID"))
+            .expect("XOUS_PID environment variable was not valid")
+    };
+
+    /// The network address to connect to when making a kernel call
+    static ref CHILD_PROCESS_ADDRESS: Arc<Mutex<SocketAddr>> = Arc::new(Mutex::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)));
+}
+thread_local!(static THREAD_ID: RefCell<Option<TID>> = RefCell::new(None));
+
+/// Describes the parameters required to create a new thread on this platform.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ThreadInit {}
+
+pub fn set_xous_address(new_address: SocketAddr) {
+    *CHILD_PROCESS_ADDRESS.lock().unwrap() = new_address;
+}
+
+pub fn set_thread_id(new_tid: TID) {
+    THREAD_ID.with(|tid| *tid.borrow_mut() = Some(new_tid));
+}
+
+static FAKE_THREAD_COUNTER: AtomicUsize = AtomicUsize::new(65536);
+
+/// Obtain this thread's ID. This value is set whenever a new thread is
+/// created via xous syscalls. However, if a new thread is created using
+/// something other than a xous syscall (e.g. by doing `std::thread::spawn()),
+/// then the kernel doesn't have a record of the new thread.
+/// If that happens, then register a new thread with the kernel.
+fn thread_id() -> TID {
+    THREAD_ID.with(|tid| {
+        if let Some(tid) = *tid.borrow() {
+            return tid;
+        }
+        let call = crate::SysCall::CreateThread(ThreadInit {});
+
+        let fake_tid = FAKE_THREAD_COUNTER.fetch_add(1, Ordering::SeqCst);
+        println!(
+            "Thread ID not defined! Creating a fake thread. Syscall TID: {}.",
+            fake_tid
+        );
+
+        // assert!(SERVER_CONNECTION
+        //     .call_tracker
+        //     .lock()
+        //     .unwrap()
+        //     .insert(fake_tid, ())
+        //     .is_none());
+
+        send_syscall_from_tid(&call, fake_tid);
+        let response = read_syscall_result(fake_tid);
+
+        // assert!(SERVER_CONNECTION
+        //     .response_tracker
+        //     .lock()
+        //     .unwrap()
+        //     .remove(&fake_tid)
+        //     .is_some());
+        let new_tid = if let crate::Result::ThreadID(new_tid) = response {
+            new_tid
+        } else {
+            panic!("unable to get new TID, got response: {:?}", response)
+        };
+        println!("Created a fake thread ID: {}", new_tid);
+        *tid.borrow_mut() = Some(new_tid);
+        new_tid
+    })
+}
+
+/// A 16-byte random nonce that identifies this process to the kernel. This
+/// is usually provided through the environment variable `XOUS_PROCESS_KEY`.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 16]);
 impl ProcessKey {
@@ -20,95 +167,11 @@ impl ProcessKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ThreadInit {}
-
+/// Describes all parameters that are required to start a new process
+/// on this platform.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessInit {
     pub key: ProcessKey,
-}
-
-pub struct ProcessArgsAsThread<F: FnOnce()> {
-    main: F,
-    name: String,
-}
-
-impl<F> ProcessArgsAsThread<F>
-where
-    F: FnOnce(),
-{
-    pub fn new(name: &str, main: F) -> ProcessArgsAsThread<F> {
-        ProcessArgsAsThread {
-            main,
-            name: name.to_owned(),
-        }
-    }
-}
-pub struct ProcessHandleAsThread(std::thread::JoinHandle<()>);
-
-/// If no connection exists, create a new connection to the server. This means
-/// our parent PID will be PID1. Otherwise, reuse the same connection.
-pub fn create_process_pre_as_thread<F>(
-    _args: &ProcessArgsAsThread<F>,
-) -> core::result::Result<ProcessInit, crate::Error>
-where
-    F: FnOnce(),
-{
-    ensure_connection()?;
-
-    // Ensure there is a connection, because after this function returns
-    // we'll make a syscall with CreateProcess(). This should only need
-    // to happen for PID1.
-    Ok(ProcessInit {
-        key: PROCESS_KEY
-            .with(|pk| *pk.borrow())
-            .unwrap_or_else(default_process_key),
-    })
-}
-
-pub fn create_process_post_as_thread<F>(
-    args: ProcessArgsAsThread<F>,
-    init: ProcessInit,
-    pid: PID,
-) -> core::result::Result<ProcessHandleAsThread, crate::Error>
-where
-    F: FnOnce() + Send + 'static,
-{
-    let server_address = xous_address();
-
-    let f = args.main;
-    let thread_main = std::thread::Builder::new()
-        .name(args.name)
-        .spawn(move || {
-            set_xous_address(server_address);
-            THREAD_ID.with(|tid| *tid.borrow_mut() = 1);
-            PROCESS_ID.with(|p| *p.borrow_mut() = pid);
-            XOUS_SERVER_CONNECTION.with(|xsc| {
-                let mut xsc = xsc.borrow_mut();
-                match xous_connect_impl(server_address, &init.key) {
-                    Ok(a) => {
-                        *xsc = Some(a);
-                        Ok(())
-                    }
-                    Err(_) => Err(crate::Error::InternalError),
-                }
-            })?;
-
-            crate::create_thread(f)
-        })
-        .map_err(|_| crate::Error::InternalError)?
-        .join()
-        .unwrap()
-        .unwrap();
-
-    Ok(ProcessHandleAsThread(thread_main.0))
-}
-
-pub fn wait_process_as_thread(joiner: ProcessHandleAsThread) -> crate::SysCallResult {
-    joiner.0.join().map(|_| Result::Ok).map_err(|_x| {
-        // panic!("wait error: {:?}", x);
-        crate::Error::InternalError
-    })
 }
 
 pub struct ProcessArgs {
@@ -131,25 +194,17 @@ pub struct ProcessHandle(std::process::Child);
 /// If no connection exists, create a new connection to the server. This means
 /// our parent PID will be PID1. Otherwise, reuse the same connection.
 pub fn create_process_pre(_args: &ProcessArgs) -> core::result::Result<ProcessInit, crate::Error> {
-    ensure_connection()?;
-
-    // Ensure there is a connection, because after this function returns
-    // we'll make a syscall with CreateProcess(). This should only need
-    // to happen for PID1.
-    Ok(ProcessInit {
-        key: PROCESS_KEY
-            .with(|pk| *pk.borrow())
-            .unwrap_or_else(default_process_key),
-    })
+    unimplemented!()
 }
 
+/// Launch a new process with the current PID as the parent.
 pub fn create_process_post(
     args: ProcessArgs,
     init: ProcessInit,
     pid: PID,
 ) -> core::result::Result<ProcessHandle, crate::Error> {
     use std::process::Command;
-    let server_env = format!("{}", xous_address());
+    let server_env = format!("{}", CHILD_PROCESS_ADDRESS.lock().unwrap());
     let pid_env = format!("{}", pid);
     let process_name_env = args.name.to_string();
     let process_key_env = hex::encode(&init.key.0);
@@ -192,11 +247,21 @@ pub fn wait_process(mut joiner: ProcessHandle) -> crate::SysCallResult {
 
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);
 
+#[derive(PartialEq)]
+enum CallMemoryKind {
+    Borrow,
+    MutableBorrow,
+    Move,
+    ReturnMemory,
+}
+
 #[derive(Clone)]
 struct ServerConnection {
     send: Arc<Mutex<TcpStream>>,
-    recv: Arc<Mutex<TcpStream>>,
-    mailbox: Arc<Mutex<HashMap<TID, Result>>>,
+    mailbox: Arc<(Mutex<HashMap<TID, Result>>, Condvar)>,
+    call_mem_tracker: Arc<Mutex<HashMap<TID, (crate::MemoryRange, CallMemoryKind)>>>,
+    // call_tracker: Arc<Mutex<HashMap<TID, ()>>>,
+    // response_tracker: Arc<Mutex<HashMap<TID, ()>>>,
 }
 
 pub fn thread_to_args(call: usize, _init: &ThreadInit) -> [usize; 8] {
@@ -247,54 +312,6 @@ pub fn args_to_process(
     Ok(ProcessInit {
         key: ProcessKey(key),
     })
-}
-
-thread_local!(static NETWORK_CONNECT_ADDRESS: RefCell<Option<SocketAddr>> = RefCell::new(None));
-thread_local!(static XOUS_SERVER_CONNECTION: RefCell<Option<ServerConnection>> = RefCell::new(None));
-thread_local!(static THREAD_ID: RefCell<TID> = RefCell::new(1));
-thread_local!(static PROCESS_ID: RefCell<PID> = RefCell::new(PID::new(1).unwrap()));
-thread_local!(static PROCESS_KEY: RefCell<Option<ProcessKey>> = RefCell::new(None));
-thread_local!(static CALL_FOR_THREAD: RefCell<Arc<Mutex<HashMap<TID, crate::SysCall>>>> = RefCell::new(Arc::new(Mutex::new(HashMap::new()))));
-
-fn default_xous_address() -> SocketAddr {
-    std::env::var("XOUS_SERVER")
-        .map(|s| {
-            s.to_socket_addrs()
-                .expect("invalid server address")
-                .next()
-                .expect("unable to resolve server address")
-        })
-        .unwrap_or_else(|_| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0))
-}
-
-fn default_process_key() -> ProcessKey {
-    std::env::var("XOUS_PROCESS_KEY")
-        .map(|s| {
-            let mut base = ProcessKey([0u8; 16]);
-            hex::decode_to_slice(s, &mut base.0).unwrap();
-            base
-        })
-        .unwrap_or(ProcessKey([0u8; 16]))
-}
-
-pub fn set_process_key(new_key: &[u8; 16]) {
-    PROCESS_KEY.with(|pk| *pk.borrow_mut() = Some(ProcessKey(*new_key)));
-}
-
-/// Set the network address for this particular thread.
-pub fn set_xous_address(new_address: SocketAddr) {
-    NETWORK_CONNECT_ADDRESS.with(|nca| {
-        let mut address = nca.borrow_mut();
-        *address = Some(new_address);
-        XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = None);
-    });
-}
-
-/// Get the network address for this particular thread.
-fn xous_address() -> SocketAddr {
-    NETWORK_CONNECT_ADDRESS
-        .with(|nca| *nca.borrow())
-        .unwrap_or_else(default_xous_address)
 }
 
 pub fn create_thread_0_pre<U>(_f: &fn() -> U) -> core::result::Result<ThreadInit, crate::Error>
@@ -353,7 +370,7 @@ pub fn create_thread_0_post<U>(
 where
     U: Send + 'static,
 {
-    create_thread_post(move || f(), thread_id)
+    create_thread_post(f, thread_id)
 }
 
 pub fn create_thread_1_post<U>(
@@ -438,6 +455,7 @@ where
     Ok(ThreadInit {})
 }
 
+/// Spawn a new thread with the given thread ID.
 pub fn create_thread_post<F, U>(
     f: F,
     thread_id: TID,
@@ -447,22 +465,13 @@ where
     F: Send + 'static,
     U: Send + 'static,
 {
-    let server_address = xous_address();
-    let server_connection =
-        XOUS_SERVER_CONNECTION.with(|xsc| xsc.borrow().as_ref().unwrap().clone());
-    let process_id = PROCESS_ID.with(|pid| *pid.borrow());
-    let call_for_thread = CALL_FOR_THREAD.with(|cft| cft.borrow().clone());
-    Ok(std::thread::Builder::new()
+    std::thread::Builder::new()
         .spawn(move || {
-            set_xous_address(server_address);
-            THREAD_ID.with(|tid| *tid.borrow_mut() = thread_id);
-            PROCESS_ID.with(|pid| *pid.borrow_mut() = process_id);
-            XOUS_SERVER_CONNECTION.with(|xsc| *xsc.borrow_mut() = Some(server_connection));
-            CALL_FOR_THREAD.with(|cft| *cft.borrow_mut() = call_for_thread);
+            THREAD_ID.with(|tid| *tid.borrow_mut() = Some(thread_id));
             f()
         })
         .map(WaitHandle)
-        .map_err(|_| crate::Error::InternalError)?)
+        .map_err(|_| crate::Error::InternalError)
 }
 
 pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
@@ -473,159 +482,67 @@ pub fn wait_thread<T>(joiner: WaitHandle<T>) -> crate::SysCallResult {
         .map_err(|_| crate::Error::InternalError)
 }
 
-pub fn ensure_connection() -> core::result::Result<(), crate::Error> {
-    XOUS_SERVER_CONNECTION.with(|xsc| {
-        let mut xsc = xsc.borrow_mut();
-        if xsc.is_none() {
-            NETWORK_CONNECT_ADDRESS.with(|nca| {
-                let addr = nca.borrow().unwrap_or_else(default_xous_address);
-                let pid1_key = PROCESS_KEY
-                    .with(|pk| *pk.borrow())
-                    .unwrap_or_else(default_process_key);
-                match xous_connect_impl(addr, &pid1_key) {
-                    Ok(a) => {
-                        *xsc = Some(a);
-                        Ok(())
-                    }
-                    Err(_) => Err(crate::Error::InternalError),
-                }
-            })
+/// Perform a synchronous syscall to the kernel.
+pub fn syscall(call: SysCall) -> SysCallResult {
+    let tid = thread_id();
+
+    // If this call has memory attached to it, save that memory information
+    // in a call tracker. That way we'll know how much data to read when
+    // the kernel response comes back.
+    if let Some(range) = call.memory() {
+        let kind = if call.is_borrow() {
+            CallMemoryKind::Borrow
+        } else if call.is_mutableborrow() {
+            CallMemoryKind::MutableBorrow
+        } else if call.is_move() {
+            CallMemoryKind::Move
+        } else if call.is_return_memory() {
+            CallMemoryKind::ReturnMemory
         } else {
-            Ok(())
-        }
-    })
-}
-
-fn xous_connect_impl(
-    addr: SocketAddr,
-    key: &ProcessKey,
-) -> core::result::Result<ServerConnection, ()> {
-    // eprintln!("Opening connection to Xous server @ {} with key {:?}...", addr, key);
-    assert_ne!(&key.0, &[0u8; 16]);
-    match TcpStream::connect(addr) {
-        Ok(mut conn) => {
-            conn.write_all(&key.0).unwrap(); // Send key to authenticate us as PID 1
-            conn.flush().unwrap();
-            conn.set_nodelay(true).unwrap();
-            let mut pid = [0u8];
-            conn.read_exact(&mut pid).unwrap();
-            PROCESS_ID.with(|process_id| *process_id.borrow_mut() = PID::new(pid[0]).unwrap());
-            Ok(ServerConnection {
-                send: Arc::new(Mutex::new(conn.try_clone().unwrap())),
-                recv: Arc::new(Mutex::new(conn)),
-                mailbox: Arc::new(Mutex::new(HashMap::new())),
-            })
-        }
-        Err(_e) => {
-            // eprintln!("Unable to connect to Xous server: {}", _e);
-            // eprintln!(
-            //     "Ensure Xous is running, or specify this process as an argument to the kernel"
-            // );
-            Err(())
-        }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-#[no_mangle]
-pub fn _xous_syscall(
-    nr: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
-    ret: &mut Result,
-) {
-    XOUS_SERVER_CONNECTION.with(|xsc| {
-        THREAD_ID.with(|tid| {
-            let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
-            {
-                CALL_FOR_THREAD.with(|cft| {
-                    let cft_rc = cft.borrow();
-                    let mut cft_mtx = cft_rc.lock().unwrap();
-                    let tid = *tid.borrow();
-                    assert!(cft_mtx.get(&tid).is_none());
-                    cft_mtx.insert(tid, call)
-                });
-            }
-            let call = crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap();
-
-            let mut xsc_borrowed = xsc.borrow_mut();
-            let xsc_asmut = xsc_borrowed.as_mut().expect("not connected to server (did you forget to create a thread with xous::create_thread()?)");
-            loop {
-                _xous_syscall_to(
-                    nr,
-                    a1,
-                    a2,
-                    a3,
-                    a4,
-                    a5,
-                    a6,
-                    a7,
-                    &call,
-                    xsc_asmut
-                );
-                _xous_syscall_result(ret, *tid.borrow(), xsc_asmut);
-                if *ret != Result::WouldBlock {
-                    return;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-        })
-    });
-}
-
-fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &ServerConnection) {
-    // Check to see if this thread id has an entry in the mailbox already.
-    // This will block until the hashmap is free.
-    {
-        let mut mailbox = server_connection.mailbox.lock().unwrap();
-        if let Some(entry) = mailbox.get(&thread_id) {
-            if &Result::BlockedProcess != entry {
-                *ret = mailbox.remove(&thread_id).unwrap();
-                return;
-            }
-        }
-    }
-
-    // Receive the packet back
-    loop {
-        // Now that we have the Stream mutex, temporarily take the Mailbox mutex to see if
-        // this thread ID is there. If it is, there's no need to read via the network.
-        // Note that the mailbox mutex is released if it isn't found.
-        {
-            let mut mailbox = server_connection.mailbox.lock().unwrap();
-            if let Some(entry) = mailbox.get(&thread_id) {
-                if &Result::BlockedProcess != entry {
-                    *ret = mailbox.remove(&thread_id).unwrap();
-                    return;
-                }
-            }
-        }
-
-        let mut stream = match server_connection.recv.try_lock() {
-            Ok(lk) => lk,
-            Err(std::sync::TryLockError::WouldBlock) => {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                continue;
-            }
-            Err(e) => panic!("Receive error: {}", e),
+            panic!("call had memory, but was unrecognized")
         };
 
-        // One more check, in case something came in while we waited for the receiver above.
-        {
-            let mut mailbox = server_connection.mailbox.lock().unwrap();
-            if let Some(entry) = mailbox.get(&thread_id) {
-                if &Result::BlockedProcess != entry {
-                    *ret = mailbox.remove(&thread_id).unwrap();
-                    return;
-                }
-            }
+        SERVER_CONNECTION
+            .call_mem_tracker
+            .lock()
+            .unwrap()
+            .insert(tid, (range, kind));
+    }
+
+    loop {
+        // assert!(SERVER_CONNECTION
+        //     .call_tracker
+        //     .lock()
+        //     .unwrap()
+        //     .insert(tid, ())
+        //     .is_none());
+        send_syscall(&call);
+
+        let result = match read_syscall_result(tid) {
+            Result::Error(e) => Some(Err(e)),
+            Result::RetryCall => None,
+            other => Some(Ok(other)),
+        };
+        // assert!(SERVER_CONNECTION
+        //     .response_tracker
+        //     .lock()
+        //     .unwrap()
+        //     .remove(&tid)
+        //     .is_some());
+        if let Some(val) = result {
+            return val;
         }
 
+        // If the syscall would block, give it 5ms and retry the call.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+fn read_next_syscall_result(
+    stream: &mut TcpStream,
+    call_mem_tracker: &Arc<Mutex<HashMap<TID, (crate::MemoryRange, CallMemoryKind)>>>,
+) -> (TID, Result) {
+    loop {
         // This thread_id doesn't exist in the mailbox, so read additional data.
         let mut pkt = [0usize; 8];
         let mut raw_bytes = [0u8; size_of::<usize>() * 9];
@@ -639,43 +556,32 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
         // Read the Thread ID, which comes across first, followed by the 8 words of
         // the message data.
         let msg_thread_id =
-            usize::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
+            TID::from_le_bytes(raw_bytes_chunks.next().unwrap().try_into().unwrap());
         for (pkt_word, word) in pkt.iter_mut().zip(raw_bytes_chunks) {
             *pkt_word = usize::from_le_bytes(word.try_into().unwrap());
         }
 
+        // Reconstitute the response from the args.
         let mut response = Result::from_args(pkt);
 
-        // If we got a `WouldBlock`, then we need to retry the whole call
-        // again. Return and retry.
-        if response == Result::WouldBlock {
-            // If the incoming message was for this thread, return it directly.
-            if msg_thread_id == thread_id {
-                *ret = response;
-                return;
-            }
-
-            // Otherwise, add it to the mailbox and try again.
-            let mut mailbox = server_connection.mailbox.lock().unwrap();
-            mailbox.insert(msg_thread_id, response);
-            continue;
-        }
-
+        // This indicates that the request was successful, but there is no response
+        // yet. The client should request the response again without sending a packet.
         if response == Result::BlockedProcess {
             // println!("   Waiting again");
             continue;
         }
 
-        // Determine if this thread will have a memory packet following it.
-        let call = CALL_FOR_THREAD.with(|cft| {
-            let cft_borrowed = cft.borrow();
-            let mut cft_mtx = cft_borrowed.lock().unwrap();
-            cft_mtx
-                .remove(&msg_thread_id)
-                .expect("thread didn't declare whether it has data")
-        });
+        // The syscall MAY contain memory, however the call was unsuccessful and should
+        // be retried. Examples of this are SendMessage when there is no server available
+        // to handle the message.
+        if response == Result::RetryCall {
+            return (msg_thread_id, response);
+        }
 
-        // If the client is passing us memory, remap the array to our own space.
+        // If control flow got here, then we have a valid syscall.
+
+        // If the client is passing us memory, read bytes from the data, then
+        // remap the addresses to function in our address space.
         if let Result::Message(msg) = &mut response {
             match &mut msg.body {
                 crate::Message::Move(ref mut memory_message)
@@ -691,26 +597,30 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
                     assert_eq!(data.len(), data.capacity());
                     let len = data.len();
                     let addr = data.as_mut_ptr();
-                    memory_message.buf = unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
+                    memory_message.buf =
+                        unsafe { crate::MemoryRange::new(addr as _, len).unwrap() };
                 }
                 _ => (),
             }
         }
 
-        // If the original call contained memory, then ensure the memory we get back is correct.
-        if let Some(mem) = call.memory() {
-            if call.is_borrow() || call.is_mutableborrow() {
+        // If the original call contained memory, then the server will send a copy of the
+        // buffer back to us. Ensure the memory we get back is correct.
+        if let Some((mem, kind)) = call_mem_tracker.lock().unwrap().remove(&msg_thread_id) {
+            if response == Result::RetryCall {
+            } else if kind == CallMemoryKind::Borrow || kind == CallMemoryKind::MutableBorrow {
                 // Read the buffer back from the remote host.
                 use core::slice;
                 let mut data = unsafe { slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()) };
 
-                // If it's a Borrow, verify the contents haven't changed.
-                let previous_data = if call.is_borrow() {
-                    Some(data.to_vec())
-                } else {
-                    None
+                // If it's a Borrow, verify the contents haven't changed by saving the previous
+                // buffer in a Vec called `previous_data`.
+                let previous_data = match kind {
+                    CallMemoryKind::Borrow => Some(data.to_vec()),
+                    _ => None,
                 };
 
+                // Read the incoming data from the network.
                 if let Err(e) = stream.read_exact(&mut data) {
                     eprintln!("Server shut down: {}", e);
                     std::process::exit(0);
@@ -718,11 +628,23 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
 
                 // If it is an immutable borrow, verify the contents haven't changed somehow
                 if let Some(previous_data) = previous_data {
-                    assert_eq!(data, previous_data.as_slice());
+                    if data != previous_data.as_slice() {
+                        println!("Data: {:x?}", data);
+                        println!("Previous data: {:x?}", previous_data);
+                        ::debug_here::debug_here!();
+                        panic!("Data was not equal!");
+                    }
+                    // assert_eq!(
+                    //     data,
+                    //     previous_data.as_slice(),
+                    //     "Data changed. Was: {:x?}, Now: {:x?}",
+                    //     data,
+                    //     previous_data
+                    // );
                 }
             }
 
-            if call.is_move() {
+            if kind == CallMemoryKind::Move {
                 // In a hosted environment, the message contents are leaked when
                 // it gets converted into a MemoryMessage. Now that the call is
                 // complete, free the memory.
@@ -731,72 +653,73 @@ fn _xous_syscall_result(ret: &mut Result, thread_id: TID, server_connection: &Se
 
             // If we're returning memory to the Server, then reconstitute the buffer we just passed,
             // and Drop it so it can be freed.
-            if call.is_return_memory() {
+            if kind == CallMemoryKind::ReturnMemory {
                 let rebuilt =
                     unsafe { Vec::from_raw_parts(mem.as_mut_ptr(), mem.len(), mem.len()) };
                 drop(rebuilt);
             }
         }
-
-        // Now that we have the Stream mutex, temporarily take the Mailbox mutex to see if
-        // this thread ID is there. If it is, there's no need to read via the network.
-        // Note that the mailbox mutex is released if it isn't found.
-        {
-            // If the incoming message was for this thread, return it directly.
-            if msg_thread_id == thread_id {
-                *ret = response;
-                return;
-            }
-
-            // Otherwise, add it to the mailbox and try again.
-            let mut mailbox = server_connection.mailbox.lock().unwrap();
-            mailbox.insert(msg_thread_id, response);
-        }
+        return (msg_thread_id, response);
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-#[no_mangle]
-fn _xous_syscall_to(
-    nr: usize,
-    a1: usize,
-    a2: usize,
-    a3: usize,
-    a4: usize,
-    a5: usize,
-    a6: usize,
-    a7: usize,
-    call: &crate::SysCall,
-    xsc: &mut ServerConnection,
-) {
-    // println!(
-    //     "Making Syscall: {:?}",
-    //     crate::SysCall::from_args(nr, a1, a2, a3, a4, a5, a6, a7).unwrap()
-    // );
+/// Read a response from the kernel
+fn read_syscall_result(thread_id: TID) -> Result {
+    // Check to see if this thread id has an entry in the mailbox already.
+    // This will block until the hashmap is free.
+    let (lock, cv) = &*SERVER_CONNECTION.mailbox;
+    let mut mailbox = lock.lock().unwrap();
+    loop {
+        if let Some(entry) = mailbox.remove(&thread_id) {
+            return entry;
+        }
+
+        mailbox = cv.wait(mailbox).unwrap();
+    }
+}
+
+fn send_syscall(call: &crate::SysCall) {
+    // println!("Making Syscall: {:?}", call);
+    let tid = thread_id();
+
+    send_syscall_from_tid(call, tid)
+}
+
+fn send_syscall_from_tid(call: &crate::SysCall, tid: TID) {
+    let args = call.as_args();
 
     // Send the packet to the server
-    let mut capacity = 9 * core::mem::size_of::<usize>();
+    let mut capacity = args.len() * core::mem::size_of::<usize>() + core::mem::size_of_val(&tid);
+
+    // If there's memory attached to this packet, add that on to the
+    // number of bytes.
     if let Some(mem) = call.memory() {
         capacity += mem.len();
     }
 
     let mut pkt = Vec::with_capacity(capacity);
-    THREAD_ID.with(|tid| pkt.extend_from_slice(&tid.borrow().to_le_bytes()));
-    for word in &[nr, a1, a2, a3, a4, a5, a6, a7] {
+
+    // 1. Add in the Thread ID
+    pkt.extend_from_slice(&tid.to_le_bytes());
+
+    // 2. Add in each of the args
+    for word in &args {
         pkt.extend_from_slice(&word.to_le_bytes());
     }
 
-    // Also send memory, if it's present.
+    // 3. (Optional) add in memory data, if present
     if let Some(memory) = call.memory() {
         use core::slice;
+        // Unsafety: As long as `memory` is a valid pointer, this is safe.
+        // The call to `MemoryRange::new()` is unsafe, and requires that
+        // the memory pointed to is always valid.
         let data: &[u8] = unsafe { slice::from_raw_parts(memory.as_ptr(), memory.len()) };
         pkt.extend_from_slice(data);
     }
 
-    let mut stream = xsc.send.lock().unwrap();
+    let mut stream = SERVER_CONNECTION.send.lock().unwrap();
     if let Err(e) = stream.write_all(&pkt) {
         eprintln!("Server shut down: {}", e);
         std::process::exit(0);
     }
-    // stream.flush().unwrap();
 }
