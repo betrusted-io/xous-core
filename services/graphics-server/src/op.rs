@@ -101,7 +101,7 @@ pub struct CircleIterator {
     radius: u16,
     style: DrawStyle,
     p: Point,
-    clip: Option<Rectangle>
+    clip: Option<Rectangle>,
 }
 
 impl Iterator for CircleIterator {
@@ -124,7 +124,8 @@ impl Iterator for CircleIterator {
             let mut item = None;
 
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p)) {
+               (self.clip.unwrap().intersects_point(self.p))
+            {
                 let t = self.p;
                 let len = t.x * t.x + t.y * t.y;
 
@@ -208,7 +209,8 @@ impl Iterator for RectangleIterator {
             }
 
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p)) {
+               (self.clip.unwrap().intersects_point(self.p))
+            {
                 let border_width = self.style.stroke_width;
                 let tl = self.top_left;
                 let br = self.bottom_right;
@@ -305,12 +307,13 @@ impl Iterator for QuadrantIterator {
         loop {
             let mut item = None;
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p + self.center)) {
-
+               (self.clip.unwrap().intersects_point(self.p + self.center))
+            {
                 let t = self.p;
                 let len = t.x * t.x + t.y * t.y;
 
-                let is_border = len > (inner_radius_sq - inner_radius) && len < (outer_radius_sq + inner_radius);
+                let is_border = len > (inner_radius_sq - inner_radius)
+                    && len < (outer_radius_sq + inner_radius);
 
                 let is_fill = len <= outer_radius_sq + 1;
 
@@ -343,7 +346,7 @@ impl Iterator for QuadrantIterator {
                     if item.is_some() {
                         break item;
                     }
-                },
+                }
                 Quadrant::TopRight => {
                     if self.p.x > self.radius as i16 {
                         self.p.x = 0;
@@ -355,7 +358,7 @@ impl Iterator for QuadrantIterator {
                     if item.is_some() {
                         break item;
                     }
-                },
+                }
                 Quadrant::BottomLeft => {
                     if self.p.x > 0 as i16 {
                         self.p.x = -(self.radius as i16);
@@ -367,7 +370,7 @@ impl Iterator for QuadrantIterator {
                     if item.is_some() {
                         break item;
                     }
-                },
+                }
                 Quadrant::BottomRight => {
                     if self.p.x > self.radius as i16 {
                         self.p.x = 0;
@@ -387,18 +390,10 @@ impl Iterator for QuadrantIterator {
 
 pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant, clip: Option<Rectangle>) {
     let starting_pixel = match quad {
-        Quadrant::TopLeft => {
-            Point::new( -(circle.radius as i16), -(circle.radius as i16))
-        },
-        Quadrant::TopRight => {
-            Point::new( 0, -(circle.radius as i16))
-        },
-        Quadrant::BottomLeft => {
-            Point::new( -(circle.radius as i16), 0)
-        },
-        Quadrant::BottomRight => {
-            Point::new( 0, 0 )
-        }
+        Quadrant::TopLeft => Point::new(-(circle.radius as i16), -(circle.radius as i16)),
+        Quadrant::TopRight => Point::new(0, -(circle.radius as i16)),
+        Quadrant::BottomLeft => Point::new(-(circle.radius as i16), 0),
+        Quadrant::BottomRight => Point::new(0, 0),
     };
     let q = QuadrantIterator {
         center: circle.center,
@@ -413,7 +408,6 @@ pub fn quadrant(fb: &mut LcdFB, circle: Circle, quad: Quadrant, clip: Option<Rec
         put_pixel(fb, pixel.0.x, pixel.0.y, pixel.1);
     }
 }
-
 
 /// Pixel iterator for each pixel in the rect border
 /// lifted from embedded-graphics crate
@@ -449,11 +443,14 @@ impl Iterator for RoundedRectangleIterator {
             }
 
             if self.clip.is_none() || // short-circuit evaluation makes this safe
-               (self.clip.unwrap().intersects_point(self.p)) {
-
+               (self.clip.unwrap().intersects_point(self.p))
+            {
                 // suppress the output pixel if we happen to be in the corner quadrant area
-                if self.tlq.intersects_point(self.p) || self.trq.intersects_point(self.p) ||
-                self.blq.intersects_point(self.p) || self.brq.intersects_point(self.p) {
+                if self.tlq.intersects_point(self.p)
+                    || self.trq.intersects_point(self.p)
+                    || self.blq.intersects_point(self.p)
+                    || self.brq.intersects_point(self.p)
+                {
                     out = None
                 } else {
                     let border_width = self.style.stroke_width;
@@ -462,8 +459,8 @@ impl Iterator for RoundedRectangleIterator {
 
                     // Border
                     if (
-                            // Top border
-                            (self.p.y >= tl.y && self.p.y < tl.y + border_width)
+                        // Top border
+                        (self.p.y >= tl.y && self.p.y < tl.y + border_width)
                             // Bottom border
                             || (self.p.y <= br.y && self.p.y > br.y - border_width)
                             // Left border
@@ -492,7 +489,6 @@ impl Iterator for RoundedRectangleIterator {
                 self.p.y += 1;
             }
 
-
             if out.is_some() {
                 break out;
             }
@@ -515,16 +511,20 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
         clip: clip,
         tlq: Rectangle::new(
             rr.border.tl,
-            Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius)),
+            Point::new(rr.border.tl.x + rr.radius, rr.border.tl.y + rr.radius),
+        ),
         trq: Rectangle::new(
             Point::new(rr.border.br.x - rr.radius, rr.border.tl.y),
-            Point::new(rr.border.br.x, rr.border.tl.y + rr.radius)),
+            Point::new(rr.border.br.x, rr.border.tl.y + rr.radius),
+        ),
         blq: Rectangle::new(
             Point::new(rr.border.tl.x, rr.border.br.y - rr.radius),
-            Point::new(rr.border.tl.x + rr.radius, rr.border.br.y)),
+            Point::new(rr.border.tl.x + rr.radius, rr.border.br.y),
+        ),
         brq: Rectangle::new(
             Point::new(rr.border.br.x - rr.radius, rr.border.br.y - rr.radius),
-            rr.border.br),
+            rr.border.br,
+        ),
     };
     // draw the body
     for pixel in rri {
@@ -532,24 +532,36 @@ pub fn rounded_rectangle(fb: &mut LcdFB, rr: RoundedRectangle, clip: Option<Rect
     }
     //log::info!("GFX|OP: topleft {:?}, {:?}, {:?}, {:?}", rri.tlq.br, rr.radius, rr.border.style, clip);
     // now draw the corners
-    quadrant(fb,
+    quadrant(
+        fb,
         Circle::new_with_style(rri.tlq.br, rr.radius, rr.border.style),
         Quadrant::TopLeft,
-        clip
+        clip,
     );
-    quadrant(fb,
-        Circle::new_with_style(Point::new(rri.trq.tl.x, rri.trq.br.y), rr.radius, rr.border.style),
+    quadrant(
+        fb,
+        Circle::new_with_style(
+            Point::new(rri.trq.tl.x, rri.trq.br.y),
+            rr.radius,
+            rr.border.style,
+        ),
         Quadrant::TopRight,
-        clip
+        clip,
     );
-    quadrant(fb,
-        Circle::new_with_style(Point::new(rri.blq.br.x, rri.blq.tl.y), rr.radius, rr.border.style),
+    quadrant(
+        fb,
+        Circle::new_with_style(
+            Point::new(rri.blq.br.x, rri.blq.tl.y),
+            rr.radius,
+            rr.border.style,
+        ),
         Quadrant::BottomLeft,
-        clip
+        clip,
     );
-    quadrant(fb,
+    quadrant(
+        fb,
         Circle::new_with_style(rri.brq.tl, rr.radius, rr.border.style),
         Quadrant::BottomRight,
-        clip
+        clip,
     );
 }

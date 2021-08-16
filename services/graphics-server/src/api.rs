@@ -23,7 +23,6 @@ pub use shapes::*;
 pub mod text;
 pub use text::*;
 
-
 use std::hash::{Hash, Hasher};
 
 //////////////// IPC APIs
@@ -33,19 +32,23 @@ pub struct Gid {
     gid: [u32; 4],
 }
 impl Gid {
-    pub fn new(id: [u32; 4]) -> Self { Gid{gid: id} }
-    pub fn gid(&self) -> [u32; 4] { self.gid }
+    pub fn new(id: [u32; 4]) -> Self {
+        Gid { gid: id }
+    }
+    pub fn gid(&self) -> [u32; 4] {
+        self.gid
+    }
 }
 impl Hash for Gid {
     fn hash<H>(&self, state: &mut H)
     where
-    H: Hasher,
+        H: Hasher,
     {
         Hash::hash(&self.gid[..], state);
     }
 }
 
-pub const SERVER_NAME_GFX: &str      = "_Graphics_";
+pub const SERVER_NAME_GFX: &str = "_Graphics_";
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
@@ -116,7 +119,7 @@ pub struct ClipObject {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub struct TokenClaim {
     pub token: Option<[u32; 4]>,
-    pub name: xous_ipc::String::<128>,
+    pub name: xous_ipc::String<128>,
 }
 
 /// the buffer length of this equal to the internal length passed by the

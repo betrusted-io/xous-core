@@ -1,7 +1,7 @@
+use crate::api::Point;
+use susres::{ManagedMem, RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
-use crate::api::Point;
-use susres::{RegManager, RegOrField, SuspendResume, ManagedMem};
 
 const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
@@ -12,9 +12,9 @@ const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 pub struct XousDisplay {
     fb: MemoryRange,
     hwfb: MemoryRange,
-    srfb: ManagedMem::<{utralib::generated::HW_MEMLCD_MEM_LEN}>,
+    srfb: ManagedMem<{ utralib::generated::HW_MEMLCD_MEM_LEN }>,
     csr: utralib::CSR<u32>,
-    susres: RegManager::<{utra::memlcd::MEMLCD_NUMREGS}>,
+    susres: RegManager<{ utra::memlcd::MEMLCD_NUMREGS }>,
 }
 
 impl XousDisplay {
@@ -28,7 +28,9 @@ impl XousDisplay {
         .expect("couldn't map backing frame buffer");
         let temp: *mut [u32; FB_SIZE] = fb.as_mut_ptr() as *mut [u32; FB_SIZE];
         for words in 0..FB_SIZE {
-            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
+            unsafe {
+                (*temp)[words] = 0xFFFF_FFFF;
+            }
         }
 
         let hwfb = xous::syscall::map_memory(
@@ -40,7 +42,9 @@ impl XousDisplay {
         .expect("couldn't map hardware frame buffer");
         let temp: *mut [u32; FB_SIZE] = hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
         for words in 0..FB_SIZE {
-            unsafe{(*temp)[words] = 0xFFFF_FFFF;}
+            unsafe {
+                (*temp)[words] = 0xFFFF_FFFF;
+            }
         }
 
         let control = xous::syscall::map_memory(
@@ -57,10 +61,12 @@ impl XousDisplay {
             csr: CSR::new(control.as_mut_ptr() as *mut u32),
             susres: RegManager::new(control.as_mut_ptr() as *mut u32),
             srfb: ManagedMem::new(hwfb),
-         };
+        };
 
         display.set_clock(CONFIG_CLOCK_FREQUENCY);
-        display.susres.push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
+        display
+            .susres
+            .push(RegOrField::Field(utra::memlcd::PRESCALER_PRESCALER), None);
         display.sync_clear();
 
         /*
@@ -101,7 +107,6 @@ impl XousDisplay {
                 // busy wait, blocking suspend until this has happened
             }
         }
-
     }
     pub fn resume(&mut self, drew_note: bool) {
         self.susres.resume();
@@ -125,7 +130,9 @@ impl XousDisplay {
         }
     }
 
-    pub fn screen_size(&self) -> Point { Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16) }
+    pub fn screen_size(&self) -> Point {
+        Point::new(FB_WIDTH_PIXELS as i16, FB_LINES as i16)
+    }
 
     pub fn redraw(&mut self) {
         let mut busy_count = 0;
@@ -145,7 +152,8 @@ impl XousDisplay {
         // clear all the dirty bits, under the theory that it's time-wise cheaper on average
         // to visit every line and clear the dirty bits than it is to do an update_all()
         for lines in 0..FB_LINES {
-            if unsafe{(*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000} != 0x0 {
+            if unsafe { (*fb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] & 0xFFFF_0000 } != 0x0
+            {
                 dirty_count += 1;
             }
             unsafe {
@@ -179,7 +187,8 @@ impl XousDisplay {
 
     ///
     fn set_clock(&mut self, clk_mhz: u32) {
-        self.csr.wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
+        self.csr
+            .wfo(utra::memlcd::PRESCALER_PRESCALER, (clk_mhz / 2_000_000) - 1);
     }
 
     fn update_all(&mut self) {

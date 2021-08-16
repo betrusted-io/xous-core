@@ -96,7 +96,7 @@ impl From<usize> for DrawStyle {
         let fc: PixelColor = (s & 0b00_01).into();
         let sc: PixelColor = (s & 0b01_00).into();
         DrawStyle {
-            fill_color:   if s & 0b00_10 != 0 { Some(fc) } else { None },
+            fill_color: if s & 0b00_10 != 0 { Some(fc) } else { None },
             stroke_color: if s & 0b10_00 != 0 { Some(sc) } else { None },
             stroke_width: (s >> 16) as i16,
         }

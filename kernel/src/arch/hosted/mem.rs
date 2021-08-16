@@ -48,8 +48,6 @@ impl MemoryMapping {
     ) -> Result<(), Error> {
         Ok(())
     }
-
-    pub fn print_map(&self) {}
 }
 
 /// Determine whether a virtual address has been mapped

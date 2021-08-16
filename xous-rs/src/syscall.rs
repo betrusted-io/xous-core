@@ -8,8 +8,8 @@ use core::convert::{TryFrom, TryInto};
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-use crate::ProcessArgsAsThread;
+#[cfg(feature = "processes-as-threads")]
+pub use crate::arch::ProcessArgsAsThread;
 
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
@@ -1002,31 +1002,6 @@ impl SysCall {
     }
 }
 
-extern "Rust" {
-    // fn _xous_syscall_rust(
-    //     nr: usize,
-    //     a1: usize,
-    //     a2: usize,
-    //     a3: usize,
-    //     a4: usize,
-    //     a5: usize,
-    //     a6: usize,
-    //     a7: usize,
-    //     ret: &mut Result,
-    // );
-    fn _xous_syscall(
-        nr: usize,
-        a1: usize,
-        a2: usize,
-        a3: usize,
-        a4: usize,
-        a5: usize,
-        a6: usize,
-        a7: usize,
-        ret: &mut Result,
-    );
-}
-
 /// Map the given physical address to the given virtual address.
 /// The `size` field must be page-aligned.
 pub fn map_memory(
@@ -1523,7 +1498,7 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by running it in its own thread
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(feature = "processes-as-threads")]
 pub fn create_process_as_thread<F>(
     args: ProcessArgsAsThread<F>,
 ) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
@@ -1541,7 +1516,7 @@ where
 }
 
 /// Wait for a thread to finish
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(feature = "processes-as-threads")]
 pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
     crate::arch::wait_process_as_thread(joiner)
 }
@@ -1673,17 +1648,7 @@ pub fn set_exception_handler(
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.
 pub fn rsyscall(call: SysCall) -> SysCallResult {
-    let mut ret = Result::Ok;
-    let args = call.as_args();
-    unsafe {
-        _xous_syscall(
-            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret,
-        )
-    };
-    match ret {
-        Result::Error(e) => Err(e),
-        other => Ok(other),
-    }
+    crate::arch::syscall(call)
 }
 
 // /// This is dangerous, but fast.

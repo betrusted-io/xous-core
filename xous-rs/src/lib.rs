@@ -30,8 +30,8 @@ pub use syscall::*;
 pub mod locale;
 pub use locale::LANG;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-pub use arch::ProcessArgsAsThread;
+#[cfg(feature = "processes-as-threads")]
+pub use crate::arch::ProcessArgsAsThread;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 pub fn init() {}
@@ -66,7 +66,7 @@ macro_rules! maybe_main {
 
         fn main() {
             #[cfg(not(target_os = "xous"))]
-            xous::arch::ensure_connection().unwrap();
+            xous::arch::set_thread_id(1);
             unsafe { xous_entry() };
         }
     };

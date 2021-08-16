@@ -4,6 +4,7 @@ description = "Core kernel for Xous, including task switching and memory managem
 edition = "2018"
 name = "kernel"
 version = "0.8.2"
+resolver = "2"
 
 [dependencies]
 bitflags = "1.2.1"
@@ -13,6 +14,9 @@ gdbstub_arch = {git = "https://github.com/daniel5151/gdbstub.git", optional = tr
 sha3 = {default-features = false, version = "0.8.2"}
 stats_alloc = {version = "0.1.8", optional = true}
 xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages"]}
+
+[target.'cfg(any(windows,unix))'.dev-dependencies]
+xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages", "processes-as-threads"]}
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
 utralib = {path = "utralib"}

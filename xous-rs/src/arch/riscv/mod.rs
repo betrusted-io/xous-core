@@ -3,6 +3,8 @@ use core::convert::TryInto;
 
 mod mem;
 pub use mem::*;
+mod syscall;
+pub use syscall::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProcessArgs {
