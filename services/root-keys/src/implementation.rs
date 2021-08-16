@@ -705,7 +705,7 @@ impl<'a> RootKeys {
             AesOpType::Encrypt => cipher.encrypt_block(block.try_into().unwrap())
         }
     }
-    pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut[[u8; 16]; 16]) {
+    pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut[[u8; 16]; PAR_BLOCKS]) {
         let key = match key_index {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);

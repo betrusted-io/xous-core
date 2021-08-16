@@ -175,6 +175,7 @@ pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::
 
 impl BlockCipher for RootKeys {
     type BlockSize = U16;   // 128-bit cipher
+    // we have to manually match this to PAR_BLOCKS!!
     type ParBlocks = U16;   // 256-byte "chunk" if doing more than one block at a time, for better efficiency
 }
 
@@ -195,7 +196,7 @@ impl BlockEncrypt for RootKeys {
         }
     }
     fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-        let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
+        let mut pb_buf: [[u8; 16]; PAR_BLOCKS] = [[0; 16]; PAR_BLOCKS];
         for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
             for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
                 *dst = src;

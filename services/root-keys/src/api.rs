@@ -97,6 +97,7 @@ pub enum RootkeyResult {
 pub use cipher::{BlockCipher, consts::U16};
 use zeroize::Zeroize;
 
+pub const PAR_BLOCKS: usize = 16;
 /// Selects which key to use for the decryption/encryption oracle.
 /// currently only one type is available, the User key, but dozens more
 /// could be accommodated.
@@ -110,7 +111,7 @@ pub enum AesRootkeyType {
 #[zeroize(drop)]
 pub enum AesBlockType {
     SingleBlock([u8; 16]),
-    ParBlock([[u8; 16]; 16]),
+    ParBlock([[u8; 16]; PAR_BLOCKS]),
 }
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
 #[zeroize(drop)]
