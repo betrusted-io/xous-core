@@ -66,7 +66,7 @@ macro_rules! maybe_main {
 
         fn main() {
             #[cfg(not(target_os = "xous"))]
-            xous::arch::ensure_connection().unwrap();
+            xous::arch::set_thread_id(1);
             unsafe { xous_entry() };
         }
     };
