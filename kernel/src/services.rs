@@ -5,7 +5,6 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
-use crate::arch::process::EXCEPTION_TID;
 use xous_kernel::MemoryRange;
 
 use core::num::NonZeroU8;
@@ -2085,6 +2084,7 @@ impl SystemServices {
         Ok(parent_pid)
     }
 
+    #[cfg(baremetal)]
     pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
@@ -2126,6 +2126,7 @@ impl SystemServices {
         Ok(())
     }
 
+    #[cfg(baremetal)]
     pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // let old_state = process.state;
@@ -2185,6 +2186,7 @@ impl SystemServices {
     ///     1. The process does not exist
     ///     2. The process has no exception handler
     ///     3. The process is not "Running" or "Ready"
+    #[cfg(baremetal)]
     pub fn begin_exception_handler(&mut self, pid: PID) -> Option<ExceptionHandler> {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
@@ -2195,13 +2197,15 @@ impl SystemServices {
         };
         // Activate the current context
         let mut arch_process = ArchProcess::current();
-        arch_process.set_tid(EXCEPTION_TID).ok()?;
-        // process.current_thread = EXCEPTION_TID;
+        arch_process
+            .set_tid(crate::arch::process::EXCEPTION_TID)
+            .ok()?;
         Some(handler)
     }
 
     /// Move the current process from an `Exception` state back into a `Running` state
     /// with the current thread being marked as the given tid.
+    #[cfg(baremetal)]
     pub fn finish_exception_handler_and_resume(
         &mut self,
         pid: PID,
@@ -2254,11 +2258,6 @@ impl SystemServices {
                 offset += (4 - (offset & 3)) & 3;
             }
         }
-        None
-    }
-
-    #[cfg(not(baremetal))]
-    pub fn process_name(&self, pid: PID) -> Option<&str> {
         None
     }
 }
