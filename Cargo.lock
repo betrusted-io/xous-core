@@ -406,7 +406,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=4b45a42ad2d932550566d6c32ec1e1dd60e93c67#4b45a42ad2d932550566d6c32ec1e1dd60e93c67"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=8959b373adc359f03a0da7c000bd8208b47d90a7#8959b373adc359f03a0da7c000bd8208b47d90a7"
 
 [[package]]
 name = "com_rs-ref"

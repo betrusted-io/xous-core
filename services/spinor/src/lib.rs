@@ -666,4 +666,39 @@ mod tests {
         print!("{:x?}", &EMU_FLASH.lock().unwrap()[0x207C..0x2084]);
     }
 
+
+    #[test]
+    fn test_patch_csr_area() {
+        let mut spinor = Spinor::new();
+        init_emu_flash(640);
+        flash_fill_rand();
+        // emulate the "erased" region at the end of the CSR file
+        for byte in EMU_FLASH.lock().unwrap()[0x27b200..0x27f000].iter_mut() {
+            *byte = 0xFF;
+        }
+
+        // create our "flash region" -- normally this would be a memory-mapped block that's owned by our calling function
+        // here we bodge it out of the emulated flash space with some rough parameter
+        let mut flash_orig = Vec::<u8>::new();
+        flash_orig.extend(EMU_FLASH.lock().unwrap().as_slice().iter().copied()); // snag a copy of the original state, so we can be sure the patch was targeted
+
+        let region_base = 0x0; // region bases are required to be aligned to an erase sector; guaranteed by fiat
+        let region_len = 0x1000 * 28; // four sectors long, one sector up
+
+        let mut patch = flash_orig.clone();
+        for i in 0x27efc0..0x27f000 {
+            patch[i] = 0x66;
+        }
+
+        print!("source {:x?}\n", &patch[0x27efc0..0x27f000]);
+        print!("target {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27efc0..0x27f000]);
+        print!("wrong  {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27e000..0x27e100]);
+        let result = spinor.patch(&flash_orig, region_base, &patch[0x27_6000..0x27_f000], 0x27_6000);
+        assert!(result.is_ok(), "patch threw an error");
+
+        print!("source {:x?}\n", &patch[0x27efc0..0x27f000]);
+        print!("target {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27efc0..0x27f000]);
+        print!("wrong  {:x?}\n", &EMU_FLASH.lock().unwrap()[0x27e000..0x27e100]);
+    }
+
 }

@@ -136,6 +136,27 @@ pub(crate) enum Opcode {
 
     /// suspend/resume callback
     SuspendResume,
+
+    /// wlan: make sure radio is on (reset from standby if needed)
+    WlanOn,
+
+    /// wlan: switch radio to lowest power standby mode
+    WlanOff,
+
+    /// wlan: set SSID to use for joining AP
+    WlanSetSSID,
+
+    /// wlan: set password to use for joining AP
+    WlanSetPass,
+
+    /// wlan: join AP using previously set SSID & password
+    WlanJoin,
+
+    /// wlan: disconnect from AP
+    WlanLeave,
+
+    /// wlan: get wlan radio status (power state? connected? AP info?)
+    WlanStatus,
 }
 
 /// These enums indicate what kind of callback type we're sending.

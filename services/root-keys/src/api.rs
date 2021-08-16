@@ -11,6 +11,10 @@ pub(crate) enum Opcode {
     KeysInitialized,
     /// check that the digital signature on the gateware
     CheckGatewareSignature,
+    /// check if the efuse has been locked down
+    IsEfuseSecured,
+    /// quick check to see if the JTAG can read its IDCODE
+    IsJtagWorking,
 
     TestUx,
 
@@ -20,15 +24,30 @@ pub(crate) enum Opcode {
     UxConfirmation,
     UxInitRequestPassword,
     UxInitPasswordReturn,
+
+    /// provision a gateware update with our secret data
+    UxUpdateGateware,
+    UxUpdateGwCheckSig,
+    UxUpdateGwShowInfo,
+    UxUpdateGwShowLog,
+    UxUpdateGwShowStatus,
+    UxUpdateGwConfirm,
+    UxUpdateGwDecidePassword,
+    UxUpdateGwPasswordPolicy,
+    UxUpdateGwRun,
+
+    /// self-sign kernel/loader
+    UxSelfSignXous,
+    UxSignXousPasswordPolicy,
+    UxSignXousRun,
+
+    // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
     UxGetPolicy,
     UxPolicyReturn,
     UxTryReboot,
     UxDoReboot,
-    /// provision a gateware update with our secret data
-    UxUpdateGateware,
-    /// self-sign kernel/loader
-    UxSelfSignXous,
+
     /// UX opcodes
     MenuRedraw,
     MenuKeys,
@@ -43,7 +62,7 @@ pub(crate) enum Opcode {
     Quit
 }
 
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
 pub enum PasswordRetentionPolicy {
     AlwaysKeep,
     EraseOnSuspend,
@@ -60,7 +79,7 @@ pub enum PasswordType {
     Boot = 1,
     Update = 2,
 }
-
+#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(dead_code))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RootkeyResult {
     AlignmentError,

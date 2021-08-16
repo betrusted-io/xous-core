@@ -283,6 +283,7 @@ impl MiniElf {
             if VDBG {println!("    Section @ {:08x}", section.virt as usize);}
             let flag_defaults = FLG_U
                 | FLG_R
+                | FLG_X
                 | FLG_VALID
                 | if section.flags() & 1 == 1 { FLG_W } else { 0 }
                 | if section.flags() & 4 == 4 { FLG_X } else { 0 };
@@ -296,7 +297,7 @@ impl MiniElf {
 
             // If this is not a new page, ensure the uninitialized values from between
             // this section and the previous one are all zeroed out.
-            if this_page != current_page_addr {
+            if this_page != current_page_addr || previous_addr == current_page_addr {
                 if VDBG {println!("1       {:08x} -> {:08x}", top as usize, this_page);}
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
@@ -334,7 +335,7 @@ impl MiniElf {
             }
 
             // Part 2: Copy any full pages.
-            while bytes_to_copy > PAGE_SIZE {
+            while bytes_to_copy >= PAGE_SIZE {
                 if VDBG {println!("2       {:08x} -> {:08x}", top as usize, this_page);}
                 allocator.map_page(satp, top as usize, this_page, flag_defaults);
                 allocator.change_owner(pid as XousPid, top as usize);
@@ -682,9 +683,9 @@ fn copy_processes(cfg: &mut BootConfig) {
                 );}
                 // If this is not a new page, ensure the uninitialized values from between
                 // this section and the previous one are all zeroed out.
-                if this_page != page_addr {
+                if this_page != page_addr || previous_addr == page_addr {
                     if VDBG {println!("New page @ {:08x}", this_page);}
-                    if previous_addr != 0 {
+                    if previous_addr != 0 && previous_addr != page_addr {
                         if VDBG {println!(
                             "Zeroing-out remainder of previous page: {:08x} (mapped to physical address {:08x})",
                             previous_addr, top as usize,
@@ -714,8 +715,9 @@ fn copy_processes(cfg: &mut BootConfig) {
                 }
                 let first_chunk_offset = section.virt as usize & (PAGE_SIZE - 1);
                 if VDBG {println!(
-                    "First chunk is {} bytes, copying from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
+                    "Section chunk is {} bytes, {} from {:08x}:{:08x} -> {:08x}:{:08x} (virt: {:08x})",
                     first_chunk_size,
+                    if section.no_copy() { "zeroing" } else { "copying" },
                     src_addr as usize,
                     unsafe { src_addr.add(first_chunk_size) as usize },
                     unsafe { top.add(first_chunk_offset) as usize },
@@ -740,12 +742,12 @@ fn copy_processes(cfg: &mut BootConfig) {
                 bytes_to_copy -= first_chunk_size;
 
                 // Part 2: Copy any full pages.
-                while bytes_to_copy > PAGE_SIZE {
+                while bytes_to_copy >= PAGE_SIZE {
                     cfg.extra_pages += 1;
                     top = cfg.get_top() as *mut u8;
                     // println!(
-                    //     "Copying next page from {:08x} {:08x}",
-                    //     src_addr as usize, top as usize
+                    //     "Copying next page from {:08x} {:08x} ({} bytes to go...)",
+                    //     src_addr as usize, top as usize, bytes_to_copy
                     // );
                     if !section.no_copy() {
                         unsafe {

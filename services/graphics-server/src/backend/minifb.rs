@@ -66,7 +66,7 @@ impl XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
-            devboot: false,
+            devboot: true,
         }
     }
     pub fn set_devboot(&mut self, ena: bool) {

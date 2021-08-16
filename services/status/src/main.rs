@@ -16,6 +16,7 @@ use graphics_server::*;
 use locales::t;
 
 use std::sync::{Arc, Mutex};
+#[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(unused_imports))]
 use std::thread;
 use std::collections::HashMap;
 
@@ -192,6 +193,7 @@ fn xmain() -> ! {
         sec_notes.lock().unwrap().insert("secnotes.no_keys".to_string(), t!("secnote.no_keys", xous::LANG).to_string());
     } else {
         log::info!("checking gateware signature...");
+        #[cfg(any(target_os = "none", target_os = "xous"))] // for now, threads don't work in hosted mode, but the result of this isn't important in hosted mode right now
         thread::spawn({
             let clone = Arc::clone(&sec_notes);
             let keys = Arc::clone(&keys);

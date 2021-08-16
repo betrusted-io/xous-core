@@ -101,6 +101,10 @@ impl Jtag {
         let erec = self.efuse_fetch().expect("couldn't read efuse record");
         if (erec.cntl & 0x20)  != 0 { Ok(true) } else { Ok(false) }
     }
+    pub fn get_raw_control_bits(&self) -> Result<u8, xous::Error> {
+        let erec = self.efuse_fetch().expect("couldn't read efuse record");
+        Ok(erec.cntl)
+    }
     fn mod_ctl_efuse(&self, bits_to_set: u8) -> Result<bool, xous::Error> {
         let erec = self.efuse_fetch().expect("couldn't read efuse record");
         let response = send_message(self.conn,
