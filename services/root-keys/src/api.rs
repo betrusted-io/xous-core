@@ -44,8 +44,7 @@ pub(crate) enum Opcode {
     UxSignXousRun,
 
     /// Ux AES calls
-    //UxAesRequestPw,
-    //UxAesRun,
+    //UxAesEnsurePassword,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
@@ -96,6 +95,7 @@ pub enum RootkeyResult {
 
 /// AES operation definitions
 pub use cipher::{BlockCipher, consts::U16};
+use zeroize::Zeroize;
 
 /// Selects which key to use for the decryption/encryption oracle.
 /// currently only one type is available, the User key, but dozens more
@@ -106,17 +106,20 @@ pub enum AesRootkeyType {
     NoneSpecified = 0xff,
 }
 
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
 pub enum AesBlockType {
     SingleBlock([u8; 16]),
     ParBlock([[u8; 16]; 16]),
 }
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
 pub enum AesOpType {
     Encrypt,
     Decrypt,
 }
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
 pub struct AesOp {
     /// the caller can try to request "any" index, but it's checked inside the oracle first.
     pub key_index: u8,

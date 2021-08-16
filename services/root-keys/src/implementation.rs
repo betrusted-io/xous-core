@@ -682,6 +682,9 @@ impl<'a> RootKeys {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                if pcache.hashed_boot_pw_valid == 0 {
+                    log::warn!("boot password isn't valid! Returning bogus results.");
+                }
                 for (key, &pw) in
                 key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
                     *key = *key ^ pw;
@@ -707,6 +710,9 @@ impl<'a> RootKeys {
             KeyRomLocs::USER_KEY => {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                if pcache.hashed_boot_pw_valid == 0 {
+                    log::warn!("boot password isn't valid! Returning bogus results.");
+                }
                 for (key, &pw) in
                 key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
                     *key = *key ^ pw;

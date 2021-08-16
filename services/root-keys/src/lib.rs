@@ -52,19 +52,6 @@ impl RootKeys {
         Opcode::UxSelfSignXous.to_u32().unwrap()
     }
 
-
-    /// this function causes the staging gateware to be provisioned with a copy of our keys,
-    /// while being encrypted to the AES key indicated inside the KEYROM
-    pub fn provision_and_encrypt_staging_gateware(&mut self) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
-    /// this function causes the staging gateware to be copied to the boot gateware region.
-    /// it can report progress of the operation by sending a message to an optional ScalarHook
-    pub fn copy_staging_to_boot_gateware(&mut self) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
     /// this function takes a boot gateware that has a "null" key (all zeros) and:
     /// 0. confirms that JTAG is accessible by reading out the ID, and that the eFuse is writeable, and all 0's
     /// 1. prompts of the update password, and confirms that the existing efuse key decrypts to 0. if not -- we were already fused, abort.
@@ -77,6 +64,11 @@ impl RootKeys {
     /// 8. reads back the eFuse key from the KEYROM to confirm everything went as planned, compares to previously computed result
     /// 9. clears the eFuse key from RAM.
     pub fn seal_boot_gateware(&mut self) -> Result<(), xous::Error> {
+        unimplemented!();
+    }
+
+    /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
+    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
@@ -101,11 +93,6 @@ impl RootKeys {
             log::error!("unexpected return value: {:#?}", response);
             Err(xous::Error::InternalError)
         }
-    }
-
-    /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
-    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
-        unimplemented!();
     }
 
     /// this will check the signature on the gateware.
