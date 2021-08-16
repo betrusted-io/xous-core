@@ -40,7 +40,7 @@ fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
         arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
         do_yield(pid, tid)
     } else {
-        Ok(xous_kernel::Result::WouldBlock)
+        Ok(xous_kernel::Result::RetryCall)
     }
 }
 
