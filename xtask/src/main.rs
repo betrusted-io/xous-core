@@ -466,7 +466,7 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
         ])
         .status()?;
     if !status.success() {
-        Err("Unable to regenerate Renode platform file")?;
+        return Err("Unable to regenerate Renode platform file".into());
     }
     build_hw_image(
         debug,
@@ -482,7 +482,7 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
 
-    build(&init, debug, None, None, None)?;
+    build(init, debug, None, None, None)?;
 
     // Build and run the kernel
     let mut args = vec!["run"];
