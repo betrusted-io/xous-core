@@ -31,6 +31,10 @@ logging = ["log"]
 # This is being built as part of libstd
 rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 
+# Processes and threads will all be subthreads. This is useful for kernel
+# testing.
+processes-as-threads = []
+
 default = ["bit-flags", "xous-macros"]
 
 [target.'cfg(any(windows,unix))'.dependencies]
