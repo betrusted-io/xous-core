@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(baremetal)]
 use core::fmt::{Error, Write};
 #[cfg(target_os = "none")]
 use utralib::generated::*;
 
+#[cfg(baremetal)]
 pub static mut DEBUG_OUTPUT: Option<&'static mut dyn Write> = None;
 
 #[macro_use]
@@ -110,7 +112,7 @@ impl Uart {
                 let ret = Some(uart_csr.r(utra::uart::RXTX) as u8);
                 uart_csr.wfo(utra::uart::EV_PENDING_RX, 1);
                 ret
-            },
+            }
         }
     }
 }
@@ -153,6 +155,11 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
     // uart.acknowledge_irq();
 }
 
+#[cfg(all(
+    not(test),
+    target_os = "none",
+    any(feature = "debug-print", feature = "print-panics")
+))]
 fn process_irq_character(b: u8) {
     #[cfg(all(feature = "gdbserver", target_os = "none"))]
     if gdb_server::handle(b) {

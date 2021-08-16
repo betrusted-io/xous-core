@@ -19,7 +19,7 @@ use crate::services::SystemServices;
 
 use crossbeam_channel::{unbounded, Receiver, RecvError, RecvTimeoutError, Sender};
 
-use xous_kernel::{MemoryAddress, ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
+use xous_kernel::{ProcessInit, ProcessKey, Result, SysCall, ThreadInit, PID, TID};
 
 enum ThreadMessage {
     SysCall(PID, TID, SysCall),

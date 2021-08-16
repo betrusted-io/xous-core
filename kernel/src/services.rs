@@ -73,6 +73,7 @@ pub enum ProcessState {
 
     /// The process is currently being debugged. When it is resumed,
     /// this will turn into `Ready(usize)`
+    #[allow(dead_code)]
     Debug(usize),
 
     /// This process is processing an exception. When it is resumed, it will
@@ -247,7 +248,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        current_thread: 0 as TID,
+        current_thread: 0_usize,
         previous_thread: INITIAL_TID as TID,
         exception_handler: None,
     }; MAX_PROCESS_COUNT],
