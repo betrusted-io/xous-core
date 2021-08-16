@@ -30,8 +30,8 @@ pub use syscall::*;
 pub mod locale;
 pub use locale::LANG;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-pub use arch::ProcessArgsAsThread;
+#[cfg(feature = "processes-as-threads")]
+pub use crate::arch::ProcessArgsAsThread;
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 pub fn init() {}
