@@ -44,7 +44,9 @@ pub(crate) enum Opcode {
     UxSignXousRun,
 
     /// Ux AES calls
-    //UxAesEnsurePassword,
+    UxAesEnsurePassword,
+    UxAesPasswordPolicy,
+    UxAesEnsureReturn,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
@@ -97,11 +99,18 @@ pub enum RootkeyResult {
 pub use cipher::{BlockCipher, consts::U16};
 use zeroize::Zeroize;
 
+/// 128-bit AES block
+#[allow(dead_code)]
+pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
+/// 16 x 128-bit AES blocks to be processed in bulk
+#[allow(dead_code)]
+pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
+
 pub const PAR_BLOCKS: usize = 16;
 /// Selects which key to use for the decryption/encryption oracle.
 /// currently only one type is available, the User key, but dozens more
 /// could be accommodated.
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq)]
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
 pub enum AesRootkeyType {
     User0 = 0x28,
     NoneSpecified = 0xff,

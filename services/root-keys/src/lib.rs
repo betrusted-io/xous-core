@@ -146,11 +146,28 @@ impl RootKeys {
         }
     }
 
+    fn ensure_aes_password(&self) -> bool {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UxAesEnsurePassword.to_usize().unwrap(), self.key_index as usize, 0, 0, 0,)
+        ).expect("failed to ensure password is current");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 1 {
+                log::error!("there was a problem ensuring our password was unlocked, aborting!");
+                return false;
+            }
+        } else {
+            log::error!("there was a problem ensuring our password was unlocked, aborting!");
+            return false;
+        }
+        true
+    }
+
     pub fn test_ux(&mut self, arg: usize) {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
+        log::info!("test_ux response: {:?}", response);
     }
 }
 
@@ -168,11 +185,6 @@ impl Drop for RootKeys {
     }
 }
 
-/// 128-bit AES block
-pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
-/// 16 x 128-bit AES blocks to be processed in bulk
-pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
-
 impl BlockCipher for RootKeys {
     type BlockSize = U16;   // 128-bit cipher
     // we have to manually match this to PAR_BLOCKS!!
@@ -181,6 +193,9 @@ impl BlockCipher for RootKeys {
 
 impl BlockEncrypt for RootKeys {
     fn encrypt_block(&self, block: &mut Block) {
+        if !self.ensure_aes_password() {
+            return;
+        }
         let op = AesOp {
             key_index: self.key_index.to_u8().unwrap(),
             block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
@@ -196,6 +211,9 @@ impl BlockEncrypt for RootKeys {
         }
     }
     fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
+        if !self.ensure_aes_password() {
+            return;
+        }
         let mut pb_buf: [[u8; 16]; PAR_BLOCKS] = [[0; 16]; PAR_BLOCKS];
         for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
             for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
@@ -222,6 +240,9 @@ impl BlockEncrypt for RootKeys {
 
 impl BlockDecrypt for RootKeys {
     fn decrypt_block(&self, block: &mut Block) {
+        if !self.ensure_aes_password() {
+            return;
+        }
         let op = AesOp {
             key_index: self.key_index.to_u8().unwrap(),
             block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
@@ -237,6 +258,9 @@ impl BlockDecrypt for RootKeys {
         }
     }
     fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
+        if !self.ensure_aes_password() {
+            return;
+        }
         let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
         for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
             for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {

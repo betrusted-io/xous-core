@@ -1,5 +1,5 @@
 use crate::{ShellCmdApi, CommonEnv};
-use root_keys::api::AesRootkeyType;
+use root_keys::api::{AesRootkeyType, Block};
 use xous_ipc::String;
 
 #[derive(Debug)]
@@ -55,6 +55,33 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     self.rootkeys.test_ux(0);
                     //debug_here::debug_here!();
                     write!(ret, "show UX").unwrap();
+                }
+                "aes" => {
+                    use aes_xous::{BlockEncrypt, BlockDecrypt};
+                    let mut pass = true;
+                    let mut block = Block::clone_from_slice(&[0; 16]);
+                    self.rootkeys.encrypt_block(&mut block);
+                    log::info!("encrypted block: {:?}", block);
+                    let mut sum = 0;
+                    for &b in block.as_slice().iter() {
+                        sum += b as u32; // we don't use .sum() because we need more bits than a u8
+                    }
+                    if sum == 0 {
+                        pass = false;
+                    }
+                    // this will cause a second password box to pop up if you told it to use-once.
+                    self.rootkeys.decrypt_block(&mut block);
+                    log::info!("decrypted block: {:?}", block);
+                    for &b in block.as_slice().iter() {
+                        if b != 0 {
+                            pass = false;
+                        }
+                    }
+                    if pass {
+                        write!(ret, "aes test passed").unwrap();
+                    } else {
+                        write!(ret, "aes test failed").unwrap();
+                    }
                 }
                 "usblock" => {
                     env.llio.debug_usb(Some(true)).unwrap();

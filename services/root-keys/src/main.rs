@@ -174,6 +174,9 @@ mod implementation {
         pub fn is_pcache_update_password_valid(&self) -> bool {
             false
         }
+        pub fn is_pcache_boot_password_valid(&self) -> bool {
+            false
+        }
 
         pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
             MetadataInFlash {
@@ -293,8 +296,9 @@ fn xmain() -> ! {
     );
 
     let mut reboot_initiated = false;
+    let mut aes_sender: Option<xous::MessageSender> = None;
     loop {
-        let msg = xous::receive_message(keys_sid).unwrap();
+        let mut msg = xous::receive_message(keys_sid).unwrap();
         log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
@@ -327,28 +331,6 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 0).unwrap();
                 }
             }),
-            Some(Opcode::AesOperation) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                // as_flat saves a copy step, but we have to deserialize some enums manually
-                let aes_op = buffer.as_flat::<AesOp, _>().unwrap();
-                // deserialize the specifier
-                let optype = match aes_op.aes_op {
-                    ArchivedAesOpType::Decrypt => {
-                        AesOpType::Decrypt
-                    },
-                    ArchivedAesOpType::Encrypt => {
-                        AesOpType::Encrypt
-                    }
-                };
-                match aes_op.block {
-                    ArchivedAesBlockType::SingleBlock(mut b) => {
-                        keys.aes_op(aes_op.key_index, optype, &mut b);
-                    }
-                    ArchivedAesBlockType::ParBlock(mut pb) => {
-                        keys.aes_par_op(aes_op.key_index, optype, &mut pb);
-                    }
-                }
-            },
 
             // UX flow opcodes
             Some(Opcode::UxTryInitKeys) => msg_scalar_unpack!(msg, _, _, _, _, {
@@ -938,6 +920,113 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::UxAesEnsurePassword) => msg_blocking_scalar_unpack!(msg, key_index, _, _, _, {
+                if key_index as u8 == AesRootkeyType::User0.to_u8().unwrap() {
+                    if keys.is_pcache_boot_password_valid() {
+                        // short circuit the process if the cache is hot
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                        continue;
+                    }
+                    if aes_sender.is_some() {
+                        log::error!("multiple concurrent requests to UxAesEnsurePasword, not allowed!");
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    } else {
+                        aes_sender = Some(msg.sender);
+                    }
+                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action)),
+                        Some(t!("rootkeys.get_login_password", xous::LANG)), false,
+                        None, true, None
+                    );
+                    rootkeys_modal.activate();
+                    // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
+                } else {
+                    // insert other indices, as we come to have them in else-ifs
+                    // note that there needs to be a way to keep the ensured password in sync with the
+                    // actual key index (if multiple passwords are used/required). For now, because there is only
+                    // one password, we can use is_pcache_boot_password_valid() to sync that up; but as we add
+                    // more keys with more passwords, this policy may need to become markedly more complicated!
+
+                    // otherwise, an invalid password request
+                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.bad_password_request", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::UxAesPasswordPolicy) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxAesEnsureReturn.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.policy_request", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxAesEnsureReturn) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                } else if payload.as_str() == "no change" {
+                    // don't change the policy
+                } else {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                }
+                keys.set_ux_password_type(None);
+                if let Some(sender) = aes_sender.take() {
+                    xous::return_scalar(sender, 1).unwrap();
+                } else {
+                    log::error!("entered a UxAesEnsureReturn but the flow was not set up correctly!");
+                    panic!("entered a UxAesEnsureReturn but the flow was not set up correctly!")
+                }
+            }
+            Some(Opcode::AesOperation) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                // as_flat saves a copy step, but we have to deserialize some enums manually
+                let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
+                let op = match aes_op.aes_op { // seems stupid, but we have to do this because we want to have zeroize on the AesOp record, and it means we can't have Copy on this.
+                    AesOpType::Decrypt => AesOpType::Decrypt,
+                    AesOpType::Encrypt => AesOpType::Encrypt,
+                };
+                // deserialize the specifier
+                match aes_op.block {
+                    AesBlockType::SingleBlock(mut b) => {
+                        log::info!("b: {:x?}", b);
+                        keys.aes_op(aes_op.key_index, op, &mut b);
+                        log::info!("b: {:x?}", b);
+                        aes_op.block = AesBlockType::SingleBlock(b);
+                        log::info!("after b: {:x?}", aes_op);
+                    }
+                    AesBlockType::ParBlock(mut pb) => {
+                        keys.aes_par_op(aes_op.key_index, op, &mut pb);
+                        aes_op.block = AesBlockType::ParBlock(pb);
+                    }
+                };
+                buffer.replace(aes_op).unwrap();
+            },
+
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {
                     if keys.verify_gateware_self_signature() {
@@ -949,8 +1038,9 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
                 }
             }),
-            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
-                // empty test routine for now
+            Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
+                // dummy test for now
+                xous::return_scalar(msg.sender, 1234).unwrap();
             }),
             Some(Opcode::UxGetPolicy) => {
                 policy_menu.activate();

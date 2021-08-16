@@ -189,6 +189,16 @@
         "zh": "更新完成重启应用",
         "en-audio": "Xous signing finished. Reboot at your earliest convenience."
     },
+    "rootkeys.get_login_password": {
+        "en": "Password request\nDevice unlock\nSecurity: Low\nWhy: User login",
+        "zh": "输入密码\n解锁\n安全含义:低",
+        "en-audio": "Enter device unlock password to access basic service."
+    },
+    "rootkeys.bad_password_request": {
+        "en": "Someone issued a request\nfor a non-existent\npassword.",
+        "zh": "**improve**无效的密码请求",
+        "en-audio": "Someone issued a request for a non-existent password."
+    },
     "rootkeys.policy_request": {
         "en": "Please pick a password\nretention policy:",
         "zh": "请选择密码保留策略:",

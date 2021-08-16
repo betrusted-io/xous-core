@@ -683,11 +683,15 @@ impl<'a> RootKeys {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
                 if pcache.hashed_boot_pw_valid == 0 {
+                    self.purge_password(PasswordType::Boot);
                     log::warn!("boot password isn't valid! Returning bogus results.");
                 }
                 for (key, &pw) in
                 key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
                     *key = *key ^ pw;
+                }
+                if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+                    self.purge_password(PasswordType::Boot);
                 }
                 key_enc
             },
@@ -711,11 +715,15 @@ impl<'a> RootKeys {
                 let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
                 let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
                 if pcache.hashed_boot_pw_valid == 0 {
+                    self.purge_password(PasswordType::Boot);
                     log::warn!("boot password isn't valid! Returning bogus results.");
                 }
                 for (key, &pw) in
                 key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
                     *key = *key ^ pw;
+                }
+                if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+                    self.purge_password(PasswordType::Boot);
                 }
                 key_enc
             },
@@ -975,6 +983,14 @@ impl<'a> RootKeys {
     pub fn is_pcache_update_password_valid(&self) -> bool {
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
         if pcache.hashed_update_pw_valid == 0 {
+            false
+        } else {
+            true
+        }
+    }
+    pub fn is_pcache_boot_password_valid(&self) -> bool {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_boot_pw_valid == 0 {
             false
         } else {
             true
