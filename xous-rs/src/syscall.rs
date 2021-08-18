@@ -985,6 +985,25 @@ impl SysCall {
         }
     }
 
+    /// If the syscall has memory attached to it, return the memory, mutably
+    ///
+    /// # Safety
+    ///
+    /// This function is only safe to call to fixup the pointer. It should
+    /// not be used for any other purpose.
+    pub unsafe fn memory_mut(&mut self) -> Option<&mut MemoryRange> {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
+                Message::Move(memory_message)
+                | Message::Borrow(memory_message)
+                | Message::MutableBorrow(memory_message) => Some(&mut memory_message.buf),
+                _ => None,
+            },
+            SysCall::ReturnMemory(_, range, _, _) => Some(range),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
         if let SysCall::TrySendMessage(_cid, msg) = self {
