@@ -179,6 +179,31 @@
         "zh": "更新完成重启应用",
         "en-audio": "Gateware update finished. Reboot at your earliest convenience."
     },
+    "rootkeys.bbram.confirm": {
+        "en": "Connect provisioning helper,\nthen press enter.\nRefer to https://github.com/betrusted-io/betrusted-wiki/wiki for details.",
+        "zh": "立即连接配置助手。请参阅 https://github.com/betrusted-io/betrusted-wiki/wiki 了解详情。",
+        "en-audio": "Connect provisioning helper then press enter.\nRefer to https://github.com/betrusted-io/betrusted-wiki/wiki for details."
+    },
+    "rootkeys.bbram.finished": {
+        "en": "BBRAM helper should have\nrebooted the device.\nThere was a problem with\nthe procedure!",
+        "zh": "**missing**",
+        "en-audio": "BBRAM helper should have rebooted the device, you should not see this message!"
+    },
+    "rootkeys.bbram.failed_restore": {
+        "en": "Something went wrong.\nRestoring from backup...\n",
+        "zh": "出了点问题，从备份中恢复...",
+        "en-audio": "Something went wrong, restoring from backup."
+    },
+    "rootkeys.console_input": {
+        "en": "Communicating with helper...\nPress enter to abort.",
+        "zh": "与助手通信，按 Enter 中止",
+        "en-audio": "Communicating with helper. Press enter to abort."
+    },
+    "rootkeys.bbram.no_helper": {
+        "en": "No BBRAM helper found.\nRefer to https://github.com/betrusted-io/betrusted-wiki/wiki for help.",
+        "zh": "没有找到 BBRAM helper。参考https://github.com/betrusted-io/betrusted-wiki/wiki。",
+        "en-audio": "No BBRAM helper found. Refer to https://github.com/betrusted-io/betrusted-wiki/wiki for help."
+    },
     "rootkeys.get_signing_password": {
         "en": "Password request\nSoftware update key\nSecurity: Critical\nWhy: Sign Xous",
         "zh": "输入密码\n软件更新\n安全含义:至关重要 ",

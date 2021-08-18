@@ -7,7 +7,7 @@ use aes_xous::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum FpgaKeySource {
+pub enum FpgaKeySource {
     Bbram,
     Efuse,
 }
@@ -185,8 +185,7 @@ impl<'a> BitstreamOracle<'a> {
         self.ciphertext
     }
     pub fn get_original_key_type(&self) -> FpgaKeySource {self.dec_from_key}
-    /// the main use case for this API is changing from a BBRAM->eFuse source
-    /// we can't go eFuse->BBRAM because, unfortunately, we can't program BBRAM keys natively; the bitstream will have to have been constructed for BBRAM already for a good boot
+    pub fn get_target_key_type(&self) -> FpgaKeySource {self.enc_to_key}
     pub fn set_target_key_type(&mut self, keytype: FpgaKeySource) {
         self.enc_to_key = keytype;
     }

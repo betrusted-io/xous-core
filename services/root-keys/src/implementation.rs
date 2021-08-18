@@ -1,5 +1,6 @@
 mod oracle;
 use oracle::*;
+pub use oracle::FpgaKeySource;
 
 use utralib::generated::*;
 use crate::api::*;
@@ -42,6 +43,22 @@ const METADATA_OFFSET: usize = 0x27_6000;
 const CSR_CSV_OFFSET: usize  = 0x27_7000;
 /// offset of the gateware self-signature area
 const SELFSIG_OFFSET: usize  = 0x27_F000;
+
+/// This structure is mapped into the password cache page and can be zero-ized at any time
+/// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
+/// The "password" here is generated as follows:
+///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
+/// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
+/// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply truncated.
+#[repr(C)]
+struct PasswordCache {
+    hashed_boot_pw: [u8; 32],
+    hashed_boot_pw_valid: u32, // non-zero for valid
+    hashed_update_pw: [u8; 32],
+    hashed_update_pw_valid: u32,
+    fpga_key: [u8; 32],
+    fpga_key_valid: u32,
+}
 
 #[repr(C)]
 struct SignatureInFlash {
@@ -98,22 +115,6 @@ pub(crate) mod keyrom_config {
     pub const FORWARD_REV_LIMIT:   KeyField = KeyField::new(4, 19);
     pub const FORWARD_MINOR_LIMIT: KeyField = KeyField::new(4, 23);
     pub const INITIALIZED:         KeyField = KeyField::new(1, 27);
-}
-
-/// This structure is mapped into the password cache page and can be zero-ized at any time
-/// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
-/// The "password" here is generated as follows:
-///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
-/// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
-/// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply truncated.
-#[repr(C)]
-struct PasswordCache {
-    hashed_boot_pw: [u8; 32],
-    hashed_boot_pw_valid: u32, // non-zero for valid
-    hashed_update_pw: [u8; 32],
-    hashed_update_pw_valid: u32,
-    fpga_key: [u8; 32],
-    fpga_key_valid: u32,
 }
 
 /// helper routine that will reverse the order of bits. uses a divide-and-conquer approach.
@@ -364,6 +365,25 @@ impl<'a> RootKeys {
             return Some(true)
         }
     }
+    pub fn fpga_key_source(&self) -> FpgaKeySource {
+        let mut words = self.gateware()[..4096].chunks(4);
+        loop {
+            if let Some(word) = words.next() {
+                let cwd = u32::from_be_bytes(word[0..4].try_into().unwrap());
+                if cwd == BITSTREAM_CTL0_CMD {
+                    let ctl0 = u32::from_be_bytes(words.next().unwrap()[0..4].try_into().unwrap());
+                    if ctl0 & 0x8000_0000 == 0 {
+                        return FpgaKeySource::Bbram
+                    } else {
+                        return FpgaKeySource::Efuse
+                    }
+                }
+            } else {
+                log::error!("didn't find FpgaKeySource in plaintext header");
+                panic!("didn't find FpgaKeySource in plaintext header");
+            }
+        }
+    }
     pub fn is_jtag_working(&self) -> bool {
         if self.jtag.get_id().unwrap() == jtag::XCS750_IDCODE {
             true
@@ -421,6 +441,33 @@ impl<'a> RootKeys {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr as u32);
             let keyword = self.keyrom.rf(utra::keyrom::DATA_DATA);
             *d = keyword;
+        }
+    }
+    fn replace_fpga_key(&mut self) {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if self.is_initialized() {
+            assert!(pcache.hashed_update_pw_valid != 0, "update password was not set before calling replace_fpga_key");
+        }
+        // build a new key into the pcache
+        for dst_lw in pcache.fpga_key.chunks_mut(8).into_iter() { // 64 bit chunks
+            for (dst, &src) in dst_lw.iter_mut().zip(self.trng.get_u64().unwrap().to_be_bytes().iter()) {
+                *dst = src;
+            }
+        }
+
+        // now encrypt the key, and store it into the sensitive_data for access later on by the patching routine
+        if self.is_initialized() {
+            for (dst, (key, pw)) in
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            pcache.fpga_key.chunks(4).into_iter().zip(pcache.hashed_update_pw.chunks(4).into_iter())) {
+                *dst = u32::from_be_bytes(key[0..4].try_into().unwrap()) ^ u32::from_be_bytes(pw[0..4].try_into().unwrap());
+            }
+        } else {
+            for (dst, key) in
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            pcache.fpga_key.chunks(4).into_iter()) {
+                *dst = u32::from_be_bytes(key[0..4].try_into().unwrap());
+            }
         }
     }
 
@@ -704,18 +751,16 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         self.debug_print_key(KeyRomLocs::FPGA_KEY as usize, 256, "FPGA key before encryption: ");
         // before we encrypt it, stash a copy in our password cache, as we'll need it later on to encrypt the bitstream
-        for (word, key) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
-        .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
-            for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
-                *d = s;
-            }
+        for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter()
+        .zip(pcache.fpga_key.iter_mut()) {
+            *dst = src;
         }
         pcache.fpga_key_valid = 1;
 
         // now encrypt it in the staging area
-        for (word, key_word) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
+        for (word, hashed_pass) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
         .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
-            *word = *word ^ u32::from_be_bytes(key_word.try_into().unwrap());
+            *word = *word ^ u32::from_be_bytes(hashed_pass.try_into().unwrap());
         }
 
         // allocate a decryption oracle for the FPGA bitstream. This will fail early if the FPGA key is wrong.
@@ -815,7 +860,7 @@ impl<'a> RootKeys {
         // in the staging area, so this step should be skipped.
         pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
         pb.rebase_subtask_percentage(30, 50);
-        self.make_gateware_backup(Some(&mut pb))?;
+        self.make_gateware_backup(Some(&mut pb), false)?;
 
         log::debug!("making source oracle");
         let mut src_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
@@ -900,7 +945,7 @@ impl<'a> RootKeys {
         }
     }
 
-    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, provision_bbram: bool) -> Result<(), RootkeyResult> {
         // make sure the system is sane
         self.xns_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
@@ -922,7 +967,7 @@ impl<'a> RootKeys {
 
         // decrypt the FPGA key using the stored password
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
-        if pcache.hashed_update_pw_valid == 0 {
+        if pcache.hashed_update_pw_valid == 0 && self.is_initialized() {
             self.purge_password(PasswordType::Update);
             log::error!("no password was set going into the update routine");
             #[cfg(feature = "hazardous-debug")]
@@ -957,15 +1002,47 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
-        let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+        let keypair: Option<Keypair> = if provision_bbram && !self.is_initialized() {
+            // don't try to derive signing keys if we're doing BBRAM provisioning on an otherwise blank device
+            None
+        } else {
+            Some(Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?)
+        };
         log::debug!("keypair success");
 
         // stage the keyrom data for patching
         self.populate_sensitive_data();
+        let mut old_key_storage: [u8; 32] = [0; 32];
+        let old_key = if provision_bbram {
+            pb.set_percentage(3);
+            if self.is_initialized() {
+                // make a backup copy of the old key, so we can use it to decrypt the gateware before re-encrypting it
+                for (&src, dst) in pcache.fpga_key.iter().zip(old_key_storage.iter_mut()) {
+                    *dst = src;
+                }
+            }
+            self.replace_fpga_key();
 
-        pb.set_percentage(3);
+            // we transmit the BBRAM key at this point -- because if there's going to be a failure,
+            // we'd rather know it now before moving on. Three copies are sent to provide some
+            // check on the integrity of the key.
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("{}", crate::CONSOLE_SENTINEL);
+            &old_key_storage
+        } else {
+            &pcache.fpga_key
+        };
+
+        pb.set_percentage(4);
         log::debug!("making destination oracle");
-        let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
+        let mut dst_oracle =
+        match BitstreamOracle::new(
+        old_key,
+        &pcache.fpga_key,
+        self.gateware(),
+        self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
                 self.purge_password(PasswordType::Update);
@@ -973,9 +1050,22 @@ impl<'a> RootKeys {
                 return Err(e);
             }
         };
+
+        let next_progress = if provision_bbram {
+            pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
+            pb.rebase_subtask_percentage(5, 30);
+            self.make_gateware_backup(Some(&mut pb), false)?;
+            30
+        } else {
+            10
+        };
         log::debug!("destination oracle success");
-        let keysource = dst_oracle.get_original_key_type();
-        dst_oracle.set_target_key_type(keysource);
+        if provision_bbram {
+            dst_oracle.set_target_key_type(FpgaKeySource::Bbram);
+        } else {
+            let keysource = dst_oracle.get_original_key_type();
+            dst_oracle.set_target_key_type(keysource);
+        }
         pb.set_percentage(6);
         // updates are always encrypted with the null key.
         let dummy_key: [u8; 32] = [0; 32];
@@ -991,9 +1081,12 @@ impl<'a> RootKeys {
         };
         log::debug!("source oracle success");
 
-        pb.set_percentage(10);
+        log::info!("source key type: {:?}", src_oracle.get_original_key_type());
+        log::info!("destination key type: {:?}", dst_oracle.get_target_key_type());
+
+        pb.set_percentage(next_progress);
         pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
-        pb.rebase_subtask_percentage(10, 60);
+        pb.rebase_subtask_percentage(next_progress, 60);
         self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
 
         // make a copy of the plaintext metadata and csr records
@@ -1018,10 +1111,16 @@ impl<'a> RootKeys {
         pb.set_percentage(92);
 
         // commit signatures
-        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
-        let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
-        log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
-        self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+        let keypair = if let Some(kp) = keypair {
+            pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+            let (gateware_sig, gateware_len) = self.sign_gateware(&kp);
+            log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+            self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+            // pass the kp back into the original variable. keypair does not implement copy...for good reasons.
+            Some(kp)
+        } else {
+            None
+        };
 
         // clean up the oracles
         pb.set_percentage(95);
@@ -1032,15 +1131,35 @@ impl<'a> RootKeys {
         for b in keypair_bytes.iter_mut() {
             *b = 0;
         }
+        for b in old_key_storage.iter_mut() {
+            *b = 0;
+        }
         // ed25519 keypair zeroizes on drop
 
         // check signatures
-        pb.set_percentage(96);
-        if !self.verify_gateware_self_signature() {
-            return Err(RootkeyResult::IntegrityError);
+        if keypair.is_some() {
+            pb.set_percentage(96);
+            if !self.verify_gateware_self_signature() {
+                return Err(RootkeyResult::IntegrityError);
+            }
         }
 
         pb.set_percentage(100);
+
+        if provision_bbram {
+            self.ticktimer.sleep_ms(500).unwrap();
+            // this will kick off the programming
+            log::info!("BURN_NOW");
+            log::info!("{}", crate::CONSOLE_SENTINEL);
+
+            // the key burning routine should finish before this timeout happens, and the system should have been rebooted
+            self.ticktimer.sleep_ms(10_000).unwrap();
+
+            pb.update_text(t!("rootkeys.bbram.failed_restore", xous::LANG));
+            pb.set_percentage(0);
+            pb.rebase_subtask_percentage(0, 100);
+            self.make_gateware_backup(Some(&mut pb), true)?;
+        }
 
         // check if we're to purge the password on completion
         if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
@@ -1204,7 +1323,7 @@ impl<'a> RootKeys {
 
             // one time only
             /*
-            match self.make_gateware_backup(30, 50, progress_modal, progress_action) {
+            match self.make_gateware_backup(30, 50, progress_modal, progress_action, false) {
                 Err(e) => {
                     log::error!("got spinor error: {:?}", e);
                     panic!("got spinor error, halting");
@@ -1513,13 +1632,10 @@ impl<'a> RootKeys {
     }
 
 
-    fn make_gateware_backup(&self, mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
-        let gateware_dest = self.staging();
-        let mut gateware_dest_base = self.staging_base();
-        let gateware_src = self.gateware();
-
-        log::trace!("src: {:x?}", &gateware_src[0..32]);
-        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
+    fn make_gateware_backup(&self, mut maybe_pb: Option<&mut ProgressBar>, do_restore: bool) -> Result<(), RootkeyResult> {
+        let gateware_dest = if !do_restore {self.staging()} else {self.gateware()};
+        let mut gateware_dest_base = if !do_restore {self.staging_base()} else {self.gateware_base()};
+        let gateware_src = if !do_restore {self.gateware()} else {self.staging()};
 
         const PATCH_CHUNK: usize = 65536; // this controls the granularity of the erase operation
         let mut prog_ctr = 0;
@@ -1541,8 +1657,6 @@ impl<'a> RootKeys {
             }
         }
 
-        log::trace!("src: {:x?}", &gateware_src[0..32]);
-        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
         Ok(())
     }
 

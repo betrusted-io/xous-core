@@ -56,6 +56,10 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     //debug_here::debug_here!();
                     write!(ret, "show UX").unwrap();
                 }
+                "bbram" => {
+                    self.rootkeys.bbram_provision();
+                    write!(ret, "Provisioning BBRAM").unwrap();
+                }
                 "aes" => {
                     use aes_xous::{BlockEncrypt, BlockDecrypt};
                     let mut pass = true;

@@ -63,7 +63,7 @@ utralib = { path = "../../utralib"}
 
 [features]
 hazardous-debug = []  # this feature enables the printing of secret materials for debug purposes
-default = ["hazardous-debug"]
+default = []
 
 [lib]
 test = true

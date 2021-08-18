@@ -169,6 +169,12 @@ impl RootKeys {
         ).expect("couldn't send test message");
         log::info!("test_ux response: {:?}", response);
     }
+    pub fn bbram_provision(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BbramProvision.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send bbram provision message");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -202,7 +208,7 @@ impl BlockEncrypt for RootKeys {
             aes_op: AesOpType::Encrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
             for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
@@ -226,7 +232,7 @@ impl BlockEncrypt for RootKeys {
             aes_op: AesOpType::Encrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
             for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
@@ -249,7 +255,7 @@ impl BlockDecrypt for RootKeys {
             aes_op: AesOpType::Decrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
             for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
@@ -273,7 +279,7 @@ impl BlockDecrypt for RootKeys {
             aes_op: AesOpType::Decrypt,
         };
         let mut buf = Buffer::into_buf(op).unwrap();
-        buf.lend_mut(self.conn, Opcode::AesOperation.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
         let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
         if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
             for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {

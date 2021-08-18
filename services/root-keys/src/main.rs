@@ -19,6 +19,8 @@ use std::str;
 mod implementation;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use implementation::*;
+/// used by the bbram helper/console protocol to indicate the start of a console message
+const CONSOLE_SENTINEL: &'static str = "CONS_SENTINEL|";
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod bcrypt;
@@ -147,7 +149,7 @@ mod implementation {
         pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
         }
-        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _provision_bbram: bool) -> Result<(), RootkeyResult> {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
         }
         pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
@@ -228,6 +230,7 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new();
+    log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
 
     // create the servers necessary to coordinate an auto-reboot sequence...
     let llio = llio::Llio::new(&xns).unwrap();
@@ -758,7 +761,7 @@ fn xmain() -> ! {
                 }
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, false);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -1002,7 +1005,7 @@ fn xmain() -> ! {
                     panic!("entered a UxAesEnsureReturn but the flow was not set up correctly!")
                 }
             }
-            Some(Opcode::AesOperation) => {
+            Some(Opcode::AesOracle) => {
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 // as_flat saves a copy step, but we have to deserialize some enums manually
                 let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
@@ -1026,6 +1029,125 @@ fn xmain() -> ! {
                 };
                 buffer.replace(aes_op).unwrap();
             },
+
+            Some(Opcode::BbramProvision) => {
+                dismiss_modal_action.set_action_opcode(Opcode::UxBbramCheckHelper.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::Notification(dismiss_modal_action)),
+                    Some(t!("rootkeys.bbram.confirm", xous::LANG)), false,
+                    None, false, None);
+                rootkeys_modal.activate();
+            }
+            Some(Opcode::UxBbramCheckHelper) => {
+                let console_input = gam::modal::ConsoleInput::new(
+                    main_cid,
+                    Opcode::UxBbramCheckReturn.to_u32().unwrap()
+                );
+                rootkeys_modal.modify(
+                    Some(ActionType::ConsoleInput(console_input)),
+                    Some(t!("rootkeys.console_input", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+                log::info!("{}check_conn", CONSOLE_SENTINEL);
+            }
+            Some(Opcode::UxBbramCheckReturn) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let console_text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                log::info!("got console text:{}", console_text.as_str());
+                if console_text.as_str().starts_with("HELPER_OK") {
+                    log::info!("got '{}', moving on", console_text.as_str());
+                    // proceed
+                    if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).unwrap();
+                    } else {
+                        keys.set_ux_password_type(Some(PasswordType::Update));
+                        password_action.set_action_opcode(Opcode::UxBbramPasswordReturn.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::TextEntry(password_action)),
+                            Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
+                            None, true, None
+                        );
+                        rootkeys_modal.activate();
+                    }
+                } else {
+                    // abort with help message
+                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.bbram.no_helper", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+                }
+            }
+            Some(Opcode::UxBbramPasswordReturn) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+            }
+            Some(Opcode::UxBbramRun) => {
+                keys.set_ux_password_type(None);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, true);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                match result {
+                    Ok(_) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.bbram.finished", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                }
+            }
 
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {

@@ -15,8 +15,10 @@ pub(crate) enum Opcode {
     IsEfuseSecured,
     /// quick check to see if the JTAG can read its IDCODE
     IsJtagWorking,
-    /// initiate an AES operation
-    AesOperation,
+    /// initiate an AES oracle operation
+    AesOracle,
+    /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
+    BbramProvision,
 
     TestUx,
 
@@ -47,6 +49,12 @@ pub(crate) enum Opcode {
     UxAesEnsurePassword,
     UxAesPasswordPolicy,
     UxAesEnsureReturn,
+
+    /// Ux BBRAM flow
+    UxBbramCheckHelper,
+    UxBbramCheckReturn,
+    UxBbramPasswordReturn,
+    UxBbramRun,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
