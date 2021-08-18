@@ -8,7 +8,7 @@ use std::{
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
-const KERNEL_TARGET: &str = "riscv32imac-unknown-none-elf";
+const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
 
 enum MemorySpec {
     SvdFile(String),
