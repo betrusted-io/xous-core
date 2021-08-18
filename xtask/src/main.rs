@@ -224,7 +224,12 @@ Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_up
     )
 }
 
-fn update_usb(do_kernel: bool, do_loader: bool, nuke_soc: bool, stage_soc: bool) -> Result<(), DynError> {
+fn update_usb(
+    do_kernel: bool,
+    do_loader: bool,
+    nuke_soc: bool,
+    stage_soc: bool,
+) -> Result<(), DynError> {
     use std::io::{BufRead, BufReader, Error, ErrorKind};
     use std::process::Stdio;
 
@@ -534,6 +539,37 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
     Ok(path)
 }
 
+static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
+    use std::process::Stdio;
+    if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(())
+    }
+    let target = target.unwrap_or(PROGRAM_TARGET).to_owned();
+    let have_toolchain = Command::new("rustc")
+        .stderr(Stdio::null())
+        .stdout(Stdio::null())
+        .args(&[
+            "--target",
+            &target,
+            "--print",
+            "sysroot",
+        ])
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap()
+        .success();
+
+    DONE_COMPILER_CHECK.store(have_toolchain, std::sync::atomic::Ordering::SeqCst);
+    if have_toolchain {
+        Ok(())
+    } else {
+        Err(format!("Toolchain for {} not found", target))
+    }
+}
+
 fn build(
     packages: &[&str],
     debug: bool,
@@ -541,6 +577,7 @@ fn build(
     directory: Option<PathBuf>,
     extra_args: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
+    ensure_compiler(&target)?;
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
     print!("Building");
