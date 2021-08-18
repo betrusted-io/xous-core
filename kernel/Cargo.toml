@@ -9,20 +9,25 @@ resolver = "2"
 [dependencies]
 bitflags = "1.2.1"
 # gdbstub branch "dev/0.6"
-gdbstub = {git = "https://github.com/daniel5151/gdbstub.git", optional = true, default_features = false, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8"}
-gdbstub_arch = {git = "https://github.com/daniel5151/gdbstub.git", optional = true, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8"}
-sha3 = {default-features = false, version = "0.8.2"}
-stats_alloc = {version = "0.1.8", optional = true}
-xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages"]}
+gdbstub = { git = "https://github.com/daniel5151/gdbstub.git", optional = true, default_features = false, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8" }
+gdbstub_arch = { git = "https://github.com/daniel5151/gdbstub.git", optional = true, rev = "5c702d063baaf78e4ebed7842cc8b96195d119a8" }
+sha3 = { default-features = false, version = "0.8.2" }
+stats_alloc = { version = "0.1.8", optional = true }
+xous-kernel = { package = "xous", path = "../xous-rs", features = [
+    "forget-memory-messages",
+] }
 
 [target.'cfg(any(windows,unix))'.dev-dependencies]
-xous-kernel = {package = "xous", path = "../xous-rs", features = ["forget-memory-messages", "processes-as-threads"]}
+xous-kernel = { package = "xous", path = "../xous-rs", features = [
+    "forget-memory-messages",
+    "processes-as-threads",
+] }
 
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = {path = "utralib"}
+utralib = { path = "utralib" }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-riscv = "0.5.6"
+riscv = { version = "0.5.6", path = "../imports/riscv-0.5.6" }
 
 [features]
 debug-print = []
@@ -42,7 +47,7 @@ rand = "0.7"
 
 [profile.release]
 codegen-units = 1 # 1 better optimizations
-debug = true # symbols are nice and they don't increase the size on Flash
-lto = "fat" 
+debug = true      # symbols are nice and they don't increase the size on Flash
+lto = "fat"
 # panic = "abort" # Remove some panic information
 # opt-level = 'z'  # Optimize for size instead of performance
