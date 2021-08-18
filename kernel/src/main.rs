@@ -4,7 +4,7 @@
 #![cfg_attr(baremetal, no_main)]
 #![cfg_attr(baremetal, no_std)]
 
-#[cfg(target_os = "none")]
+#[cfg(baremetal)]
 #[macro_use]
 extern crate bitflags;
 
@@ -28,9 +28,9 @@ mod syscall;
 use services::SystemServices;
 use xous_kernel::*;
 
-#[cfg(target_os = "none")]
+#[cfg(baremetal)]
 use core::panic::PanicInfo;
-#[cfg(target_os = "none")]
+#[cfg(baremetal)]
 #[panic_handler]
 fn handle_panic(_arg: &PanicInfo) -> ! {
     println!("PANIC in PID {}: {}", crate::arch::current_pid(), _arg);
@@ -150,7 +150,7 @@ pub extern "C" fn kmain() {
     // Note that at this point, no new direct children of INIT may be created.
     let mut pid = None;
 
-    #[cfg(not(any(target_os = "none", all(ci, test))))]
+    #[cfg(not(any(target_os = "none", target_os = "xous", all(ci, test))))]
     {
         use std::panic;
         panic::set_hook(Box::new(|arg| {

@@ -17,7 +17,7 @@ fn main() {
     // If we're not running on a desktop-class operating system, emit the "baremetal"
     // config setting. This will enable software to do tasks such as
     // managing memory.
-    if target_os == "none" {
+    if target_os == "none" || target_os == "xous" {
         println!("Target {} is bare metal", target);
         println!("cargo:rustc-cfg=baremetal");
     } else {
