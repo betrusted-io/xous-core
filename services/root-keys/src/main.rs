@@ -85,6 +85,12 @@ mod implementation {
     use num_traits::*;
     use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
 
+    #[derive(Debug, Copy, Clone)]
+    #[allow(dead_code)]
+    pub enum FpgaKeySource {
+        Bbram,
+        Efuse,
+    }
     #[allow(dead_code)]
     pub struct RootKeys {
         password_type: Option<PasswordType>,
@@ -178,6 +184,9 @@ mod implementation {
         }
         pub fn is_pcache_boot_password_valid(&self) -> bool {
             false
+        }
+        pub fn fpga_key_source(&self) -> FpgaKeySource {
+            FpgaKeySource::Efuse
         }
 
         pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
