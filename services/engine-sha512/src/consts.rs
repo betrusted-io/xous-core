@@ -1,8 +1,8 @@
 /*
-   This is vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
-   1c1182c8b8e9aee5f3e082b77b9a6cb1d273350f
-   License is Apache 2.0
- */
+  This is vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
+  1c1182c8b8e9aee5f3e082b77b9a6cb1d273350f
+  License is Apache 2.0
+*/
 #![allow(dead_code, clippy::unreadable_literal)]
 
 pub const STATE_LEN: usize = 8;

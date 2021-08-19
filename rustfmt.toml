@@ -1,10 +1,8 @@
 # if you want to format 'em, then you maintain 'em!
 ignore = [
-  "services/aes",
   "services/codec",
   "services/com",
   "services/engine-25519",
-  "services/engine-sha512",
   "services/gam",
   "services/graphics-server",
   "services/ime-frontend",
@@ -18,3 +16,5 @@ ignore = [
   "services/spinor",
   "services/susres",
 ]
+# Note: run this on Linux to fix Windows changing .rs files to +x:
+# find . -name "*.rs" -exec chmod -x {} \;

@@ -1,8 +1,8 @@
 /*
-   This is vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
-   1c1182c8b8e9aee5f3e082b77b9a6cb1d273350f
-   License is Apache 2.0
- */
+  This is vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
+  1c1182c8b8e9aee5f3e082b77b9a6cb1d273350f
+  License is Apache 2.0
+*/
 #![allow(clippy::many_single_char_names)]
 use crate::consts::{BLOCK_LEN, K64X2};
 use core::convert::TryInto;

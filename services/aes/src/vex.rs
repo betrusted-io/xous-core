@@ -368,11 +368,11 @@ pub(crate) fn aes_dec_round_last(arg1: u32, arg2: u32, id: AesByte) -> u32 {
 use core::convert::TryInto;
 
 pub(crate) fn get_u32_be(input: &[u8], offset: usize) -> u32 {
-    u32::from_be_bytes(input[offset..offset+4].try_into().unwrap())
+    u32::from_be_bytes(input[offset..offset + 4].try_into().unwrap())
 }
 
 pub(crate) fn get_u32_le(input: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(input[offset..offset+4].try_into().unwrap())
+    u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap())
 }
 
 pub(crate) fn set_u32(output: &mut [u8], offset: usize, value: u32) {
