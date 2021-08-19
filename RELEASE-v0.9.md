@@ -8,7 +8,11 @@ Notably, in 0.9, we have `libstd` integrated into Xous, and solidly intergated
 into several servers; thus this release is not backward compatible with 0.8 (and
 was never intended to be).
 
-## Major features of 0.9
+Aside from the introduction of `libstd`, few other breaking changes were implemented
+in the APIs. Thus, we refer you to the [0.8 release notes](https://github.com/betrusted-io/xous-core/blob/main/RELEASE-v0.8.md#xous-08-messaging-api-in-practice)
+for examples of idiomatic ways to write code for Xous.
+
+## Major new features of 0.9
 - Xous now targets `riscv32-imac-uknown-xous-elf` instead of `riscv32-imac-unknown-none-elf`.
   - `cargo xtask`, when run interactively, will offer to install the `xous` target.
   - Kernel debug primitives are accessible via the kernel console
