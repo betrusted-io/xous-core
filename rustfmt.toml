@@ -1,8 +1,6 @@
 ignore = [
   "services/aes-test",
   "services/graphics-server",
-  "services/log-server",
-  "services/ticktimer-server",
   "services/com",
   "services/xous-names",
   "services/keyboard",
@@ -14,8 +12,6 @@ ignore = [
   "services/ime-frontend",
   "services/ime-plugin-shell",
   "services/shellchat",
-  "imports/blitstr-ref",
-  "imports/com_rs-ref",
   "services/ime-plugin-api",
   "services/content-plugin-api",
   "services/llio",

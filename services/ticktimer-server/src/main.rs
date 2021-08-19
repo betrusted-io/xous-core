@@ -1,12 +1,11 @@
 #![cfg_attr(not(target_os = "none"), allow(dead_code))]
-
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
 
-use std::collections::BinaryHeap;
 use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 
 use log::{error, info};
 
@@ -56,15 +55,15 @@ impl core::cmp::PartialEq for SleepRequest {
 mod implementation {
     const TICKS_PER_MS: u64 = 1;
     use super::SleepRequest;
-    use utralib::generated::*;
     use susres::{RegManager, RegOrField, SuspendResume};
+    use utralib::generated::*;
 
     pub struct XousTickTimer {
         csr: utralib::CSR<u32>,
         current_response: Option<SleepRequest>,
         connection: xous::CID,
-        ticktimer_sr_manager: RegManager::<{utra::ticktimer::TICKTIMER_NUMREGS}>,
-        wdt_sr_manager: RegManager::<{utra::wdt::WDT_NUMREGS}>,
+        ticktimer_sr_manager: RegManager<{ utra::ticktimer::TICKTIMER_NUMREGS }>,
+        wdt_sr_manager: RegManager<{ utra::wdt::WDT_NUMREGS }>,
         wdt: utralib::CSR<u32>,
     }
 
@@ -109,12 +108,17 @@ mod implementation {
         // This is dangerous and may return an error if the queue is full.
         // Which is fine, because the queue is always recalculated any time a message arrives.
         use num_traits::ToPrimitive;
-        xous::try_send_message(xtt.connection,
+        xous::try_send_message(
+            xtt.connection,
             xous::Message::Scalar(xous::ScalarMessage {
                 id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
-                arg1: 0, arg2: 0, arg3: 0, arg4: 0
-            })
-        ).ok();
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
+            }),
+        )
+        .ok();
     }
 
     impl XousTickTimer {
@@ -171,18 +175,24 @@ mod implementation {
             #[cfg(feature = "watchdog")]
             {
                 xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
-                xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+                xtt.wdt_sr_manager
+                    .push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
             }
             #[cfg(not(feature = "watchdog"))]
             {
                 xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 0);
-                xtt.wdt_sr_manager.push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
+                xtt.wdt_sr_manager
+                    .push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
             }
 
-            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
-            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
-            xtt.ticktimer_sr_manager.push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
-            xtt.ticktimer_sr_manager.push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
+            xtt.ticktimer_sr_manager
+                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
+            xtt.ticktimer_sr_manager
+                .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET1), None);
+            xtt.ticktimer_sr_manager
+                .push_fixed_value(RegOrField::Reg(utra::ticktimer::EV_PENDING), 0xFFFF_FFFF);
+            xtt.ticktimer_sr_manager
+                .push(RegOrField::Reg(utra::ticktimer::EV_ENABLE), None);
 
             xtt
         }
@@ -264,7 +274,11 @@ mod implementation {
         pub fn check_wdt(&mut self) {
             let state = self.wdt.r(utra::wdt::STATE);
             if state & self.wdt.ms(utra::wdt::STATE_DISARMED, 1) == 0 {
-                log::info!("{} WDT is not disarmed, state: 0x{:x}", self.elapsed_ms(), state);
+                log::info!(
+                    "{} WDT is not disarmed, state: 0x{:x}",
+                    self.elapsed_ms(),
+                    state
+                );
             }
         }
 
@@ -297,8 +311,15 @@ mod implementation {
             #[cfg(feature = "watchdog")]
             self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
 
-            log::trace!("ticktimer enable: {}", self.csr.r(utra::ticktimer::EV_ENABLE));
-            log::trace!("ticktimer time/target: {}/{}", self.csr.r(utra::ticktimer::TIME0), self.csr.r(utra::ticktimer::MSLEEP_TARGET0));
+            log::trace!(
+                "ticktimer enable: {}",
+                self.csr.r(utra::ticktimer::EV_ENABLE)
+            );
+            log::trace!(
+                "ticktimer time/target: {}/{}",
+                self.csr.r(utra::ticktimer::TIME0),
+                self.csr.r(utra::ticktimer::MSLEEP_TARGET0)
+            );
         }
     }
 }
@@ -306,8 +327,8 @@ mod implementation {
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
     use super::SleepRequest;
-    use std::convert::TryInto;
     use num_traits::ToPrimitive;
+    use std::convert::TryInto;
 
     #[derive(Debug)]
     enum SleepComms {
@@ -350,8 +371,11 @@ mod implementation {
                                 cid,
                                 xous::Message::Scalar(xous::ScalarMessage {
                                     id: crate::api::Opcode::RecalculateSleep.to_usize().unwrap(),
-                                    arg1: 0, arg2: 0, arg3: 0, arg4: 0
-                                })
+                                    arg1: 0,
+                                    arg2: 0,
+                                    arg3: 0,
+                                    arg4: 0,
+                                }),
                             )
                             .unwrap();
                             timeout = None;
@@ -435,14 +459,15 @@ mod implementation {
         pub fn reset_wdt(&self) {
             // dummy function, does nothing
         }
-        pub fn register_suspend_listener(&self, _opcode: u32, _cid: xous::CID) -> Result<(), xous::Error> {
+        pub fn register_suspend_listener(
+            &self,
+            _opcode: u32,
+            _cid: xous::CID,
+        ) -> Result<(), xous::Error> {
             Ok(())
         }
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
-
+        pub fn suspend(&self) {}
+        pub fn resume(&self) {}
     }
 }
 
@@ -472,8 +497,7 @@ fn recalculate_sleep(
 
         #[cfg(feature = "debug-print")]
         info!("Modified, the request was: {:?}", request);
-        sleep_heap
-            .push(Reverse(request));
+        sleep_heap.push(Reverse(request));
     } else {
         #[cfg(feature = "debug-print")]
         info!("No new sleep request");
@@ -512,8 +536,10 @@ fn xmain() -> ! {
 
     // register a suspend/resume listener
     let xns = xous_names::XousNames::new().unwrap();
-    let sr_cid = xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let sr_cid =
+        xous::connect(ticktimer_server).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid)
+        .expect("couldn't create suspend/resume object");
 
     loop {
         #[cfg(feature = "watchdog")]
@@ -534,29 +560,31 @@ fn xmain() -> ! {
                 .expect("couldn't return time request");
             }
             Some(api::Opcode::SleepMs) => xous::msg_blocking_scalar_unpack!(msg, ms, _, _, _, {
-                    recalculate_sleep(
-                        &mut ticktimer,
-                        &mut sleep_heap,
-                        Some(SleepRequest {
-                            msec: ms as i64,
-                            sender: msg.sender,
-                        }),
-                    )
+                recalculate_sleep(
+                    &mut ticktimer,
+                    &mut sleep_heap,
+                    Some(SleepRequest {
+                        msec: ms as i64,
+                        sender: msg.sender,
+                    }),
+                )
             }),
             Some(api::Opcode::RecalculateSleep) => {
                 recalculate_sleep(&mut ticktimer, &mut sleep_heap, None);
-            },
+            }
             Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 ticktimer.suspend();
-                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                susres
+                    .suspend_until_resume(token)
+                    .expect("couldn't execute suspend/resume");
                 ticktimer.resume();
             }),
             Some(api::Opcode::PingWdt) => {
                 ticktimer.reset_wdt();
-            },
+            }
             None => {
                 error!("couldn't convert opcode");
-                break
+                break;
             }
         }
     }
