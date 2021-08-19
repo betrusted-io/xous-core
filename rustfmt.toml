@@ -1,12 +1,10 @@
+# if you want to format 'em, then you maintain 'em!
 ignore = [
   "services/graphics-server",
   "services/com",
   "services/keyboard",
-  #"services/trng",
   "services/gam",
   "services/status",
-  "services/benchmark",
-  "services/benchmark-target",
   "services/ime-frontend",
   "services/ime-plugin-shell",
   "services/shellchat",

@@ -3,13 +3,21 @@
 pub mod api;
 use api::*;
 
-use xous::{CID, send_message};
+use num_traits::ToPrimitive;
+use xous::{send_message, CID};
 use xous_ipc::Buffer;
-use num_traits::{ToPrimitive};
 
 pub fn test_scalar(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
-    let response = send_message(cid,
-        xous::Message::new_blocking_scalar(Opcode::TestScalar.to_usize().unwrap(), testvar as usize, 0, 0, 0))?;
+    let response = send_message(
+        cid,
+        xous::Message::new_blocking_scalar(
+            Opcode::TestScalar.to_usize().unwrap(),
+            testvar as usize,
+            0,
+            0,
+            0,
+        ),
+    )?;
     if let xous::Result::Scalar1(r) = response {
         Ok(r as u32)
     } else {
@@ -22,7 +30,8 @@ pub fn test_memory(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
     reg.challenge[0] = testvar;
 
     let mut buf = Buffer::into_buf(reg).or(Err(xous::Error::InternalError))?;
-    buf.lend_mut(cid, Opcode::TestMemory.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+    buf.lend_mut(cid, Opcode::TestMemory.to_u32().unwrap())
+        .or(Err(xous::Error::InternalError))?;
 
     let result = buf.as_flat::<TestStruct, _>().unwrap();
     Ok(result.challenge[0])
@@ -33,6 +42,7 @@ pub fn test_memory_send(cid: CID, testvar: u32) -> Result<u32, xous::Error> {
     reg.challenge[0] = testvar;
 
     let mut buf = Buffer::into_buf(reg).or(Err(xous::Error::InternalError))?;
-    buf.send(cid, Opcode::TestMemorySend.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-    Ok(testvar+2)
+    buf.send(cid, Opcode::TestMemorySend.to_u32().unwrap())
+        .or(Err(xous::Error::InternalError))?;
+    Ok(testvar + 2)
 }
