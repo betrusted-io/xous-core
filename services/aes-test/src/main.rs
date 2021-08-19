@@ -108,7 +108,6 @@ fn aes_test_main() -> ! {
             &hex!("f69f2445df4f9b17ad2b417be66c3710"),
             &hex!("7b0c785e27e8ad3f8223207104725dd4"),
         ),
-
         // NIST ECB-AES192
         AesTest::new_ecb(
             &hex!("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b"),
@@ -130,7 +129,6 @@ fn aes_test_main() -> ! {
             &hex!("f69f2445df4f9b17ad2b417be66c3710"),
             &hex!("9a4b41ba738d6c72fb16691603c18e0e"),
         ),
-
         // NIST ECB-AES256
         AesTest::new_ecb(
             &hex!("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4"),
@@ -152,7 +150,6 @@ fn aes_test_main() -> ! {
             &hex!("f69f2445df4f9b17ad2b417be66c3710"),
             &hex!("23304b7a39f9f3ff067d8d8f9e24ecc7"),
         ),
-
         // From the VexRiscv AES test
         AesTest::new_ecb(
             &hex!("706919a040610517f7fff5272b640467c5067a4bba5778ad6cddcbf473031564"),
@@ -169,7 +166,11 @@ fn aes_test_main() -> ! {
         }
     }
 
-    log::error!("{} tests were run and {} errors were encountered", tests.len(), failures);
+    log::error!(
+        "{} tests were run and {} errors were encountered",
+        tests.len(),
+        failures
+    );
 
     #[cfg(feature = "low_level_tests")]
     {

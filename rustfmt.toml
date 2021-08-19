@@ -1,5 +1,4 @@
 ignore = [
-  "services/aes-test",
   "services/graphics-server",
   "services/com",
   "services/keyboard",
