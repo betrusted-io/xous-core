@@ -2,7 +2,7 @@ ignore = [
   "services/graphics-server",
   "services/com",
   "services/keyboard",
-  "services/trng",
+  #"services/trng",
   "services/gam",
   "services/status",
   "services/benchmark",
