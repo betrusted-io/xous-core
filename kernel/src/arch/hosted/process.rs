@@ -391,7 +391,7 @@ impl Process {
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             let conn = process.conn.as_mut().unwrap();
             conn.write_all(bytes).unwrap();
-            conn.flush().unwrap();
+            // conn.flush().unwrap();
         });
         Ok(())
     }

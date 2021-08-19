@@ -85,22 +85,25 @@ fn handle_connection(
     chn: Sender<ThreadMessage>,
     should_exit: std::sync::Arc<core::sync::atomic::AtomicBool>,
 ) {
-    enum ServerMessage {
-        Exit,
-        ServerPacket([usize; 9]),
-        ServerPacketWithData([usize; 9], Vec<u8>),
-    }
+    // enum ServerMessage {
+    //     Exit,
+    //     ServerPacket(Box<SysCall>),
+    //     ServerPacketWithData([usize; 9], Vec<u8>),
+    // }
 
-    fn conn_thread(mut conn: TcpStream, sender: Sender<ServerMessage>, _pid: PID) {
+    fn conn_thread(mut conn: TcpStream, sender: Sender<ThreadMessage>, pid: PID) {
         loop {
             let mut raw_data = [0u8; 9 * std::mem::size_of::<usize>()];
+
+            // Read bytes from the connection. This will fail when the connection closes,
+            // so send a `Termination` message across the channel.
             if let Err(_e) = conn.read_exact(&mut raw_data) {
                 #[cfg(not(test))]
                 eprintln!(
                     "KERNEL({}): client disconnected: {} -- shutting down virtual process",
-                    _pid, _e
+                    pid, _e
                 );
-                sender.send(ServerMessage::Exit).ok();
+                // sender.send(ServerMessage::Exit).ok();
                 return;
             }
 
@@ -111,40 +114,68 @@ fn handle_connection(
             {
                 *word = usize::from_le_bytes(bytes.try_into().unwrap());
             }
+            let thread_id = packet_data[0] as TID;
+            let mut call = match crate::SysCall::from_args(
+                packet_data[1],
+                packet_data[2],
+                packet_data[3],
+                packet_data[4],
+                packet_data[5],
+                packet_data[6],
+                packet_data[7],
+                packet_data[8],
+            ) {
+                Ok(call) => call,
+                Err(e) => {
+                    eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
+                    eprintln!(
+                        "Raw packet: {:08x} {} {} {} {} {} {} {}",
+                        packet_data[0],
+                        packet_data[1],
+                        packet_data[2],
+                        packet_data[3],
+                        packet_data[4],
+                        packet_data[5],
+                        packet_data[6],
+                        packet_data[7]
+                    );
+                    continue;
+                }
+            };
+
+            if let Some(mem) = unsafe { call.memory_mut() } {
+                let mut data = vec![0u8; mem.len()];
+                if conn.read_exact(&mut data).is_err() {
+                    return;
+                }
+
+                let sliced_data = data.into_boxed_slice();
+                assert_eq!(
+                    sliced_data.len(),
+                    mem.len(),
+                    "deconstructed data {} != message buf length {}",
+                    sliced_data.len(),
+                    mem.len()
+                );
+                *mem = unsafe {
+                    xous_kernel::MemoryRange::new(
+                        Box::into_raw(sliced_data) as *mut u8 as usize,
+                        mem.len(),
+                    )
+                    .unwrap()
+                };
+            }
 
             sender
-                .send(
-                    if (packet_data[1] == xous_kernel::syscall::SysCallNumber::SendMessage as _
-                        || packet_data[1]
-                            == xous_kernel::syscall::SysCallNumber::TrySendMessage as _)
-                        && (packet_data[3] == 1 || packet_data[3] == 2 || packet_data[3] == 3)
-                    {
-                        let mut v = vec![0; packet_data[6]];
-                        if conn.read_exact(&mut v).is_err() {
-                            sender.send(ServerMessage::Exit).ok();
-                            return;
-                        }
-                        ServerMessage::ServerPacketWithData(packet_data, v)
-                    } else if packet_data[1]
-                        == xous_kernel::syscall::SysCallNumber::ReturnMemory as _
-                    {
-                        let mut v = vec![0; packet_data[4]];
-                        if conn.read_exact(&mut v).is_err() {
-                            sender.send(ServerMessage::Exit).ok();
-                            return;
-                        }
-                        ServerMessage::ServerPacketWithData(packet_data, v)
-                    } else {
-                        ServerMessage::ServerPacket(packet_data)
-                    },
-                )
+                .send(ThreadMessage::SysCall(pid, thread_id, call))
                 .unwrap();
         }
     }
 
-    let (sender, receiver) = unbounded();
-    let conn_sender = sender.clone();
-    std::thread::Builder::new()
+    // let (sender, receiver) = unbounded();
+    // let conn_sender = sender.clone();
+    let conn_sender = chn.clone();
+    let conn_thread = std::thread::Builder::new()
         .name(format!("PID {}: client connection thread", pid))
         .spawn(move || {
             conn_thread(conn, conn_sender, pid);
@@ -155,122 +186,124 @@ fn handle_connection(
         .name(format!("PID {}: client should_exit thread", pid))
         .spawn(move || loop {
             if should_exit.load(core::sync::atomic::Ordering::Relaxed) {
-                // eprintln!("KERNEL: should_exit == 1");
-                sender.send(ServerMessage::Exit).ok();
+                eprintln!("KERNEL: should_exit == 1");
+                // sender.send(ServerMessage::Exit).ok();
+                // WARNING: This functionality is unimplemented right now
                 return;
             }
             std::thread::park_timeout(std::time::Duration::from_secs(1));
         })
         .unwrap();
 
-    for msg in receiver {
-        match msg {
-            ServerMessage::Exit => {
-                #[cfg(not(test))]
-                eprintln!("KERNEL({}): Received ServerMessage::Exit", pid);
-                break;
-            }
-            ServerMessage::ServerPacket(pkt) => {
-                let thread_id = pkt[0];
-                let call = xous_kernel::SysCall::from_args(
-                    pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
-                );
-                match call {
-                    Err(e) => {
-                        eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
-                        eprintln!(
-                            "Raw packet: {:08x} {} {} {} {} {} {} {}",
-                            pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
-                        );
-                    }
-                    Ok(call) => chn
-                        .send(ThreadMessage::SysCall(pid, thread_id, call))
-                        .expect("couldn't make syscall"),
-                }
-            }
-            ServerMessage::ServerPacketWithData(pkt, data) => {
-                let thread_id = pkt[0];
-                let call = xous_kernel::SysCall::from_args(
-                    pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
-                );
-                match call {
-                    Err(e) => {
-                        eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
-                        eprintln!(
-                            "Raw packet: {:08x} {} {} {} {} {} {} {}",
-                            pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
-                        );
-                    }
-                    Ok(mut call) => {
-                        // eprintln!(
-                        //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
-                        //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
-                        // );
-                        match call {
-                            SysCall::SendMessage(ref _cid, ref mut envelope)
-                            | SysCall::TrySendMessage(ref _cid, ref mut envelope) => {
-                                match envelope {
-                                    xous_kernel::Message::MutableBorrow(msg)
-                                    | xous_kernel::Message::Borrow(msg)
-                                    | xous_kernel::Message::Move(msg) => {
-                                        // Update the address pointer. This will get turned back into a
-                                        // usable pointer by casting it back into a &[T] on the other
-                                        // side. This is just a pointer to the start of data
-                                        // as well as the index into the data it points at. The lengths
-                                        // should still be equal once we reconstitute the data in the
-                                        // other process.
-                                        // ::debug_here::debug_here!();
-                                        let sliced_data = data.into_boxed_slice();
-                                        assert_eq!(
-                                            sliced_data.len(),
-                                            msg.buf.len(),
-                                            "deconstructed data {} != message buf length {}",
-                                            sliced_data.len(),
-                                            msg.buf.len()
-                                        );
-                                        msg.buf = unsafe {
-                                            xous_kernel::MemoryRange::new(
-                                                Box::into_raw(sliced_data) as *mut u8 as usize,
-                                                msg.buf.len(),
-                                            )
-                                            .unwrap()
-                                        };
-                                    }
-                                    xous_kernel::Message::Scalar(_)
-                                    | xous_kernel::Message::BlockingScalar(_) => (),
-                                }
-                            }
-                            SysCall::ReturnMemory(
-                                ref _sender,
-                                ref mut buf,
-                                ref _offset,
-                                ref _valid,
-                            ) => {
-                                let sliced_data = data.into_boxed_slice();
-                                assert_eq!(
-                                    sliced_data.len(),
-                                    buf.len(),
-                                    "deconstructed data {} != message buf length {}",
-                                    sliced_data.len(),
-                                    buf.len()
-                                );
-                                *buf = unsafe {
-                                    xous_kernel::MemoryRange::new(
-                                        Box::into_raw(sliced_data) as *mut u8 as usize,
-                                        buf.len(),
-                                    )
-                                    .unwrap()
-                                };
-                            }
-                            _ => panic!("unsupported message type"),
-                        }
-                        chn.send(ThreadMessage::SysCall(pid, thread_id, call))
-                            .expect("couldn't make syscall");
-                    }
-                }
-            }
-        }
-    }
+    // for msg in receiver {
+    //     match msg {
+    //         ServerMessage::Exit => {
+    //             #[cfg(not(test))]
+    //             eprintln!("KERNEL({}): Received ServerMessage::Exit", pid);
+    //             break;
+    //         }
+    //         ServerMessage::ServerPacket(pkt) => {
+    //             let thread_id = pkt[0];
+    //             let call = xous_kernel::SysCall::from_args(
+    //                 pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
+    //             );
+    //             match call {
+    //                 Err(e) => {
+    //                     eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
+    //                     eprintln!(
+    //                         "Raw packet: {:08x} {} {} {} {} {} {} {}",
+    //                         pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
+    //                     );
+    //                 }
+    //                 Ok(call) => chn
+    //                     .send(ThreadMessage::SysCall(pid, thread_id, call))
+    //                     .expect("couldn't make syscall"),
+    //             }
+    //         }
+    //         ServerMessage::ServerPacketWithData(pkt, data) => {
+    //             let thread_id = pkt[0];
+    //             let call = xous_kernel::SysCall::from_args(
+    //                 pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], pkt[8],
+    //             );
+    //             match call {
+    //                 Err(e) => {
+    //                     eprintln!("KERNEL({}): Received invalid syscall: {:?}", pid, e);
+    //                     eprintln!(
+    //                         "Raw packet: {:08x} {} {} {} {} {} {} {}",
+    //                         pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7]
+    //                     );
+    //                 }
+    //                 Ok(mut call) => {
+    //                     // eprintln!(
+    //                     //     "Received packet: {:08x} {} {} {} {} {} {} {}: {:?}",
+    //                     //     pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5], pkt[6], pkt[7], call
+    //                     // );
+    //                     match call {
+    //                         SysCall::SendMessage(ref _cid, ref mut envelope)
+    //                         | SysCall::TrySendMessage(ref _cid, ref mut envelope) => {
+    //                             match envelope {
+    //                                 xous_kernel::Message::MutableBorrow(msg)
+    //                                 | xous_kernel::Message::Borrow(msg)
+    //                                 | xous_kernel::Message::Move(msg) => {
+    //                                     // Update the address pointer. This will get turned back into a
+    //                                     // usable pointer by casting it back into a &[T] on the other
+    //                                     // side. This is just a pointer to the start of data
+    //                                     // as well as the index into the data it points at. The lengths
+    //                                     // should still be equal once we reconstitute the data in the
+    //                                     // other process.
+    //                                     // ::debug_here::debug_here!();
+    //                                     let sliced_data = data.into_boxed_slice();
+    //                                     assert_eq!(
+    //                                         sliced_data.len(),
+    //                                         msg.buf.len(),
+    //                                         "deconstructed data {} != message buf length {}",
+    //                                         sliced_data.len(),
+    //                                         msg.buf.len()
+    //                                     );
+    //                                     msg.buf = unsafe {
+    //                                         xous_kernel::MemoryRange::new(
+    //                                             Box::into_raw(sliced_data) as *mut u8 as usize,
+    //                                             msg.buf.len(),
+    //                                         )
+    //                                         .unwrap()
+    //                                     };
+    //                                 }
+    //                                 xous_kernel::Message::Scalar(_)
+    //                                 | xous_kernel::Message::BlockingScalar(_) => (),
+    //                             }
+    //                         }
+    //                         SysCall::ReturnMemory(
+    //                             ref _sender,
+    //                             ref mut buf,
+    //                             ref _offset,
+    //                             ref _valid,
+    //                         ) => {
+    //                             let sliced_data = data.into_boxed_slice();
+    //                             assert_eq!(
+    //                                 sliced_data.len(),
+    //                                 buf.len(),
+    //                                 "deconstructed data {} != message buf length {}",
+    //                                 sliced_data.len(),
+    //                                 buf.len()
+    //                             );
+    //                             *buf = unsafe {
+    //                                 xous_kernel::MemoryRange::new(
+    //                                     Box::into_raw(sliced_data) as *mut u8 as usize,
+    //                                     buf.len(),
+    //                                 )
+    //                                 .unwrap()
+    //                             };
+    //                         }
+    //                         _ => panic!("unsupported message type"),
+    //                     }
+    //                     chn.send(ThreadMessage::SysCall(pid, thread_id, call))
+    //                         .expect("couldn't make syscall");
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+    conn_thread.join().unwrap();
     #[cfg(not(test))]
     eprintln!(
         "KERNEL({}): Finished the thread so sending TerminateProcess",
@@ -535,6 +568,7 @@ pub fn idle() -> bool {
                 }
             }
             ThreadMessage::SysCall(pid, thread_id, call) => {
+                // let measurement_start = std::time::Instant::now();
                 // println!("KERNEL({}): Received syscall {:?}", pid, call);
                 crate::arch::process::set_current_pid(pid);
                 // println!("KERNEL({}): Now running as the new process", pid);
@@ -607,6 +641,12 @@ pub fn idle() -> bool {
                             .ok();
                     });
                     crate::arch::process::set_current_pid(existing_pid);
+                    // println!(
+                    //     "KERNEL [{:2}:{:2}] Syscall took {:7} usec",
+                    //     pid,
+                    //     thread_id,
+                    //     measurement_start.elapsed().as_micros()
+                    // );
                 }
 
                 if is_shutdown {

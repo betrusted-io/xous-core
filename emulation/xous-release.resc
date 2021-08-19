@@ -53,7 +53,7 @@ sysbus SilenceRange <0xF0023000, 0xF0023FFF>
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """
-    sysbus LoadELF @../loader/target/riscv32imac-unknown-none-elf/release/loader
+    sysbus LoadELF @../loader/target/riscv32imac-unknown-xous-elf/release/loader
     sysbus LoadBinary @../target/riscv32imac-unknown-xous-elf/release/xous.img 0x20980000
     # Set $a0 to point at the args binary
     cpu SetRegisterUnsafe 10 0x20980000

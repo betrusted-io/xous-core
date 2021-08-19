@@ -1914,7 +1914,7 @@ impl SystemServices {
     /// within the current process.
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
         // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(), cid);
-        if cid == 0 || cid == 1 {
+        if cid < 2 {
             return None;
         }
 
@@ -1930,8 +1930,9 @@ impl SystemServices {
             //     println!("KERNEL({}): CID {} doesn't exist in the connection map", crate::arch::process::current_pid(), cid + 2);
             //     println!("KERNEL({}): Process inner is: {:?}", crate::arch::process::current_pid(), process_inner);
             // }
-            let mut server_idx = process_inner.connection_map[cid as usize]?.get() as usize;
-            if server_idx == 1 {
+            let connection_value = *process_inner.connection_map.get(cid as usize)?;
+            let mut server_idx = connection_value?.get() as usize;
+            if server_idx < 2 {
                 // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid + 2);
                 return None;
             }

@@ -13,3 +13,11 @@ rustflags = [
   "-C", "force-frame-pointers=no",
   "-C", "link-arg=-Map=loader.map",
 ]
+
+[target.riscv32imac-unknown-xous-elf]
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "linker-plugin-lto=yes",
+  "-C", "force-frame-pointers=no",
+  "-C", "link-arg=-Map=loader.map",
+]
