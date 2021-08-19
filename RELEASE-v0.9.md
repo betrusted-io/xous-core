@@ -20,6 +20,7 @@ for examples of idiomatic ways to write code for Xous.
   - Improved `MemoryRange` API
   - Various stability improvements and major bug fixes (ELF loader bugs, stack pointer alignment, etc.)
   - Elimination of `heapless` crate
+  - Transition from `master`->`main` for the default branch
 - All hardware drivers are available in some form:
   - AES (using VexRiscV CPU extensions)
   - Audio Codec (low-level interface only, 8kHz rec/playback)
