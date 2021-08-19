@@ -1,7 +1,7 @@
+use convert_case::{Case, Casing};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::io::{BufRead, BufReader, Read, Write};
-use convert_case::{Case, Casing};
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedTag,
@@ -413,21 +413,23 @@ fn generate_constants<T: BufRead>(
                     for maybe_att in e.attributes() {
                         match maybe_att {
                             Ok(att) => {
-                                let att_name = String::from_utf8(att.key.to_vec()).expect("constant: error parsing attribute name");
-                                let att_value = String::from_utf8(att.value.to_vec()).expect("constant: error parsing attribute value");
+                                let att_name = String::from_utf8(att.key.to_vec())
+                                    .expect("constant: error parsing attribute name");
+                                let att_value = String::from_utf8(att.value.to_vec())
+                                    .expect("constant: error parsing attribute value");
                                 match att_name {
                                     _ if att_name == "name" => constant_descriptor.name = att_value,
-                                    _ if att_name == "value" => constant_descriptor.value = att_value,
-                                    _ => panic!("unexpected attribute name")
+                                    _ if att_name == "value" => {
+                                        constant_descriptor.value = att_value
+                                    }
+                                    _ => panic!("unexpected attribute name"),
                                 }
-                            },
+                            }
                             _ => panic!("unexpected value in constant: {:?}", maybe_att),
                         }
                     }
-                    description
-                    .constants
-                    .push(constant_descriptor)
-                },
+                    description.constants.push(constant_descriptor)
+                }
                 _ => panic!("unexpected tag in <constants>: {:?}", e),
             },
             // note to future self: if Litex goe away from attributes to nested elements, you would want
@@ -438,13 +440,11 @@ fn generate_constants<T: BufRead>(
             // if there are no attributes, the attribute iterator would do nothing; and if there are no
             // child elements, the recursive descent would also do nothing.
             Ok(Event::End(ref e)) => match e.name() {
-                b"constants" => {
-                    break
-                }
+                b"constants" => break,
                 e => panic!("unhandled value: {:?}", e),
             },
             Ok(Event::Text(_)) => (),
-            e => panic!("unhandled value: {:?}", e)
+            e => panic!("unhandled value: {:?}", e),
         }
     }
     Ok(())
@@ -673,7 +673,7 @@ fn print_constants<U: Write>(constants: &[Constant], out: &mut U) -> std::io::Re
                     "pub const LITEX_{}: usize = {};",
                     constant.name, intval
                 )?;
-            },
+            }
             Err(_) => {
                 writeln!(
                     out,
@@ -707,14 +707,31 @@ pub mod utra {
     for peripheral in peripherals {
         writeln!(out)?;
         writeln!(out, "    pub mod {} {{", peripheral.name.to_lowercase())?;
-        writeln!(out, "        // this enum is vestigal, and currently not used by anything")?;
+        writeln!(
+            out,
+            "        // this enum is vestigal, and currently not used by anything"
+        )?;
         writeln!(out, "        #[derive(Debug, Copy, Clone)]")?;
-        writeln!(out, "        pub enum {}Offset {{", peripheral.name.to_case(Case::UpperCamel))?;
+        writeln!(
+            out,
+            "        pub enum {}Offset {{",
+            peripheral.name.to_case(Case::UpperCamel)
+        )?;
         for register in &peripheral.registers {
-            writeln!(out, "            {} = {},", register.name.to_case(Case::UpperCamel), register.offset / 4)?;
+            writeln!(
+                out,
+                "            {} = {},",
+                register.name.to_case(Case::UpperCamel),
+                register.offset / 4
+            )?;
         }
         writeln!(out, "        }}")?;
-        writeln!(out, "        pub const {}_NUMREGS: usize = {};", peripheral.name.to_uppercase(), peripheral.registers.len())?;
+        writeln!(
+            out,
+            "        pub const {}_NUMREGS: usize = {};",
+            peripheral.name.to_uppercase(),
+            peripheral.registers.len()
+        )?;
         for register in &peripheral.registers {
             writeln!(out)?;
             if let Some(description) = &register.description {

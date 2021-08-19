@@ -66,7 +66,9 @@ impl<'a> Buffer<'a> {
     pub fn volatile_clear(&mut self) {
         let b = self.slice.as_mut_ptr();
         for i in 0..self.slice.len() {
-            unsafe{b.add(i).write_volatile(core::mem::zeroed());}
+            unsafe {
+                b.add(i).write_volatile(core::mem::zeroed());
+            }
         }
         // Ensure the compiler doesn't re-order the clear.
         // We use `SeqCst`, because `Acquire` only prevents later accesses from being reordered before
@@ -84,11 +86,7 @@ impl<'a> Buffer<'a> {
                 usize::from(offset),
             )
         } else {
-            (
-                self.valid.as_ptr() as usize,
-                self.valid.len(),
-                0
-            )
+            (self.valid.as_ptr() as usize, self.valid.len(), 0)
         }
     }
 

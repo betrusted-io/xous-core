@@ -102,38 +102,38 @@ pub fn xous_main(args: TokenStream, input: TokenStream) -> TokenStream {
 
 // Creates a random identifier
 /*
-   Historical note -- this identifier was inherited from the Cortex libraries.
-   Apparently, it serves just to prove that the initializing function was run at
-   all, and does not create any sort of security property. It could be replaced
-   with a "magic number" instead and achieve the same goal. From reading the rationale
-   behind why the Cortex ecosystem does this, it's that a name like "__main" could accidentally
-   be used by a developer and cause the system to be unsafe, and so by going with
-   a pseudorandom identifier, it discourages programmers from accidental
-   copy/pasta of well-known symbols and skipping certain initializations that are
-   critical in the runtime to guarantee the safety properties that Rust depends
-   upon.
+  Historical note -- this identifier was inherited from the Cortex libraries.
+  Apparently, it serves just to prove that the initializing function was run at
+  all, and does not create any sort of security property. It could be replaced
+  with a "magic number" instead and achieve the same goal. From reading the rationale
+  behind why the Cortex ecosystem does this, it's that a name like "__main" could accidentally
+  be used by a developer and cause the system to be unsafe, and so by going with
+  a pseudorandom identifier, it discourages programmers from accidental
+  copy/pasta of well-known symbols and skipping certain initializations that are
+  critical in the runtime to guarantee the safety properties that Rust depends
+  upon.
 
-   Safety properties meaning, the Rust memory system has to reason about the type
-   safety and initialization state of a program, and this starts with a base set
-   of assumptions. The runtime is responsible for setting up these assumptions,
-   and if they are wrong then the whole Rust memory system analysis is for naught.
-   Because the Rust compiler can't "reason beyond the runtime", it becomes a hazard
-   that a programmer unwittingly names their "main" function with a well-known
-   symbol that doesn't have the proper initializations, and become confused as to
-   why their programs don't work. Thus it seems that this random identifier is
-   a way to "prove" that the run-time did its thing, without relying upon a symbol
-   or name that could just be copy/pasted by the programmer without also copy/pasting
-   its semantic significance.
+  Safety properties meaning, the Rust memory system has to reason about the type
+  safety and initialization state of a program, and this starts with a base set
+  of assumptions. The runtime is responsible for setting up these assumptions,
+  and if they are wrong then the whole Rust memory system analysis is for naught.
+  Because the Rust compiler can't "reason beyond the runtime", it becomes a hazard
+  that a programmer unwittingly names their "main" function with a well-known
+  symbol that doesn't have the proper initializations, and become confused as to
+  why their programs don't work. Thus it seems that this random identifier is
+  a way to "prove" that the run-time did its thing, without relying upon a symbol
+  or name that could just be copy/pasted by the programmer without also copy/pasting
+  its semantic significance.
 
-   This is not a "security-critical" random number because it's more of a check on
-   programmer behavior; any attacker with the ability to write or modify this number
-   also has the ability to modify the initialization routines anyways, and therefore
-   promoting this to a true cryptographic random number doesn't solve any problem
-   or necessarily protect the Rust type safety system from attacks against the
-   initialization frameworks. To protect against that, the code base needs to be
-   hashed and signed and checked against a signature, and not rely upon random
-   identifiers which have no cryptographically essential correlation with the code around it.
- */
+  This is not a "security-critical" random number because it's more of a check on
+  programmer behavior; any attacker with the ability to write or modify this number
+  also has the ability to modify the initialization routines anyways, and therefore
+  promoting this to a true cryptographic random number doesn't solve any problem
+  or necessarily protect the Rust type safety system from attacks against the
+  initialization frameworks. To protect against that, the code base needs to be
+  hashed and signed and checked against a signature, and not rely upon random
+  identifiers which have no cryptographically essential correlation with the code around it.
+*/
 fn random_ident() -> Ident {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -5,7 +5,7 @@ mod api;
 use core::sync::atomic::{AtomicU32, Ordering};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-use xous_ipc::{String, Buffer};
+use xous_ipc::{Buffer, String};
 
 // Note that connection IDs are never 0, so this is invalid, and could map to `None`.
 static SERVER_CID: AtomicU32 = AtomicU32::new(0);
@@ -69,7 +69,9 @@ fn do_op(op: api::MathOperation) -> Result<i32, api::Error> {
     // Don't deserialize it -- use the archived version
     match *buf.as_flat::<api::MathResult, _>().unwrap() {
         api::ArchivedMathResult::Value(v) => Ok(v),
-        api::ArchivedMathResult::Error(api::ArchivedError::InternalError) => Err(api::Error::InternalError),
+        api::ArchivedMathResult::Error(api::ArchivedError::InternalError) => {
+            Err(api::Error::InternalError)
+        }
         api::ArchivedMathResult::Error(api::ArchivedError::Overflow) => Err(api::Error::Overflow),
         api::ArchivedMathResult::Error(api::ArchivedError::Underflow) => Err(api::Error::Underflow),
     }
@@ -189,7 +191,10 @@ pub fn hook_log_messages(cb: fn(&str, &str)) {
     }
 }
 
-pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
+pub fn double_string<T>(value: &T) -> String<512>
+where
+    T: AsRef<str>,
+{
     let op = api::StringDoubler {
         value: String::from_str(value.as_ref()),
     };
@@ -206,5 +211,10 @@ pub fn double_string<T>(value: &T) -> String<512> where T: AsRef<str> {
     )
     .unwrap();
 
-    String::from_str(buf.as_flat::<api::StringDoubler, _>().unwrap().value.as_str())
+    String::from_str(
+        buf.as_flat::<api::StringDoubler, _>()
+            .unwrap()
+            .value
+            .as_str(),
+    )
 }

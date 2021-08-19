@@ -1,8 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
-use num_traits::{FromPrimitive, ToPrimitive};
 use cb_test_srv::*;
+use num_traits::{FromPrimitive, ToPrimitive};
 
 const SERVER_NAME: &str = "_CB test client 1_";
 
@@ -17,9 +17,11 @@ static CB_TO_MAIN_CONN: AtomicU32 = AtomicU32::new(0);
 fn do_result(result: u32) {
     let cb_to_main_conn = CB_TO_MAIN_CONN.load(Ordering::Relaxed);
     if cb_to_main_conn != 0 {
-        xous::send_message(cb_to_main_conn,
-            xous::Message::new_scalar(Opcode::Result.to_usize().unwrap(), result as usize, 0, 0, 0)
-        ).unwrap();
+        xous::send_message(
+            cb_to_main_conn,
+            xous::Message::new_scalar(Opcode::Result.to_usize().unwrap(), result as usize, 0, 0, 0),
+        )
+        .unwrap();
     }
 }
 
@@ -30,14 +32,18 @@ fn xmain() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let sid = xns.register_name(SERVER_NAME).expect("can't register server");
+    let sid = xns
+        .register_name(SERVER_NAME)
+        .expect("can't register server");
     log::trace!("registered with NS -- {:?}", sid);
 
     CB_TO_MAIN_CONN.store(xous::connect(sid).unwrap(), Ordering::Relaxed);
 
     let mut cb_serv = CbTestServer::new(&xns).unwrap();
     let tick_cid = xous::connect(sid).unwrap();
-    cb_serv.hook_tick_callback(Opcode::Tick.to_u32().unwrap(), tick_cid).unwrap();
+    cb_serv
+        .hook_tick_callback(Opcode::Tick.to_u32().unwrap(), tick_cid)
+        .unwrap();
 
     log::trace!("ready to accept requests");
     let mut state = 0;
@@ -67,7 +73,7 @@ fn xmain() -> ! {
             }),
             None => {
                 log::error!("couldn't convert opcode");
-                break
+                break;
             }
         }
     }

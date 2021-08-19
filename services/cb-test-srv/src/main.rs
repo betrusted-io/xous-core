@@ -4,10 +4,10 @@
 mod api;
 use api::*;
 
-use num_traits::{ToPrimitive, FromPrimitive};
-use xous_ipc::*;
 use api::Opcode;
-use xous::{CID, msg_scalar_unpack};
+use num_traits::{FromPrimitive, ToPrimitive};
+use xous::{msg_scalar_unpack, CID};
+use xous_ipc::*;
 
 #[derive(Copy, Clone, Debug)]
 struct ScalarCallback {
@@ -22,10 +22,15 @@ fn pump_thread() {
     let ticktimer = ticktimer_server::Ticktimer::new().expect("Couldn't connect to Ticktimer");
 
     let xns = xous_names::XousNames::new().unwrap();
-    let server_conn = xns.request_connection_blocking(api::SERVER_NAME).expect("can't connect to main program");
+    let server_conn = xns
+        .request_connection_blocking(api::SERVER_NAME)
+        .expect("can't connect to main program");
     loop {
-        xous::send_message(server_conn,
-            xous::Message::new_scalar(Opcode::Tick.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't send Tick message");
+        xous::send_message(
+            server_conn,
+            xous::Message::new_scalar(Opcode::Tick.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("couldn't send Tick message");
         ticktimer.sleep_ms(100).expect("couldn't sleep");
     }
 }
@@ -37,7 +42,9 @@ fn shell_main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let server = xns.register_name(api::SERVER_NAME).expect("can't register server");
+    let server = xns
+        .register_name(api::SERVER_NAME)
+        .expect("can't register server");
 
     xous::create_thread_0(pump_thread).unwrap();
     log::info!("pump thread started");
@@ -54,27 +61,35 @@ fn shell_main() -> ! {
             Some(Opcode::Tick) => {
                 // pump the tick callbacks
                 for maybe_conn in tick_cb.iter_mut() {
-                if let Some(scb) = maybe_conn {
-                    match xous::send_message(scb.server_to_cb_cid,
-                        xous::Message::new_scalar(api::TickCallback::Tick.to_usize().unwrap(),
-                           scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, 0, 0)) {
+                    if let Some(scb) = maybe_conn {
+                        match xous::send_message(
+                            scb.server_to_cb_cid,
+                            xous::Message::new_scalar(
+                                api::TickCallback::Tick.to_usize().unwrap(),
+                                scb.cb_to_client_cid as usize,
+                                scb.cb_to_client_id as usize,
+                                0,
+                                0,
+                            ),
+                        ) {
                             Err(xous::Error::ServerNotFound) => {
                                 *maybe_conn = None // automatically de-allocate callbacks for clients that have dropped
-                            },
+                            }
                             Ok(xous::Result::Ok) => {}
-                            _ => panic!("unhandled error or result in callback processing")
+                            _ => panic!("unhandled error or result in callback processing"),
                         }
                     }
                 }
                 log::trace!("ticks: {}", ticks);
                 ticks += 1;
                 state += 1;
-            },
+            }
             Some(Opcode::RegisterTickListener) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let buffer =
+                    unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let hookdata = buffer.to_original::<ScalarHook, _>().unwrap();
                 do_hook(hookdata, &mut tick_cb);
-            },
+            }
             Some(Opcode::RegisterReqListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
                 let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
                 let cid = xous::connect(sid).unwrap();
@@ -84,30 +99,41 @@ fn shell_main() -> ! {
                     log::error!("cid out of allowable range");
                 }
             }),
-            Some(Opcode::UnregisterReqListener) => msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
-                let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
-                let cid = xous::connect(sid).unwrap(); // if the connection already exists, this just looks it up in the table
-                log::info!("UnregisterReqListener cid {}", cid);
-                if (cid as usize) < req_cb.len() {
-                    req_cb[cid as usize] = false;
-                } else {
-                    log::error!("cid out of allowable range");
-                }
-                unsafe{xous::disconnect(cid).unwrap()};
-            }),
+            Some(Opcode::UnregisterReqListener) => {
+                msg_scalar_unpack!(msg, sid0, sid1, sid2, sid3, {
+                    let sid = xous::SID::from_u32(sid0 as _, sid1 as _, sid2 as _, sid3 as _);
+                    let cid = xous::connect(sid).unwrap(); // if the connection already exists, this just looks it up in the table
+                    log::info!("UnregisterReqListener cid {}", cid);
+                    if (cid as usize) < req_cb.len() {
+                        req_cb[cid as usize] = false;
+                    } else {
+                        log::error!("cid out of allowable range");
+                    }
+                    unsafe { xous::disconnect(cid).unwrap() };
+                })
+            }
             Some(Opcode::Req) => msg_scalar_unpack!(msg, _, _, _, _, {
                 log::debug!("req_cb: {:?}", req_cb);
                 // send results to request listeners
-                for cid in 1..req_cb.len() { // 0 is not a valid connection
+                for cid in 1..req_cb.len() {
+                    // 0 is not a valid connection
                     if req_cb[cid as usize] {
-                        match xous::send_message(cid as u32,
-                            xous::Message::new_scalar(api::ResultCallback::Result.to_usize().unwrap(), state as _, 0, 0, 0)) {
-                                Err(xous::Error::ServerNotFound) => {
-                                    log::info!("de-allocate ReqCallback");
-                                    req_cb[cid] = false;
-                                },
-                                Ok(xous::Result::Ok) => {}
-                                _ => panic!("unhandled error or result in callback processing")
+                        match xous::send_message(
+                            cid as u32,
+                            xous::Message::new_scalar(
+                                api::ResultCallback::Result.to_usize().unwrap(),
+                                state as _,
+                                0,
+                                0,
+                                0,
+                            ),
+                        ) {
+                            Err(xous::Error::ServerNotFound) => {
+                                log::info!("de-allocate ReqCallback");
+                                req_cb[cid] = false;
+                            }
+                            Ok(xous::Result::Ok) => {}
+                            _ => panic!("unhandled error or result in callback processing"),
                         }
                     }
                 }
