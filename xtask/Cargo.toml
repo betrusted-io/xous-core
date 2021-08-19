@@ -1,12 +1,13 @@
 [package]
 name = "xtask"
+description = "Cargo-based build system for Xous"
 version = "0.1.0"
 authors = ["Sean Cross <sean@xobs.io>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+curl = "0.4"
+atty = "0.2"
 filetime = "0.2"
-#"ed25519-dalek" = "1"
-#"pem" = "0.8"
+rustc_version = "0.4"
+zip = "0.5"
