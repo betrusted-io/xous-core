@@ -1,4 +1,4 @@
-# if you want to format 'em, then you maintain 'em!
+# if you want to format 'em, then you can maintain 'em!
 ignore = [
   "services/codec",
   "services/com",
