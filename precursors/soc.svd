@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-08-20 01:37:39]]></description>
+    <description><![CDATA[Litex SoC 2021-08-20 04:16:46]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -1238,10 +1238,10 @@ register to disable individual events.]]></description>
                 <register>
                     <name>GIT_GITREV</name>
                     <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``94b0064b``, so this value is 2494563915, which should be enough to check out
+``cac0c7a5``, so this value is 3401631653, which should be enough to check out
 the exact git version used to build this firmware.]]></description>
                     <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x94b0064b</resetValue>
+                    <resetValue>0xcac0c7a5</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3584,7 +3584,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x543b6ef</resetValue>
+                    <resetValue>0x3055ce23</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3599,7 +3599,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x66e4b81</resetValue>
+                    <resetValue>0x24d49879</resetValue>
                     <size>32</size>
                     <fields>
                         <field>

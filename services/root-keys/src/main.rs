@@ -642,12 +642,20 @@ fn xmain() -> ! {
             },
             Some(Opcode::UxUpdateGwShowInfo) => {
                 let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
-                let info = format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
-                    gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
-                    gw_info.git_commit,
-                    str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
-                    str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
-                );
+                let info = if gw_info.git_commit == 0 && gw_info.git_additional == 0 {
+                    format!("v{}.{}.{}+{}\nClean tag\n@{}\n{}",
+                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                        str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
+                        str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
+                    )
+                } else {
+                    format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
+                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                        gw_info.git_commit,
+                        str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
+                        str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
+                    )
+                };
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                 if payload.as_str() == t!("rootkeys.gwup.short", xous::LANG) {
