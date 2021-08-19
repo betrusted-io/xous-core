@@ -6,7 +6,7 @@ use api::*;
 
 use num_traits::FromPrimitive;
 use xous::msg_blocking_scalar_unpack;
-use xous_ipc::{String, Buffer};
+use xous_ipc::{Buffer, String};
 
 use log::{error, info};
 
@@ -79,12 +79,12 @@ struct Connection {
     pub current_conns: u32, // number of unauthenticated (inherentely trusted) connections
     pub max_conns: Option<u32>, // if None, unlimited connections allowed
     pub allow_authenticate: bool,
-    pub auth_conns: u32,  // number of authenticated connections
-    pub token: Option<[u32; 4]>,  // a random number that must be presented to allow for disconnection for single-connection servers
+    pub auth_conns: u32,         // number of authenticated connections
+    pub token: Option<[u32; 4]>, // a random number that must be presented to allow for disconnection for single-connection servers
 }
 #[derive(Debug)]
 struct CheckedHashMap {
-    pub map: HashMap::<XousServerName, Connection>,
+    pub map: HashMap<XousServerName, Connection>,
 }
 impl CheckedHashMap {
     pub fn new() -> Self {
@@ -92,21 +92,33 @@ impl CheckedHashMap {
             map: HashMap::new(),
         }
     }
-    pub fn insert(&mut self, name: XousServerName, sid: xous::SID, max_conns: Option<u32>) -> Result<(), xous::Error> {
+    pub fn insert(
+        &mut self,
+        name: XousServerName,
+        sid: xous::SID,
+        max_conns: Option<u32>,
+    ) -> Result<(), xous::Error> {
         let token = if max_conns == Some(1) {
             // for the special case of 1-connection servers, provision a one-time use token for disconnects
-            Some(xous::create_server_id().expect("couldn't create token").to_array())
+            Some(
+                xous::create_server_id()
+                    .expect("couldn't create token")
+                    .to_array(),
+            )
         } else {
             None
         };
-        self.map.insert(name, Connection {
-            sid,
-            current_conns: 0,
-            max_conns,
-            allow_authenticate: false, // for now, we don't support authenticated connections
-            auth_conns: 0,
-            token,
-        });
+        self.map.insert(
+            name,
+            Connection {
+                sid,
+                current_conns: 0,
+                max_conns,
+                allow_authenticate: false, // for now, we don't support authenticated connections
+                auth_conns: 0,
+                token,
+            },
+        );
         Ok(())
     }
     pub fn remove(&mut self, sid: xous::SID) -> Option<XousServerName> {
@@ -136,9 +148,9 @@ impl CheckedHashMap {
                 // single-connection case
                 if entry.current_conns < 1 {
                     (*entry).current_conns = 1;
-                    return (Some(&entry.sid), entry.token)
+                    return (Some(&entry.sid), entry.token);
                 } else {
-                    return (None, None)
+                    return (None, None);
                 }
             }
             if let Some(max) = entry.max_conns {
@@ -161,7 +173,12 @@ impl CheckedHashMap {
         for (name, entry) in self.map.iter() {
             if let Some(max) = entry.max_conns {
                 if max != entry.current_conns {
-                    log::info!("server {} has {} conns but expects {}", name, entry.current_conns, max);
+                    log::info!(
+                        "server {} has {} conns but expects {}",
+                        name,
+                        entry.current_conns,
+                        max
+                    );
                     trusted_done = false;
                 }
             }
@@ -193,8 +210,12 @@ impl CheckedHashMap {
                 if (token == old_token) && (entry.current_conns == 1) {
                     (*entry).current_conns = 0;
                     // generate the token -- we should never re-use these!
-                    (*entry).token = Some(xous::create_server_id().expect("couldn't create token").to_array());
-                    return true
+                    (*entry).token = Some(
+                        xous::create_server_id()
+                            .expect("couldn't create token")
+                            .to_array(),
+                    );
+                    return true;
                 }
             }
         }
@@ -227,7 +248,12 @@ fn xmain() -> ! {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
                 let registration = buffer.to_original::<Registration, _>().unwrap();
-                let name = XousServerName::from_str(registration.name.as_str().expect("couldn't convert server name to string"));
+                let name = XousServerName::from_str(
+                    registration
+                        .name
+                        .as_str()
+                        .expect("couldn't convert server name to string"),
+                );
 
                 let response: api::Return;
 
@@ -247,7 +273,9 @@ fn xmain() -> ! {
                     info!("deterministic timeout done");
                     response = api::Return::Failure
                 }
-                buffer.replace(response).expect("Register can't serialize return value");
+                buffer
+                    .replace(response)
+                    .expect("Register can't serialize return value");
             }
             Some(api::Opcode::Unregister) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
                 let gid = xous::SID::from_u32(s0 as u32, s1 as u32, s2 as u32, s3 as u32);
@@ -263,8 +291,12 @@ fn xmain() -> ! {
             Some(api::Opcode::Lookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
                 let mut buffer = unsafe { Buffer::from_memory_message_mut(mem) };
-                let name_string = buffer.to_original::<String::<64>, _>().unwrap();
-                let name = XousServerName::from_str(name_string.as_str().expect("couldn't convert server name to string"));
+                let name_string = buffer.to_original::<String<64>, _>().unwrap();
+                let name = XousServerName::from_str(
+                    name_string
+                        .as_str()
+                        .expect("couldn't convert server name to string"),
+                );
                 log::trace!("Lookup request for '{}'", name);
                 let response: api::Return;
                 if let (Some(server_sid), token) = name_table.connect(&name) {
@@ -280,10 +312,7 @@ fn xmain() -> ! {
                             response = api::Return::CID((connection_id, token))
                         }
                         _ => {
-                            log::debug!(
-                                "Can't find request '{}' in table, dumping table:",
-                                name
-                            );
+                            log::debug!("Can't find request '{}' in table, dumping table:", name);
                             for (_name, conn) in name_table.map.iter() {
                                 log::debug!("{:?}", conn);
                             }
@@ -292,24 +321,27 @@ fn xmain() -> ! {
                         }
                     }
                 } else {
-                    log::debug!(
-                        "Can't find request '{}' in table, dumping table:",
-                        name
-                    );
+                    log::debug!("Can't find request '{}' in table, dumping table:", name);
                     for (_name, conn) in name_table.map.iter() {
                         log::debug!("{:?}", conn);
                     }
                     // no authenticate remedy currently supported, but we'd put that code somewhere around here eventually.
                     let (c1, c2, c3, c4) = xous::create_server_id().unwrap().to_u32();
                     let auth_request = AuthenticateRequest {
-                        name: String::<64>::from_str(name_string.as_str().expect("couldn't convert server name to string")),
+                        name: String::<64>::from_str(
+                            name_string
+                                .as_str()
+                                .expect("couldn't convert server name to string"),
+                        ),
                         pubkey_id: [0; 20], // placeholder
                         challenge: [c1, c2, c3, c4],
                     };
                     d11ctimeout.hosted_delay();
                     response = api::Return::AuthenticateRequest(auth_request) // this code just exists to exercise the return path
                 }
-                buffer.replace(response).expect("Lookup can't serialize return value");
+                buffer
+                    .replace(response)
+                    .expect("Lookup can't serialize return value");
             }
             Some(api::Opcode::AuthenticatedLookup) => {
                 let mem = msg.body.memory_message_mut().unwrap();
@@ -338,7 +370,10 @@ fn xmain() -> ! {
                 };
                 buffer.replace(response).expect("Can't return buffer");
             }
-            None => {error!("couldn't decode message: {:?}", msg); break}
+            None => {
+                error!("couldn't decode message: {:?}", msg);
+                break;
+            }
         }
     }
     // clean up our program

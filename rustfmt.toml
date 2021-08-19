@@ -2,7 +2,6 @@ ignore = [
   "services/aes-test",
   "services/graphics-server",
   "services/com",
-  "services/xous-names",
   "services/keyboard",
   "services/trng",
   "services/gam",

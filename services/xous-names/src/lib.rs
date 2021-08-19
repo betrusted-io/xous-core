@@ -4,10 +4,10 @@
 
 pub mod api;
 
-use core::fmt::Write;
 use api::Disconnect;
-use xous_ipc::{String, Buffer};
+use core::fmt::Write;
 use num_traits::ToPrimitive;
+use xous_ipc::{Buffer, String};
 
 #[doc = include_str!("../README.md")]
 #[derive(Debug)]
@@ -17,10 +17,9 @@ pub struct XousNames {
 impl XousNames {
     pub fn new() -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-        let conn = xous::connect(xous::SID::from_bytes(b"xous-name-server").unwrap()).expect("Couldn't connect to XousNames");
-        Ok(XousNames {
-           conn,
-        })
+        let conn = xous::connect(xous::SID::from_bytes(b"xous-name-server").unwrap())
+            .expect("Couldn't connect to XousNames");
+        Ok(XousNames { conn })
     }
 
     pub fn unregister_server(&self, sid: xous::SID) -> Result<(), xous::Error> {
@@ -31,9 +30,17 @@ impl XousNames {
         // note that with the current implementation, the destroy call will have to be an O(N) search through
         // the server table, but this is OK as we expect <100 servers on a device
         let s = sid.to_array();
-        let response = xous::send_message(self.conn,
-            xous::Message::new_blocking_scalar(api::Opcode::Unregister.to_usize().unwrap(), s[0] as usize, s[1] as usize, s[2] as usize, s[3] as usize)
-        ).expect("unregistration failed");
+        let response = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                api::Opcode::Unregister.to_usize().unwrap(),
+                s[0] as usize,
+                s[1] as usize,
+                s[2] as usize,
+                s[3] as usize,
+            ),
+        )
+        .expect("unregistration failed");
         if let xous::Result::Scalar1(result) = response {
             if result != 0 {
                 Ok(())
@@ -45,7 +52,11 @@ impl XousNames {
         }
     }
 
-    pub fn register_name(&self, name: &str, max_conns: Option<u32>) -> Result<xous::SID, xous::Error> {
+    pub fn register_name(
+        &self,
+        name: &str,
+        max_conns: Option<u32>,
+    ) -> Result<xous::SID, xous::Error> {
         let mut registration = api::Registration {
             name: String::<64>::new(),
             conn_limit: max_conns,
@@ -55,11 +66,8 @@ impl XousNames {
 
         let mut buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
 
-        buf.lend_mut(
-            self.conn,
-            api::Opcode::Register.to_u32().unwrap()
-        )
-        .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Register.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::SID(sid_raw) => {
@@ -67,23 +75,21 @@ impl XousNames {
                 xous::create_server_with_sid(sid).expect("can't auto-register server");
                 Ok(sid)
             }
-            api::Return::Failure => {
-                Err(xous::Error::InternalError)
-            }
-            _ => unimplemented!("unimplemented return codes")
+            api::Return::Failure => Err(xous::Error::InternalError),
+            _ => unimplemented!("unimplemented return codes"),
         }
     }
 
-    pub fn request_connection_with_token(&self, name: &str) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
+    pub fn request_connection_with_token(
+        &self,
+        name: &str,
+    ) -> Result<(xous::CID, Option<[u32; 4]>), xous::Error> {
         let mut lookup_name = xous_ipc::String::<64>::new();
         write!(lookup_name, "{}", name).expect("name problably too long");
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
-        buf.lend_mut(
-            self.conn,
-            api::Opcode::Lookup.to_u32().unwrap()
-        )
-        .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::CID((cid, token)) => Ok((cid, token)),
@@ -97,10 +103,8 @@ impl XousNames {
             token,
         };
         let mut buf = Buffer::into_buf(disconnect).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(
-            self.conn,
-            api::Opcode::Disconnect.to_u32().unwrap()
-        ).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Disconnect.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::Success => Ok(()),
@@ -114,11 +118,8 @@ impl XousNames {
 
         let mut buf = Buffer::into_buf(lookup_name).or(Err(xous::Error::InternalError))?;
 
-        buf.lend_mut(
-            self.conn,
-            api::Opcode::Lookup.to_u32().unwrap()
-        )
-        .or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, api::Opcode::Lookup.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
 
         match buf.to_original().unwrap() {
             api::Return::CID((cid, _)) => Ok(cid),
@@ -141,9 +142,17 @@ impl XousNames {
     }
 
     pub fn trusted_init_done(&self) -> Result<bool, xous::Error> {
-        let response = xous::send_message(self.conn,
-            xous::Message::new_blocking_scalar(api::Opcode::TrustedInitDone.to_usize().unwrap(), 0, 0, 0, 0)
-        ).expect("couldn't query trusted_init_done");
+        let response = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                api::Opcode::TrustedInitDone.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        .expect("couldn't query trusted_init_done");
         if let xous::Result::Scalar1(result) = response {
             if result == 1 {
                 Ok(true)
@@ -167,7 +176,9 @@ impl Drop for XousNames {
     fn drop(&mut self) {
         // de-allocate myself. It's unsafe because we are responsible to make sure nobody else is using the connection.
         if REFCOUNT.load(Ordering::Relaxed) == 0 {
-            unsafe{xous::disconnect(self.conn).unwrap();}
+            unsafe {
+                xous::disconnect(self.conn).unwrap();
+            }
         }
     }
 }
