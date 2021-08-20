@@ -52,7 +52,6 @@ entire emulator.
 Then, build Xous:
 
 ```sh
-rustup target add riscv32imac-unknown-none-elf
 cargo xtask renode-image
 ```
 
