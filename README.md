@@ -15,7 +15,10 @@ from source.  It consists of the following projects:
 * **xous-rs**: userspace library
 
 ## Dependencies
-There's some Python scripts to help deal with firmware signing. Ensure the following python packages are available in your environment: `pycryptodome` (signing - PEM read), `cryptography` (signing - x509 read), `pynacl` (signing - ed25519 signatures). If you plan on doing USB firmware updates, you'll also need `progressbar2` (updates), `pyusb` (updates).
+
+- Xous requires its own Rust target, `riscv32imac-unkwon-xous-elf`. If you run `cargo xtask` from the command line, you should be prompted to install the target automatically if it does not already exist.
+- If you plan on doing USB firmware updates, you'll need `progressbar2` (updates) and `pyusb` (updates). Note that `pyusb` has name space conflicts with similarly named packages, so if updates aren't working you may need to create a `venv` or uninstall conflicting packages.
+- If you are doing development on the digital signatures with the Python helper scripts, you will need: `pycryptodome` (signing - PEM read), `cryptography` (signing - x509 read), `pynacl` (signing - ed25519 signatures) (most users won't need this).
 
 ## Quickstart using Hosted Mode
 
@@ -75,19 +78,15 @@ Betrusted core. These addresses will change as hardware is modified,
 so if you distribute a modified Betrusted core, you should be sure
 to distribute the `.svd` file.
 
-An example file may be found under `svd2utra/`, but this is probably
-out of date and won't work with your device.
-
-Pass this `.svd` file to the `hw-image` `xtask` command:
+We have included a reference version of the gateware and its SVD
+file in the `precursors` directory, so you can compile a gateware
+for the reference image using this command:
 
 ```sh
-cargo xtask hw-image svd2utra/examples/soc.svd
+cargo xtask hw-image precursors/soc.svd
 ```
 
-This will compile all runtime packages for `riscv32imac-unknown-none-elf`, and
-will generate a release image under the `target/` directory, which will be printed
-on the output.
-
-The image should be written to location 0x2050_0000 (SPI ROM offset 0x50_0000), using
-the `provision-xous.sh` script inside [betrusted-scripts](https://github.com/betrusted-io/betrusted-scripts/blob/master/provision-xous.sh)
-running on a Betrusted provisioning harness, that is a Raspberry Pi 4 with the appropriate debug hat attached, and the Precursor hardware plugged into the debug hat. You can also check out the `dvt-hardware` branch for the WIP integration of all the above commands.
+The resulting images are in your target directory (typically `target/riscv32imac-unknown-xous-elf/release/`)
+with the names `xous.img` (for the kernel) and `loader.bin` (for its bootloader). The corresponding
+gateware is in `precursors/soc_csr.bin`. These can be written to your
+device by following the [update guide](https://github.com/betrusted-io/betrusted-wiki/wiki/Updating-Your-Device).
