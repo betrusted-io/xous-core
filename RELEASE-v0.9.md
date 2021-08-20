@@ -60,8 +60,13 @@ for examples of idiomatic ways to write code for Xous.
     - Rogue processes cannot create new trusted UX resources
     - Developers must register their UX tokens in the `gam` inside `tokens.rs`
 - Extended simulation support
-  - More peripherals working in Renode
   - Hosted mode performance improvements
+  - Hosted mode now supports thread creation with `std::thread::spawn()`
+- Improved emulation in Renode
+  - Full emulation of ENGINE
+  - Full emulation of SHA512 block
+  - Initial support of emulation of EC
+    - No COM-based inter-chip communication yet
 
 ## Roadmap to 1.0
 
