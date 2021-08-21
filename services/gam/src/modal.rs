@@ -349,6 +349,7 @@ impl<'a> Modal<'a> {
     }
 
     pub fn redraw(&mut self) {
+        const BORDER_WIDTH: i16 = 3;
         log::debug!("modal redraw");
         let canvas_size = self.gam.get_canvas_bounds(self.canvas).unwrap();
         let do_redraw = self.top_dirty || self.bot_dirty;
@@ -357,7 +358,7 @@ impl<'a> Modal<'a> {
             self.gam.draw_rounded_rectangle(self.canvas,
                 RoundedRectangle::new(
                     Rectangle::new_with_style(Point::new(0, 0), canvas_size,
-                        DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 3)
+                        DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, BORDER_WIDTH)
                     ), 5
                 )).unwrap();
         }
@@ -393,8 +394,10 @@ impl<'a> Modal<'a> {
         if !do_redraw {
             // the action area wasn't blanked, so blank it as prep for the action redraw
             self.gam.draw_rectangle(self.canvas,
-            Rectangle::new_with_style(Point::new(0, cur_height), Point::new(canvas_size.x, cur_height + action_height),
-                DrawStyle::new(if self.inverted{PixelColor::Dark} else {PixelColor::Light}, PixelColor::Dark, 2)
+            Rectangle::new_with_style(Point::new(BORDER_WIDTH, cur_height), Point::new(canvas_size.x - BORDER_WIDTH, cur_height + action_height),
+                DrawStyle::new(
+                    if self.inverted{PixelColor::Dark} else {PixelColor::Light},
+                    if self.inverted{PixelColor::Dark} else {PixelColor::Light}, 0)
             )).unwrap();
         }
         self.action.redraw(cur_height, &self);
