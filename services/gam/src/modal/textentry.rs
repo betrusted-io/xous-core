@@ -65,7 +65,7 @@ impl ActionApi for TextEntry {
                 Point::new(modal.margin, at_height),
                 Point::new(modal.canvas_width - modal.margin, at_height + modal.line_height))
         ));
-        tv.ellipsis = true; // TODO: fix so we are drawing from the right-most entered text and old text is ellipsis *to the left*
+        tv.ellipsis = true;
         tv.invert = self.is_password;
         tv.style = modal.style;
         tv.margin = Point::new(0, 0);
