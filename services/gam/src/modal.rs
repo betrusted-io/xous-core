@@ -1,53 +1,5 @@
 //! The main API entry point is the `Modal` struct. Click into the struct for more details.
 
-/*
-  design ideas
-
-Modal for password request:
-    ---------------------
-    | Password Type: Updater
-    | Requester: RootKeys
-    | Reason: The updater modal has not been set.
-    | Security Level: Critical
-    |
-    |    *****4f_
-    |
-    |      ← 👁️ 🕶️ * →
-    |--------------------
-
-Item primitives:
-  - text bubble
-  - text entry field (with confidentiality option)
-  - left/right radio select
-  - up/down radio select
-
-Then simple menu prompt after password entry:
-    ---------------------
-    | [x] Persist until reboot
-    | [ ] Persist until suspend
-    | [ ] Use once
-    ---------------------
-
-General form for modals:
-
-    [top text]
-
-    [action form]
-
-    [bottom text]
-
- - "top text" is an optional TextArea
- - "action form" is a mandatory field that handles interactions
- - "bottom text" is an optional TextArea
-
- Action form can be exactly one of the following:
-   - password text field - enter closes the form, has visibility options as left/right arrows; entered text wraps
-   - regular text field - enter closes the form, visibility is always visible; entered text wraps
-   - radio buttons - has an explicit "okay" button to close the modal; up/down arrows + select/enter pick the radio
-   - check boxes - has an explicit "okay" button to close the modal; up/down arrows + select/enter checks boxes
-   - slider - left/right moves the slider, enter/select closes the modal
-*/
-
 mod textentry;
 pub use textentry::*;
 mod radiobuttons;
@@ -67,18 +19,45 @@ use enum_dispatch::enum_dispatch;
 
 use crate::api::*;
 use crate::Gam;
+use crate::MsgForwarder;
 
 use graphics_server::api::*;
 pub use graphics_server::GlyphStyle;
 
 use xous_ipc::{String, Buffer};
 use num_traits::*;
-
-use crate::MsgForwarder;
-
 use core::fmt::Write;
 
 pub const MAX_ITEMS: usize = 8;
+
+#[enum_dispatch(ActionApi)]
+#[derive(Copy, Clone)]
+pub enum ActionType {
+    TextEntry,
+    RadioButtons,
+    CheckBoxes,
+    Slider,
+    Notification,
+    ConsoleInput
+}
+
+#[enum_dispatch]
+pub trait ActionApi {
+    fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
+    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
+    fn close(&mut self) {}
+    fn is_password(&self) -> bool { false }
+    /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
+    fn key_action(&mut self, _key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
+    fn set_action_opcode(&mut self, _op: u32) {}
+}
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
+    Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
+    Rawkeys,
+    Quit,
+}
 
 /// We use a new type for item names, so that it's easy to resize this as needed.
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
@@ -161,28 +140,6 @@ impl CheckBoxPayload {
     }
 }
 
-#[enum_dispatch]
-pub trait ActionApi {
-    fn height(&self, glyph_height: i16, margin: i16) -> i16 {glyph_height + margin * 2}
-    fn redraw(&self, _at_height: i16, _modal: &Modal) { unimplemented!() }
-    fn close(&mut self) {}
-    fn is_password(&self) -> bool { false }
-    /// navigation is one of '∴' | '←' | '→' | '↑' | '↓'
-    fn key_action(&mut self, _key: char) -> (Option<xous_ipc::String::<512>>, bool) {(None, true)}
-    fn set_action_opcode(&mut self, _op: u32) {}
-}
-
-#[enum_dispatch(ActionApi)]
-#[derive(Copy, Clone)]
-pub enum ActionType {
-    TextEntry,
-    RadioButtons,
-    CheckBoxes,
-    Slider,
-    Notification,
-    ConsoleInput
-}
-
 //#[derive(Debug)]
 pub struct Modal<'a> {
     pub sid: xous::SID,
@@ -208,13 +165,6 @@ pub struct Modal<'a> {
     top_memoized_height: Option<i16>,
     bot_dirty: bool,
     bot_memoized_height: Option<i16>,
-}
-
-#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum ModalOpcode { // if changes are made here, also update MenuOpcode
-    Redraw = 0x4000_0000, // set the high bit so that "standard" enums don't conflict with the Modal-specific opcodes
-    Rawkeys,
-    Quit,
 }
 
 fn recompute_canvas(modal: &mut Modal, action: ActionType, top_text: Option<&str>, bot_text: Option<&str>, style: GlyphStyle) {
@@ -554,3 +504,54 @@ impl<'a> Modal<'a> {
         recompute_canvas(self, action, top_text, bot_text, style);
     }
 }
+
+
+/*
+ old notes to remind myself of how I got here.
+
+  design ideas
+
+Modal for password request:
+    ---------------------
+    | Password Type: Updater
+    | Requester: RootKeys
+    | Reason: The updater modal has not been set.
+    | Security Level: Critical
+    |
+    |    *****4f_
+    |
+    |      ← 👁️ 🕶️ * →
+    |--------------------
+
+Item primitives:
+  - text bubble
+  - text entry field (with confidentiality option)
+  - left/right radio select
+  - up/down radio select
+
+Then simple menu prompt after password entry:
+    ---------------------
+    | [x] Persist until reboot
+    | [ ] Persist until suspend
+    | [ ] Use once
+    ---------------------
+
+General form for modals:
+
+    [top text]
+
+    [action form]
+
+    [bottom text]
+
+ - "top text" is an optional TextArea
+ - "action form" is a mandatory field that handles interactions
+ - "bottom text" is an optional TextArea
+
+ Action form can be exactly one of the following:
+   - password text field - enter closes the form, has visibility options as left/right arrows; entered text wraps
+   - regular text field - enter closes the form, visibility is always visible; entered text wraps
+   - radio buttons - has an explicit "okay" button to close the modal; up/down arrows + select/enter pick the radio
+   - check boxes - has an explicit "okay" button to close the modal; up/down arrows + select/enter checks boxes
+   - slider - left/right moves the slider, enter/select closes the modal
+*/
