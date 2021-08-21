@@ -156,6 +156,7 @@ pub(crate) struct RootKeys {
     gfx: graphics_server::Gfx, // for reading out font planes for signing verification
     spinor: spinor::Spinor,
     ticktimer: ticktimer_server::Ticktimer,
+    gam: gam::Gam,
     xns: xous_names::XousNames,
     jtag: jtag::Jtag,
     fake_key: [u8; 32], // a base set of random numbers used to respond to invalid keyloc requests in AES operations
@@ -249,6 +250,7 @@ impl<'a> RootKeys {
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
+            gam: gam::Gam::new(&xns).expect("couldn't connect to GAM"),
             xns,
             jtag,
             fake_key,
@@ -392,12 +394,25 @@ impl<'a> RootKeys {
         }
     }
 
-    fn xns_interlock(&self) {
+    /// Checks that various registries are "fully populated", to ensure that the trusted set of servers
+    /// have completely loaded before trying to move on. Many of the security properties of the system
+    /// rely upon a trusted set of servers claiming unique and/or enumerated tokens or slots, and then
+    /// disallowing any new registrations after that point. This call prevents trusted operations from
+    /// occurring if some of these servers have failed to check in.
+    fn xous_init_interlock(&self) {
         loop {
-            if self.xns.trusted_init_done().expect("couldn't query init done status") {
+            if self.xns.trusted_init_done().expect("couldn't query init done status on xous-names") {
                 break;
             } else {
-                log::warn!("trusted init not finished, rootkeys is holding off on sensitive operations");
+                log::warn!("trusted init of xous-names not finished, rootkeys is holding off on sensitive operations");
+                self.ticktimer.sleep_ms(650).expect("couldn't sleep");
+            }
+        }
+        loop {
+            if self.gam.trusted_init_done().expect("couldn't query init done status on GAM") {
+                break;
+            } else {
+                log::warn!("trusted init of GAM not finished, rootkeys is holding off on sensitive operations");
                 self.ticktimer.sleep_ms(650).expect("couldn't sleep");
             }
         }
@@ -647,7 +662,7 @@ impl<'a> RootKeys {
     /// Called by the UX layer to set up a key init run. It disables suspend/resume for the duration
     /// of the run, and also sets up some missing fields of KEYROM necessary to encrypt passwords.
     pub fn setup_key_init(&mut self) {
-        self.xns_interlock();
+        self.xous_init_interlock();
         // block suspend/resume ops during security-sensitive operations
         self.susres.set_suspendable(false).expect("couldn't block suspend/resume");
         // in this block, keyrom data is copied into RAM.
@@ -696,7 +711,7 @@ impl<'a> RootKeys {
     /// because this creates a temporary that has the wrong lifetime, and thus, we have to embed that terrible piece
     /// of unmaintainable syntax all over the place in the code below to solve this problem.
     pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
-        self.xns_interlock();
+        self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
 
         let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
@@ -947,7 +962,7 @@ impl<'a> RootKeys {
 
     pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, provision_bbram: bool) -> Result<(), RootkeyResult> {
         // make sure the system is sane
-        self.xns_interlock();
+        self.xous_init_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
 
         // setup Ux
@@ -1170,7 +1185,7 @@ impl<'a> RootKeys {
 
     pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
         // make sure the system is sane
-        self.xns_interlock();
+        self.xous_init_interlock();
 
         // setup Ux
         let mut progress_action = Slider::new(main_cid, Opcode::UxGutter.to_u32().unwrap(),
