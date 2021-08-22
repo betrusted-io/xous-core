@@ -239,11 +239,13 @@ mod implementation {
             kbd.new_state.clear();
             for r in 0..KBD_ROWS {
                 let cols: u16 = kbd_getrow(kbd, r as u8);
-                for c in 0..KBD_COLS {
-                    if (cols & (1 << c)) != 0 {
-                        kbd.new_state.insert(
-                            RowCol{r: r as _, c: c as _}
-                        );
+                if cols != 0 {
+                    for c in 0..KBD_COLS {
+                        if (cols & (1 << c)) != 0 {
+                            kbd.new_state.insert(
+                                RowCol{r: r as _, c: c as _}
+                            );
+                        }
                     }
                 }
             }
@@ -352,6 +354,14 @@ mod implementation {
             self.chord_captured = false;
             self.chord_active = 0;
             self.chord = [[false; KBD_COLS]; KBD_ROWS];
+
+            // ensure interrupts are re-enabled -- this could /shouldn't/ be necessary but we're having
+            // some strange resume behavior, trying to see if this resolves it.
+            self.csr.wo(utra::keyboard::EV_PENDING, self.csr.r(utra::keyboard::EV_PENDING));
+            self.csr.wo(utra::keyboard::EV_ENABLE,
+                self.csr.ms(utra::keyboard::EV_ENABLE_KEYPRESSED, 1) |
+                self.csr.ms(utra::keyboard::EV_ENABLE_INJECT, 1)
+            );
         }
 
         pub(crate) fn set_map(&mut self, map: KeyMap) {
@@ -369,12 +379,35 @@ mod implementation {
             self.rate
         }
 
+        pub(crate) fn poll(&mut self) {
+            // disable the interrupt while we're polling, to avoid a race condition...
+            self.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 0);
+            self.new_state.clear();
+            for r in 0..KBD_ROWS {
+                let cols: u16 = kbd_getrow(self, r as u8);
+                if cols != 0 {
+                    for c in 0..KBD_COLS {
+                        if (cols & (1 << c)) != 0 {
+                            self.new_state.insert(
+                                RowCol{r: r as _, c: c as _}
+                            );
+                        }
+                    }
+                }
+            }
+            if self.csr.rf(utra::keyboard::EV_ENABLE_KEYPRESSED) != 0 {
+                log::warn!("kbd interrupt was set when we didn't expect it, clearing anyways...");
+                self.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1);
+            }
+            self.csr.wfo(utra::keyboard::EV_ENABLE_KEYPRESSED, 1);
+        }
+
         pub(crate) fn update(&mut self) -> KeyRawStates {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
             // for keys that are pressed & held.
-            log::trace!("update new_state:  {:?}", self.new_state);
-            log::trace!("update last_state: {:?}", self.last_state);
+            log::info!("update new_state:  {:?}", self.new_state);
+            log::info!("update last_state: {:?}", self.last_state);
 
             let mut krs = KeyRawStates::new();
 
@@ -394,7 +427,7 @@ mod implementation {
                 self.last_state.insert(rc);
             }
 
-            log::trace!("krs: {:?}", krs);
+            log::info!("krs: {:?}", krs);
             krs
         }
 
@@ -816,6 +849,10 @@ fn xmain() -> ! {
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns).unwrap();
+    {
+        log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
+        llio.wfi_override(true).unwrap();
+    }
 
     log::trace!("starting main loop");
     loop {
@@ -913,6 +950,7 @@ fn xmain() -> ! {
                     log::info!("keydowns hold");
                     // fire a second call to check if we should transition to a repeating state
                     ticktimer.sleep_ms(kbd.get_repeat_check_interval() as _).unwrap();
+                    kbd.poll();
                     xous::send_message(self_cid,
                         xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)
                     ).unwrap();

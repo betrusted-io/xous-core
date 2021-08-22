@@ -246,7 +246,7 @@ mod implementation {
             // add a short pause so we can capture KPs from other processes on resume
             // this could cause some problems if there are llio-urgent activities to run after resume
             // it's ok to remove this -- it's just to help capture debug logs on resume.
-            self.ticktimer.sleep_ms(500).unwrap();
+            self.ticktimer.sleep_ms(10).unwrap();
             self.set_uart_mux(UartType::from(self.uartmux_cache as usize));
         }
         #[allow(dead_code)]
@@ -291,7 +291,12 @@ mod implementation {
                     // during a critical operation like SPINOR flashing because we swapped consoles at a bad time. Should be
                     // very rare and only affect devs...
                     log::warn!("unsafe re-enabling WFI -- if you issued this command at a bad time, could have side effects");
-                    self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+                    if false {
+                        self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
+                    } else {
+                        log::warn!("sticking WFI override to 1 for keyboard debug, remove this path when done!");
+                        self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 1);
+                    }
                     self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 1)
                 },
                 UartType::Application => {
