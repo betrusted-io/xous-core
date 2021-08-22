@@ -149,7 +149,9 @@ mod implementation {
             engine.susres.push(RegOrField::Reg(utra::engine::MPSTART), None);
             engine.susres.push(RegOrField::Reg(utra::engine::MPLEN), None);
             engine.susres.push_fixed_value(RegOrField::Reg(utra::engine::EV_PENDING), 0xFFFF_FFFF);
-            engine.susres.push(RegOrField::Reg(utra::engine::EV_ENABLE), None);
+
+            // manually handle event enable, because the bootloader could have messed with our current state
+            // engine.susres.push(RegOrField::Reg(utra::engine::EV_ENABLE), None);
 
             // engine.susres.push(RegOrField::Reg(utra::engine::CONTROL), None); // don't push this, we need to manually coordinate `mpcresume` before resuming
 
@@ -178,6 +180,9 @@ mod implementation {
             } else {
                 self.mpc_resume = None;
             }
+            // disable interrupts
+            self.csr.wo(utra::engine::EV_ENABLE, 0);
+
             // accessing ucode & rf requires clocks to be on
             let orig_state = if self.csr.rf(utra::engine::POWER_ON) == 0 {
                 self.csr.rmwf(utra::engine::POWER_ON, 1);
@@ -224,9 +229,18 @@ mod implementation {
                 self.csr.rmwf(utra::engine::POWER_ON, 0);
             }
 
+            log::info!("orig_state: {:?}", orig_state);
+            // clear any droppings from the bootloader, and then re-enable
+            self.csr.wo(utra::engine::EV_PENDING, 0xFFFF_FFFF);
+            self.csr.wo(utra::engine::EV_ENABLE,
+                self.csr.ms(utra::engine::EV_ENABLE_FINISHED, 1) |
+                self.csr.ms(utra::engine::EV_ENABLE_ILLEGAL_OPCODE, 1)
+            );
+
             // in the case of a resume from pause, we need to specify the PC to resume from
             // clear the pause
             if let Some(mpc) = self.mpc_resume {
+                log::info!("suspended during engine25519 transaction, resuming...");
                 if self.csr.rf(utra::engine::POWER_PAUSE_REQ) != 1 {
                     log::error!("resuming from an unexpected state: we had mpc of {} set, but pause was not requested!", mpc);
                     self.clean_resume = Some(false);
@@ -249,6 +263,7 @@ mod implementation {
                     self.csr.rmwf(utra::engine::POWER_PAUSE_REQ, 0);
                 }
             } else {
+                log::info!("engine25519 simple resume");
                 // if we didn't have a resume PC set, we weren't paused, so we just continue on our merry way.
                 self.clean_resume = Some(true);
             }
