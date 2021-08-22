@@ -133,8 +133,8 @@ class PrecursorUsb:
                 exit(1)
 
     def ping_wdt(self):
-        self.poke(self.register('wdt_watchdog'), 0x600d, display=False)
-        self.poke(self.register('wdt_watchdog'), 0xc0de, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
 
     def spinor_command_value(self, exec=0, lock_reads=0, cmd_code=0, dummy_cycles=0, data_words=0, has_arg=0):
         return ((exec & 1) << 1 |
@@ -350,10 +350,10 @@ def main():
         "-s", "--staging", required=False, help="Stage an update to apply", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
-        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
+        "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-xous-elf/release/loader.bin'
     )
     parser.add_argument(
-        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-none-elf/release/xous.img'
+        "-k", "--kernel", required=False, help="Kernel", type=str, nargs='?', metavar=('kernel file'), const='../target/riscv32imac-unknown-xous-elf/release/xous.img'
     )
     parser.add_argument(
         "-e", "--ec", required=False, help="EC gateware", type=str, nargs='?', metavar=('EC gateware package'), const='ec_fw.bin'
