@@ -116,7 +116,7 @@ impl ContextManager {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         // hook the keyboard event server and have it forward keys to our local main loop
         let kbd = keyboard::Keyboard::new(&xns).expect("can't connect to KBD");
-        kbd.register_listener(api::SERVER_NAME_GAM, Some(Opcode::KeyboardEvent as u32), None).expect("couldn't register for keyboard events");
+        kbd.register_listener(api::SERVER_NAME_GAM, Opcode::KeyboardEvent as usize);
 
         info!("acquiring connection to IMEF...");
         let mut imef = ime_plugin_api::ImeFrontEnd::new(&xns).expect("Couldn't connect to IME front end");

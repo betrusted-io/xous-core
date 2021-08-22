@@ -12,121 +12,6 @@ pub struct ScanCode {
     pub alt: Option<char>,
 }
 
-// maximum number of key events to track simultaneously.
-pub const MAX_KEYS: usize = 16;
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default, Copy, Clone, PartialEq, Eq)]
-pub struct RowCol {
-    pub r: u8,
-    pub c: u8,
-}
-/// RowColVec is implemented here instead of using heapless::Vec because we can't
-/// derive the rkyv traits on heapless::Vec. By making a janky vector type here
-/// our IPC doesn't rely on dangerous serialization techniques like casting to
-/// raw u8 slices which rely on the implicit shape of packed structures...
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub struct RowColVec {
-    storage: [Option<RowCol>; MAX_KEYS],
-    iter: usize,
-}
-impl RowColVec {
-    pub fn new() -> Self {
-        RowColVec {
-            storage: [None; MAX_KEYS],
-            iter: 0
-        }
-    }
-    pub fn clear(&mut self) {
-        self.storage = [None; MAX_KEYS];
-        self.iter = 0;
-    }
-    pub fn len(&self) -> usize {
-        return MAX_KEYS
-    }
-    pub fn get(&self, i: usize) -> Option<RowCol> {
-        if i < MAX_KEYS {
-            self.storage[i]
-        } else {
-            None
-        }
-    }
-    pub fn set(&mut self, i: usize, data: Option<RowCol>) {
-        if i < MAX_KEYS {
-            self.storage[i]= data;
-        }
-    }
-    // used by the interrupt handler, we can't deal with errors anyways
-    pub fn add_unchecked(&mut self, key: RowCol) {
-        for s in self.storage.iter_mut() {
-            if *s == None {
-                *s = Some(key);
-                break;
-            }
-        }
-    }
-    // returns True if key is unique and added; False if already exists in storage
-    pub fn add_rc(&mut self, key: RowCol) -> Result<bool, xous::Error> {
-        // first, check if the rc is in the array
-        for &s in self.storage.iter() {
-            if let Some(rc) = s {
-                if rc == key {
-                    return Ok(false)
-                }
-            }
-        }
-        // if we got here, rc was not in the arary
-        let mut added = false;
-        for s in self.storage.iter_mut() {
-            if *s == None {
-                *s = Some(key);
-                added = true;
-                break;
-            }
-        }
-        if added {
-            Ok(true)
-        } else {
-            Err(xous::Error::OutOfMemory)
-        }
-    }
-    // returns True if the key was removed; false if the key did not exist already
-    pub fn remove_rc(&mut self, key: RowCol) -> bool {
-        for s in self.storage.iter_mut() {
-            if let Some(rc) = s {
-                if *rc == key {
-                    *s = None;
-                    return true
-                }
-            }
-        }
-        return false
-    }
-    pub fn contains(&self, key: RowCol) -> bool {
-        for s in self.storage.iter() {
-            if let Some(rc) = s {
-                if *rc == key {
-                    return true
-                }
-            }
-        }
-        false
-    }
-}
-
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
-pub struct KeyRawStates {
-    pub keydowns: RowColVec,
-    pub keyups: RowColVec,
-}
-impl KeyRawStates {
-    pub fn new() -> Self {
-        KeyRawStates {
-            keydowns: RowColVec::new(),
-            keyups: RowColVec::new(),
-        }
-    }
-}
-
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub enum KeyMap {
     Qwerty,
@@ -194,6 +79,5 @@ pub(crate) enum Opcode {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct KeyboardRegistration {
     pub server_name: xous_ipc::String::<64>,
-    pub listener_op_id: Option<u32>,
-    pub rawlistener_op_id: Option<u32>,
+    pub listener_op_id: usize,
 }

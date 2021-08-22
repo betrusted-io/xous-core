@@ -21,21 +21,14 @@ impl Keyboard {
           })
     }
 
-    pub fn register_listener(&self,
-        // the public name of the destination server. The calling server must guarantee it has sufficient connection priveleges with xous-names to accept the keyboard's incoming connection.
-        server_name: &str,
-        // if Some(u32), the enum Opcode ID of the command for the incoming scancodes (adjusted already for keyup/down, repeat, shift, etc.)
-        listener_id: Option<u32>,
-        // if Some(u32), the enum Opcode ID of the command for incoming raw scancodes (just raw row/col locations and up/down)
-        raw_listener_id: Option<u32>) -> Result<(), xous::Error> {
-
-        let registration = KeyboardRegistration {
+    pub fn register_listener(&self, server_name: &str, action_opcode: usize) {
+        let kr = KeyboardRegistration {
             server_name: String::<64>::from_str(server_name),
-            listener_op_id: listener_id,
-            rawlistener_op_id: raw_listener_id,
+            listener_op_id: action_opcode
         };
-        let buf = Buffer::into_buf(registration).or(Err(xous::Error::InternalError))?;
-        buf.lend(self.conn, Opcode::RegisterListener.to_u32().unwrap()).map(|_| ())
+        let buf = Buffer::into_buf(kr).unwrap();
+        buf.lend(self.conn, Opcode::RegisterListener.to_u32().unwrap())
+        .expect("couldn't register listener");
     }
 
     pub fn set_vibe(&self, enable: bool) -> Result<(), xous::Error> {

@@ -8,8 +8,28 @@ use log::info;
 
 use num_traits::*;
 use xous_ipc::Buffer;
-use api::{Opcode, KeyRawStates, KeyboardRegistration};
 use xous::{CID, msg_scalar_unpack};
+
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct RowCol {
+    pub r: u8,
+    pub c: u8,
+}
+
+#[derive(Debug)]
+pub (crate) struct KeyRawStates {
+    pub keydowns: Vec::<RowCol>,
+    pub keyups: Vec::<RowCol>,
+}
+impl KeyRawStates {
+    pub fn new() -> Self {
+        KeyRawStates {
+            keydowns: Vec::with_capacity(16),
+            keyups: Vec::with_capacity(16),
+        }
+    }
+}
+
 
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
@@ -161,24 +181,25 @@ fn map_qwerty(code: RowCol) -> ScanCode {
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod implementation {
     use utralib::generated::*;
-    use crate::api::*;
+    use crate::{RowCol, KeyRawStates, api::*};
     use crate::{map_dvorak, map_qwerty};
     use ticktimer_server::Ticktimer;
     use xous::CID;
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
+    use std::collections::HashSet;
 
     /// note: the code is structured to use at most 16 rows or 16 cols
     const KBD_ROWS: usize = 9;
     const KBD_COLS: usize = 10;
 
-    pub struct Keyboard {
+    pub(crate) struct Keyboard {
         conn: CID,
         csr: utralib::CSR<u32>,
         /// where the interrupt handler copies the new state
-        new_state: RowColVec,
+        new_state: HashSet::<RowCol>,
         /// remember the last key states
-        last_state: RowColVec,
+        last_state: HashSet::<RowCol>,
         /// connection to the timer for real-time events
         ticktimer: Ticktimer,
         /// mapping for ScanCode translation
@@ -213,7 +234,19 @@ mod implementation {
     fn handle_kbd(_irq_no: usize, arg: *mut usize) {
         let kbd = unsafe { &mut *(arg as *mut Keyboard) };
         if kbd.csr.rf(utra::keyboard::EV_PENDING_KEYPRESSED) != 0 {
-            kbd.new_state = kbd.kbd_getcodes();
+            // scan the entire key matrix and return the list of keys that are currently
+            // pressed as key codes. If we missed an interrupt, then we missed the key...
+            kbd.new_state.clear();
+            for r in 0..KBD_ROWS {
+                let cols: u16 = kbd_getrow(kbd, r as u8);
+                for c in 0..KBD_COLS {
+                    if (cols & (1 << c)) != 0 {
+                        kbd.new_state.insert(
+                            RowCol{r: r as _, c: c as _}
+                        );
+                    }
+                }
+            }
             kbd.csr.wfo(utra::keyboard::EV_PENDING_KEYPRESSED, 1); // clear the interrupt
 
             xous::try_send_message(kbd.conn,
@@ -227,9 +260,26 @@ mod implementation {
             ).ok();
         }
     }
+    /// get the column activation contents of the given row
+    /// row is coded as a binary number, so the result of kbd_rowchange has to be decoded from a binary
+    /// vector of rows to a set of numbers prior to using this function
+    fn kbd_getrow(kbd: &Keyboard, row: u8) -> u16 {
+        match row {
+            0 => kbd.csr.rf(utra::keyboard::ROW0DAT_ROW0DAT) as u16,
+            1 => kbd.csr.rf(utra::keyboard::ROW1DAT_ROW1DAT) as u16,
+            2 => kbd.csr.rf(utra::keyboard::ROW2DAT_ROW2DAT) as u16,
+            3 => kbd.csr.rf(utra::keyboard::ROW3DAT_ROW3DAT) as u16,
+            4 => kbd.csr.rf(utra::keyboard::ROW4DAT_ROW4DAT) as u16,
+            5 => kbd.csr.rf(utra::keyboard::ROW5DAT_ROW5DAT) as u16,
+            6 => kbd.csr.rf(utra::keyboard::ROW6DAT_ROW6DAT) as u16,
+            7 => kbd.csr.rf(utra::keyboard::ROW7DAT_ROW7DAT) as u16,
+            8 => kbd.csr.rf(utra::keyboard::ROW8DAT_ROW8DAT) as u16,
+            _ => 0
+        }
+    }
 
     impl Keyboard {
-        pub fn new(sid: xous::SID) -> Keyboard {
+        pub(crate) fn new(sid: xous::SID) -> Keyboard {
             let csr = xous::syscall::map_memory(
                 xous::MemoryAddress::new(utra::keyboard::HW_KEYBOARD_BASE),
                 None,
@@ -244,8 +294,8 @@ mod implementation {
             let mut kbd = Keyboard {
                 conn: xous::connect(sid).unwrap(),
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                new_state: RowColVec::new(),
-                last_state: RowColVec::new(),
+                new_state: HashSet::with_capacity(16), // pre-allocate space since this has to work in an interrupt context
+                last_state: HashSet::with_capacity(16),
                 ticktimer,
                 map: KeyMap::Qwerty,
                 delay: 500,
@@ -283,11 +333,11 @@ mod implementation {
             kbd
         }
 
-        pub fn suspend(&mut self) {
+        pub(crate) fn suspend(&mut self) {
             self.susres.suspend();
             self.csr.wo(utra::keyboard::EV_ENABLE, 0);
         }
-        pub fn resume(&mut self) {
+        pub(crate) fn resume(&mut self) {
             self.susres.resume();
 
             // clear the keyboard state vectors -- actually, if a key was being pressed at the time of suspend
@@ -304,110 +354,48 @@ mod implementation {
             self.chord = [[false; KBD_COLS]; KBD_ROWS];
         }
 
-        pub fn set_map(&mut self, map: KeyMap) {
+        pub(crate) fn set_map(&mut self, map: KeyMap) {
             self.map = map;
         }
-        pub fn get_map(&self) -> KeyMap {self.map}
-        pub fn set_repeat(&mut self, rate: u32, delay: u32) {
+        pub(crate) fn get_map(&self) -> KeyMap {self.map}
+        pub(crate) fn set_repeat(&mut self, rate: u32, delay: u32) {
             self.rate = rate;
             self.delay = delay;
         }
-        pub fn set_chord_interval(&mut self, delay: u32) {
+        pub(crate) fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
         }
 
-
-        /// get the column activation contents of the given row
-        /// row is coded as a binary number, so the result of kbd_rowchange has to be decoded from a binary
-        /// vector of rows to a set of numbers prior to using this function
-        fn kbd_getrow(&self, row: u8) -> u16 {
-            match row {
-                0 => self.csr.rf(utra::keyboard::ROW0DAT_ROW0DAT) as u16,
-                1 => self.csr.rf(utra::keyboard::ROW1DAT_ROW1DAT) as u16,
-                2 => self.csr.rf(utra::keyboard::ROW2DAT_ROW2DAT) as u16,
-                3 => self.csr.rf(utra::keyboard::ROW3DAT_ROW3DAT) as u16,
-                4 => self.csr.rf(utra::keyboard::ROW4DAT_ROW4DAT) as u16,
-                5 => self.csr.rf(utra::keyboard::ROW5DAT_ROW5DAT) as u16,
-                6 => self.csr.rf(utra::keyboard::ROW6DAT_ROW6DAT) as u16,
-                7 => self.csr.rf(utra::keyboard::ROW7DAT_ROW7DAT) as u16,
-                8 => self.csr.rf(utra::keyboard::ROW8DAT_ROW8DAT) as u16,
-                _ => 0
-            }
-        }
-
-        /// scan the entire key matrix and return the list of keys that are currently
-        /// pressed as key codes. Return format is an array of option-wrapped RowCol
-        /// which is structured as (row : col), where each of row and col are a u8.
-        /// Option "none" means no keys were pressed during this scan.
-        /// This has O(N^2) time growth as number of keys are pressed; but, typically,
-        /// it's rare that more than two keys are pressed at once, and most of the time, none are pressed.
-        /// The 16-element limit is more allowing for an extremely likely worst case. On average, this will perform
-        /// as well as an O(N) heapless Vec, but comes with the benefit of getting rid of that dependency.
-        fn kbd_getcodes(&self) -> RowColVec {
-            let mut keys = RowColVec::new();
-
-            for r in 0..KBD_ROWS {
-                let cols: u16 = self.kbd_getrow(r as u8);
-                for c in 0..KBD_COLS {
-                    if (cols & (1 << c)) != 0 {
-                        // note: we could implement a check to flag if more than 16 keys were pressed within a single
-                        // debounce quanta (5ms) at once...
-                        // this is an unlikely scenario, so we're just going to count on ample space being the solution
-                        // to this problem
-                        keys.add_unchecked(RowCol{r: r as _, c: c as _});
-                    }
-                }
-            }
-            keys
-        }
-
-        pub fn update(&mut self) -> KeyRawStates {
+        pub(crate) fn update(&mut self) -> KeyRawStates {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
             // for keys that are pressed & held.
+            log::trace!("update new_state:  {:?}", self.new_state);
+            log::trace!("update last_state: {:?}", self.last_state);
 
-            if log::log_enabled!(log::Level::Trace) {
-                log::trace!("pending detected");
-                log::trace!("{:?}", self.new_state);
-            }
-            let new_codes = self.new_state;
+            let mut krs = KeyRawStates::new();
 
-            let mut keydowns = RowColVec::new();
-            let mut keyups = RowColVec::new();
-
-            // check to see if there are codes in the last state that aren't in the current codes
-            for i in 0..self.last_state.len() {
-                if let Some(lastcode) = self.last_state.get(i) {
-                    if !new_codes.contains(lastcode) {
-                        keyups.add_rc(lastcode).unwrap();
-                        self.last_state.set(i, None);
-                    }
-                }
-            }
-            // check to see if the codes in the current set aren't already in the current codes
-            for i in 0..new_codes.len() {
-                if let Some(rc) = new_codes.get(i) {
-                    match self.last_state.add_rc(rc) {
-                        Ok(true) => {
-                            keydowns.add_rc(rc).unwrap();
-                        },
-                        Ok(false) => {
-                            // already in the array, don't report anything as it's not a change
-                        },
-                        _ => log::error!("out of key storage state in keyboard update")
-                    }
-                }
+            // compute the key-ups: this would be codes that are in the last_state, but not in the incoming
+            // new_state
+            for &rc in self.last_state.difference(&self.new_state) {
+                krs.keyups.push(rc);
             }
 
-            let krs = KeyRawStates {
-                keydowns,
-                keyups,
-            };
+            // compute key-downs: codes that are in the new_state, but not in last_state
+            for &rc in self.new_state.difference(&self.last_state) {
+                krs.keydowns.push(rc);
+            }
 
+            self.last_state.clear();
+            for &rc in self.new_state.iter() {
+                self.last_state.insert(rc);
+            }
+
+            log::trace!("krs: {:?}", krs);
             krs
         }
 
-        pub fn track_chord(&mut self, keyups: Option<Vec<RowCol>>, keydowns: Option<Vec<RowCol>>) -> Vec<char> {
+        pub(crate) fn track_chord(&mut self, krs: &KeyRawStates) -> Vec<char> {
             /*
             Chording algorithm:
 
@@ -419,11 +407,9 @@ mod implementation {
             6. Return scancodes
              */
             let was_idle = self.chord_active == 0;
-            if let Some(kds) = &keydowns {
-                for &rc in kds.iter() {
-                    self.chord[rc.r as usize][rc.c as usize] = true;
-                    self.chord_active += 1;
-                }
+            for rc in krs.keydowns.iter() {
+                self.chord[rc.r as usize][rc.c as usize] = true;
+                self.chord_active += 1;
             }
             log::trace!("self.chord: {:?}", self.chord);
             let mut keystates: Vec<char> = Vec::new();
@@ -526,14 +512,12 @@ mod implementation {
                 log::trace!("up {}, left {}, right {}, down, {}, center, {}, space {}, esc {}, func {}",
                     up, left, right, down, center, space, esc, func);
             }
-            if let Some(kus) = &keyups {
-                for &rc in kus.iter() {
-                    self.chord[rc.r as usize][rc.c as usize] = false;
-                    if self.chord_active > 0 {
-                        self.chord_active -= 1;
-                    } else {
-                        log::error!("received more keyups than we had keydowns!")
-                    }
+            for rc in krs.keyups.iter() {
+                self.chord[rc.r as usize][rc.c as usize] = false;
+                if self.chord_active > 0 {
+                    self.chord_active -= 1;
+                } else {
+                    log::error!("received more keyups than we had keydowns!")
                 }
             }
             if self.chord_active == 0 {
@@ -543,7 +527,7 @@ mod implementation {
             keystates
         }
 
-        pub fn track_keys(&mut self, keyups: Option<Vec<RowCol>>, keydowns: Option<Vec<RowCol>>) -> Vec<char> {
+        pub(crate) fn track_keys(&mut self, krs: &KeyRawStates) -> Vec<char> {
             /*
               "conventional" keyboard algorithm. The goals of this are to differentiate
               the cases of "shift", "alt", and "hold".
@@ -557,97 +541,89 @@ mod implementation {
             let mut ks: Vec<char> = Vec::new();
 
             // first check for shift and alt keys
-            if let Some(kds) = &keydowns {
-                for &rc in kds.iter() {
-                    match self.map {
-                        KeyMap::Azerty => {
-                            if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
-                                if self.alt_up == false {
-                                    self.alt_down = true;
-                                } else {
-                                    self.alt_up = false;
-                                }
-                            } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
-                                if self.shift_up == false {
-                                    self.shift_down = true;
-                                } else {
-                                    self.shift_up = false;
-                                }
+            for rc in krs.keydowns.iter() {
+                match self.map {
+                    KeyMap::Azerty => {
+                        if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
+                            if self.alt_up == false {
+                                self.alt_down = true;
+                            } else {
+                                self.alt_up = false;
                             }
-                        },
-                        _ => { // the rest just have one color of shift
-                            if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
-                                // if the shift key was tapped twice, remove the shift modifier
-                                if self.shift_up == false {
-                                    //info!("shift down true");
-                                    self.shift_down = true;
-                                } else {
-                                    //info!("shift up false");
-                                    self.shift_up = false;
-                                }
+                        } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
+                            if self.shift_up == false {
+                                self.shift_down = true;
+                            } else {
+                                self.shift_up = false;
+                            }
+                        }
+                    },
+                    _ => { // the rest just have one color of shift
+                        if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
+                            // if the shift key was tapped twice, remove the shift modifier
+                            if self.shift_up == false {
+                                //info!("shift down true");
+                                self.shift_down = true;
+                            } else {
+                                //info!("shift up false");
+                                self.shift_up = false;
                             }
                         }
                     }
                 }
             }
-            let keyups_noshift: Option<Vec<RowCol>> =
-                if let Some(kus) = &keyups {
-                    let mut ku_ns: Vec<RowCol> = Vec::new();
-                    for &rc in kus.iter() {
-                        match self.map {
-                            KeyMap::Azerty => {
-                                if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
-                                    if self.alt_down {
-                                        self.alt_up = true;
-                                    }
-                                    self.alt_down = false;
-                                } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
-                                    if self.shift_down {
-                                        self.shift_up = true;
-                                    }
-                                    self.shift_down = false;
-                                } else {
-                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _});
-                                }
-                            },
-                            _ => { // the rest just have one color of shift
-                                if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
-                                    // only set the shift-up if we didn't previously clear it with a double-tap of shift
-                                    if self.shift_down {
-                                        //info!("shift up true");
-                                        self.shift_up = true;
-                                    }
-                                    //info!("shift down false");
-                                    self.shift_down = false;
-                                } else {
-                                    //info!("adding non-shift entry {:?}", rc);
-                                    ku_ns.push(RowCol{r: rc.r as _, c: rc.c as _});
-                                }
+            let mut keyups_noshift: Vec::<RowCol> = Vec::new();
+            for &rc in krs.keyups.iter() {
+                match self.map {
+                    KeyMap::Azerty => {
+                        if (rc.r == 8) && (rc.c == 5) { // left shift (orange)
+                            if self.alt_down {
+                                self.alt_up = true;
                             }
+                            self.alt_down = false;
+                        } else if (rc.r == 8) && (rc.c == 9) { // right shift (yellow)
+                            if self.shift_down {
+                                self.shift_up = true;
+                            }
+                            self.shift_down = false;
+                        } else {
+                            keyups_noshift.push(RowCol{r: rc.r as _, c: rc.c as _});
+                        }
+                    },
+                    _ => { // the rest just have one color of shift
+                        if ((rc.r == 8) && (rc.c == 5)) || ((rc.r == 8) && (rc.c == 9)) {
+                            // only set the shift-up if we didn't previously clear it with a double-tap of shift
+                            if self.shift_down {
+                                //info!("shift up true");
+                                self.shift_up = true;
+                            }
+                            //info!("shift down false");
+                            self.shift_down = false;
+                        } else {
+                            //info!("adding non-shift entry {:?}", rc);
+                            keyups_noshift.push(RowCol{r: rc.r as _, c: rc.c as _});
                         }
                     }
-                    Some(ku_ns)
-                } else {
-                    None
-                };
+                }
+            }
 
             // interpret keys in the context of the shift/alt modifiers
-            if let Some(kds) = &keydowns {
+            if !krs.keydowns.is_empty() {
                 self.chord_timestamp = self.ticktimer.elapsed_ms();
-                // if more than one is held, the key that gets picked for the repeat function is arbitrary!
-                for &rc in kds.iter() {
-                    let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty(rc),
-                        KeyMap::Dvorak => map_dvorak(rc),
-                        _ => ScanCode {key: None, shift: None, hold: None, alt: None},
-                    };
-                    if code.hold == None { // if there isn't a pre-defined meaning if the key is held, it's a repeating key
-                        if let Some(key) = code.key {
-                            self.repeating_key = Some(key);
-                        }
+            }
+            for &rc in krs.keydowns.iter() {
+                let code = match self.map {
+                    KeyMap::Qwerty => map_qwerty(rc),
+                    KeyMap::Dvorak => map_dvorak(rc),
+                    _ => ScanCode {key: None, shift: None, hold: None, alt: None},
+                };
+                if code.hold == None { // if there isn't a pre-defined meaning if the key is held, it's a repeating key
+                    if let Some(key) = code.key {
+                        self.repeating_key = Some(key);
                     }
                 }
             }
+
             let now = self.ticktimer.elapsed_ms();
             let hold: bool;
             if (now - self.chord_timestamp) >= self.delay as u64 {
@@ -659,75 +635,73 @@ mod implementation {
                 hold = false;
             }
 
-            if let Some(kus) = &keyups_noshift {
-                for &rc in kus.iter() {
-                    // info!("interpreting keyups_noshift entry {:?}", rc);
-                    let code = match self.map {
-                        KeyMap::Qwerty => map_qwerty(rc),
-                        KeyMap::Dvorak => map_dvorak(rc),
-                        _ => ScanCode {key: None, shift: None, hold: None, alt: None},
-                    };
-                    // delete the key repeat if there is one
-                    if code.hold == None {
-                        if let Some(key) = code.key {
-                            if let Some(rk) = self.repeating_key {
-                                if rk == key {
-                                    self.repeating_key = None;
-                                }
+            for &rc in keyups_noshift.iter() {
+                // info!("interpreting keyups_noshift entry {:?}", rc);
+                let code = match self.map {
+                    KeyMap::Qwerty => map_qwerty(rc),
+                    KeyMap::Dvorak => map_dvorak(rc),
+                    _ => ScanCode {key: None, shift: None, hold: None, alt: None},
+                };
+                // delete the key repeat if there is one
+                if code.hold == None {
+                    if let Some(key) = code.key {
+                        if let Some(rk) = self.repeating_key {
+                            if rk == key {
+                                self.repeating_key = None;
                             }
                         }
                     }
+                }
 
-                    match self.map {
-                        KeyMap::Azerty => {
-                            if self.shift_down || self.shift_up {
-                                if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode);
-                                } else if let Some(keycode) = code.key {
-                                    ks.push(keycode);
-                                }
-                                self.shift_down = false;
-                                self.shift_up = false;
-                            } else if self.alt_down || self.alt_up {
-                                if let Some(altcode) = code.alt {
-                                    ks.push(altcode);
-                                } else if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode);
-                                } else if let Some(keycode) = code.key {
-                                    ks.push(keycode);
-                                }
-                                self.alt_down = false;
-                                self.alt_up = false;
-                            } else if hold {
-                                if let Some(holdcode) = code.hold {
-                                    ks.push(holdcode);
-                                }
-                            } else {
-                                if let Some(keycode) = code.key {
-                                    ks.push(keycode);
-                                }
+                match self.map {
+                    KeyMap::Azerty => {
+                        if self.shift_down || self.shift_up {
+                            if let Some(shiftcode) = code.shift {
+                                ks.push(shiftcode);
+                            } else if let Some(keycode) = code.key {
+                                ks.push(keycode);
                             }
-                        },
-                        _ => {
-                            if self.shift_down || self.alt_down || self.shift_up || self.alt_up {
-                                if let Some(shiftcode) = code.shift {
-                                    ks.push(shiftcode);
-                                } else if let Some(keycode) = code.key {
-                                    ks.push(keycode);
-                                }
-                                self.shift_down = false;
-                                self.alt_down = false;
-                                self.shift_up = false;
-                                self.alt_up = false;
-                            } else if hold {
-                                if let Some(holdcode) = code.hold {
-                                    ks.push(holdcode);
-                                }
-                            } else {
-                                if let Some(keycode) = code.key {
-                                    // info!("appeding normal key '{}'", keycode);
-                                    ks.push(keycode);
-                                }
+                            self.shift_down = false;
+                            self.shift_up = false;
+                        } else if self.alt_down || self.alt_up {
+                            if let Some(altcode) = code.alt {
+                                ks.push(altcode);
+                            } else if let Some(shiftcode) = code.shift {
+                                ks.push(shiftcode);
+                            } else if let Some(keycode) = code.key {
+                                ks.push(keycode);
+                            }
+                            self.alt_down = false;
+                            self.alt_up = false;
+                        } else if hold {
+                            if let Some(holdcode) = code.hold {
+                                ks.push(holdcode);
+                            }
+                        } else {
+                            if let Some(keycode) = code.key {
+                                ks.push(keycode);
+                            }
+                        }
+                    },
+                    _ => {
+                        if self.shift_down || self.alt_down || self.shift_up || self.alt_up {
+                            if let Some(shiftcode) = code.shift {
+                                ks.push(shiftcode);
+                            } else if let Some(keycode) = code.key {
+                                ks.push(keycode);
+                            }
+                            self.shift_down = false;
+                            self.alt_down = false;
+                            self.shift_up = false;
+                            self.alt_up = false;
+                        } else if hold {
+                            if let Some(holdcode) = code.hold {
+                                ks.push(holdcode);
+                            }
+                        } else {
+                            if let Some(keycode) = code.key {
+                                // info!("appeding normal key '{}'", keycode);
+                                ks.push(keycode);
                             }
                         }
                     }
@@ -750,11 +724,10 @@ mod implementation {
 // a stub to try to avoid breaking hosted mode for as long as possible.
 #[cfg(not(any(target_os = "none", target_os = "xous")))]
 mod implementation {
-    use crate::api::*;
-    //use crate::{map_dvorak, map_qwerty};
+    use crate::*;
 
     #[allow(dead_code)]
-    pub struct Keyboard {
+    pub(crate) struct Keyboard {
         cid: xous::CID,
         map: KeyMap,
         rate: u32,
@@ -786,11 +759,11 @@ mod implementation {
             KeyRawStates::new()
         }
 
-        pub fn track_chord(&mut self, _keyups: Option<Vec<RowCol>>, _keydowns: Option<Vec<RowCol>>) -> Vec<char> {
+        pub fn track_chord(&mut self, _krs: &KeyRawStates) -> Vec<char> {
             Vec::new()
         }
 
-        pub fn track_keys(&mut self, _keyups: Option<Vec<RowCol>>, _keydowns: Option<Vec<RowCol>>) -> Vec<char> {
+        pub fn track_keys(&mut self, _rs: &KeyRawStates) -> Vec<char> {
             Vec::new()
         }
 
@@ -801,24 +774,6 @@ mod implementation {
 
         pub fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
-        }
-    }
-}
-
-// for now we restrict to 1: we delegate authentication to the primary listener, that is, the GAM.
-const MAX_LISTENERS: usize = 1;
-
-fn send_rawstates(cb_conns: &mut [Option<(CID, u32)>; MAX_LISTENERS], krs: &KeyRawStates) {
-    for maybe_conn in cb_conns.iter_mut() {
-        if let Some((conn, opcode)) = maybe_conn {
-            let buf = Buffer::into_buf(*krs).unwrap();
-            match buf.lend(*conn, *opcode) {
-                Err(xous::Error::ServerNotFound) => {
-                    *maybe_conn = None
-                },
-                Ok(xous::Result::Ok) => {},
-                _ => panic!("unhandled error or result in callback processing"),
-            }
         }
     }
 }
@@ -847,11 +802,8 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
-    // reduce connection count to 1, but leave the option to add more later
-    // for now, we only expect to ever foward events to the GAM, which is capable of doing authentication
-    // on our behalf.
-    let mut normal_conns: [Option<(CID, u32)>; MAX_LISTENERS] = [None; {MAX_LISTENERS}];
-    let mut raw_conns: [Option<(CID, u32)>; MAX_LISTENERS] = [None; {MAX_LISTENERS}];
+    let mut listener_conn: Option<CID> = None;
+    let mut listener_op: Option<usize> = None;
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns).unwrap();
@@ -871,41 +823,17 @@ fn xmain() -> ! {
                 else { vibe = false }
             }),
             Some(Opcode::RegisterListener) => {
-                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
-                let registration = buffer.to_original::<KeyboardRegistration, _>().unwrap();
-                let cid = match xns.request_connection_blocking(registration.server_name.as_str().unwrap()) {
-                    Ok(id) => id,
-                    _ =>  {
-                        log::error!("register listener could not connect to {}, ignoring", registration.server_name);
-                        // TODO: maybe convert this to something that returns an error code.
-                        // or maybe not? nobody /should/ be trying to eavesdrop on the keyboard server, after all, right? amiright?
-                        continue;
+                let buffer = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                match xns.request_connection_blocking(kr.server_name.as_str()) {
+                    Ok(cid) => {
+                        listener_conn = Some(cid);
+                        listener_op = Some(kr.listener_op_id as usize);
                     }
-                };
-                if let Some(op) = registration.listener_op_id {
-                    let mut found = false;
-                    for entry in normal_conns.iter_mut() {
-                        if *entry == None {
-                            *entry = Some((cid, op));
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        log::error!("RegisterListener ran out of space registering scancode callback");
-                    }
-                }
-                if let Some(op) = registration.rawlistener_op_id {
-                    let mut found = false;
-                    for entry in raw_conns.iter_mut() {
-                        if *entry == None {
-                            *entry = Some((cid, op));
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        log::error!("RegisterListener ran out of space registering rawcode callback");
+                    Err(e) => {
+                        log::error!("couldn't connect to listener: {:?}", e);
+                        listener_conn = None;
+                        listener_op = None;
                     }
                 }
             },
@@ -924,104 +852,52 @@ fn xmain() -> ! {
                 } else {
                     '\u{0000}'
                 };
-                info!("injecting emulation key press '{}'", key);
-                for maybe_conn in normal_conns.iter_mut() {
-                    if let Some((conn, opcode)) = maybe_conn {
-                        match xous::send_message(*conn,
-                            xous::Message::new_scalar(*opcode as usize,
+                log::info!("got inject key, listener_conn: {:?}", listener_conn);
+                if let Some(conn) = listener_conn {
+                    info!("injecting key '{}'", key); // always be noisy about this, it's an exploit path
+                    xous::send_message(conn,
+                        xous::Message::new_scalar(listener_op.unwrap(),
                             key as u32 as usize,
                             '\u{0000}' as u32 as usize,
                             '\u{0000}' as u32 as usize,
                             '\u{0000}' as u32 as usize,
-                        )) {
-                            Err(xous::Error::ServerNotFound) => {
-                                *maybe_conn = None
-                            },
-                            Ok(xous::Result::Ok) => {},
-                            _ => log::error!("unhandled error in key event sending")
-                        }
-                    }
+                       )
+                    ).unwrap();
                 }
             }),
             Some(Opcode::HandlerTrigger) => {
                 let rawstates = kbd.update();
 
-                // send rawstates on to rawstate listeners
-                send_rawstates(&mut raw_conns, &rawstates);
-
-                ///// TODO: the comment below predates the addition of libstd to Xous. We need to fix this still,
-                ///// for now we have just refactored out the heapless crate.
-                // GROSS: we copy our IPC-compatible RowColVec type into a heapless::Vec for further processing
-                // this code can probably be cleaned up and improved quite a bit to reduce CPU time.
-                // We don't use heapless::Vec for the IPC because we can't serialize the object with a trait natively
-                // which leaves us with ugly/dangerous slice-of-u8 cast techniques and/or inefficient serialization
-                // methods that rely on effectively a substantially similar intermediate array-based implementation.
-                // We retain the use of the "Vec" type here because the Vec type has some nice functions like iterators,
-                // and push(), len() etc. which doesn't really make sense to re-implement. But, maybe someone much
-                // more clever than I could do extend RowColVec to have these feature and get rid of this ugly copy
-                // step and make the rest of this routine operate natively on RowColVec types....
-                let mut keyups_core: Vec<RowCol> = Vec::new();
-                let mut keydowns_core: Vec<RowCol> = Vec::new();
-                for i in 0..rawstates.keyups.len() {
-                    if let Some(rc) = rawstates.keyups.get(i) {
-                        keyups_core.push(rc);
-                    }
-                }
-                for i in 0..rawstates.keydowns.len() {
-                    if let Some(rc) = rawstates.keydowns.get(i) {
-                        keydowns_core.push(rc);
-                    }
-                }
-                let keyups = if keyups_core.len() > 0 {
-                    Some(keyups_core)
-                } else {
-                    None
-                };
-                let keydowns = if keydowns_core.len() > 0 {
-                    Some(keydowns_core)
-                } else {
-                    None
-                };
-
                 // interpret scancodes
                 // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
                 let kc: Vec<char> = match kbd.get_map() {
                     KeyMap::Braille => {
-                        kbd.track_chord(keyups, keydowns)
+                        kbd.track_chord(&rawstates)
                     },
                     _ => {
-                        kbd.track_keys(keyups, keydowns)
+                        kbd.track_keys(&rawstates)
                     },
                 };
 
                 // send keys, if any
-                if kc.len() > 0 {
+                if kc.len() > 0 && listener_conn.is_some() && listener_op.is_some() {
                     if vibe {
                         llio.vibe(llio::VibePattern::Short).unwrap();
                     }
                     let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
                     for i in 0..kc.len() {
-                        // info!("sending key '{}'", kc[i]);
                         keys[i] = kc[i];
                     }
-
-                    for maybe_conn in normal_conns.iter_mut() {
-                        if let Some((conn, opcode)) = maybe_conn {
-                            match xous::send_message(*conn,
-                                xous::Message::new_scalar(*opcode as usize,
-                                keys[0] as u32 as usize,
-                                keys[1] as u32 as usize,
-                                keys[2] as u32 as usize,
-                                keys[3] as u32 as usize,
-                            )) {
-                                Err(xous::Error::ServerNotFound) => {
-                                    *maybe_conn = None
-                                },
-                                Ok(xous::Result::Ok) => {},
-                                _ => log::error!("unhandled error in key event sending")
-                            }
-                        }
-                    }
+                    log::trace!("sending keys {:?}", keys);
+                    xous::send_message(listener_conn.unwrap(),
+                        xous::Message::new_scalar(
+                            listener_op.unwrap(),
+                            keys[0] as u32 as usize,
+                            keys[1] as u32 as usize,
+                            keys[2] as u32 as usize,
+                            keys[3] as u32 as usize,
+                        )
+                    ).expect("couldn't send key codes to listener");
                 }
             },
             None => {log::error!("couldn't convert opcode"); break}
