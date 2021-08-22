@@ -365,6 +365,9 @@ mod implementation {
         pub(crate) fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
         }
+        pub(crate) fn get_repeat_check_interval(&self) -> u32 {
+            self.rate
+        }
 
         pub(crate) fn update(&mut self) -> KeyRawStates {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
@@ -718,6 +721,9 @@ mod implementation {
 
             ks
         }
+        pub fn is_repeating_key(&self) -> bool {
+            self.repeating_key.is_some()
+        }
     }
 }
 
@@ -799,8 +805,11 @@ fn xmain() -> ! {
     let mut kbd = Keyboard::new(kbd_sid);
 
     // register a suspend/resume listener
-    let sr_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let self_cid = xous::connect(kbd_sid).expect("couldn't create suspend callback connection");
+    let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, self_cid).expect("couldn't create suspend/resume object");
+
+    // start a thread that can ping the keyboard loop when a key is held down
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 
     let mut listener_conn: Option<CID> = None;
     let mut listener_op: Option<usize> = None;
@@ -898,6 +907,15 @@ fn xmain() -> ! {
                             keys[3] as u32 as usize,
                         )
                     ).expect("couldn't send key codes to listener");
+                }
+                // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.
+                if kbd.is_repeating_key() {
+                    log::info!("keydowns hold");
+                    // fire a second call to check if we should transition to a repeating state
+                    ticktimer.sleep_ms(kbd.get_repeat_check_interval() as _).unwrap();
+                    xous::send_message(self_cid,
+                        xous::Message::new_scalar(Opcode::HandlerTrigger.to_usize().unwrap(), 0, 0, 0, 0)
+                    ).unwrap();
                 }
             },
             None => {log::error!("couldn't convert opcode"); break}
