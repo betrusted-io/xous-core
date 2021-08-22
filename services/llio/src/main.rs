@@ -19,7 +19,7 @@ use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 mod implementation {
     use crate::api::*;
     use log::{error, info};
-    use utralib::generated::*;
+    use utralib::{generated::*, utra::gpio::UARTSEL_UARTSEL};
     use num_traits::ToPrimitive;
     use susres::{RegManager, RegOrField, SuspendResume};
 
@@ -39,6 +39,7 @@ mod implementation {
         ticktimer: ticktimer_server::Ticktimer,
         activity_period: u32, // 12mhz clock cycles over which to sample activity
         destruct_armed: bool,
+        uartmux_cache: u32, // stash a value of the uartmux -- restore from override into kernel so we can record KPs on resume
     }
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
@@ -176,6 +177,7 @@ mod implementation {
                 ticktimer,
                 activity_period: 24_000_000, // 2 second interval initially
                 destruct_armed: false,
+                uartmux_cache: BOOT_UART.into(),
             };
 
             xous::claim_interrupt(
@@ -226,6 +228,8 @@ mod implementation {
             xl
         }
         pub fn suspend(&mut self) {
+            self.uartmux_cache = self.gpio_csr.rf(UARTSEL_UARTSEL).into();
+            self.set_uart_mux(UartType::Kernel);
             self.gpio_susres.suspend();
             self.event_susres.suspend();
             self.power_susres.suspend();
@@ -239,6 +243,11 @@ mod implementation {
             self.power_susres.resume();
             self.event_susres.resume();
             self.gpio_susres.resume();
+            // add a short pause so we can capture KPs from other processes on resume
+            // this could cause some problems if there are llio-urgent activities to run after resume
+            // it's ok to remove this -- it's just to help capture debug logs on resume.
+            self.ticktimer.sleep_ms(500).unwrap();
+            self.set_uart_mux(UartType::from(self.uartmux_cache as usize));
         }
         #[allow(dead_code)]
         pub fn activity_set_period(&mut self, period: u32) {
