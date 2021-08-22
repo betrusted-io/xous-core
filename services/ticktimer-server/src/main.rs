@@ -67,30 +67,6 @@ mod implementation {
         wdt: utralib::CSR<u32>,
     }
 
-    fn handle_wdt(_irq_no: usize, arg: *mut usize) {
-        let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
-        // disarm the WDT -- do it in an interrupt context, to make sure we aren't interrupted while doing this.
-
-        // This WDT is a query/response type. There are two possible states, and to unlock it,
-        // the CPU must query the state and provide the right response. Why this is the case:
-        //  - the WDT is triggered on a "ring oscillator" that's entirely internal to the SoC
-        //    (so you can't defeat the WDT by just pausing the external clock sourc)
-        //  - the ring oscillator has a tolerance band of 65MHz +/- 50%
-        //  - the CPU runs at 100MHz with a tight tolerance
-        //  - thus it is impossible to guarantee sync between the domains, so we do a two-step query/response interlock
-        #[cfg(feature = "watchdog")]
-        if xtt.wdt.rf(utra::wdt::STATE_ENABLED) == 1 {
-            if xtt.wdt.rf(utra::wdt::STATE_ARMED1) != 0 {
-                xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0x600d);
-            }
-            if xtt.wdt.rf(utra::wdt::STATE_ARMED2) != 0 {
-                xtt.wdt.wfo(utra::wdt::WATCHDOG_RESET_CODE, 0xc0de);
-            }
-        }
-        // Clear the interrupt
-        xtt.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
-    }
-
     fn handle_irq(_irq_no: usize, arg: *mut usize) {
         let xtt = unsafe { &mut *(arg as *mut XousTickTimer) };
         // println!("In IRQ, connection: {}", xtt.connection);
@@ -164,26 +140,6 @@ mod implementation {
                 (&mut xtt) as *mut XousTickTimer as *mut usize,
             )
             .expect("couldn't claim irq");
-
-            xous::claim_interrupt(
-                utra::wdt::WDT_IRQ,
-                handle_wdt,
-                (&mut xtt) as *mut XousTickTimer as *mut usize,
-            )
-            .expect("couldn't claim irq");
-
-            #[cfg(feature = "watchdog")]
-            {
-                xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
-                xtt.wdt_sr_manager
-                    .push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
-            }
-            #[cfg(not(feature = "watchdog"))]
-            {
-                xtt.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 0);
-                xtt.wdt_sr_manager
-                    .push(RegOrField::Reg(utra::wdt::EV_ENABLE), None);
-            }
 
             xtt.ticktimer_sr_manager
                 .push(RegOrField::Reg(utra::ticktimer::MSLEEP_TARGET0), None);
@@ -265,9 +221,7 @@ mod implementation {
 
         #[allow(dead_code)]
         pub fn reset_wdt(&mut self) {
-            // this triggers an interrupt, and the handler of the interrupt does the actual reset
-            // this is done because we don't want the WDT reset to be interrupted
-            self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
+            self.wdt.wfo(utra::wdt::WATCHDOG_RESET_WDT, 1);
         }
 
         #[allow(dead_code)]
@@ -297,8 +251,6 @@ mod implementation {
             // thus we have to restore in manually on a resume
             #[cfg(feature = "watchdog")]
             {
-                self.wdt.wfo(utra::wdt::EV_PENDING_SOFT_INT, 1);
-                self.wdt.wfo(utra::wdt::EV_ENABLE_SOFT_INT, 1);
                 self.wdt.wfo(utra::wdt::WATCHDOG_ENABLE, 1);
             }
 
@@ -307,9 +259,6 @@ mod implementation {
 
             self.wdt_sr_manager.resume();
             self.ticktimer_sr_manager.resume();
-
-            #[cfg(feature = "watchdog")]
-            self.wdt.wfo(utra::wdt::INTERRUPT_INTERRUPT, 1);
 
             log::trace!(
                 "ticktimer enable: {}",
@@ -544,8 +493,8 @@ fn xmain() -> ! {
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
-        //#[cfg(feature = "watchdog")] // for debugging the watchdog
-        //ticktimer.check_wdt();
+        #[cfg(feature = "watchdog")] // for debugging the watchdog
+        ticktimer.check_wdt();
 
         let msg = xous::receive_message(ticktimer_server).unwrap();
         log::trace!("msg: {:?}", msg);
