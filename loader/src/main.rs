@@ -1236,6 +1236,9 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
             while trng_csr.rf(utra::trng_kernel::URANDOM_VALID_URANDOM_VALID) == 0 {}
             trng_csr.rf(utra::trng_kernel::URANDOM_URANDOM);
         }
+        // turn on the kernel UART.
+        let mut uart_csr = CSR::new(utra::uart::HW_UART_BASE as *mut u32);
+        uart_csr.rmwf(utra::uart::EV_ENABLE_RX, 1);
 
         // setup the `susres` register for a resume
         let mut resume_csr = CSR::new(utra::susres::HW_SUSRES_BASE as *mut u32);
