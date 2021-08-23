@@ -229,7 +229,8 @@ mod implementation {
         }
         pub fn suspend(&mut self) {
             self.uartmux_cache = self.gpio_csr.rf(UARTSEL_UARTSEL).into();
-            self.set_uart_mux(UartType::Kernel);
+            self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, 0); // set the kernel UART so we can catch KPs on boot
+
             self.gpio_susres.suspend();
             self.event_susres.suspend();
             self.power_susres.suspend();
@@ -243,11 +244,8 @@ mod implementation {
             self.power_susres.resume();
             self.event_susres.resume();
             self.gpio_susres.resume();
-            // add a short pause so we can capture KPs from other processes on resume
-            // this could cause some problems if there are llio-urgent activities to run after resume
-            // it's ok to remove this -- it's just to help capture debug logs on resume.
-            self.ticktimer.sleep_ms(10).unwrap();
-            self.set_uart_mux(UartType::from(self.uartmux_cache as usize));
+            // restore the UART mux setting after resume
+            self.gpio_csr.wfo(utra::gpio::UARTSEL_UARTSEL, self.uartmux_cache);
         }
         #[allow(dead_code)]
         pub fn activity_set_period(&mut self, period: u32) {
@@ -603,21 +601,37 @@ fn i2c_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sr_cid = xous::connect(i2c_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, I2cOpcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut suspend_pending_token: Option<usize> = None;
     log::trace!("starting i2c main loop");
     loop {
         let mut msg = xous::receive_message(i2c_sid).unwrap();
         log::trace!("i2c message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(I2cOpcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                i2c.suspend();
-                susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                i2c.resume();
+                if !i2c.is_busy() {
+                    i2c.suspend();
+                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                    i2c.resume();
+                } else {
+                    // stash the token, and we'll do the suspend once the I2C transaction is done.
+                    suspend_pending_token = Some(token);
+                }
             }),
             Some(I2cOpcode::IrqI2cTxrxWriteDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                if let Some(token) = suspend_pending_token.take() {
+                    i2c.suspend();
+                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                    i2c.resume();
+                }
                 // I2C state machine handler irq result
                 i2c.report_write_done();
             }),
             Some(I2cOpcode::IrqI2cTxrxReadDone) => msg_scalar_unpack!(msg, _, _, _, _, {
+                if let Some(token) = suspend_pending_token.take() {
+                    i2c.suspend();
+                    susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
+                    i2c.resume();
+                }
                 // I2C state machine handler irq result
                 i2c.report_read_done();
             }),
