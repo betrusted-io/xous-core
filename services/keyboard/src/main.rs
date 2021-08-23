@@ -406,8 +406,8 @@ mod implementation {
             // EV_PENDING_KEYPRESSED effectively does an XOR of the previous keyboard state
             // to the current state, which is why update() does not repeatedly issue results
             // for keys that are pressed & held.
-            log::info!("update new_state:  {:?}", self.new_state);
-            log::info!("update last_state: {:?}", self.last_state);
+            log::trace!("update new_state:  {:?}", self.new_state);
+            log::trace!("update last_state: {:?}", self.last_state);
 
             let mut krs = KeyRawStates::new();
 
@@ -427,7 +427,7 @@ mod implementation {
                 self.last_state.insert(rc);
             }
 
-            log::info!("krs: {:?}", krs);
+            log::trace!("krs: {:?}", krs);
             krs
         }
 
@@ -849,10 +849,10 @@ fn xmain() -> ! {
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns).unwrap();
-    {
+    /*{
         log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
         llio.wfi_override(true).unwrap();
-    }
+    }*/
 
     log::trace!("starting main loop");
     loop {
@@ -898,7 +898,7 @@ fn xmain() -> ! {
                 } else {
                     '\u{0000}'
                 };
-                log::info!("got inject key, listener_conn: {:?}", listener_conn);
+                log::trace!("got inject key, listener_conn: {:?}", listener_conn);
                 if let Some(conn) = listener_conn {
                     info!("injecting key '{}'", key); // always be noisy about this, it's an exploit path
                     xous::send_message(conn,
@@ -947,7 +947,7 @@ fn xmain() -> ! {
                 }
                 // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.
                 if kbd.is_repeating_key() {
-                    log::info!("keydowns hold");
+                    log::trace!("keydowns hold");
                     // fire a second call to check if we should transition to a repeating state
                     ticktimer.sleep_ms(kbd.get_repeat_check_interval() as _).unwrap();
                     kbd.poll();

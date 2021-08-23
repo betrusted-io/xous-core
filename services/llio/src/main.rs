@@ -289,7 +289,7 @@ mod implementation {
                     // during a critical operation like SPINOR flashing because we swapped consoles at a bad time. Should be
                     // very rare and only affect devs...
                     log::warn!("unsafe re-enabling WFI -- if you issued this command at a bad time, could have side effects");
-                    if false {
+                    if true {
                         self.power_csr.rmwf(utra::power::POWER_DISABLE_WFI, 0);
                     } else {
                         log::warn!("sticking WFI override to 1 for keyboard debug, remove this path when done!");
