@@ -107,22 +107,21 @@ fi
 # case of no private key specified
 if [ $USE_USB -eq 1 ]
 then
-    if [ $UPDATE_FPGA -eq 1 ]
-    then
-      echo "Burning FPGA image"
-      sudo wishbone-tool $CSR_CSV --load-name $FPGA_IMAGE --load-address 0x0 --load-flash
-      echo "*** Manual power cycle required to reload SoC FPGA configuration ***"
-      echo " -> Either issue a power cycle command, or insert paper clip in the hole on the right hand side!"
-    fi
     if [ $UPDATE_LOADER -eq 1 ]
     then
       echo "Burning loader"
-      sudo wishbone-tool $CSR_CSV --load-name $LOADER_IMAGE --load-address 0x500000 --load-flash
+      cd tools && ./usb_update.py -l
     fi
     if [ $UPDATE_KERNEL -eq 1 ]
     then
       echo "Burning kernel"
-      sudo wishbone-tool $CSR_CSV --load-name $KERNEL_IMAGE --load-address 0x980000 --load-flash
+      cd tools && ./usb_update.py -k
+    fi
+    if [ $UPDATE_FPGA -eq 1 ]
+    then
+	echo "Burning FPGA image"
+	cd tools && ./usb_update.py -s
+	echo "*** Select 'Install gateware update' from the main menu to apply the update with your root keys ***"
     fi
 else
 
