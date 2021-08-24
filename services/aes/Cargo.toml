@@ -13,6 +13,7 @@ cipher = "0.3"
 ctr = { version = "0.7", optional = true }
 opaque-debug = "0.3"
 hex-literal = "0.2"
+zeroize = "1.4.1"
 
 [features]
 compact = [] # Reduce code size at the cost of slower performance

@@ -1,11 +1,11 @@
 //! SHA-512
 mod soft;
-use soft::compress;
 use crate::consts::*;
+use soft::compress;
 
 use crate::api::*;
-use xous::{send_message, Message};
 use num_traits::ToPrimitive;
+use xous::{send_message, Message};
 use xous_ipc::Buffer;
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -18,17 +18,17 @@ static HW_CONN: AtomicU32 = AtomicU32::new(0);
 /// a unique-enough random ID number to prove we own our connection to the hashing engine hardware
 static TOKEN: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
 
-use digest::{BlockInput, FixedOutputDirty, Reset, Update};
-use digest::generic_array::GenericArray;
-use digest::consts::{U28, U32, U48, U64, U128};
 use block_buffer::BlockBuffer;
 use core::slice::from_ref;
+use digest::consts::{U128, U28, U32, U48, U64};
+use digest::generic_array::GenericArray;
+use digest::{BlockInput, FixedOutputDirty, Reset, Update};
 type BlockSize = U128;
 
 /*
-   Software emulation vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
-   License is Apache 2.0
- */
+  Software emulation vendored from https://github.com/RustCrypto/hashes/tree/master/sha2/src
+  License is Apache 2.0
+*/
 /// Structure that keeps state of the software-emulated Sha-512 operation and
 /// contains the logic necessary to perform the final calculations.
 #[derive(Clone)]
@@ -74,7 +74,11 @@ macro_rules! sha512_comms {
         pub(crate) fn ensure_conn(&self) -> u32 {
             if HW_CONN.load(Ordering::Relaxed) == 0 {
                 let xns = xous_names::XousNames::new().unwrap();
-                HW_CONN.store(xns.request_connection_blocking(crate::api::SERVER_NAME_SHA512).expect("Can't connect to Sha512 server"), Ordering::Relaxed);
+                HW_CONN.store(
+                    xns.request_connection_blocking(crate::api::SERVER_NAME_SHA512)
+                        .expect("Can't connect to Sha512 server"),
+                    Ordering::Relaxed,
+                );
                 let trng = trng::Trng::new(&xns).expect("Can't connect to TRNG server");
                 let id1 = trng.get_u64().unwrap();
                 let id2 = trng.get_u32().unwrap();
@@ -85,9 +89,11 @@ macro_rules! sha512_comms {
             HW_CONN.load(Ordering::Relaxed)
         }
         pub fn is_idle(&self) -> Result<bool, xous::Error> {
-            let response = send_message(self.ensure_conn(),
-                Message::new_blocking_scalar(Opcode::IsIdle.to_usize().unwrap(), 0, 0, 0, 0)
-            ).expect("Couldn't make IsIdle query");
+            let response = send_message(
+                self.ensure_conn(),
+                Message::new_blocking_scalar(Opcode::IsIdle.to_usize().unwrap(), 0, 0, 0, 0),
+            )
+            .expect("Couldn't make IsIdle query");
             if let xous::Result::Scalar1(result) = response {
                 if result != 0 {
                     Ok(true)
@@ -99,9 +105,17 @@ macro_rules! sha512_comms {
             }
         }
         pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
-            let response = send_message(self.ensure_conn(),
-                Message::new_blocking_scalar(Opcode::AcquireSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
-            ).expect("Couldn't issue AcquireSuspendLock message");
+            let response = send_message(
+                self.ensure_conn(),
+                Message::new_blocking_scalar(
+                    Opcode::AcquireSuspendLock.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .expect("Couldn't issue AcquireSuspendLock message");
             if let xous::Result::Scalar1(result) = response {
                 if result != 0 {
                     Ok(true)
@@ -114,22 +128,33 @@ macro_rules! sha512_comms {
         }
         pub fn abort_suspend(&self) -> Result<(), xous::Error> {
             // we ignore the result and just turn it into () once we get anything back, as abort_suspend "can't fail"
-            send_message(self.ensure_conn(),
-                Message::new_blocking_scalar(Opcode::AbortSuspendLock.to_usize().unwrap(), 0, 0, 0, 0)
-            ).map(|_| ())
+            send_message(
+                self.ensure_conn(),
+                Message::new_blocking_scalar(
+                    Opcode::AbortSuspendLock.to_usize().unwrap(),
+                    0,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+            .map(|_| ())
         }
         pub(crate) fn try_acquire_hw(&mut self, config: Sha2Config) {
             if !self.in_progress && (self.strategy != FallbackStrategy::SoftwareOnly) {
                 loop {
                     let conn = self.ensure_conn(); // also ensures the ID
-                    let response = send_message(conn,
-                        Message::new_blocking_scalar(Opcode::AcquireExclusive.to_usize().unwrap(),
+                    let response = send_message(
+                        conn,
+                        Message::new_blocking_scalar(
+                            Opcode::AcquireExclusive.to_usize().unwrap(),
                             TOKEN[0].load(Ordering::Relaxed) as usize,
                             TOKEN[1].load(Ordering::Relaxed) as usize,
                             TOKEN[2].load(Ordering::Relaxed) as usize,
                             config.to_usize().unwrap(),
-                        )
-                    ).expect("couldn't send AcquireExclusive message to Sha2 hardware!");
+                        ),
+                    )
+                    .expect("couldn't send AcquireExclusive message to Sha2 hardware!");
                     if let xous::Result::Scalar1(result) = response {
                         if result != 0 {
                             self.use_soft = false;
@@ -156,13 +181,17 @@ macro_rules! sha512_comms {
             }
         }
         pub(crate) fn reset_hw(&mut self) {
-            send_message(self.ensure_conn(),
-                Message::new_blocking_scalar(Opcode::Reset.to_usize().unwrap(),
-                TOKEN[0].load(Ordering::Relaxed) as usize,
-                TOKEN[1].load(Ordering::Relaxed) as usize,
-                TOKEN[2].load(Ordering::Relaxed) as usize,
-                0,
-            )).expect("couldn't send reset to hardware");
+            send_message(
+                self.ensure_conn(),
+                Message::new_blocking_scalar(
+                    Opcode::Reset.to_usize().unwrap(),
+                    TOKEN[0].load(Ordering::Relaxed) as usize,
+                    TOKEN[1].load(Ordering::Relaxed) as usize,
+                    TOKEN[2].load(Ordering::Relaxed) as usize,
+                    0,
+                ),
+            )
+            .expect("couldn't send reset to hardware");
             // reset internal flags
             self.length = 0;
             self.in_progress = false;
@@ -241,7 +270,11 @@ impl Update for Sha512 {
             for chunk in input.as_ref().chunks(3968) {
                 // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap handling
                 let mut update = Sha2Update {
-                    id: [TOKEN[0].load(Ordering::Relaxed), TOKEN[1].load(Ordering::Relaxed), TOKEN[2].load(Ordering::Relaxed)],
+                    id: [
+                        TOKEN[0].load(Ordering::Relaxed),
+                        TOKEN[1].load(Ordering::Relaxed),
+                        TOKEN[2].load(Ordering::Relaxed),
+                    ],
                     buffer: [0; 3968],
                     len: 0,
                 };
@@ -251,7 +284,8 @@ impl Update for Sha512 {
                 }
                 update.len = chunk.len() as u16;
                 let buf = Buffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
-                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap()).expect("hardware rejected our hash chunk!");
+                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
+                    .expect("hardware rejected our hash chunk!");
             }
         }
     }
@@ -269,18 +303,28 @@ impl FixedOutputDirty for Sha512 {
             }
         } else {
             let result = Sha2Finalize {
-                id: [TOKEN[0].load(Ordering::Relaxed), TOKEN[1].load(Ordering::Relaxed), TOKEN[2].load(Ordering::Relaxed)],
+                id: [
+                    TOKEN[0].load(Ordering::Relaxed),
+                    TOKEN[1].load(Ordering::Relaxed),
+                    TOKEN[2].load(Ordering::Relaxed),
+                ],
                 result: Sha2Result::Uninitialized,
                 length_in_bits: None,
             };
-            let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap()).expect("couldn't finalize");
+            let mut buf =
+                Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
+            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap())
+                .expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Result(s) => {
                     log::debug!("bits hashed: {}", self.length);
-                    if self.length != returned.length_in_bits.expect("hardware did not return a length field!") {
+                    if self.length
+                        != returned
+                            .length_in_bits
+                            .expect("hardware did not return a length field!")
+                    {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }
                     for (dest, &src) in out.chunks_exact_mut(1).zip(s.iter()) {
@@ -313,7 +357,6 @@ impl Reset for Sha512 {
         }
     }
 }
-
 
 /// The SHA-512 hash algorithm with the SHA-512/256 initial hash value. The
 /// result is truncated to 256 bits.
@@ -384,7 +427,11 @@ impl Update for Sha512Trunc256 {
             for chunk in input.as_ref().chunks(3968) {
                 // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap handling
                 let mut update = Sha2Update {
-                    id: [TOKEN[0].load(Ordering::Relaxed), TOKEN[1].load(Ordering::Relaxed), TOKEN[2].load(Ordering::Relaxed)],
+                    id: [
+                        TOKEN[0].load(Ordering::Relaxed),
+                        TOKEN[1].load(Ordering::Relaxed),
+                        TOKEN[2].load(Ordering::Relaxed),
+                    ],
                     buffer: [0; 3968],
                     len: 0,
                 };
@@ -394,7 +441,8 @@ impl Update for Sha512Trunc256 {
                 }
                 update.len = chunk.len() as u16;
                 let buf = Buffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
-                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap()).expect("hardware rejected our hash chunk!");
+                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
+                    .expect("hardware rejected our hash chunk!");
             }
         }
     }
@@ -412,17 +460,27 @@ impl FixedOutputDirty for Sha512Trunc256 {
             }
         } else {
             let result = Sha2Finalize {
-                id: [TOKEN[0].load(Ordering::Relaxed), TOKEN[1].load(Ordering::Relaxed), TOKEN[2].load(Ordering::Relaxed)],
+                id: [
+                    TOKEN[0].load(Ordering::Relaxed),
+                    TOKEN[1].load(Ordering::Relaxed),
+                    TOKEN[2].load(Ordering::Relaxed),
+                ],
                 result: Sha2Result::Uninitialized,
                 length_in_bits: None,
             };
-            let mut buf = Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap()).expect("couldn't finalize");
+            let mut buf =
+                Buffer::into_buf(result).expect("couldn't map memory for the return buffer");
+            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap())
+                .expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
             match returned.result {
                 Sha2Result::Sha512Trunc256Result(s) => {
-                    if self.length != returned.length_in_bits.expect("hardware did not return a length field!") {
+                    if self.length
+                        != returned
+                            .length_in_bits
+                            .expect("hardware did not return a length field!")
+                    {
                         panic!("Sha512 hardware did not hash as many bits as we had expected!")
                     }
                     for (dest, &src) in out.chunks_exact_mut(1).zip(s.iter()) {
@@ -503,7 +561,6 @@ impl Reset for Sha384 {
     }
 }
 
-
 /// The SHA-512 hash algorithm with the SHA-512/224 initial hash value.
 /// The result is truncated to 224 bits.
 #[derive(Clone)]
@@ -547,7 +604,6 @@ impl Reset for Sha512Trunc224 {
         self.engine.reset(&H512_TRUNC_224);
     }
 }
-
 
 opaque_debug::implement!(Sha384);
 opaque_debug::implement!(Sha512);

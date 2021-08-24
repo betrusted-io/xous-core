@@ -1,6 +1,6 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use xous::{CID, send_message, Message, ScalarMessage};
+use xous::{send_message, Message, ScalarMessage, CID};
 
 #[derive(Debug)]
 pub enum Opcode {
@@ -8,9 +8,9 @@ pub enum Opcode {
     Redraw,
 }
 
-impl core::convert::TryFrom<& Message> for Opcode {
+impl core::convert::TryFrom<&Message> for Opcode {
     type Error = &'static str;
-    fn try_from(message: & Message) -> Result<Self, Self::Error> {
+    fn try_from(message: &Message) -> Result<Self, Self::Error> {
         match message {
             Message::Scalar(m) => match m.id {
                 0 => Ok(Opcode::Redraw),
@@ -25,7 +25,11 @@ impl Into<Message> for Opcode {
     fn into(self) -> Message {
         match self {
             Opcode::Redraw => Message::Scalar(ScalarMessage {
-                id: 0, arg1: 0, arg2: 0, arg3: 0, arg4: 0,
+                id: 0,
+                arg1: 0,
+                arg2: 0,
+                arg3: 0,
+                arg4: 0,
             }),
             // _ => panic!("SHCH api: Opcode type not handled by Into(), refer to helper method"),
         }
@@ -45,8 +49,7 @@ impl ContentCanvasApi for ContentCanvasConnection {
     fn redraw_canvas(&self) -> Result<(), xous::Error> {
         if let Some(id) = self.redraw_id {
             match self.connection {
-                Some(cid) => send_message(cid,
-                    Message::new_scalar(id, 0, 0, 0, 0)).map(|_| ()),
+                Some(cid) => send_message(cid, Message::new_scalar(id, 0, 0, 0, 0)).map(|_| ()),
                 _ => Err(xous::Error::UseBeforeInit),
             }
         } else {
@@ -54,4 +57,3 @@ impl ContentCanvasApi for ContentCanvasConnection {
         }
     }
 }
-

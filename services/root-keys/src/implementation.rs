@@ -1,3 +1,7 @@
+mod oracle;
+use oracle::*;
+pub use oracle::FpgaKeySource;
+
 use utralib::generated::*;
 use crate::api::*;
 use core::num::NonZeroUsize;
@@ -39,6 +43,22 @@ const METADATA_OFFSET: usize = 0x27_6000;
 const CSR_CSV_OFFSET: usize  = 0x27_7000;
 /// offset of the gateware self-signature area
 const SELFSIG_OFFSET: usize  = 0x27_F000;
+
+/// This structure is mapped into the password cache page and can be zero-ized at any time
+/// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
+/// The "password" here is generated as follows:
+///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
+/// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
+/// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply truncated.
+#[repr(C)]
+struct PasswordCache {
+    hashed_boot_pw: [u8; 32],
+    hashed_boot_pw_valid: u32, // non-zero for valid
+    hashed_update_pw: [u8; 32],
+    hashed_update_pw_valid: u32,
+    fpga_key: [u8; 32],
+    fpga_key_valid: u32,
+}
 
 #[repr(C)]
 struct SignatureInFlash {
@@ -97,24 +117,8 @@ pub(crate) mod keyrom_config {
     pub const INITIALIZED:         KeyField = KeyField::new(1, 27);
 }
 
-/// This structure is mapped into the password cache page and can be zero-ized at any time
-/// we avoid using fancy Rust structures because everything has to "make sense" after a forced zero-ization
-/// The "password" here is generated as follows:
-///   `user plaintext (up to first 72 bytes) -> bcrypt (24 bytes) -> sha512trunc256 -> [u8; 32]`
-/// The final sha512trunc256 expansion is because we will use this to XOR against secret keys stored in
-/// the KEYROM that may be up to 256 bits in length. For shorter keys, the hashed password is simply truncated.
-#[repr(C)]
-struct PasswordCache {
-    hashed_boot_pw: [u8; 32],
-    hashed_boot_pw_valid: u32, // non-zero for valid
-    hashed_update_pw: [u8; 32],
-    hashed_update_pw_valid: u32,
-    fpga_key: [u8; 32],
-    fpga_key_valid: u32,
-}
-
 /// helper routine that will reverse the order of bits. uses a divide-and-conquer approach.
-fn bitflip(input: &[u8], output: &mut [u8]) {
+pub(crate) fn bitflip(input: &[u8], output: &mut [u8]) {
     assert!((input.len() % 4 == 0) && (output.len() % 4 == 0) && (input.len() == output.len()));
     for (src, dst) in
     input.chunks(4).into_iter()
@@ -127,409 +131,6 @@ fn bitflip(input: &[u8], output: &mut [u8]) {
         for (&s, d) in word.to_be_bytes().iter().zip(dst.iter_mut()) {
             *d = s;
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum FpgaKeySource {
-    Bbram,
-    Efuse,
-}
-
-const AES_BLOCKSIZE: usize = 16;
-// a "slight" lie in that it's not literally the bitstream command, it's the fully encoded word + length of args.
-const BITSTREAM_CTL0_CMD: u32       = 0x3000_a001;
-const BITSTREAM_CTL0_CMD_FLIP: u32  = 0x8005_000c;
-const BITSTREAM_MASK_CMD: u32       = 0x3000_c001;
-#[allow(dead_code)]
-const BITSTREAM_MASK_CMD_FLIP: u32  = 0x8005_000c;
-const BITSTREAM_IV_CMD: u32         = 0x3001_6004;
-const BITSTREAM_CIPHERTEXT_CMD: u32 = 0x3003_4001;
-/// This structure encapsulates the tools necessary to create an Oracle that can go from
-/// the encrypted bitstream to plaintext and back again, based on the position in the bitstream.
-/// It is a partial re-implementation of the Cbc crate from block-ciphers, and the reason we're
-/// not just using the stock Cbc crate is that it doesn't seem to support restarting the Cbc
-/// stream from an arbitrary position.
-struct BitstreamOracle<'a> {
-    bitstream: &'a [u8],
-    base: u32,
-    dec_cipher: Aes256,
-    enc_cipher: Aes256,
-    iv: [u8; AES_BLOCKSIZE],
-    /// subslice of the bitstream that contains just the encrypted area of the bitstream
-    ciphertext: &'a [u8],
-    ct_absolute_offset: usize,
-    type2_count: u32,
-    /// start of type2 data as an absolute offset in the overall bitstream
-    type2_absolute_offset: usize,
-    /// start of type2 data as an offset relative to the start of ciphertext
-    type2_ciphertext_offset: usize,
-    /// length of the undifferentiated plaintext header -- this is right up to the IV specifier
-    #[allow(dead_code)]
-    pt_header_len: usize,
-    enc_to_key: FpgaKeySource,
-    dec_from_key: FpgaKeySource,
-}
-impl<'a> BitstreamOracle<'a> {
-    /// oracle supports separate encryption and decryption keys, so that it may
-    /// be used for re-encryption of bitstreams to a new key. If using it for patching,
-    /// set the keys to the same value.
-    /// key_target selects what we want the encrypted target to be for boot key source; if None, we retain the bitstream settings
-    pub fn new(dec_key: &'a[u8], enc_key: &'a[u8], bitstream: &'a[u8], base: u32) -> Result<BitstreamOracle<'a>, RootkeyResult> {
-        let mut position: usize = 0;
-
-        // Search through the bitstream for the key words that define the IV and ciphertext length.
-        // This is done so that if extra headers are added or modified, the code doesn't break (versus coding in static offsets).
-        let mut iv_pos = 0;
-        let mut cwd = 0;
-        while position < bitstream.len() {
-            cwd = u32::from_be_bytes(bitstream[position..position+4].try_into().unwrap());
-            if cwd == BITSTREAM_IV_CMD {
-                iv_pos = position + 4
-            }
-            if cwd == BITSTREAM_CIPHERTEXT_CMD {
-                break;
-            }
-            position += 1;
-        }
-
-        let position = position + 4;
-        let ciphertext_len = 4 * u32::from_be_bytes(bitstream[position..position+4].try_into().unwrap());
-        let ciphertext_start = position + 4;
-        if ciphertext_start & (AES_BLOCKSIZE - 1) != 0 {
-            log::error!("Padding is incorrect on the bitstream. Check append_csr.py for padding and make sure you are burning gateware with --raw-binary, and not --bitstream as the latter strips padding from the top of the file.");
-            return Err(RootkeyResult::AlignmentError)
-        }
-        log::debug!("ciphertext len: {} bytes, start: 0x{:08x}", ciphertext_len, ciphertext_start);
-        let ciphertext = &bitstream[ciphertext_start..ciphertext_start + ciphertext_len as usize];
-
-        let mut iv_bytes: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
-        bitflip(&bitstream[iv_pos..iv_pos + AES_BLOCKSIZE], &mut iv_bytes);
-        log::debug!("recovered iv (pre-flip): {:x?}", &bitstream[iv_pos..iv_pos + AES_BLOCKSIZE]);
-        log::debug!("recovered iv           : {:x?}", &iv_bytes);
-
-        let dec_cipher = Aes256::new(dec_key.try_into().unwrap());
-        let enc_cipher = Aes256::new(enc_key.try_into().unwrap());
-
-        let mut oracle = BitstreamOracle {
-            bitstream,
-            base,
-            dec_cipher,
-            enc_cipher,
-            iv: iv_bytes,
-            ciphertext,
-            ct_absolute_offset: ciphertext_start,
-            type2_count: 0,
-            type2_absolute_offset: 0,
-            type2_ciphertext_offset: 0,
-            pt_header_len: iv_pos, // plaintext header goes all the way up to the IV
-            enc_to_key: FpgaKeySource::Efuse, // these get set later
-            dec_from_key: FpgaKeySource::Efuse,
-        };
-
-        // search forward for the "type 2" region in the first kilobyte of plaintext
-        // type2 is where regular dataframes start, and we can compute offsets for patching
-        // based on this.
-        let mut first_block: [u8; 1024] = [0; 1024];
-        oracle.decrypt(0, &mut first_block);
-
-        // check that the plaintext header has a well-known sequence in it -- sanity check the AES key
-        let mut pass = true;
-        for &b in first_block[32..64].iter() {
-            if b != 0x6C {
-                pass = false;
-            }
-        }
-        if !pass {
-            log::error!("hmac_header did not decrypt correctly: {:x?}", &first_block[..64]);
-            return Err(RootkeyResult::KeyError)
-        }
-
-        // start searching for the commands *after* the IV and well-known sequence
-        let mut pt_pos = 64;
-        let mut flipword: [u8; 4] = [0; 4];
-        for word in first_block[64..].chunks_exact(4).into_iter() {
-            bitflip(&word[0..4], &mut flipword);
-            cwd = u32::from_be_bytes(flipword);
-            pt_pos += 4;
-            if (cwd & 0xE000_0000) == 0x4000_0000 {
-                break;
-            }
-        }
-        oracle.type2_count = cwd & 0x3FF_FFFF;
-        if pt_pos > 1000 { // pt_pos is usually found within the first 200 bytes of a bitstream, should definitely be in the first 1k or else shenanigans
-            log::error!("type 2 region not found in the expected region, is the FPGA key correct?");
-            return Err(RootkeyResult::KeyError)
-        }
-        oracle.type2_absolute_offset = pt_pos + ciphertext_start;
-        oracle.type2_ciphertext_offset = pt_pos;
-        log::debug!("type2 absolute: {}, relative to ct start: {}", oracle.type2_absolute_offset, oracle.type2_ciphertext_offset);
-
-        // read the boot source out of the ciphertext
-        let mut bytes = first_block.chunks(4).into_iter();
-        let mut ctl0_enc: Option<u32> = None;
-        loop {
-            if let Some(b) = bytes.next() {
-                let word = u32::from_be_bytes(b.try_into().unwrap());
-                if word == BITSTREAM_CTL0_CMD_FLIP {
-                    if let Some(val) = bytes.next() {
-                        let mut flip: [u8; 4] = [0; 4];
-                        bitflip(val, &mut flip);
-                        let w = u32::from_be_bytes(flip.try_into().unwrap());
-                        ctl0_enc = Some(w);
-                    } else {
-                        log::error!("didn't decrypt enough memory to find the ctl0 encrypted settings");
-                        return Err(RootkeyResult::IntegrityError);
-                    }
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        if (ctl0_enc.unwrap() & 0x8000_0000) == 0x8000_0000 {
-            oracle.dec_from_key = FpgaKeySource::Efuse;
-        } else {
-            oracle.dec_from_key = FpgaKeySource::Bbram;
-        }
-        // by default, we always re-encrypt to the same key type
-        oracle.enc_to_key = oracle.dec_from_key;
-
-        Ok(oracle)
-    }
-
-    #[allow(dead_code)]
-    pub fn pt_header_len(&self) -> usize {self.pt_header_len as usize}
-    pub fn base(&self) -> u32 {self.base}
-    pub fn ciphertext_offset(&self) -> usize {
-        self.ct_absolute_offset as usize
-    }
-    pub fn ciphertext(&self) -> &[u8] {
-        self.ciphertext
-    }
-    pub fn get_original_key_type(&self) -> FpgaKeySource {self.dec_from_key}
-    /// the main use case for this API is changing from a BBRAM->eFuse source
-    /// we can't go eFuse->BBRAM because, unfortunately, we can't program BBRAM keys natively; the bitstream will have to have been constructed for BBRAM already for a good boot
-    pub fn set_target_key_type(&mut self, keytype: FpgaKeySource) {
-        self.enc_to_key = keytype;
-    }
-    pub fn ciphertext_offset_to_frame(&self, offset: usize) -> (usize, usize) {
-        let type2_offset = offset - self.type2_ciphertext_offset;
-
-        let frame = type2_offset / (101 * 4);
-        let frame_offset = type2_offset - (frame * 101 * 4);
-        (frame, frame_offset / 4)
-    }
-    pub fn clear(&mut self) {
-        self.enc_cipher.clear();
-        self.dec_cipher.clear();
-
-        for b in self.iv.iter_mut() {
-            *b = 0;
-        }
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    }
-    /// Decrypts a portion of the bitstream starting at "from", of length output.
-    /// Returns the actual number of bytes processed.
-    pub fn decrypt(&self, from: usize, output: &mut [u8]) -> usize {
-        assert!(from & (AES_BLOCKSIZE - 1) == 0); // all requests must be an even multiple of an AES block size
-
-        let mut index = from;
-        let mut temp_block = [0; AES_BLOCKSIZE];
-        let mut chain: [u8; AES_BLOCKSIZE] = [0; AES_BLOCKSIZE];
-        let mut bytes_processed = 0;
-        for block in output.chunks_mut(AES_BLOCKSIZE).into_iter() {
-            if index > self.ciphertext_len() - AES_BLOCKSIZE {
-                return bytes_processed;
-            }
-            if index ==  0 {
-                chain = self.iv;
-            } else {
-                bitflip(&self.ciphertext[index - AES_BLOCKSIZE..index], &mut chain);
-            };
-            // copy the ciphertext into the temp_block, with a bitflip
-            bitflip(&self.ciphertext[index..index + AES_BLOCKSIZE], &mut temp_block);
-
-            // replaces the ciphertext with "plaintext"
-            let mut d = GenericArray::clone_from_slice(&mut temp_block);
-            self.dec_cipher.decrypt_block(&mut d);
-            for (&src, dst) in d.iter().zip(temp_block.iter_mut()) {
-                *dst = src;
-            }
-
-            // now XOR against the IV into the final output block. We use a "temp" block so we
-            // guarantee an even block size for AES, but in fact, the output block does not
-            // have to be an even multiple of our block size!
-            for (dst, (&src, &iv)) in block.iter_mut().zip(temp_block.iter().zip(chain.iter())) {
-                *dst = src ^ iv;
-            }
-            index += AES_BLOCKSIZE;
-            bytes_processed += AES_BLOCKSIZE;
-        }
-        bytes_processed
-    }
-    /// Encrypts a portion of a bitstream starting at "from"; manages the IV lookup for the encryption process
-    ///
-    /// "from" is relative to ciphertext start, and chosen to match the "from" of a decrypt operation.
-    /// When using this function to encrypt the very first block, the "from" offset should be negative.
-    ///
-    /// ASSUME: the chain is unbroken, e.g. this is being called successively on correctly encrypted, chained
-    /// blocks, that have been written to FLASH such that we can refer to the older blocks for the current
-    /// chaining value. It is up to the caller to manage the linear order of the calls.
-    /// ASSUME: `from` + `self.ct_absolute_offset` is a multiple of an erase block
-    /// returns the actual number of bytes processed
-    /// NOTE: input plaintext can be changed by this function -- the first block is modified based on the requested encryption type
-    pub fn encrypt_sector(&self, from: i32, input_plaintext: &mut [u8], output_sector: &mut [u8]) -> usize {
-        assert!(output_sector.len() & (AES_BLOCKSIZE - 1) == 0, "output length must be a multiple of AES block size");
-        assert!(input_plaintext.len() & (AES_BLOCKSIZE - 1) == 0, "input length must be a multiple of AES block size");
-        assert!((from + self.ct_absolute_offset as i32) & (spinor::SPINOR_ERASE_SIZE as i32 - 1) == 0, "request address must line up with an erase block boundary");
-
-        if from > 0 {
-            assert!(input_plaintext.len() == output_sector.len(), "input and output length must match");
-        } else {
-            assert!(input_plaintext.len() == output_sector.len() - self.ct_absolute_offset, "output length must have space for the plaintext header");
-        }
-
-        let mut out_start_offset = 0;
-        if from < 0 {
-            // A bit of a nightmare, but we have to patch over the efuse/bbram selection settings
-            // on the fly, because a user might be using bbram, but updates are by default set to use efuse.
-            //
-            // the plaintext header already has:
-            //   - one copy of the fuse and config settings
-            //   - padding
-            //   - IV for cipher
-            //   - length of ciphertext region
-            // slightly into the ciphertext region is another set of bits that re-confirm the key settings.
-            // we need to flip the bits that control bbram vs aes key boot as part of the re-encryption process.
-            //
-            // So: 1. check to see what type of boot we are doing
-            //     2. update the header bits to match it.
-            //     3. update the ciphertext (in two places) to match.
-            //
-            // The instruction that selects eFuse/BBRAM is 'Control Register 0' (00101)
-            // It has the in-bitstream hex code of 0x3000a001 and is set to 0x80000040 for efuse boot and
-            // 0x00000040 for bbram boot. The byte to patch is at offset 88 decimal in the bitstream headers
-            // generated by our tools, but it would be more reliable to search for the instruction and patch the
-            // byte after it. The `mask` register (00110) is also set, hex code 0x3000c001, set to 0x80000040
-            // to allow for the control register write to "take"
-
-            // copy the plaintext header over to the destination, as-is
-            for (&src, dst) in self.bitstream[..self.ct_absolute_offset].iter()
-            .zip(output_sector[..self.ct_absolute_offset].iter_mut()) {
-                *dst = src;
-            }
-            out_start_offset = self.ct_absolute_offset;
-
-            // now, make sure that the new settings match the settings indicated by the oracle.
-            // 1. patch the plaintext header
-            let mut pos = 0;
-            let mut patchcount = 0;
-            while pos < self.ct_absolute_offset {
-                let cwd = u32::from_be_bytes(output_sector[pos..pos+4].try_into().unwrap());
-                if (cwd == BITSTREAM_CTL0_CMD) || (cwd == BITSTREAM_MASK_CMD) {
-                    pos += 4;
-                    // the bit we want to patch is in MSB of the value, just patch it directly since
-                    // the pos pointer is at this byte.
-                    log::debug!("output_sector: {:x?}", &output_sector[pos..pos+4]);
-                    match self.enc_to_key {
-                        FpgaKeySource::Bbram => output_sector[pos] &= 0x7f,
-                        FpgaKeySource::Efuse => output_sector[pos] |= 0x80,
-                    }
-                    log::debug!("patched {:x?}", &output_sector[pos..pos+4]);
-                    patchcount += 1;
-                    if patchcount  >= 2 {
-                        break; // short circuit the checking when we're done
-                    }
-                }
-                pos += 4;
-            }
-
-            // 2. set the commands that will eventually be encrypted, by patching the input plaintext
-            pos = 64; // start from after the hmac header
-            while pos < input_plaintext.len() {
-                let cwd = u32::from_be_bytes(input_plaintext[pos..pos+4].try_into().unwrap());
-                // the mask is always 0xffff_ffff for the bitstreams as generated by vivado...so need to modify that
-                if cwd == BITSTREAM_CTL0_CMD_FLIP {
-                    pos += 4;
-                    // the bit we want to patch is in MSB of the value, just patch it directly since
-                    // the pos pointer is at this byte.
-                    log::debug!("patching ct header orig:    {:x}", input_plaintext[pos+3]);
-                    log::debug!("{:x?}", &input_plaintext[pos..pos+4]);
-                    if cwd == BITSTREAM_CTL0_CMD_FLIP {
-                        match self.enc_to_key {
-                            FpgaKeySource::Bbram => input_plaintext[pos+3] &= 0xfe,
-                            FpgaKeySource::Efuse => input_plaintext[pos+3] |= 0x01, // bit 31 is at byte 3 "lsb" in the flipped version
-                        }
-                    }
-                    log::debug!("{:x?}", &input_plaintext[pos..pos+4]);
-                    break;
-                }
-                pos += 4;
-            }
-        }
-        let mut chain: [u8; AES_BLOCKSIZE] = self.iv;
-        if from > 0 {
-            bitflip(&self.ciphertext[from as usize - AES_BLOCKSIZE..from as usize], &mut chain);
-        }
-
-        // 3. search for the encryption key source setting only in the last blocks
-        if from > ((self.type2_count as i32 * 4 + self.type2_ciphertext_offset as i32) & 0x7FFF_F000) - 0x1000 {
-            // maybe that complex math above would be better replaced with the the constant 0x21_5000. it never changes...?
-            // I guess it might be helpful if someone ported this code to a new FPGA type.
-            log::debug!("type2 count: {} offset: {}", self.type2_count, self.type2_ciphertext_offset);
-            log::debug!("searching for second key setting starting from 0x{:x}", from);
-            let mut bytes = input_plaintext.chunks_mut(4).into_iter();
-            loop {
-                if let Some(b) = bytes.next() {
-                    let word = u32::from_be_bytes(b[..4].try_into().unwrap());
-                    if word == BITSTREAM_CTL0_CMD_FLIP {
-                        log::debug!("patching the second key setting inside block starting at 0x{:x}", from);
-                        if let Some(val) = bytes.next() {
-                            log::debug!("{:x?}", val);
-                            match self.enc_to_key {
-                                FpgaKeySource::Bbram => val[3] &= 0xfe,
-                                FpgaKeySource::Efuse => val[3] |= 0x01, // bit 31 is at byte 3 "lsb" in the flipped version
-                            }
-                            log::debug!("{:x?}", val);
-                        } else {
-                            log::error!("didn't decrypt enough memory to find the ctl0 encrypted settings");
-                        }
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        let mut bytes_processed = 0;
-        let mut temp_block = [0; AES_BLOCKSIZE];
-        for (iblock, oblock) in input_plaintext.chunks(AES_BLOCKSIZE).into_iter()
-        .zip(output_sector[out_start_offset..].chunks_mut(AES_BLOCKSIZE).into_iter()) {
-            // XOR against IV/chain value
-            for (dst, (&src, &iv)) in temp_block.iter_mut().zip(iblock.iter().zip(chain.iter())) {
-                *dst = src ^ iv;
-            }
-            let mut e = GenericArray::clone_from_slice(&mut temp_block);
-            self.enc_cipher.encrypt_block(&mut e);
-            for (&src, dst) in e.iter().zip(temp_block.iter_mut()) {
-                *dst = src;
-            }
-            // redo the IV based on the previous output. no bitflipping of the IV.
-            for (&src, dst) in temp_block.iter().zip(chain.iter_mut()) {
-                *dst = src;
-            }
-
-            // copy the ciphertext into the output block, with a bitflip
-            bitflip(&temp_block, oblock);
-            bytes_processed += AES_BLOCKSIZE;
-        }
-        bytes_processed
-    }
-
-    pub fn ciphertext_len(&self) -> usize {
-        self.ciphertext.len()
     }
 }
 
@@ -557,6 +158,7 @@ pub(crate) struct RootKeys {
     ticktimer: ticktimer_server::Ticktimer,
     xns: xous_names::XousNames,
     jtag: jtag::Jtag,
+    fake_key: [u8; 32], // a base set of random numbers used to respond to invalid keyloc requests in AES operations
 }
 
 impl<'a> RootKeys {
@@ -619,6 +221,13 @@ impl<'a> RootKeys {
         let spinor = spinor::Spinor::new(&xns).expect("couldn't connect to spinor server");
         spinor.register_soc_token().expect("couldn't register rootkeys as the one authorized writer to the gateware update area!");
         let jtag = jtag::Jtag::new(&xns).expect("couldn't connect to JTAG server");
+        let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG server");
+        // respond to invalid key indices with a "fake" AES key. We try to foil attempts to "probe out" the
+        // oracle to discover the presence of null keys.
+        let mut fake_key: [u8; 32] = [0; 32];
+        for k in fake_key.chunks_exact_mut(8) {
+            k.clone_from_slice(&trng.get_u64().unwrap().to_be_bytes());
+        }
 
         let keys = RootKeys {
             keyrom: CSR::new(keyrom.as_mut_ptr() as *mut u32),
@@ -636,12 +245,13 @@ impl<'a> RootKeys {
             boot_password_policy: PasswordRetentionPolicy::AlwaysKeep,
             cur_password_type: None,
             susres: susres::Susres::new_without_hook(&xns).expect("couldn't connect to susres without hook"),
-            trng: trng::Trng::new(&xns).expect("couldn't connect to TRNG server"),
+            trng,
             gfx: graphics_server::Gfx::new(&xns).expect("couldn't connect to gfx"),
             spinor,
             ticktimer: ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer"),
             xns,
             jtag,
+            fake_key,
         };
 
         keys
@@ -663,6 +273,81 @@ impl<'a> RootKeys {
     }
     pub fn kernel_base(&self) -> u32 { self.kernel_base }
 
+    /// This implementation creates and destroys the AES key schedule on every function call
+    /// However, Rootkey operations are not meant to be used for streaming operations; they are typically
+    /// used to secure subkeys, so a bit of overhead on each call is OK in order to not keep excess secret
+    /// data laying around.
+    /// ASSUME: the caller has confirmed that the user password is valid and in cache
+    pub fn aes_op(&mut self, key_index: u8, op_type: AesOpType, block: &mut [u8; 16]) {
+        let key = match key_index {
+            KeyRomLocs::USER_KEY => {
+                let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                if pcache.hashed_boot_pw_valid == 0 {
+                    self.purge_password(PasswordType::Boot);
+                    log::warn!("boot password isn't valid! Returning bogus results.");
+                }
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                    *key = *key ^ pw;
+                }
+                if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+                    self.purge_password(PasswordType::Boot);
+                }
+                key_enc
+            },
+            _ => {
+                // within a single boot, return a stable, non-changing fake ky based off of a single root
+                // fake key. This will make it a bit harder for an attacker to "probe out" an oracle and see
+                // which keys are null or which are populated.
+                self.fake_key[0] = key_index;
+                self.fake_key
+            }
+        };
+        let cipher = Aes256::new(GenericArray::from_slice(&key));
+        match op_type {
+            AesOpType::Decrypt => cipher.decrypt_block(block.try_into().unwrap()),
+            AesOpType::Encrypt => cipher.encrypt_block(block.try_into().unwrap())
+        }
+    }
+    pub fn aes_par_op(&mut self, key_index: u8, op_type: AesOpType, blocks: &mut[[u8; 16]; PAR_BLOCKS]) {
+        let key = match key_index {
+            KeyRomLocs::USER_KEY => {
+                let mut key_enc = self.read_key_256(KeyRomLocs::USER_KEY);
+                let pcache: &PasswordCache = unsafe{& *(self.pass_cache.as_ptr() as *const PasswordCache)};
+                if pcache.hashed_boot_pw_valid == 0 {
+                    self.purge_password(PasswordType::Boot);
+                    log::warn!("boot password isn't valid! Returning bogus results.");
+                }
+                for (key, &pw) in
+                key_enc.iter_mut().zip(pcache.hashed_boot_pw.iter()) {
+                    *key = *key ^ pw;
+                }
+                if self.boot_password_policy == PasswordRetentionPolicy::AlwaysPurge {
+                    self.purge_password(PasswordType::Boot);
+                }
+                key_enc
+            },
+            _ => {
+                self.fake_key[0] = key_index;
+                self.fake_key
+            }
+        };
+        let cipher = Aes256::new(GenericArray::from_slice(&key));
+        match op_type {
+            AesOpType::Decrypt => {
+                for block in blocks.iter_mut() {
+                    cipher.decrypt_block(block.try_into().unwrap());
+                }
+            },
+            AesOpType::Encrypt => {
+                for block in blocks.iter_mut() {
+                    cipher.encrypt_block(block.try_into().unwrap());
+                }
+            }
+        }
+    }
+
     /// returns None if there is an obvious problem with the JTAG interface
     /// otherwise returns the result. "secured" would be the most paranoid setting
     /// which is all the bits burned. There are other combinations that are also
@@ -678,6 +363,25 @@ impl<'a> RootKeys {
             return Some(false)
         } else {
             return Some(true)
+        }
+    }
+    pub fn fpga_key_source(&self) -> FpgaKeySource {
+        let mut words = self.gateware()[..4096].chunks(4);
+        loop {
+            if let Some(word) = words.next() {
+                let cwd = u32::from_be_bytes(word[0..4].try_into().unwrap());
+                if cwd == BITSTREAM_CTL0_CMD {
+                    let ctl0 = u32::from_be_bytes(words.next().unwrap()[0..4].try_into().unwrap());
+                    if ctl0 & 0x8000_0000 == 0 {
+                        return FpgaKeySource::Bbram
+                    } else {
+                        return FpgaKeySource::Efuse
+                    }
+                }
+            } else {
+                log::error!("didn't find FpgaKeySource in plaintext header");
+                panic!("didn't find FpgaKeySource in plaintext header");
+            }
         }
     }
     pub fn is_jtag_working(&self) -> bool {
@@ -737,6 +441,33 @@ impl<'a> RootKeys {
             self.keyrom.wfo(utra::keyrom::ADDRESS_ADDRESS, addr as u32);
             let keyword = self.keyrom.rf(utra::keyrom::DATA_DATA);
             *d = keyword;
+        }
+    }
+    fn replace_fpga_key(&mut self) {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if self.is_initialized() {
+            assert!(pcache.hashed_update_pw_valid != 0, "update password was not set before calling replace_fpga_key");
+        }
+        // build a new key into the pcache
+        for dst_lw in pcache.fpga_key.chunks_mut(8).into_iter() { // 64 bit chunks
+            for (dst, &src) in dst_lw.iter_mut().zip(self.trng.get_u64().unwrap().to_be_bytes().iter()) {
+                *dst = src;
+            }
+        }
+
+        // now encrypt the key, and store it into the sensitive_data for access later on by the patching routine
+        if self.is_initialized() {
+            for (dst, (key, pw)) in
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            pcache.fpga_key.chunks(4).into_iter().zip(pcache.hashed_update_pw.chunks(4).into_iter())) {
+                *dst = u32::from_be_bytes(key[0..4].try_into().unwrap()) ^ u32::from_be_bytes(pw[0..4].try_into().unwrap());
+            }
+        } else {
+            for (dst, key) in
+            self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize .. KeyRomLocs::FPGA_KEY as usize + 8].iter_mut().zip(
+            pcache.fpga_key.chunks(4).into_iter()) {
+                *dst = u32::from_be_bytes(key[0..4].try_into().unwrap());
+            }
         }
     }
 
@@ -904,6 +635,14 @@ impl<'a> RootKeys {
             true
         }
     }
+    pub fn is_pcache_boot_password_valid(&self) -> bool {
+        let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
+        if pcache.hashed_boot_pw_valid == 0 {
+            false
+        } else {
+            true
+        }
+    }
 
     /// Called by the UX layer to set up a key init run. It disables suspend/resume for the duration
     /// of the run, and also sets up some missing fields of KEYROM necessary to encrypt passwords.
@@ -1012,18 +751,16 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         self.debug_print_key(KeyRomLocs::FPGA_KEY as usize, 256, "FPGA key before encryption: ");
         // before we encrypt it, stash a copy in our password cache, as we'll need it later on to encrypt the bitstream
-        for (word, key) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter()
-        .zip(pcache.fpga_key.chunks_mut(4).into_iter()) {
-            for (&s, d) in word.to_be_bytes().iter().zip(key.iter_mut()) {
-                *d = s;
-            }
+        for (&src, dst) in self.read_key_256(KeyRomLocs::FPGA_KEY).iter()
+        .zip(pcache.fpga_key.iter_mut()) {
+            *dst = src;
         }
         pcache.fpga_key_valid = 1;
 
         // now encrypt it in the staging area
-        for (word, key_word) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
+        for (word, hashed_pass) in self.sensitive_data.borrow_mut().as_slice_mut::<u32>()[KeyRomLocs::FPGA_KEY as usize..KeyRomLocs::FPGA_KEY as usize + 256/(size_of::<u32>()*8)].iter_mut()
         .zip(pcache.hashed_update_pw.chunks(4).into_iter()) {
-            *word = *word ^ u32::from_be_bytes(key_word.try_into().unwrap());
+            *word = *word ^ u32::from_be_bytes(hashed_pass.try_into().unwrap());
         }
 
         // allocate a decryption oracle for the FPGA bitstream. This will fail early if the FPGA key is wrong.
@@ -1123,7 +860,7 @@ impl<'a> RootKeys {
         // in the staging area, so this step should be skipped.
         pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
         pb.rebase_subtask_percentage(30, 50);
-        self.make_gateware_backup(Some(&mut pb))?;
+        self.make_gateware_backup(Some(&mut pb), false)?;
 
         log::debug!("making source oracle");
         let mut src_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.staging(), self.staging_base()) {
@@ -1208,7 +945,7 @@ impl<'a> RootKeys {
         }
     }
 
-    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+    pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, provision_bbram: bool) -> Result<(), RootkeyResult> {
         // make sure the system is sane
         self.xns_interlock();
         self.spinor.set_staging_write_protect(true).expect("couldn't protect the staging area");
@@ -1230,7 +967,7 @@ impl<'a> RootKeys {
 
         // decrypt the FPGA key using the stored password
         let pcache: &mut PasswordCache = unsafe{&mut *(self.pass_cache.as_mut_ptr() as *mut PasswordCache)};
-        if pcache.hashed_update_pw_valid == 0 {
+        if pcache.hashed_update_pw_valid == 0 && self.is_initialized() {
             self.purge_password(PasswordType::Update);
             log::error!("no password was set going into the update routine");
             #[cfg(feature = "hazardous-debug")]
@@ -1265,15 +1002,47 @@ impl<'a> RootKeys {
         #[cfg(feature = "hazardous-debug")]
         log::debug!("trying to make a keypair from {:x?}", keypair_bytes);
         // Keypair zeroizes on drop
-        let keypair = Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?;
+        let keypair: Option<Keypair> = if provision_bbram && !self.is_initialized() {
+            // don't try to derive signing keys if we're doing BBRAM provisioning on an otherwise blank device
+            None
+        } else {
+            Some(Keypair::from_bytes(&keypair_bytes).map_err(|_| RootkeyResult::KeyError)?)
+        };
         log::debug!("keypair success");
 
         // stage the keyrom data for patching
         self.populate_sensitive_data();
+        let mut old_key_storage: [u8; 32] = [0; 32];
+        let old_key = if provision_bbram {
+            pb.set_percentage(3);
+            if self.is_initialized() {
+                // make a backup copy of the old key, so we can use it to decrypt the gateware before re-encrypting it
+                for (&src, dst) in pcache.fpga_key.iter().zip(old_key_storage.iter_mut()) {
+                    *dst = src;
+                }
+            }
+            self.replace_fpga_key();
 
-        pb.set_percentage(3);
+            // we transmit the BBRAM key at this point -- because if there's going to be a failure,
+            // we'd rather know it now before moving on. Three copies are sent to provide some
+            // check on the integrity of the key.
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("BBKEY|: {:?}", &pcache.fpga_key);
+            log::info!("{}", crate::CONSOLE_SENTINEL);
+            &old_key_storage
+        } else {
+            &pcache.fpga_key
+        };
+
+        pb.set_percentage(4);
         log::debug!("making destination oracle");
-        let mut dst_oracle = match BitstreamOracle::new(&pcache.fpga_key, &pcache.fpga_key, self.gateware(), self.gateware_base()) {
+        let mut dst_oracle =
+        match BitstreamOracle::new(
+        old_key,
+        &pcache.fpga_key,
+        self.gateware(),
+        self.gateware_base()) {
             Ok(o) => o,
             Err(e) => {
                 self.purge_password(PasswordType::Update);
@@ -1281,9 +1050,22 @@ impl<'a> RootKeys {
                 return Err(e);
             }
         };
+
+        let next_progress = if provision_bbram {
+            pb.update_text(t!("rootkeys.init.backup_gateware", xous::LANG));
+            pb.rebase_subtask_percentage(5, 30);
+            self.make_gateware_backup(Some(&mut pb), false)?;
+            30
+        } else {
+            10
+        };
         log::debug!("destination oracle success");
-        let keysource = dst_oracle.get_original_key_type();
-        dst_oracle.set_target_key_type(keysource);
+        if provision_bbram {
+            dst_oracle.set_target_key_type(FpgaKeySource::Bbram);
+        } else {
+            let keysource = dst_oracle.get_original_key_type();
+            dst_oracle.set_target_key_type(keysource);
+        }
         pb.set_percentage(6);
         // updates are always encrypted with the null key.
         let dummy_key: [u8; 32] = [0; 32];
@@ -1299,9 +1081,12 @@ impl<'a> RootKeys {
         };
         log::debug!("source oracle success");
 
-        pb.set_percentage(10);
+        log::info!("source key type: {:?}", src_oracle.get_original_key_type());
+        log::info!("destination key type: {:?}", dst_oracle.get_target_key_type());
+
+        pb.set_percentage(next_progress);
         pb.update_text(t!("rootkeys.init.patching_keys", xous::LANG));
-        pb.rebase_subtask_percentage(10, 60);
+        pb.rebase_subtask_percentage(next_progress, 60);
         self.gateware_copy_and_patch(&src_oracle, &dst_oracle, Some(&mut pb))?;
 
         // make a copy of the plaintext metadata and csr records
@@ -1326,10 +1111,16 @@ impl<'a> RootKeys {
         pb.set_percentage(92);
 
         // commit signatures
-        pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
-        let (gateware_sig, gateware_len) = self.sign_gateware(&keypair);
-        log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
-        self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+        let keypair = if let Some(kp) = keypair {
+            pb.update_text(t!("rootkeys.init.commit_signatures", xous::LANG));
+            let (gateware_sig, gateware_len) = self.sign_gateware(&kp);
+            log::debug!("gateware signature ({}): {:x?}", gateware_len, gateware_sig.to_bytes());
+            self.commit_signature(gateware_sig, gateware_len, SignatureType::Gateware)?;
+            // pass the kp back into the original variable. keypair does not implement copy...for good reasons.
+            Some(kp)
+        } else {
+            None
+        };
 
         // clean up the oracles
         pb.set_percentage(95);
@@ -1340,15 +1131,35 @@ impl<'a> RootKeys {
         for b in keypair_bytes.iter_mut() {
             *b = 0;
         }
+        for b in old_key_storage.iter_mut() {
+            *b = 0;
+        }
         // ed25519 keypair zeroizes on drop
 
         // check signatures
-        pb.set_percentage(96);
-        if !self.verify_gateware_self_signature() {
-            return Err(RootkeyResult::IntegrityError);
+        if keypair.is_some() {
+            pb.set_percentage(96);
+            if !self.verify_gateware_self_signature() {
+                return Err(RootkeyResult::IntegrityError);
+            }
         }
 
         pb.set_percentage(100);
+
+        if provision_bbram {
+            self.ticktimer.sleep_ms(500).unwrap();
+            // this will kick off the programming
+            log::info!("BURN_NOW");
+            log::info!("{}", crate::CONSOLE_SENTINEL);
+
+            // the key burning routine should finish before this timeout happens, and the system should have been rebooted
+            self.ticktimer.sleep_ms(10_000).unwrap();
+
+            pb.update_text(t!("rootkeys.bbram.failed_restore", xous::LANG));
+            pb.set_percentage(0);
+            pb.rebase_subtask_percentage(0, 100);
+            self.make_gateware_backup(Some(&mut pb), true)?;
+        }
 
         // check if we're to purge the password on completion
         if self.update_password_policy == PasswordRetentionPolicy::AlwaysPurge {
@@ -1512,7 +1323,7 @@ impl<'a> RootKeys {
 
             // one time only
             /*
-            match self.make_gateware_backup(30, 50, progress_modal, progress_action) {
+            match self.make_gateware_backup(30, 50, progress_modal, progress_action, false) {
                 Err(e) => {
                     log::error!("got spinor error: {:?}", e);
                     panic!("got spinor error, halting");
@@ -1594,7 +1405,7 @@ impl<'a> RootKeys {
 
         log::debug!("sector 0 patch len: {}", bytes_hashed);
         log::debug!("sector 0 header: {:x?}", &ct_sector[..dst_oracle.ciphertext_offset()]);
-        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(), &ct_sector, 0)
+        self.spinor.patch(dst_oracle.bitstream(), dst_oracle.base(), &ct_sector, 0)
         .map_err(|_| RootkeyResult::FlashError)?;
 
         // now we can patch the rest of the sectors as a loop
@@ -1634,7 +1445,7 @@ impl<'a> RootKeys {
                 }
             }
 
-            self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(),
+            self.spinor.patch(dst_oracle.bitstream(), dst_oracle.base(),
                 &ct_sector[..decrypt_len], from + dst_oracle.ciphertext_offset() as u32)
             .map_err(|_| RootkeyResult::FlashError)?;
 
@@ -1694,7 +1505,7 @@ impl<'a> RootKeys {
 
         dst_oracle.encrypt_sector(ct_last_block_loc as i32, &mut pt_sector[..pt_sector_len], &mut ct_sector[..pt_sector_len]);
         log::trace!("hash patching from 0x{:x} len {}", ct_last_block_loc, pt_sector_len);
-        self.spinor.patch(dst_oracle.bitstream, dst_oracle.base(),
+        self.spinor.patch(dst_oracle.bitstream(), dst_oracle.base(),
             &ct_sector[..pt_sector_len], ct_last_block_loc as u32 + dst_oracle.ciphertext_offset() as u32)
         .map_err(|_| RootkeyResult::FlashError)?;
 
@@ -1821,13 +1632,10 @@ impl<'a> RootKeys {
     }
 
 
-    fn make_gateware_backup(&self, mut maybe_pb: Option<&mut ProgressBar>) -> Result<(), RootkeyResult> {
-        let gateware_dest = self.staging();
-        let mut gateware_dest_base = self.staging_base();
-        let gateware_src = self.gateware();
-
-        log::trace!("src: {:x?}", &gateware_src[0..32]);
-        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
+    fn make_gateware_backup(&self, mut maybe_pb: Option<&mut ProgressBar>, do_restore: bool) -> Result<(), RootkeyResult> {
+        let gateware_dest = if !do_restore {self.staging()} else {self.gateware()};
+        let mut gateware_dest_base = if !do_restore {self.staging_base()} else {self.gateware_base()};
+        let gateware_src = if !do_restore {self.gateware()} else {self.staging()};
 
         const PATCH_CHUNK: usize = 65536; // this controls the granularity of the erase operation
         let mut prog_ctr = 0;
@@ -1849,8 +1657,6 @@ impl<'a> RootKeys {
             }
         }
 
-        log::trace!("src: {:x?}", &gateware_src[0..32]);
-        log::trace!("dst: {:x?}", &gateware_dest[0..32]);
         Ok(())
     }
 

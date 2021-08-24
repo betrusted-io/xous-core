@@ -15,6 +15,10 @@ pub(crate) enum Opcode {
     IsEfuseSecured,
     /// quick check to see if the JTAG can read its IDCODE
     IsJtagWorking,
+    /// initiate an AES oracle operation
+    AesOracle,
+    /// create new FPGA keys; provisioning requires a slave device to be connected that can run the JTAG sequence
+    BbramProvision,
 
     TestUx,
 
@@ -40,6 +44,17 @@ pub(crate) enum Opcode {
     UxSelfSignXous,
     UxSignXousPasswordPolicy,
     UxSignXousRun,
+
+    /// Ux AES calls
+    UxAesEnsurePassword,
+    UxAesPasswordPolicy,
+    UxAesEnsureReturn,
+
+    /// Ux BBRAM flow
+    UxBbramCheckHelper,
+    UxBbramCheckReturn,
+    UxBbramPasswordReturn,
+    UxBbramRun,
 
     // General Ux calls
     UxGutter, // NOP for UX calls that require a destination
@@ -86,4 +101,64 @@ pub enum RootkeyResult {
     KeyError,
     IntegrityError,
     FlashError,
+}
+
+/// AES operation definitions
+pub use cipher::{BlockCipher, consts::U16};
+use zeroize::Zeroize;
+
+/// 128-bit AES block
+#[allow(dead_code)]
+pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
+/// 16 x 128-bit AES blocks to be processed in bulk
+#[allow(dead_code)]
+pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
+
+pub const PAR_BLOCKS: usize = 16;
+/// Selects which key to use for the decryption/encryption oracle.
+/// currently only one type is available, the User key, but dozens more
+/// could be accommodated.
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive, PartialEq, Eq, Copy, Clone)]
+pub enum AesRootkeyType {
+    User0 = 0x28,
+    NoneSpecified = 0xff,
+}
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
+pub enum AesBlockType {
+    SingleBlock([u8; 16]),
+    ParBlock([[u8; 16]; PAR_BLOCKS]),
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
+pub enum AesOpType {
+    Encrypt,
+    Decrypt,
+}
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Zeroize)]
+#[zeroize(drop)]
+pub struct AesOp {
+    /// the caller can try to request "any" index, but it's checked inside the oracle first.
+    pub key_index: u8,
+    pub block: AesBlockType,
+    pub aes_op: AesOpType,
+}
+impl AesOp {
+    pub fn clear(&mut self) {
+        match self.block {
+            AesBlockType::SingleBlock(mut blk) => {
+                for b in blk.iter_mut() {
+                    *b = 0;
+                }
+            }
+            AesBlockType::ParBlock(mut blks) => {
+                for blk in blks.iter_mut() {
+                    for b in blk.iter_mut() {
+                        *b = 0;
+                    }
+                }
+            }
+        }
+    }
 }

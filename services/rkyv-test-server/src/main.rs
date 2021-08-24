@@ -3,7 +3,7 @@
 
 mod api;
 use num_traits::{FromPrimitive, ToPrimitive};
-use xous_ipc::{String, Buffer};
+use xous_ipc::{Buffer, String};
 
 fn value_or(val: Option<i32>, default: api::MathResult) -> api::MathResult {
     val.map(|v| api::MathResult::Value(v)).unwrap_or(default)
@@ -92,7 +92,7 @@ fn double_string(mem: &mut xous::MemoryMessage) {
     buffer.replace(response).unwrap();
 }
 
-fn local_lender(){
+fn local_lender() {
     use core::fmt::Write;
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();

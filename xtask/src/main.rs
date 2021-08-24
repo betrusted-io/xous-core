@@ -8,7 +8,10 @@ use std::{
 type DynError = Box<dyn std::error::Error>;
 
 const PROGRAM_TARGET: &str = "riscv32imac-unknown-xous-elf";
-const KERNEL_TARGET: &str = "riscv32imac-unknown-none-elf";
+const KERNEL_TARGET: &str = "riscv32imac-unknown-xous-elf";
+const TOOLCHAIN_URL_PREFIX: &str =
+    "https://github.com/betrusted-io/rust/releases/latest/download/riscv32imac-unknown-xous_";
+const TOOLCHAIN_URL_SUFFIX: &str = ".zip";
 
 enum MemorySpec {
     SvdFile(String),
@@ -185,9 +188,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             build_hw_image(false, env::args().nth(2), &sr_pkgs, lkey, kkey, None, &[])?
         }
         Some("debug") => run(true, &hw_pkgs)?,
-        Some("burn-kernel") => update_usb(true, false, false)?,
-        Some("burn-loader") => update_usb(false, true, false)?,
-        Some("burn-soc") => update_usb(false, false, true)?,
+        Some("burn-kernel") => update_usb(true, false, false, false)?,
+        Some("burn-loader") => update_usb(false, true, false, false)?,
+        Some("nuke-soc") => update_usb(false, false, true, false)?,
+        Some("burn-soc") => update_usb(false, false, false, true)?,
         Some("generate-locales") => generate_locales()?,
         _ => print_help(),
     }
@@ -214,7 +218,8 @@ av-test [soc.svd]       builds an image for avalanche generater only TRNG testin
 sr-test [soc.svd]       builds the suspend/resume testing image
 burn-kernel             invoke the `usb_update.py` utility to burn the kernel
 burn-loader             invoke the `usb_update.py` utility to burn the loader
-burn-soc                invoke the `usb_update.py` utility to burn the SoC gateware
+burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
+nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
 generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
@@ -222,12 +227,17 @@ Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_up
     )
 }
 
-fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynError> {
+fn update_usb(
+    do_kernel: bool,
+    do_loader: bool,
+    nuke_soc: bool,
+    stage_soc: bool,
+) -> Result<(), DynError> {
     use std::io::{BufRead, BufReader, Error, ErrorKind};
     use std::process::Stdio;
 
     if do_kernel {
-        println!("Burning kernel");
+        println!("Burning kernel. After this is done, you must select 'Sign xous update' to self-sign the image.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-k")
@@ -243,7 +253,7 @@ fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynE
             .for_each(|line| println!("{}", line.unwrap()));
     }
     if do_loader {
-        println!("Burning loader");
+        println!("Burning loader. After this is done, you must select 'Sign xous update' to self-sign the image.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-l")
@@ -258,11 +268,27 @@ fn update_usb(do_kernel: bool, do_loader: bool, do_soc: bool) -> Result<(), DynE
             .lines()
             .for_each(|line| println!("{}", line.unwrap()));
     }
-    if do_soc {
-        println!("Burning SoC gateware");
+    if stage_soc {
+        println!("Staging SoC gateware. After this is done, you must select 'Install Gateware Update' from the root menu of your Precursor device.");
         let stdout = Command::new("python3")
             .arg("tools/usb_update.py")
             .arg("-s")
+            .arg("precursors/soc_csr.bin")
+            .stdout(Stdio::piped())
+            .spawn()?
+            .stdout
+            .ok_or_else(|| Error::new(ErrorKind::Other, "Could not capture output"))?;
+
+        let reader = BufReader::new(stdout);
+        reader
+            .lines()
+            .for_each(|line| println!("{}", line.unwrap()));
+    }
+    if nuke_soc {
+        println!("Installing factory-reset SoC gateware (secrets will be lost)!");
+        let stdout = Command::new("python3")
+            .arg("tools/usb_update.py")
+            .arg("--soc")
             .arg("precursors/soc_csr.bin")
             .stdout(Stdio::piped())
             .spawn()?
@@ -448,7 +474,7 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
         ])
         .status()?;
     if !status.success() {
-        Err("Unable to regenerate Renode platform file")?;
+        return Err("Unable to regenerate Renode platform file".into());
     }
     build_hw_image(
         debug,
@@ -464,7 +490,7 @@ fn renode_image(debug: bool, packages: &[&str], extra_packages: &[&str]) -> Resu
 fn run(debug: bool, init: &[&str]) -> Result<(), DynError> {
     let stream = if debug { "debug" } else { "release" };
 
-    build(&init, debug, None, None, None)?;
+    build(init, debug, None, None, None)?;
 
     // Build and run the kernel
     let mut args = vec!["run"];
@@ -516,6 +542,217 @@ fn build_kernel(debug: bool) -> Result<PathBuf, DynError> {
     Ok(path)
 }
 
+/// Since we use the same TARGET for all calls to `build()`,
+/// cache it inside an atomic boolean. If this is `true` then
+/// it means we can assume the check passed already.
+static DONE_COMPILER_CHECK: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Ensure we have a compatible compiler toolchain. We use a new Target,
+/// and we want to give the user a friendly way of installing the latest
+/// Rust toolchain.
+fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
+    use std::process::Stdio;
+    if DONE_COMPILER_CHECK.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    /// Return the sysroot for the given target. If the target does not exist,
+    /// return None.
+    fn get_sysroot(target: Option<&str>) -> Result<Option<String>, String> {
+        let mut args = vec!["--print", "sysroot"];
+        if let Some(target) = target {
+            args.push("--target");
+            args.push(target);
+        }
+
+        let sysroot_cmd = Command::new("rustc")
+            .stderr(Stdio::null())
+            .stdout(Stdio::piped())
+            .args(&args)
+            .spawn()
+            .expect("could not run rustc");
+        let sysroot_output = sysroot_cmd.wait_with_output().unwrap();
+        let have_toolchain = sysroot_output.status.success();
+
+        let toolchain_path = String::from_utf8(sysroot_output.stdout)
+            .map_err(|_| "Unable to find Rust sysroot".to_owned())?
+            .trim()
+            .to_owned();
+
+        if have_toolchain {
+            Ok(Some(toolchain_path))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // If the sysroot exists, then we're good.
+    let target = target.unwrap_or(PROGRAM_TARGET);
+    if get_sysroot(Some(target))?.is_some() {
+        DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
+        return Ok(());
+    }
+
+    // Since no sysroot exists, we must download a new one.
+    let toolchain_path =
+        get_sysroot(None)?.ok_or_else(|| "default toolchain not installed".to_owned())?;
+    // If the terminal is a tty, offer to download the latest toolchain.
+    if !atty::is(atty::Stream::Stdin) {
+        return Err(format!("Toolchain for {} not found", target));
+    }
+
+    // Version 1.54 was the last major version that was released.
+    let ver = rustc_version::version().unwrap();
+    if ver.major == 1 && ver.minor < 54 {
+        return Err("Rust 1.54 or higher is required".into());
+    }
+
+    // Ask the user if they want to install the toolchain.
+    let mut buffer = String::new();
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    println!();
+    println!(
+        "Error: Toolchain for {} was not found on this system!",
+        target
+    );
+    loop {
+        print!("Would you like this program to attempt to download and install it?   [Y/n] ");
+        stdout.flush().unwrap();
+        buffer.clear();
+        stdin.read_line(&mut buffer).unwrap();
+
+        let trimmed = buffer.trim();
+
+        if trimmed == "n" || trimmed == "N" {
+            return Err(format!("Please install the {} toolchain", target));
+        }
+
+        if trimmed == "y" || trimmed == "Y" || trimmed.is_empty() {
+            break;
+        }
+        println!();
+    }
+
+    let toolchain_url = format!(
+        "{}{}.{}.{}{}",
+        TOOLCHAIN_URL_PREFIX, ver.major, ver.minor, ver.patch, TOOLCHAIN_URL_SUFFIX
+    );
+
+    println!(
+        "Attempting to install toolchain for {} into {}",
+        target, toolchain_path
+    );
+    println!("Downloading from {}...", toolchain_url);
+
+    print!("Download rogress: 0%");
+    stdout.flush().unwrap();
+    let mut zip_data = vec![];
+    {
+        let mut easy = curl::easy::Easy::new();
+        easy.url(&toolchain_url).unwrap();
+        easy.follow_location(true).unwrap();
+        easy.progress(true).unwrap();
+        let mut transfer = easy.transfer();
+        transfer
+            .progress_function(
+                |total_bytes, bytes_so_far, _total_uploaded, _uploaded_so_far| {
+                    // If either number is infinite, don't print anything and just continue.
+                    if total_bytes.is_infinite() || bytes_so_far.is_infinite() {
+                        return true;
+                    }
+
+                    // Display progress.
+                    print!(
+                        "\rDownload progress: {:3.02}% ",
+                        bytes_so_far / total_bytes * 100.0
+                    );
+                    stdout.flush().unwrap();
+
+                    // Return `true` to continue the transfer.
+                    true
+                },
+            )
+            .unwrap();
+        transfer
+            .write_function(|data| {
+                zip_data.extend_from_slice(data);
+                Ok(data.len())
+            })
+            .unwrap();
+        transfer
+            .perform()
+            .map_err(|e| format!("Unable to download toolchain: {}", e))?;
+        println!();
+    }
+    println!(
+        "Download successful. Total data size is {} bytes",
+        zip_data.len()
+    );
+
+    /// Extract the zipfile to the target directory, ensuring that all files
+    /// contained within are created.
+    fn extract_zip<P: std::io::Read + std::io::Seek, P2: AsRef<Path>>(
+        archive_data: P,
+        extract_to: P2,
+    ) -> Result<(), String> {
+        let mut archive = zip::ZipArchive::new(archive_data)
+            .map_err(|e| format!("unable to extract zip: {}", e))?;
+        for i in 0..archive.len() {
+            let mut entry_in_archive = archive
+                .by_index(i)
+                .map_err(|e| format!("unable to locate file index {}: {}", i, e))?;
+            // println!(
+            //     "Trying to extract file {}",
+            //     entry_in_archive.mangled_name().display()
+            // );
+
+            let output_path = extract_to.as_ref().join(entry_in_archive.mangled_name());
+            if entry_in_archive.is_dir() {
+                std::fs::create_dir_all(&output_path).map_err(|e| {
+                    format!(
+                        "unable to create directory {}: {}",
+                        output_path.display(),
+                        e
+                    )
+                })?;
+            } else {
+                // Create the parent directory if necessary
+                if let Some(parent) = output_path.parent() {
+                    if !parent.exists() {
+                        std::fs::create_dir_all(&parent).map_err(|e| {
+                            format!(
+                                "unable to create directory {}: {}",
+                                output_path.display(),
+                                e
+                            )
+                        })?;
+                    }
+                }
+                let mut outfile = std::fs::File::create(&output_path).map_err(|e| {
+                    format!("unable to create file {}: {}", output_path.display(), e)
+                })?;
+                std::io::copy(&mut entry_in_archive, &mut outfile).map_err(|e| {
+                    format!(
+                        "unable to write extracted file {}: {}",
+                        output_path.display(),
+                        e
+                    )
+                })?;
+            }
+        }
+        Ok(())
+    }
+    println!("Extracting toolchain to {}...", toolchain_path);
+    extract_zip(std::io::Cursor::new(zip_data), &toolchain_path)?;
+
+    println!("Toolchain successfully installed");
+
+    DONE_COMPILER_CHECK.store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
 fn build(
     packages: &[&str],
     debug: bool,
@@ -523,6 +760,7 @@ fn build(
     directory: Option<PathBuf>,
     extra_args: Option<&[&str]>,
 ) -> Result<PathBuf, DynError> {
+    ensure_compiler(&target)?;
     let stream = if debug { "debug" } else { "release" };
     let mut args = vec!["build"];
     print!("Building");

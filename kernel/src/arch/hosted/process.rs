@@ -301,7 +301,7 @@ impl Process {
             if let Some(mem) = result.memory() {
                 let s = unsafe { core::slice::from_raw_parts(mem.as_ptr(), mem.len()) };
                 klog!("adding {} additional bytes from result", s.len());
-                response.extend_from_slice(&s);
+                response.extend_from_slice(s);
             }
 
             // If there is memory to return for this thread, also return that.
@@ -391,16 +391,10 @@ impl Process {
             let process = &mut process_table.table[current_pid_idx].as_mut().unwrap();
             let conn = process.conn.as_mut().unwrap();
             conn.write_all(bytes).unwrap();
-            conn.flush().unwrap();
+            // conn.flush().unwrap();
         });
         Ok(())
     }
-
-    pub fn print_all_threads(&self) {}
 }
 
 impl Thread {}
-
-pub fn current_tid() -> TID {
-    1
-}

@@ -33,30 +33,29 @@ pub(crate) enum Return {
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Registration {
-    pub name: xous_ipc::String::<64>,
+    pub name: xous_ipc::String<64>,
     pub conn_limit: Option<u32>,
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Disconnect {
-    pub name: xous_ipc::String::<64>,
+    pub name: xous_ipc::String<64>,
     pub token: [u32; 4],
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticatedLookup {
-    pub name: xous_ipc::String::<64>,
+    pub name: xous_ipc::String<64>,
     pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
     pub response: [u32; 8],
 }
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct AuthenticateRequest {
-    pub name: xous_ipc::String::<64>,  // a copy of the originally requested lookup
-    pub pubkey_id: [u8; 20], // 160-bit pubkey ID encoded in network order (big endian)
+    pub name: xous_ipc::String<64>, // a copy of the originally requested lookup
+    pub pubkey_id: [u8; 20],        // 160-bit pubkey ID encoded in network order (big endian)
     pub challenge: [u32; 4],
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 // We keep XousServerName around because want to be able to index off the server name, without
@@ -147,7 +146,10 @@ impl core::fmt::Write for XousServerName {
             Err(core::fmt::Error)?;
         }
         self.length = b.len();
-        assert!(self.length < self.value.len(), "incorrect length derivation!");
+        assert!(
+            self.length < self.value.len(),
+            "incorrect length derivation!"
+        );
 
         // Copy the string into this variable
         for (dest, src) in self.value.iter_mut().zip(s.bytes()) {
@@ -177,7 +179,10 @@ impl std::hash::Hash for XousServerName {
 impl PartialEq for XousServerName {
     fn eq(&self, other: &Self) -> bool {
         assert!(self.length < self.value.len(), "incorret length on Eq!");
-        assert!(other.length < other.value.len(), "incorrect length on Eq (other)!");
+        assert!(
+            other.length < other.value.len(),
+            "incorrect length on Eq (other)!"
+        );
         self.value[..self.length as usize] == other.value[..other.length as usize]
             && self.length == other.length
     }

@@ -1,5 +1,4 @@
-pub(crate) const SERVER_NAME_TRNG: &str     = "_TRNG manager_";
-
+pub(crate) const SERVER_NAME_TRNG: &str = "_TRNG manager_";
 
 #[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Default)]
 pub struct ExcursionTest {
@@ -79,6 +78,6 @@ pub(crate) enum EventCallback {
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
 pub(crate) struct ScalarHook {
     pub sid: (u32, u32, u32, u32),
-    pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
-    pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
+    pub id: u32, // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
+    pub cid: xous::CID, // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
 }

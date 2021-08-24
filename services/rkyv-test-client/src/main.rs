@@ -60,20 +60,28 @@ fn rkyv_test_client() -> ! {
         ticktimer.sleep_ms(3000).ok();
 
         message_string.clear();
-        write!(message_string, "I'm at loop # {:^4} (some numer: {})", idx, some_number).unwrap();
+        write!(
+            message_string,
+            "I'm at loop # {:^4} (some numer: {})",
+            idx, some_number
+        )
+        .unwrap();
         some_number = some_number.wrapping_mul(53);
         rkyv_test_server::log_message("prefix", message_string);
 
         double_src.clear();
         write!(double_src, "12345678 Loop {} 🎉 你好", idx).unwrap();
         log::info!("Doubling string {}", double_src);
-        log::info!("Doubled string: {}", rkyv_test_server::double_string(&double_src));
+        log::info!(
+            "Doubled string: {}",
+            rkyv_test_server::double_string(&double_src)
+        );
 
         let sent_str = xous::String::<32>::from_str("This got moved");
         log::info!("Sending a string \"{}\"", sent_str);
         rkyv_test_server::log_message("prefix", sent_str);
 
-        if (idx %2) == 0 {
+        if (idx % 2) == 0 {
             com.req_batt_stats().unwrap();
         }
 
@@ -86,4 +94,3 @@ fn rkyv_test_client() -> ! {
         idx += 1;
     }
 }
-

@@ -1,8 +1,8 @@
+use crate::api::{DrawStyle, Point};
 use crate::op::{HEIGHT, WIDTH};
-use crate::api::{Point, DrawStyle};
+use blitstr::ClipRect;
 use blitstr_ref as blitstr;
-use blitstr::{ClipRect};
-use core::{cmp::{max, min}};
+use core::cmp::{max, min};
 
 #[derive(Debug, Clone, Copy, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct Rectangle {
@@ -37,12 +37,22 @@ impl Rectangle {
     // stack a new rectangle on top of the current one (same width)
     // positive heights go *below*, negative go *above* in screen coordinate space. borders are non-overlapping.
     pub fn new_v_stack(reference: Rectangle, height: i16) -> Rectangle {
-        if height >= 0 { // rectangle below
-            Rectangle::new_coords(reference.tl.x, reference.br.y + 1,
-            reference.br.x, reference.br.y + height)
-        } else { // rectangle above
-            Rectangle::new_coords(reference.tl.x, reference.tl.y + height,
-            reference.br.x, reference.tl.y - 1)
+        if height >= 0 {
+            // rectangle below
+            Rectangle::new_coords(
+                reference.tl.x,
+                reference.br.y + 1,
+                reference.br.x,
+                reference.br.y + height,
+            )
+        } else {
+            // rectangle above
+            Rectangle::new_coords(
+                reference.tl.x,
+                reference.tl.y + height,
+                reference.br.x,
+                reference.tl.y - 1,
+            )
         }
     }
     // make a new rectangle than spans between the above and below rectangles. the borders are non-overlapping.
@@ -52,20 +62,34 @@ impl Rectangle {
     // "stack" a rectangle to the left or right of the current one (same height)
     // positive widths go to the right, negative to the left. borders are non-overlapping
     pub fn new_h_stack(reference: Rectangle, width: i16) -> Rectangle {
-        if width >= 0 { // stack to the right
-            Rectangle::new_coords(reference.br.x + 1, reference.tl.y,
-            reference.br.x + width + 1, reference.br.y)
-        } else { // stack to the left
-            Rectangle::new_coords(reference.tl.x + width - 1, reference.tl.y,
-            reference.tl.x - 1, reference.br.y)
+        if width >= 0 {
+            // stack to the right
+            Rectangle::new_coords(
+                reference.br.x + 1,
+                reference.tl.y,
+                reference.br.x + width + 1,
+                reference.br.y,
+            )
+        } else {
+            // stack to the left
+            Rectangle::new_coords(
+                reference.tl.x + width - 1,
+                reference.tl.y,
+                reference.tl.x - 1,
+                reference.br.y,
+            )
         }
     }
     // make a new rectangle than spans between the left and right rectangles. borders are non-overlapping
     pub fn new_h_span(left: Rectangle, right: Rectangle) -> Rectangle {
         Rectangle::new_coords(left.br.x + 1, left.tl.y, right.tl.x - 1, right.br.y)
     }
-    pub fn tl(&self) -> Point { self.tl }
-    pub fn br(&self) -> Point { self.br }
+    pub fn tl(&self) -> Point {
+        self.tl
+    }
+    pub fn br(&self) -> Point {
+        self.br
+    }
     pub fn bl(&self) -> Point {
         Point {
             x: self.tl.x,
@@ -79,14 +103,14 @@ impl Rectangle {
         }
     }
     pub fn intersects(&self, other: Rectangle) -> bool {
-        !(self.br.x < other.tl.x ||
-          self.tl.y > other.br.y ||
-          self.br.y < other.tl.y ||
-          self.tl.x > other.br.x)
+        !(self.br.x < other.tl.x
+            || self.tl.y > other.br.y
+            || self.br.y < other.tl.y
+            || self.tl.x > other.br.x)
     }
     pub fn intersects_point(&self, point: Point) -> bool {
-        ((point.x >= self.tl.x) && (point.x <= self.br.x)) &&
-        ((point.y >= self.tl.y) && (point.y <= self.br.y))
+        ((point.x >= self.tl.x) && (point.x <= self.br.x))
+            && ((point.y >= self.tl.y) && (point.y <= self.br.y))
     }
     /// takes the current Rectangle, and clips it with a clipping Rectangle; returns a new rectangle as the result
     pub fn clip_with(&self, clip: Rectangle) -> Option<Rectangle> {
@@ -97,18 +121,26 @@ impl Rectangle {
         let tl: Point = Point::new(
             if self.tl.x < clip.tl.x {
                 clip.tl.x
-            } else { self.tl.x },
+            } else {
+                self.tl.x
+            },
             if self.tl.y < clip.tl.y {
                 clip.tl.y
-            } else { self.tl.y },
+            } else {
+                self.tl.y
+            },
         );
         let br: Point = Point::new(
             if self.br.x > clip.br.x {
                 clip.br.x
-            } else { self.br.x },
+            } else {
+                self.br.x
+            },
             if self.br.y > clip.br.y {
                 clip.br.y
-            } else { self.br.y },
+            } else {
+                self.br.y
+            },
         );
         Some(Rectangle::new(tl, br))
     }
@@ -206,7 +238,12 @@ impl Rectangle {
 
 impl Into<ClipRect> for Rectangle {
     fn into(self) -> ClipRect {
-        ClipRect::new(self.x0() as _, self.y0() as _, self.x1() as _, self.y1() as _)
+        ClipRect::new(
+            self.x0() as _,
+            self.y0() as _,
+            self.x1() as _,
+            self.y1() as _,
+        )
     }
 }
 
@@ -241,7 +278,6 @@ impl Line {
         self.end = self.end + offset;
     }
 }
-
 
 //////////////////////////// CIRCLE
 
@@ -300,105 +336,48 @@ impl RoundedRectangle {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn intersection_test() {
-        let a = Rectangle::new(
-            Point::new(0, 0,),
-            Point::new(100, 150));
+        let a = Rectangle::new(Point::new(0, 0), Point::new(100, 150));
 
         assert!(a.intersects(a));
         // br corner
-        assert!(a.intersects(Rectangle::new(
-            Point::new(50, 50),
-            Point::new(200, 200),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(50, 50), Point::new(200, 200),)));
         // tl corner
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, -50),
-            Point::new(50, 50),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, -50), Point::new(50, 50),)));
         // tr corner
-        assert!(a.intersects(Rectangle::new(
-            Point::new(50, -50),
-            Point::new(250, 50),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(50, -50), Point::new(250, 50),)));
         // bl corner
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, 50),
-            Point::new(50, 250),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, 50), Point::new(50, 250),)));
         // enclosed
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, -50),
-            Point::new(250, 250),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, -50), Point::new(250, 250),)));
         // enclosing
-        assert!(a.intersects(Rectangle::new(
-            Point::new(10, 10),
-            Point::new(20, 20),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(10, 10), Point::new(20, 20),)));
         // left border
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-10, 10),
-            Point::new(0, 20),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-10, 10), Point::new(0, 20),)));
         // right border
-        assert!(a.intersects(Rectangle::new(
-            Point::new(100, 10),
-            Point::new(150, 20),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(100, 10), Point::new(150, 20),)));
         // top border
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-100, -10),
-            Point::new(150, 0),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-100, -10), Point::new(150, 0),)));
         // bottom border
-        assert!(a.intersects(Rectangle::new(
-            Point::new(50, 150),
-            Point::new(60, 151),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(50, 150), Point::new(60, 151),)));
         // within, bordering
-        assert!(a.intersects(Rectangle::new(
-            Point::new(0, 20),
-            Point::new(100, 50),
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(0, 20), Point::new(100, 50),)));
         // wider than, from above
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, -50),
-            Point::new(300, 50)
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, -50), Point::new(300, 50))));
         // wider than, from below
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, 100),
-            Point::new(300, 300)
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, 100), Point::new(300, 300))));
         // taller than, from left
-        assert!(a.intersects(Rectangle::new(
-            Point::new(-50, -50),
-            Point::new(20, 300)
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(-50, -50), Point::new(20, 300))));
         // taller than, from right
-        assert!(a.intersects(Rectangle::new(
-            Point::new(20, 50),
-            Point::new(300, 300)
-        )));
+        assert!(a.intersects(Rectangle::new(Point::new(20, 50), Point::new(300, 300))));
 
         // to the left of
-        assert!(!a.intersects(Rectangle::new(
-            Point::new(-10, -10),
-            Point::new(-5, -5),
-        )));
+        assert!(!a.intersects(Rectangle::new(Point::new(-10, -10), Point::new(-5, -5),)));
         // to the right of
-        assert!(!a.intersects(Rectangle::new(
-            Point::new(101, 0),
-            Point::new(150, 150),
-        )));
-
+        assert!(!a.intersects(Rectangle::new(Point::new(101, 0), Point::new(150, 150),)));
     }
 }

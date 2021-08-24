@@ -10,7 +10,7 @@ const HEIGHT: usize = 536;
 const WIDTH_WORDS: usize = 11;
 const FB_SIZE: usize = WIDTH_WORDS * HEIGHT; // 44 bytes by 536 lines
 
-const MAX_FPS: u64 = 15;
+const MAX_FPS: u64 = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
 const LIGHT_COLOUR: u32 = 0x1B1B19;
 
@@ -43,10 +43,10 @@ impl XousDisplay {
             panic!("{}", e);
         });
 
-        // Limit the maximum refresh rate
-        window.limit_update_rate(Some(std::time::Duration::from_micros(
-            1000 * 1000 / MAX_FPS,
-        )));
+        // // Limit the maximum refresh rate
+        // window.limit_update_rate(Some(std::time::Duration::from_micros(
+        //     1000 * 1000 / MAX_FPS,
+        // )));
 
         let native_buffer = vec![DARK_COLOUR; WIDTH * HEIGHT];
         window
@@ -54,7 +54,8 @@ impl XousDisplay {
             .unwrap();
 
         let xns = xous_names::XousNames::new().unwrap();
-        let kbd = keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
+        let kbd =
+            keyboard::Keyboard::new(&xns).expect("GFX|hosted can't connect to KBD for emulation");
         let keyboard_handler = Box::new(XousKeyboardHandler {
             kbd: kbd,
             left_shift: false,
@@ -66,7 +67,7 @@ impl XousDisplay {
             native_buffer,
             window,
             emulated_buffer: [0u32; FB_SIZE],
-            devboot: false,
+            devboot: true,
         }
     }
     pub fn set_devboot(&mut self, ena: bool) {
@@ -105,16 +106,6 @@ impl XousDisplay {
         if !self.window.is_open() || self.window.is_key_down(Key::Escape) {
             std::process::exit(0);
         }
-        // let pressed = self.window.get_keys_pressed(KeyRepeat::No);
-        // if let Some(keys) = pressed {
-        //     for k in keys {
-        //         log::info!("GFX|hosted: sending key {:?}", k);
-        //         let c = self.decode_key(k);
-        //         if c != '\u{0000}' {
-        //             xous::send_message(self.kbd_conn, keyboard::api::Opcode::HostModeInjectKey(c).into()).map(|_| ()).unwrap();
-        //         }
-        //     }
-        // }
     }
 
     fn emulated_to_native(&mut self) {
@@ -127,7 +118,8 @@ impl XousDisplay {
         {
             for (dest_cell, src_cell) in dest_row.chunks_mut(32).zip(src_row) {
                 for (bit, dest) in dest_cell.iter_mut().enumerate() {
-                    if self.devboot && ((bit >> 1) % 2) == 0 && (row == DEVBOOT_LINE) { // try to render the devboot defile somewhat accurately
+                    if self.devboot && ((bit >> 1) % 2) == 0 && (row == DEVBOOT_LINE) {
+                        // try to render the devboot defile somewhat accurately
                         *dest = LIGHT_COLOUR
                     } else {
                         *dest = if src_cell & (1 << bit) != 0 {

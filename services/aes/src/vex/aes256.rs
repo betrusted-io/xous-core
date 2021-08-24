@@ -7,10 +7,7 @@ pub fn aes256_enc_key_schedule(user_key: &[u8]) -> VexKeys256 {
     set_encrypt_key_inner_256(user_key, true)
 }
 
-fn set_encrypt_key_inner_256(
-    user_key: &[u8],
-    swap_final: bool,
-) -> VexKeys256 {
+fn set_encrypt_key_inner_256(user_key: &[u8], swap_final: bool) -> VexKeys256 {
     let mut rk: VexKeys256 = [0; 60];
 
     rk[0] = get_u32_be(user_key, 0);
@@ -117,4 +114,3 @@ pub fn aes256_dec_key_schedule(user_key: &[u8]) -> VexKeys256 {
     }
     rk
 }
-

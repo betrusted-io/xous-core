@@ -1,0 +1,20 @@
+# if you want to format 'em, then you can maintain 'em!
+ignore = [
+  "services/codec",
+  "services/com",
+  "services/engine-25519",
+  "services/gam",
+  "services/graphics-server",
+  "services/ime-frontend",
+  "services/ime-plugin-shell",
+  "services/jtag",
+  "services/keyboard",
+  "services/llio",
+  "services/root-keys",
+  "services/rtc",
+  "services/shellchat",
+  "services/spinor",
+  "services/susres",
+]
+# Note: run this on Linux to fix Windows changing .rs files to +x:
+# find . -name "*.rs" -exec chmod -x {} \;

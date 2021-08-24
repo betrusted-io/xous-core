@@ -46,7 +46,8 @@ fn sleep_loop_4(main_conn: usize, sleep_ms: usize, ticktimer_conn: usize, pid: u
                 loop_count as _,
                 end_time as _,
             )),
-        ).unwrap();
+        )
+        .unwrap();
     }
 }
 

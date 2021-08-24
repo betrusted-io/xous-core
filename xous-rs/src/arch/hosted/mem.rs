@@ -12,12 +12,12 @@ pub fn map_memory_pre(
     Ok(())
 }
 
+#[allow(unused_mut)]
 pub fn map_memory_post(
     _phys: Option<MemoryAddress>,
     _virt: Option<MemoryAddress>,
     _size: usize,
     _flags: MemoryFlags,
-    #[cfg_attr(not(any(target_os = "none", target_os = "xous")), allow(unused_mut))]
     mut range: MemoryRange,
 ) -> core::result::Result<MemoryRange, Error> {
     let layout = Layout::from_size_align(range.len(), 4096).unwrap();

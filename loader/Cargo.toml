@@ -6,23 +6,20 @@ edition = "2018"
 description = "Initial kernel loader for Xous"
 
 [dependencies]
-utralib = {path = "utralib"}
+utralib = { path = "utralib" }
 
 [dependencies.com_rs]
-git="https://github.com/betrusted-io/com_rs"
-branch="main"
+git = "https://github.com/betrusted-io/com_rs"
+branch = "main"
 
 [dependencies.curve25519-dalek]
-git="https://github.com/betrusted-io/curve25519-dalek.git"
-branch="main"
-#path = "../../curve25519-dalek"
 package = "curve25519-dalek"
-version = "3.1.0"
+version = "3"
 default-features = false
 features = ["u32e_backend"]
 
 [dependencies.ed25519-dalek]
-version="1.0.1"
+version = "1.0.1"
 default-features = false
 #features = ["u32_backend"]
 
@@ -36,13 +33,8 @@ earlyprintk = []
 #default = ["debug-print"]
 default = []
 
-[profile.release]
-codegen-units = 1 # 1 better optimizations
-debug = true # symbols are nice and they don't increase the size on Flash
-lto = "fat"
-
 [target.'cfg(not(any(windows, unix)))'.dependencies]
-utralib = { path = "utralib"}
+utralib = { path = "utralib" }
 
 # patch key references into our local name space
 [patch.crates-io.sha2]
@@ -54,9 +46,10 @@ default-features = false
 path = "utralib"
 
 [patch.crates-io.curve25519-dalek]
-git="https://github.com/betrusted-io/curve25519-dalek.git"
-branch="main"
-package = "curve25519-dalek"
-version = "3.1.0"
-default-features = false
-features = ["u32e_backend"]
+git = "https://github.com/betrusted-io/curve25519-dalek.git"
+branch = "main"
+
+[profile.release]
+codegen-units = 1 # 1 better optimizations
+debug = true      # symbols are nice and they don't increase the size on Flash
+lto = "fat"

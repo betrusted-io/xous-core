@@ -7,10 +7,7 @@ pub fn aes128_enc_key_schedule(user_key: &[u8]) -> VexKeys128 {
     set_encrypt_key_inner_128(user_key, true)
 }
 
-fn set_encrypt_key_inner_128(
-    user_key: &[u8],
-    swap_final: bool,
-) -> VexKeys128 {
+fn set_encrypt_key_inner_128(user_key: &[u8], swap_final: bool) -> VexKeys128 {
     let mut rk: VexKeys128 = [0; 60];
 
     rk[0] = get_u32_be(user_key, 0);

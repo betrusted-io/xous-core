@@ -19,6 +19,8 @@ use std::str;
 mod implementation;
 #[cfg(any(target_os = "none", target_os = "xous"))]
 use implementation::*;
+/// used by the bbram helper/console protocol to indicate the start of a console message
+const CONSOLE_SENTINEL: &'static str = "CONS_SENTINEL|";
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
 mod bcrypt;
@@ -83,6 +85,12 @@ mod implementation {
     use num_traits::*;
     use crate::{SignatureResult, GatewareRegion, MetadataInFlash};
 
+    #[derive(Debug, Copy, Clone)]
+    #[allow(dead_code)]
+    pub enum FpgaKeySource {
+        Bbram,
+        Efuse,
+    }
     #[allow(dead_code)]
     pub struct RootKeys {
         password_type: Option<PasswordType>,
@@ -147,7 +155,7 @@ mod implementation {
         pub fn do_key_init(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.setup_wait", xous::LANG))
         }
-        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
+        pub fn do_gateware_update(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID, _provision_bbram: bool) -> Result<(), RootkeyResult> {
             self.fake_progress(rootkeys_modal, main_cid, t!("rootkeys.gwup_starting", xous::LANG))
         }
         pub fn do_sign_xous(&mut self, rootkeys_modal: &mut Modal, main_cid: xous::CID) -> Result<(), RootkeyResult> {
@@ -174,6 +182,12 @@ mod implementation {
         pub fn is_pcache_update_password_valid(&self) -> bool {
             false
         }
+        pub fn is_pcache_boot_password_valid(&self) -> bool {
+            false
+        }
+        pub fn fpga_key_source(&self) -> FpgaKeySource {
+            FpgaKeySource::Efuse
+        }
 
         pub fn fetch_gw_metadata(&self, _region_enum: GatewareRegion) -> MetadataInFlash {
             MetadataInFlash {
@@ -198,6 +212,8 @@ mod implementation {
                 status_str: [79, 110, 32, 98, 114, 97, 110, 99, 104, 32, 109, 97, 105, 110, 10, 89, 111, 117, 114, 32, 98, 114, 97, 110, 99, 104, 32, 105, 115, 32, 117, 112, 32, 116, 111, 32, 100, 97, 116, 101, 32, 119, 105, 116, 104, 32, 39, 111, 114, 105, 103, 105, 110, 47, 109, 97, 105, 110, 39, 46, 10, 10, 67, 104, 97, 110, 103, 101, 115, 32, 110, 111, 116, 32, 115, 116, 97, 103, 101, 100, 32, 102, 111, 114, 32, 99, 111, 109, 109, 105, 116, 58, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 97, 100, 100, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 117, 112, 100, 97, 116, 101, 32, 119, 104, 97, 116, 32, 119, 105, 108, 108, 32, 98, 101, 32, 99, 111, 109, 109, 105, 116, 116, 101, 100, 41, 10, 32, 32, 40, 117, 115, 101, 32, 34, 103, 105, 116, 32, 114, 101, 115, 116, 111, 114, 101, 32, 60, 102, 105, 108, 101, 62, 46, 46, 46, 34, 32, 116, 111, 32, 100, 105, 115, 99, 97, 114, 100, 32, 99, 104, 97, 110, 103, 101, 115, 32, 105, 110, 32, 119, 111, 114, 107, 105, 110, 103, 32, 100, 105, 114, 101, 99, 116, 111, 114, 121, 41, 10, 32, 32, 40, 99, 111, 109, 109, 105, 116, 32, 111, 114, 32, 100, 105, 115, 99, 97, 114, 100, 32, 116, 104, 101, 32, 117, 110, 116, 114, 97, 99, 107, 101, 100, 32, 111, 114, 32, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 32, 105, 110, 32, 115, 117, 98, 109, 111, 100, 117, 108, 101, 115, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 97, 112, 112, 101, 110, 100, 95, 99, 115, 114, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 101, 116, 114, 117, 115, 116, 101, 100, 95, 115, 111, 99, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 47, 98, 101, 116, 114, 117, 115, 116, 101, 100, 45, 98, 111, 111, 116, 47, 97, 115, 115, 101, 109, 98, 108, 101, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 111, 111, 116, 95, 116, 101, 115, 116, 46, 112, 121, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 98, 117, 105, 108, 100, 45, 100, 111, 99, 115, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 99, 104, 101, 99, 107, 45, 116, 105, 109, 105, 110, 103, 46, 115, 104, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 99, 111, 109, 112, 105, 108, 101, 114, 95, 114, 116, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 101, 110, 99, 114, 121, 112, 116, 45, 98, 105, 116, 115, 116, 114, 101, 97, 109, 45, 112, 121, 116, 104, 111, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 103, 97, 116, 101, 119, 97, 114, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 100, 114, 97, 109, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 115, 99, 111, 112, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 108, 105, 116, 101, 120, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 109, 105, 103, 101, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 111, 112, 101, 110, 116, 105, 116, 97, 110, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 115, 101, 114, 105, 97, 108, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 112, 121, 116, 104, 111, 110, 100, 97, 116, 97, 45, 99, 112, 117, 45, 118, 101, 120, 114, 105, 115, 99, 118, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102, 105, 101, 100, 58, 32, 32, 32, 100, 101, 112, 115, 47, 114, 111, 109, 45, 108, 111, 99, 97, 116, 101, 32, 40, 109, 111, 100, 105, 102, 105, 101, 100, 32, 99, 111, 110, 116, 101, 110, 116, 41, 10, 9, 109, 111, 100, 105, 102],
            }
         }
+        pub fn aes_op(&mut self, _key_index: u8, _op_type: AesOpType, _block: &mut [u8; 16]) {}
+        pub fn aes_par_op(&mut self, _key_index: u8, _op_type: AesOpType, _block: &mut [[u8; 16]; PAR_BLOCKS]) {}
     }
 }
 
@@ -223,6 +239,7 @@ fn xmain() -> ! {
     log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new();
+    log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());
 
     // create the servers necessary to coordinate an auto-reboot sequence...
     let llio = llio::Llio::new(&xns).unwrap();
@@ -291,8 +308,9 @@ fn xmain() -> ! {
     );
 
     let mut reboot_initiated = false;
+    let mut aes_sender: Option<xous::MessageSender> = None;
     loop {
-        let msg = xous::receive_message(keys_sid).unwrap();
+        let mut msg = xous::receive_message(keys_sid).unwrap();
         log::debug!("message: {:?}", msg);
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
@@ -624,12 +642,20 @@ fn xmain() -> ! {
             },
             Some(Opcode::UxUpdateGwShowInfo) => {
                 let gw_info = keys.fetch_gw_metadata(GatewareRegion::Staging);
-                let info = format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
-                    gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
-                    gw_info.git_commit,
-                    str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
-                    str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
-                );
+                let info = if gw_info.git_commit == 0 && gw_info.git_additional == 0 {
+                    format!("v{}.{}.{}+{}\nClean tag\n@{}\n{}",
+                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                        str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
+                        str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
+                    )
+                } else {
+                    format!("v{}.{}.{}+{}\ncommit: g{:x}\n@{}\n{}",
+                        gw_info.git_maj, gw_info.git_min, gw_info.git_rev, gw_info.git_additional,
+                        gw_info.git_commit,
+                        str::from_utf8(&gw_info.host_str[..gw_info.host_len as usize]).unwrap(),
+                        str::from_utf8(&gw_info.date_str[..gw_info.date_len as usize]).unwrap()
+                    )
+                };
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
                 if payload.as_str() == t!("rootkeys.gwup.short", xous::LANG) {
@@ -752,7 +778,7 @@ fn xmain() -> ! {
                 }
                 keys.set_ux_password_type(None);
 
-                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, false);
                 // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
                 rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
 
@@ -914,6 +940,232 @@ fn xmain() -> ! {
                     }
                 }
             }
+            Some(Opcode::UxAesEnsurePassword) => msg_blocking_scalar_unpack!(msg, key_index, _, _, _, {
+                if key_index as u8 == AesRootkeyType::User0.to_u8().unwrap() {
+                    if keys.is_pcache_boot_password_valid() {
+                        // short circuit the process if the cache is hot
+                        xous::return_scalar(msg.sender, 1).unwrap();
+                        continue;
+                    }
+                    if aes_sender.is_some() {
+                        log::error!("multiple concurrent requests to UxAesEnsurePasword, not allowed!");
+                        xous::return_scalar(msg.sender, 0).unwrap();
+                    } else {
+                        aes_sender = Some(msg.sender);
+                    }
+                    keys.set_ux_password_type(Some(PasswordType::Boot));
+                    password_action.set_action_opcode(Opcode::UxAesPasswordPolicy.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::TextEntry(password_action)),
+                        Some(t!("rootkeys.get_login_password", xous::LANG)), false,
+                        None, true, None
+                    );
+                    rootkeys_modal.activate();
+                    // note that the scalar is *not* yet returned, it will be returned by the opcode called by the password assurance
+                } else {
+                    // insert other indices, as we come to have them in else-ifs
+                    // note that there needs to be a way to keep the ensured password in sync with the
+                    // actual key index (if multiple passwords are used/required). For now, because there is only
+                    // one password, we can use is_pcache_boot_password_valid() to sync that up; but as we add
+                    // more keys with more passwords, this policy may need to become markedly more complicated!
+
+                    // otherwise, an invalid password request
+                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.bad_password_request", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+
+                    xous::return_scalar(msg.sender, 0).unwrap();
+                }
+            }),
+            Some(Opcode::UxAesPasswordPolicy) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+
+                let mut confirm_radiobox = gam::modal::RadioButtons::new(
+                    main_cid,
+                    Opcode::UxAesEnsureReturn.to_u32().unwrap()
+                );
+                confirm_radiobox.is_password = true;
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_clear", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_suspend", xous::LANG)));
+                confirm_radiobox.add_item(ItemName::new(t!("rootkeys.policy_keep", xous::LANG)));
+                rootkeys_modal.modify(
+                    Some(ActionType::RadioButtons(confirm_radiobox)),
+                    Some(t!("rootkeys.policy_request", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+            },
+            Some(Opcode::UxAesEnsureReturn) => {
+                let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let payload = buffer.to_original::<RadioButtonPayload, _>().unwrap();
+                if payload.as_str() == t!("rootkeys.policy_keep", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysKeep));
+                } else if payload.as_str() == t!("rootkeys.policy_suspend", xous::LANG) {
+                    keys.update_policy(Some(PasswordRetentionPolicy::EraseOnSuspend));
+                } else if payload.as_str() == "no change" {
+                    // don't change the policy
+                } else {
+                    keys.update_policy(Some(PasswordRetentionPolicy::AlwaysPurge)); // default to the most paranoid level
+                }
+                keys.set_ux_password_type(None);
+                if let Some(sender) = aes_sender.take() {
+                    xous::return_scalar(sender, 1).unwrap();
+                } else {
+                    log::error!("entered a UxAesEnsureReturn but the flow was not set up correctly!");
+                    panic!("entered a UxAesEnsureReturn but the flow was not set up correctly!")
+                }
+            }
+            Some(Opcode::AesOracle) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                // as_flat saves a copy step, but we have to deserialize some enums manually
+                let mut aes_op = buffer.to_original::<AesOp, _>().unwrap();
+                let op = match aes_op.aes_op { // seems stupid, but we have to do this because we want to have zeroize on the AesOp record, and it means we can't have Copy on this.
+                    AesOpType::Decrypt => AesOpType::Decrypt,
+                    AesOpType::Encrypt => AesOpType::Encrypt,
+                };
+                // deserialize the specifier
+                match aes_op.block {
+                    AesBlockType::SingleBlock(mut b) => {
+                        log::info!("b: {:x?}", b);
+                        keys.aes_op(aes_op.key_index, op, &mut b);
+                        log::info!("b: {:x?}", b);
+                        aes_op.block = AesBlockType::SingleBlock(b);
+                        log::info!("after b: {:x?}", aes_op);
+                    }
+                    AesBlockType::ParBlock(mut pb) => {
+                        keys.aes_par_op(aes_op.key_index, op, &mut pb);
+                        aes_op.block = AesBlockType::ParBlock(pb);
+                    }
+                };
+                buffer.replace(aes_op).unwrap();
+            },
+
+            Some(Opcode::BbramProvision) => {
+                dismiss_modal_action.set_action_opcode(Opcode::UxBbramCheckHelper.to_u32().unwrap());
+                rootkeys_modal.modify(
+                    Some(ActionType::Notification(dismiss_modal_action)),
+                    Some(t!("rootkeys.bbram.confirm", xous::LANG)), false,
+                    None, false, None);
+                rootkeys_modal.activate();
+            }
+            Some(Opcode::UxBbramCheckHelper) => {
+                let console_input = gam::modal::ConsoleInput::new(
+                    main_cid,
+                    Opcode::UxBbramCheckReturn.to_u32().unwrap()
+                );
+                rootkeys_modal.modify(
+                    Some(ActionType::ConsoleInput(console_input)),
+                    Some(t!("rootkeys.console_input", xous::LANG)), false,
+                    None, true, None);
+                rootkeys_modal.activate();
+                log::info!("{}check_conn", CONSOLE_SENTINEL);
+            }
+            Some(Opcode::UxBbramCheckReturn) => {
+                let buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let console_text = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+                log::info!("got console text:{}", console_text.as_str());
+                if console_text.as_str().starts_with("HELPER_OK") {
+                    log::info!("got '{}', moving on", console_text.as_str());
+                    // proceed
+                    if keys.is_pcache_update_password_valid() || !keys.is_initialized() {
+                        send_message(main_cid,
+                            xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).unwrap();
+                    } else {
+                        keys.set_ux_password_type(Some(PasswordType::Update));
+                        password_action.set_action_opcode(Opcode::UxBbramPasswordReturn.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::TextEntry(password_action)),
+                            Some(t!("rootkeys.get_signing_password", xous::LANG)), false,
+                            None, true, None
+                        );
+                        rootkeys_modal.activate();
+                    }
+                } else {
+                    // abort with help message
+                    dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                    rootkeys_modal.modify(
+                        Some(ActionType::Notification(dismiss_modal_action)),
+                        Some(t!("rootkeys.bbram.no_helper", xous::LANG)), false,
+                        None, false, None);
+                    rootkeys_modal.activate();
+                }
+            }
+            Some(Opcode::UxBbramPasswordReturn) => {
+                let mut buf = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
+                let mut plaintext_pw = buf.to_original::<gam::modal::TextEntryPayload, _>().unwrap();
+
+                keys.hash_and_save_password(plaintext_pw.as_str());
+                plaintext_pw.volatile_clear(); // ensure the data is destroyed after sending to the keys enclave
+                buf.volatile_clear();
+                send_message(main_cid,
+                    xous::Message::new_scalar(Opcode::UxBbramRun.to_usize().unwrap(), 0, 0, 0, 0)
+                ).unwrap();
+            }
+            Some(Opcode::UxBbramRun) => {
+                keys.set_ux_password_type(None);
+                let result = keys.do_gateware_update(&mut rootkeys_modal, main_cid, true);
+                // the stop emoji, when sent to the slider action bar in progress mode, will cause it to close and relinquish focus
+                rootkeys_modal.key_event(['🛑', '\u{0000}', '\u{0000}', '\u{0000}']);
+
+                match result {
+                    Ok(_) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.bbram.finished", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::AlignmentError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_alignment", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::KeyError) => {
+                        // probably a bad password, purge it, so the user can try again
+                        keys.purge_password(PasswordType::Update);
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_key", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::IntegrityError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_verify", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                    Err(RootkeyResult::FlashError) => {
+                        dismiss_modal_action.set_action_opcode(Opcode::UxGutter.to_u32().unwrap());
+                        rootkeys_modal.modify(
+                            Some(ActionType::Notification(dismiss_modal_action)),
+                            Some(t!("rootkeys.init.fail_burn", xous::LANG)), false,
+                            None, false, None);
+                        rootkeys_modal.activate();
+                        xous::yield_slice();
+                    }
+                }
+            }
+
             Some(Opcode::CheckGatewareSignature) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 if keys.is_initialized() {
                     if keys.verify_gateware_self_signature() {
@@ -925,8 +1177,9 @@ fn xmain() -> ! {
                     xous::return_scalar(msg.sender, 2).expect("couldn't send return value");
                 }
             }),
-            Some(Opcode::TestUx) => msg_scalar_unpack!(msg, _arg, _, _, _, {
-                // empty test routine for now
+            Some(Opcode::TestUx) => msg_blocking_scalar_unpack!(msg, _arg, _, _, _, {
+                // dummy test for now
+                xous::return_scalar(msg.sender, 1234).unwrap();
             }),
             Some(Opcode::UxGetPolicy) => {
                 policy_menu.activate();

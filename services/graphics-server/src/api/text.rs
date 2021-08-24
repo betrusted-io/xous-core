@@ -1,6 +1,6 @@
-use crate::api::{Point, Rectangle, Gid};
+use crate::api::{Gid, Point, Rectangle};
+use blitstr::{Cursor, GlyphStyle};
 use blitstr_ref as blitstr;
-use blitstr::{GlyphStyle, Cursor};
 use xous_ipc::String;
 
 /// coordinates are local to the canvas, not absolute to the screen
@@ -50,10 +50,10 @@ pub struct TextView {
     // this is the operation as specified for the GAM. Note this is different from the "op" when sent to graphics-server
     // only the GAM should be sending TextViews to the graphics-server, and a different coding scheme is used for that link.
     operation: TextOp,
-    canvas: Gid, // GID of the canvas to draw on
-    pub clip_rect: Option<Rectangle>,  // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
+    canvas: Gid,                      // GID of the canvas to draw on
+    pub clip_rect: Option<Rectangle>, // this is set by the GAM to the canvas' clip_rect; needed by gfx for drawing. Note this is in screen coordinates.
 
-    pub untrusted: bool,  // render content with random stipples to indicate the strings within are untrusted
+    pub untrusted: bool, // render content with random stipples to indicate the strings within are untrusted
     pub token: Option<[u32; 4]>, // optional 128-bit token which is presented to prove a field's trustability
     pub invert: bool, // only trusted, token-validated TextViews will have the invert bit respected
 
@@ -61,7 +61,7 @@ pub struct TextView {
     // note that the TextBounds coordinate system is local to the canvas, not the screen
     pub bounds_hint: TextBounds,
     pub bounds_computed: Option<Rectangle>, // is Some(Rectangle) if bounds have been computed and text has not been modified
-    pub overflow: Option<bool>,  // indicates if the text has overflowed the canvas, set by the drawing routine
+    pub overflow: Option<bool>, // indicates if the text has overflowed the canvas, set by the drawing routine
     dry_run: bool, // callers should not set; use TexOp to select. gam-side bookkeepping, set to true if no drawing is desired and we just want to compute the bounds
 
     pub style: GlyphStyle,
@@ -78,7 +78,7 @@ pub struct TextView {
     // this field specifies the beginning and end of a "selected" region of text
     pub selected: Option<[u32; 2]>,
 
-    pub text: String::<3072>,
+    pub text: String<3072>,
 }
 impl TextView {
     pub fn new(canvas: Gid, bounds_hint: TextBounds) -> Self {
@@ -93,7 +93,7 @@ impl TextView {
             bounds_computed: None,
             style: GlyphStyle::Regular,
             text: String::<3072>::new(),
-            cursor: Cursor::new(0,0,0),
+            cursor: Cursor::new(0, 0, 0),
             insertion: None,
             ellipsis: false,
             draw_border: true,
@@ -106,17 +106,29 @@ impl TextView {
             dry_run: false,
         }
     }
-    pub fn dry_run(&self) -> bool {self.dry_run}
-    pub fn set_dry_run(&mut self, dry_run: bool) {self.dry_run = dry_run;}
-    pub fn set_op(&mut self, op: TextOp) { self.operation = op; }
-    pub fn get_op(&self) -> TextOp { self.operation }
-    pub fn get_canvas_gid(&self) -> Gid { self.canvas }
+    pub fn dry_run(&self) -> bool {
+        self.dry_run
+    }
+    pub fn set_dry_run(&mut self, dry_run: bool) {
+        self.dry_run = dry_run;
+    }
+    pub fn set_op(&mut self, op: TextOp) {
+        self.operation = op;
+    }
+    pub fn get_op(&self) -> TextOp {
+        self.operation
+    }
+    pub fn get_canvas_gid(&self) -> Gid {
+        self.canvas
+    }
 
     pub fn to_str(&self) -> &str {
         self.text.as_str().unwrap()
     }
 
-    pub fn clear_str(&mut self) { self.text.clear() }
+    pub fn clear_str(&mut self) {
+        self.text.clear()
+    }
 
     pub fn populate_from(&mut self, t: &TextView) {
         self.canvas = t.canvas;
@@ -152,8 +164,16 @@ impl AsRef<str> for TextView {
 impl core::fmt::Debug for TextView {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // this should definitely be extended to print more relevant data, but for now just render the string itself
-        write!(f, "{:?}, {:?}, {:?}, {:?}, dry_run: {:?}, {}",
-            self.get_op(), self.bounds_hint, self.cursor, self.get_canvas_gid(), self.dry_run, self.to_str())
+        write!(
+            f,
+            "{:?}, {:?}, {:?}, {:?}, dry_run: {:?}, {}",
+            self.get_op(),
+            self.bounds_hint,
+            self.cursor,
+            self.get_canvas_gid(),
+            self.dry_run,
+            self.to_str()
+        )
     }
 }
 

@@ -7,15 +7,11 @@ use api::*;
 pub mod key2bits;
 
 use xous::{CID, send_message, Message};
+use xous_ipc::Buffer;
 use num_traits::*;
+use std::convert::TryInto;
 
 pub use cipher::{self, BlockCipher, BlockDecrypt, BlockEncrypt, consts::U16};
-
-/// 128-bit AES block
-pub type Block = cipher::generic_array::GenericArray<u8, cipher::consts::U16>;
-
-/// 16 x 128-bit AES blocks to be processed in bulk
-pub type ParBlocks = cipher::generic_array::GenericArray<Block, cipher::consts::U16>;
 
 pub enum ImageType {
     All,
@@ -29,15 +25,20 @@ pub enum ImageType {
 pub struct RootKeys {
     conn: CID,
     // index of the key to use for the next encrypt/decrypt ops
-    key_index: Option<u8>,
+    key_index: AesRootkeyType,
 }
 impl RootKeys {
-    pub fn new(xns: &xous_names::XousNames) -> Result<Self, xous::Error> {
+    pub fn new(xns: &xous_names::XousNames, key_index: Option<AesRootkeyType>) -> Result<Self, xous::Error> {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_KEYS).expect("Can't connect to Keys server");
+        let index = if let Some(ki) = key_index {
+            ki
+        } else {
+            AesRootkeyType::NoneSpecified
+        };
         Ok(RootKeys {
             conn,
-            key_index: None,
+            key_index: index,
         })
     }
     pub fn conn(&self) -> CID {self.conn}
@@ -49,18 +50,6 @@ impl RootKeys {
     }
     pub fn get_try_selfsign_op(&self) -> u32 {
         Opcode::UxSelfSignXous.to_u32().unwrap()
-    }
-
-    /// this function causes the staging gateware to be provisioned with a copy of our keys,
-    /// while being encrypted to the AES key indicated inside the KEYROM
-    pub fn provision_and_encrypt_staging_gateware(&mut self) -> Result<(), xous::Error> {
-        unimplemented!();
-    }
-
-    /// this function causes the staging gateware to be copied to the boot gateware region.
-    /// it can report progress of the operation by sending a message to an optional ScalarHook
-    pub fn copy_staging_to_boot_gateware(&mut self) -> Result<(), xous::Error> {
-        unimplemented!();
     }
 
     /// this function takes a boot gateware that has a "null" key (all zeros) and:
@@ -75,6 +64,11 @@ impl RootKeys {
     /// 8. reads back the eFuse key from the KEYROM to confirm everything went as planned, compares to previously computed result
     /// 9. clears the eFuse key from RAM.
     pub fn seal_boot_gateware(&mut self) -> Result<(), xous::Error> {
+        unimplemented!();
+    }
+
+    /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
+    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
         unimplemented!();
     }
 
@@ -99,11 +93,6 @@ impl RootKeys {
             log::error!("unexpected return value: {:#?}", response);
             Err(xous::Error::InternalError)
         }
-    }
-
-    /// this initiates an attempt to update passwords. User must unlock their device first, and can cancel out if not expected.
-    pub fn try_update_password(&mut self, _which: PasswordType) -> Result<(), xous::Error> {
-        unimplemented!();
     }
 
     /// this will check the signature on the gateware.
@@ -157,11 +146,34 @@ impl RootKeys {
         }
     }
 
+    fn ensure_aes_password(&self) -> bool {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::UxAesEnsurePassword.to_usize().unwrap(), self.key_index as usize, 0, 0, 0,)
+        ).expect("failed to ensure password is current");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 1 {
+                log::error!("there was a problem ensuring our password was unlocked, aborting!");
+                return false;
+            }
+        } else {
+            log::error!("there was a problem ensuring our password was unlocked, aborting!");
+            return false;
+        }
+        true
+    }
+
     pub fn test_ux(&mut self, arg: usize) {
-        send_message(self.conn,
-            Message::new_scalar(Opcode::TestUx.to_usize().unwrap(),
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::TestUx.to_usize().unwrap(),
             arg, 0, 0, 0)
         ).expect("couldn't send test message");
+        log::info!("test_ux response: {:?}", response);
+    }
+    pub fn bbram_provision(&self) {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::BbramProvision.to_usize().unwrap(),
+            0, 0, 0, 0)
+        ).expect("couldn't send bbram provision message");
     }
 }
 
@@ -179,27 +191,103 @@ impl Drop for RootKeys {
     }
 }
 
-
 impl BlockCipher for RootKeys {
     type BlockSize = U16;   // 128-bit cipher
+    // we have to manually match this to PAR_BLOCKS!!
     type ParBlocks = U16;   // 256-byte "chunk" if doing more than one block at a time, for better efficiency
 }
 
 impl BlockEncrypt for RootKeys {
     fn encrypt_block(&self, block: &mut Block) {
-        // put data in a buf, send it to the server for encryption
+        if !self.ensure_aes_password() {
+            return;
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            aes_op: AesOpType::Encrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
+            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
+                *dst = src;
+            }
+        }
     }
     fn encrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-
+        if !self.ensure_aes_password() {
+            return;
+        }
+        let mut pb_buf: [[u8; 16]; PAR_BLOCKS] = [[0; 16]; PAR_BLOCKS];
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+            for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
+                *dst = src;
+            }
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::ParBlock(pb_buf),
+            aes_op: AesOpType::Encrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
+            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+                for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
+                    *dst = src;
+                }
+            }
+        }
     }
 }
 
 impl BlockDecrypt for RootKeys {
     fn decrypt_block(&self, block: &mut Block) {
-
+        if !self.ensure_aes_password() {
+            return;
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::SingleBlock(block.as_slice().try_into().unwrap()),
+            aes_op: AesOpType::Decrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::SingleBlock(b) = ret_op.block {
+            for (&src, dst) in b.iter().zip(block.as_mut_slice().iter_mut()) {
+                *dst = src;
+            }
+        }
     }
     fn decrypt_par_blocks(&self, blocks: &mut ParBlocks) {
-
+        if !self.ensure_aes_password() {
+            return;
+        }
+        let mut pb_buf: [[u8; 16]; 16] = [[0; 16]; 16];
+        for (dst_block, src_block) in pb_buf.iter_mut().zip(blocks.as_slice().iter()) {
+            for (dst, &src) in dst_block.iter_mut().zip(src_block.as_slice().iter()) {
+                *dst = src;
+            }
+        }
+        let op = AesOp {
+            key_index: self.key_index.to_u8().unwrap(),
+            block: AesBlockType::ParBlock(pb_buf),
+            aes_op: AesOpType::Decrypt,
+        };
+        let mut buf = Buffer::into_buf(op).unwrap();
+        buf.lend_mut(self.conn, Opcode::AesOracle.to_u32().unwrap()).expect("couldn't initiate encrypt_block operation");
+        let ret_op = buf.as_flat::<AesOp, _>().expect("got the wrong type of data structure back for encrypt_block");
+        if let ArchivedAesBlockType::ParBlock(pb) = ret_op.block {
+            for (b, pbs) in pb.iter().zip(blocks.as_mut_slice().iter_mut()) {
+                for (&src, dst) in b.iter().zip(pbs.as_mut_slice().iter_mut()) {
+                    *dst = src;
+                }
+            }
+        }
     }
 }
 

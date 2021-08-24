@@ -66,5 +66,5 @@ pub(crate) enum MathResult {
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct RegisterCallback {
-    server: (u32, u32, u32, u32)
+    server: (u32, u32, u32, u32),
 }

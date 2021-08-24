@@ -4,13 +4,11 @@ pub struct TestStruct {
 }
 impl TestStruct {
     pub fn new() -> Self {
-        TestStruct {
-            challenge: [0; 8],
-        }
+        TestStruct { challenge: [0; 8] }
     }
 }
 
-pub const SERVER_NAME_BENCHMARK: &str= "_Benchmark target_";
+pub const SERVER_NAME_BENCHMARK: &str = "_Benchmark target_";
 
 #[allow(dead_code)]
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

@@ -783,7 +783,7 @@ pub enum Result {
 
     /// The syscall should be attempted again. This is returned when calling
     /// functions such as `try_connect()` and `try_send()` that may block.
-    WouldBlock,
+    RetryCall,
 
     /// The message was successful but no value was returned.
     None,
@@ -838,7 +838,7 @@ impl Result {
                     0,
                 ]
             }
-            Result::WouldBlock => [16, 0, 0, 0, 0, 0, 0, 0],
+            Result::RetryCall => [16, 0, 0, 0, 0, 0, 0, 0],
             Result::None => [17, 0, 0, 0, 0, 0, 0, 0],
             Result::MemoryReturned(offset, valid) => [
                 18,
@@ -923,7 +923,7 @@ impl Result {
                 SID::from_u32(src[1] as _, src[2] as _, src[3] as _, src[4] as _),
                 src[5] as _,
             ),
-            16 => Result::WouldBlock,
+            16 => Result::RetryCall,
             17 => Result::None,
             18 => Result::MemoryReturned(MemorySize::new(src[1]), MemorySize::new(src[2])),
             _ => Result::UnknownResult(src[0], src[1], src[2], src[3], src[4], src[5], src[6]),

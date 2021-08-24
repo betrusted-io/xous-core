@@ -40,7 +40,7 @@ fn retry_syscall(pid: PID, tid: TID) -> SysCallResult {
         arch::process::Process::with_current_mut(|p| p.retry_instruction(tid))?;
         do_yield(pid, tid)
     } else {
-        Ok(xous_kernel::Result::WouldBlock)
+        Ok(xous_kernel::Result::RetryCall)
     }
 }
 
@@ -600,13 +600,16 @@ fn receive_message(pid: PID, tid: TID, sid: SID, blocking: ExecutionType) -> Sys
 pub fn handle(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallResult {
     #[cfg(feature = "debug-print")]
     print!("KERNEL({}:{}): Syscall {:x?}", pid, tid, call);
-
+    // let call_string = format!("{:x?}", call);
+    // let start_time = std::time::Instant::now();
     #[allow(clippy::let_and_return)]
     let result = if in_irq && !call.can_call_from_interrupt() {
         Err(xous_kernel::Error::InvalidSyscall)
     } else {
         handle_inner(pid, tid, in_irq, call)
     };
+
+    // println!("KERNEL [{:2}:{:2}] Syscall took {:7} usec: {}", pid, tid, start_time.elapsed().as_micros(), call_string);
 
     #[cfg(feature = "debug-print")]
     println!(

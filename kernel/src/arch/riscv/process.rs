@@ -254,7 +254,7 @@ impl Process {
                 tid -= process.threads.len()
             }
 
-            if tid != IRQ_TID && thread.sepc == 0 {
+            if tid != IRQ_TID && tid != EXCEPTION_TID && thread.sepc == 0 {
                 process.last_tid_allocated = tid as _;
                 return Some(tid as TID);
             }

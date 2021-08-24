@@ -1,9 +1,14 @@
 #[cfg(any(target_os = "none", target_os = "xous"))]
-pub mod native;
+pub mod riscv;
 #[cfg(any(target_os = "none", target_os = "xous"))]
-pub use native::*;
+pub use riscv::*;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
 pub mod hosted;
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(all(any(windows, unix), not(feature = "processes-as-threads")))]
 pub use hosted::*;
+
+#[cfg(feature = "processes-as-threads")]
+pub mod test;
+#[cfg(feature = "processes-as-threads")]
+pub use test::*;

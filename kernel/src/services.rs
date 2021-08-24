@@ -5,7 +5,6 @@ use crate::arch;
 use crate::arch::mem::MemoryMapping;
 pub use crate::arch::process::Process as ArchProcess;
 pub use crate::arch::process::Thread;
-use crate::arch::process::EXCEPTION_TID;
 use xous_kernel::MemoryRange;
 
 use core::num::NonZeroU8;
@@ -74,6 +73,7 @@ pub enum ProcessState {
 
     /// The process is currently being debugged. When it is resumed,
     /// this will turn into `Ready(usize)`
+    #[allow(dead_code)]
     Debug(usize),
 
     /// This process is processing an exception. When it is resumed, it will
@@ -248,7 +248,7 @@ std::thread_local!(static SYSTEM_SERVICES: core::cell::RefCell<SystemServices> =
         ppid: unsafe { PID::new_unchecked(1) },
         pid: unsafe { PID::new_unchecked(1) },
         mapping: arch::mem::DEFAULT_MEMORY_MAPPING,
-        current_thread: 0 as TID,
+        current_thread: 0_usize,
         previous_thread: INITIAL_TID as TID,
         exception_handler: None,
     }; MAX_PROCESS_COUNT],
@@ -360,7 +360,11 @@ impl SystemServices {
                 process.state = ProcessState::Setup(ThreadInit::new(
                     unsafe { core::mem::transmute::<usize, _>(init.entrypoint) },
                     unsafe {
-                        MemoryRange::new(init.sp, crate::arch::process::DEFAULT_STACK_SIZE).unwrap()
+                        MemoryRange::new(
+                            init.sp - crate::arch::process::DEFAULT_STACK_SIZE,
+                            crate::arch::process::DEFAULT_STACK_SIZE,
+                        )
+                        .unwrap()
                     },
                     pid,
                     0,
@@ -1910,7 +1914,7 @@ impl SystemServices {
     /// within the current process.
     pub fn sidx_from_cid(&self, cid: CID) -> Option<usize> {
         // println!("KERNEL({}): Attempting to get SIDX from CID {}", crate::arch::process::current_pid(), cid);
-        if cid == 0 || cid == 1 {
+        if cid < 2 {
             return None;
         }
 
@@ -1926,8 +1930,9 @@ impl SystemServices {
             //     println!("KERNEL({}): CID {} doesn't exist in the connection map", crate::arch::process::current_pid(), cid + 2);
             //     println!("KERNEL({}): Process inner is: {:?}", crate::arch::process::current_pid(), process_inner);
             // }
-            let mut server_idx = process_inner.connection_map[cid as usize]?.get() as usize;
-            if server_idx == 1 {
+            let connection_value = *process_inner.connection_map.get(cid as usize)?;
+            let mut server_idx = connection_value?.get() as usize;
+            if server_idx < 2 {
                 // println!("KERNEL({}): CID {} is no longer valid", crate::arch::process::current_pid(), cid + 2);
                 return None;
             }
@@ -2081,6 +2086,7 @@ impl SystemServices {
         Ok(parent_pid)
     }
 
+    #[cfg(baremetal)]
     pub fn suspend_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let (process_state, parent_pid) = {
             let process = self.get_process_mut(pid)?;
@@ -2122,6 +2128,7 @@ impl SystemServices {
         Ok(())
     }
 
+    #[cfg(baremetal)]
     pub fn continue_process(&mut self, pid: PID) -> Result<(), xous_kernel::Error> {
         let process = self.get_process_mut(pid)?;
         // let old_state = process.state;
@@ -2181,6 +2188,7 @@ impl SystemServices {
     ///     1. The process does not exist
     ///     2. The process has no exception handler
     ///     3. The process is not "Running" or "Ready"
+    #[cfg(baremetal)]
     pub fn begin_exception_handler(&mut self, pid: PID) -> Option<ExceptionHandler> {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
@@ -2191,13 +2199,15 @@ impl SystemServices {
         };
         // Activate the current context
         let mut arch_process = ArchProcess::current();
-        arch_process.set_tid(EXCEPTION_TID).ok()?;
-        // process.current_thread = EXCEPTION_TID;
+        arch_process
+            .set_tid(crate::arch::process::EXCEPTION_TID)
+            .ok()?;
         Some(handler)
     }
 
     /// Move the current process from an `Exception` state back into a `Running` state
     /// with the current thread being marked as the given tid.
+    #[cfg(baremetal)]
     pub fn finish_exception_handler_and_resume(
         &mut self,
         pid: PID,
@@ -2250,11 +2260,6 @@ impl SystemServices {
                 offset += (4 - (offset & 3)) & 3;
             }
         }
-        None
-    }
-
-    #[cfg(not(baremetal))]
-    pub fn process_name(&self, pid: PID) -> Option<&str> {
         None
     }
 }

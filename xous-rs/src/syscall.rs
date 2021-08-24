@@ -8,8 +8,8 @@ use core::convert::{TryFrom, TryInto};
 // use num_derive::FromPrimitive;
 // use num_traits::FromPrimitive;
 
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-use crate::ProcessArgsAsThread;
+#[cfg(feature = "processes-as-threads")]
+pub use crate::arch::ProcessArgsAsThread;
 
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
@@ -985,6 +985,25 @@ impl SysCall {
         }
     }
 
+    /// If the syscall has memory attached to it, return the memory, mutably
+    ///
+    /// # Safety
+    ///
+    /// This function is only safe to call to fixup the pointer. It should
+    /// not be used for any other purpose.
+    pub unsafe fn memory_mut(&mut self) -> Option<&mut MemoryRange> {
+        match self {
+            SysCall::TrySendMessage(_, msg) | SysCall::SendMessage(_, msg) => match msg {
+                Message::Move(memory_message)
+                | Message::Borrow(memory_message)
+                | Message::MutableBorrow(memory_message) => Some(&mut memory_message.buf),
+                _ => None,
+            },
+            SysCall::ReturnMemory(_, range, _, _) => Some(range),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if the given syscall may be called from an IRQ context
     pub fn can_call_from_interrupt(&self) -> bool {
         if let SysCall::TrySendMessage(_cid, msg) = self {
@@ -1000,31 +1019,6 @@ impl SysCall {
                 | SysCall::ReturnMemory(_, _, _, _)
         )
     }
-}
-
-extern "Rust" {
-    // fn _xous_syscall_rust(
-    //     nr: usize,
-    //     a1: usize,
-    //     a2: usize,
-    //     a3: usize,
-    //     a4: usize,
-    //     a5: usize,
-    //     a6: usize,
-    //     a7: usize,
-    //     ret: &mut Result,
-    // );
-    fn _xous_syscall(
-        nr: usize,
-        a1: usize,
-        a2: usize,
-        a3: usize,
-        a4: usize,
-        a5: usize,
-        a6: usize,
-        a7: usize,
-        ret: &mut Result,
-    );
 }
 
 /// Map the given physical address to the given virtual address.
@@ -1523,7 +1517,7 @@ pub fn wait_thread<T>(joiner: crate::arch::WaitHandle<T>) -> SysCallResult {
 }
 
 /// Create a new process by running it in its own thread
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(feature = "processes-as-threads")]
 pub fn create_process_as_thread<F>(
     args: ProcessArgsAsThread<F>,
 ) -> core::result::Result<crate::arch::ProcessHandleAsThread, Error>
@@ -1541,7 +1535,7 @@ where
 }
 
 /// Wait for a thread to finish
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
+#[cfg(feature = "processes-as-threads")]
 pub fn wait_process_as_thread(joiner: crate::arch::ProcessHandleAsThread) -> SysCallResult {
     crate::arch::wait_process_as_thread(joiner)
 }
@@ -1673,17 +1667,7 @@ pub fn set_exception_handler(
 /// Perform a raw syscall and return the result. This will transform
 /// `xous::Result::Error(e)` into an `Err(e)`.
 pub fn rsyscall(call: SysCall) -> SysCallResult {
-    let mut ret = Result::Ok;
-    let args = call.as_args();
-    unsafe {
-        _xous_syscall(
-            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret,
-        )
-    };
-    match ret {
-        Result::Error(e) => Err(e),
-        other => Ok(other),
-    }
+    crate::arch::syscall(call)
 }
 
 // /// This is dangerous, but fast.

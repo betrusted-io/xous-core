@@ -344,10 +344,10 @@ def auto_int(x):
 def main():
     parser = argparse.ArgumentParser(description="Update/upload to a Precursor device running Xous 0.8/0.9")
     parser.add_argument(
-        "--soc", required=False, help="SoC gateware. Note: this will overwrite any secret keys stored in your device!", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
+        "--soc", required=False, help="'Factory Reset' the SoC gateware. Note: this will overwrite any secret keys stored in your device!", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
-        "-s", "--staging", required=False, help="Stage an update to apply", type=str, nargs='?', metavar=('SoC gateware file for staging'), const='../precursors/soc_csr.bin'
+        "-s", "--staging", required=False, help="Stage an update to apply", type=str, nargs='?', metavar=('SoC gateware file'), const='../precursors/soc_csr.bin'
     )
     parser.add_argument(
         "-l", "--loader", required=False, help="Loader", type=str, nargs='?', metavar=('loader file'), const='../target/riscv32imac-unknown-none-elf/release/loader.bin'
