@@ -203,6 +203,9 @@ fn xmain() -> ! {
                     blitstr::xor_char
                 };
 
+                use std::fmt::Write;
+                write!(tv.text, " ").unwrap(); // appending a trailing space so as to "fix" issue #73
+
                 // first compute the bounding box, if it isn't computed
                 if tv.bounds_computed.is_none() {
                     match tv.bounds_hint {
@@ -466,7 +469,6 @@ fn xmain() -> ! {
                     Some(r) => r,
                     _ => continue, // don't draw anything if somehow this doesn't fit in the creen.
                 };
-
                 let mut ref_cursor = blitstr::Cursor::from_top_left_of(cr.into());
                 if debugtv {
                     log::trace!(
