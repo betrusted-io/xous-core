@@ -493,8 +493,8 @@ fn xmain() -> ! {
     loop {
         #[cfg(feature = "watchdog")]
         ticktimer.reset_wdt();
-        #[cfg(feature = "watchdog")] // for debugging the watchdog
-        ticktimer.check_wdt();
+        //#[cfg(feature = "watchdog")] // for debugging the watchdog
+        //ticktimer.check_wdt();
 
         let msg = xous::receive_message(ticktimer_server).unwrap();
         log::trace!("msg: {:?}", msg);

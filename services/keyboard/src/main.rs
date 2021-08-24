@@ -814,6 +814,14 @@ mod implementation {
         pub fn set_chord_interval(&mut self, delay: u32) {
             self.chord_interval = delay;
         }
+
+        pub fn is_repeating_key(&self) -> bool {
+            false
+        }
+        pub(crate) fn get_repeat_check_interval(&self) -> u32 {
+            self.rate
+        }
+        pub(crate) fn poll(&mut self) {}
     }
 }
 
