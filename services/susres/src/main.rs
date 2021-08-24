@@ -599,7 +599,7 @@ fn xmain() -> ! {
                     do_hook(hookdata, &mut suspend_subscribers);
                 },
                 Some(Opcode::SuspendReady) => msg_scalar_unpack!(msg, token, _, _, _, {
-                    log::trace!("suspendready with token {}", token);
+                    //log::trace!("suspendready with token {}", token);
                     if !suspend_requested {
                         log::error!("received a SuspendReady message when a suspend wasn't pending. Ignoring.");
                         continue;
@@ -644,7 +644,9 @@ fn xmain() -> ! {
                     }
                 }),
                 Some(Opcode::SuspendRequest) => {
-                    if allow_suspend {
+                    // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
+                    // ...just don't suspend that quickly after resuming???
+                    if allow_suspend && !timeout_pending {
                         suspend_requested = true;
                         // clear the resume gate
                         SHOULD_RESUME.store(false, Ordering::Relaxed);
