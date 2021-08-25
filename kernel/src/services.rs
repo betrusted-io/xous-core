@@ -2112,10 +2112,22 @@ impl SystemServices {
                 // but without a context to switch to.
                 p.set_tid(parent_process.previous_thread).unwrap();
                 parent_process.current_thread = parent_process.previous_thread;
+                parent_process.state = match parent_process.state {
+                    ProcessState::Ready(x) | ProcessState::Running(x)
+                        if x & (1 << parent_process.previous_thread) != 0 =>
+                    {
+                        ProcessState::Running(x & !(1 << parent_process.previous_thread))
+                    }
+                    ProcessState::Sleeping => ProcessState::Running(0),
+                    _ => panic!(
+                        "parent process was not ready to be resumed: {:?}",
+                        parent_process.state
+                    ),
+                };
 
                 // Ensure we don't switch back to the same process.
                 unsafe { crate::arch::irq::take_isr_return_pair() };
-                ProcessState::Ready(tids | 1 << current_tid)
+                ProcessState::Debug(tids | 1 << current_tid)
             }
         };
         {
