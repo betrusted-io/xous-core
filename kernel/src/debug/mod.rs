@@ -59,7 +59,7 @@ pub struct Uart {}
 #[cfg(baremetal)]
 pub static mut UART: Uart = Uart {};
 
-#[cfg(all(target_os = "none", feature = "wrap-print"))]
+#[cfg(all(baremetal, feature = "wrap-print"))]
 static mut CHAR_COUNT: usize = 0;
 
 #[cfg(baremetal)]
@@ -143,8 +143,8 @@ impl gdbstub::Connection for Uart {
 }
 
 #[cfg(all(
-    not(test),
     baremetal,
+    not(test),
     any(feature = "debug-print", feature = "print-panics")
 ))]
 pub fn irq(_irq_number: usize, _arg: *mut usize) {
@@ -156,8 +156,8 @@ pub fn irq(_irq_number: usize, _arg: *mut usize) {
 }
 
 #[cfg(all(
-    not(test),
     baremetal,
+    not(test),
     any(feature = "debug-print", feature = "print-panics")
 ))]
 fn process_irq_character(b: u8) {
@@ -266,7 +266,7 @@ fn process_irq_character(b: u8) {
             println!("Xous Kernel Debug");
             println!("key | command");
             println!("--- + -----------------------");
-            #[cfg(all(feature = "gdbserver", target_os = "none"))]
+            #[cfg(all(feature = "gdbserver", baremetal))]
             println!(" g  | enter the gdb server");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
