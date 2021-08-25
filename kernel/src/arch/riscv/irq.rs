@@ -299,13 +299,14 @@ pub extern "C" fn trap_handler(
             }
         }
 
+        let is_kernel_failure = sstatus::read().spp() == sstatus::SPP::Supervisor;
         // The exception was not handled. We should terminate the program here.
         // For now, let's halt the whole system instead so that it becomes
         // immediately obvious that we screwed up. On harware this will trigger
         // a watchdog reset.
         println!(
             "{}: CPU Exception on PID {}: {}",
-            if sstatus::read().spp() == sstatus::SPP::Supervisor {
+            if is_kernel_failure {
                 "!!! KERNEL FAILURE !!!"
             } else {
                 "PROGRAM HALT"
@@ -317,9 +318,31 @@ pub extern "C" fn trap_handler(
             println!("Current thread {}:", process.current_tid());
             process.print_current_thread();
         });
+
+        // If this is a failure in the kernel, go into an infinite loop
         MemoryMapping::current().print_map();
-        #[allow(clippy::empty_loop)]
-        loop {}
+        if is_kernel_failure {
+            #[allow(clippy::empty_loop)]
+            loop {}
+        }
+
+        // If it's not a failure in the kernel, terminate or debug the current process.
+        SystemServices::with_mut(|ss| {
+            if cfg!(feature = "gdbserver") {
+                ss.suspend_process(pid)
+                    .expect("couldn't debug current process");
+                println!("Program suspended. You may inspect it using gdb.");
+            } else {
+                ss.terminate_process(pid)
+                    .expect("couldn't terminate current process");
+            };
+            crate::syscall::reset_switchto_caller();
+        });
+
+        // Resume the parent process.
+        ArchProcess::with_current_mut(|process| {
+            crate::arch::syscall::resume(current_pid().get() == 1, process.current_thread())
+        })
     } else {
         let irqs_pending = sip::read();
         // println!("irqs: {:x}", irqs_pending);
