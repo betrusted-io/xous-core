@@ -253,12 +253,10 @@ impl gdbstub::target::ext::breakpoints::Breakpoints for XousTarget {
 }
 
 impl gdbstub::target::ext::breakpoints::HwBreakpoint for XousTarget {
-    #[inline(never)]
     fn add_hw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
         Ok(false)
     }
 
-    #[inline(never)]
     fn remove_hw_breakpoint(&mut self, _addr: u32, _kind: usize) -> TargetResult<bool, Self> {
         Ok(false)
     }
