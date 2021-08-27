@@ -87,8 +87,12 @@ mod implementation {
                 }
             }
 
+            // prevent re-ordering
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
             // power the system down - this should result in an almost immediate loss of power
             sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
+            // prevent re-ordering
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
 
             loop {} // block forever here
         } else {
