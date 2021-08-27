@@ -1,6 +1,8 @@
 
 # Memory Layout
 
+You definitely want to refer to the [Xous Book](https://betrusted.io/xous-book/ch03-01-memory-layout.html) if you're trying to debug a kernel panic, before reading on here.
+
 Xous assumes a memory-mapped IO system.  Furthermore, it assumes there
 is one section of "general-purpose RAM", and zero or more additional
 memory sections.  Finally, it assumes there is an MMU.
@@ -66,21 +68,6 @@ assigned to every process simply by mapping megapage 1023 (`0xffc00000`).
 
 Note that the stack pointer is not necessarily fixed, and may be changed
 in a later revision.
-
-Other addresses can be [found in Xous](https://github.com/betrusted-io/xous-core/blob/main/kernel/src/arch/riscv/mem.rs#L10-L18):
-
-```rust
-// pub const DEFAULT_STACK_TOP: usize = 0x8000_0000;
-pub const DEFAULT_HEAP_BASE: usize = 0x2000_0000;
-pub const DEFAULT_MESSAGE_BASE: usize = 0x4000_0000;
-pub const DEFAULT_BASE: usize = 0x6000_0000;
-
-pub const USER_AREA_END: usize = 0xff00_0000;
-pub const EXCEPTION_STACK_TOP: usize = 0xffff_0000;
-pub const PAGE_SIZE: usize = 4096;
-const PAGE_TABLE_OFFSET: usize = 0xff40_0000;
-const PAGE_TABLE_ROOT_OFFSET: usize = 0xff80_0000;
-```
 
 ## Special Physical Memory Addresses
 
