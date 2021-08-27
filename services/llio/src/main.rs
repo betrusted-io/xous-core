@@ -242,6 +242,9 @@ mod implementation {
         }
         pub fn resume(&mut self) {
             self.power_susres.resume();
+            // reset these to "on" in case the "off" value was captured and stored on suspend
+            self.power_csr.rmwf(utra::power::POWER_SELF, 1);
+            self.power_csr.rmwf(utra::power::POWER_STATE, 1);
             self.event_susres.resume();
             self.gpio_susres.resume();
             // restore the UART mux setting after resume
