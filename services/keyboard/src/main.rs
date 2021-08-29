@@ -861,6 +861,7 @@ fn xmain() -> ! {
         log::warn!("kbd server is overriding WFI for debugging, remember to disable for production");
         llio.wfi_override(true).unwrap();
     }*/
+    let mut inject_esc = false;
 
     log::trace!("starting main loop");
     loop {
@@ -900,15 +901,46 @@ fn xmain() -> ! {
             Some(Opcode::SetChordInterval) => msg_scalar_unpack!(msg, delay, _, _, _, {
                 kbd.set_chord_interval(delay as u32);
             }),
-            Some(Opcode::InjectKey) => msg_scalar_unpack!(msg, _k, _, _, _, {
-                let key = if let Some(a) = core::char::from_u32(_k as u32) {
+            Some(Opcode::InjectKey) => msg_scalar_unpack!(msg, k, _, _, _, {
+                // key substitutions to help things work better
+                // 5b31 = home
+                // 5b44 = left
+                // 5b43 = right
+                // 5b41 = up
+                // 5b42 = down
+                let k_prime = if !inject_esc {
+                    match k {
+                        0x7f => 0x08,
+                        0x5b => {
+                            inject_esc = true;
+                            0x00
+                        }
+                        _ => k as u32
+                    }
+                } else {
+                    inject_esc = false;
+                    match k {
+                        0x31 => '∴' as u32,
+                        0x44 => '←' as u32,
+                        0x43 => '→' as u32,
+                        0x41 => '↑' as u32,
+                        0x42 => '↓' as u32,
+                        _ => {
+                            log::warn!("unknown escape sequence, ignoring: 0x5b{:x}", k);
+                            0
+                        }
+                    }
+                };
+
+                let key = if let Some(a) = core::char::from_u32(k_prime) {
                     a
                 } else {
+                    log::warn!("Uninterpreable key sequence, ignoring: 0x{:x}", k);
                     '\u{0000}'
                 };
                 log::trace!("got inject key, listener_conn: {:?}", listener_conn);
                 if let Some(conn) = listener_conn {
-                    info!("injecting key '{}'", key); // always be noisy about this, it's an exploit path
+                    info!("injecting key '{}'({:x})", key, key as u32); // always be noisy about this, it's an exploit path
                     xous::send_message(conn,
                         xous::Message::new_scalar(listener_op.unwrap(),
                             key as u32 as usize,
