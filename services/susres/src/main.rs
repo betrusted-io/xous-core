@@ -225,7 +225,7 @@ mod implementation {
                     xous::syscall::map_memory(
                         None,
                         None,
-                        256 * 1024, // bigger than 128k to flush the L1 dcache etc. as well
+                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
                         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
                     ).expect("couldn't allocate RAM for cache flushing")
                 );
