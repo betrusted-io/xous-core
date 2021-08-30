@@ -19,9 +19,9 @@ using Antmicro.Renode.Utilities;
 namespace Antmicro.Renode.Peripherals.I2C
 {
     [AllowedTranslations(AllowedTranslation.ByteToDoubleWord)]
-    public class BetrustedI2C : SimpleContainer<II2CPeripheral>, IDoubleWordPeripheral, IKnownSize
+    public class BetrustedSocI2C : SimpleContainer<II2CPeripheral>, IDoubleWordPeripheral, IKnownSize
     {
-        public BetrustedI2C(Machine machine) : base(machine)
+        public BetrustedSocI2C(Machine machine) : base(machine)
         {
             dataToSlave = new Queue<byte>();
             dataFromSlave = new Queue<byte>();
@@ -56,14 +56,6 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithReservedBits(2, 3)
                     .WithFlag(1, FieldMode.Read, valueProviderCallback: _ => false, name: "Transfer in progress")
                     .WithFlag(0, out i2cIntIrqStatus, FieldMode.Read)
-                },
-
-                {(long)Registers.CoreReset, new DoubleWordRegister(this)
-                    .WithFlag(0, FieldMode.Write, writeCallback: (_, do_it) => {
-                        if (do_it) {
-                            Reset();
-                        }
-                    })
                 },
 
                 {(long)Registers.EventStatus, new DoubleWordRegister(this)
@@ -192,17 +184,16 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void UpdateInterrupts()
         {
-            if (i2cIntIrqStatus.Value)
+            if (i2cIntIrqStatus.Value && i2cIntIrqEnabled.Value)
             {
                 i2cIntIrqPending.Value = true;
             }
-            if (txRxDoneIrqStatus)
+            if (txRxDoneIrqStatus && txRxDoneIrqEnabled.Value)
             {
                 txRxDoneIrqPending.Value = true;
             }
             // this.Log(LogLevel.Noisy, "    Setting status: {0}, enabled: {1}, pending: {2}", txRxDoneIrqStatus, txRxDoneIrqEnabled.Value, txRxDoneIrqPending.Value);
-            IRQ.Set((i2cIntIrqPending.Value && txRxDoneIrqEnabled.Value)
-            || (txRxDoneIrqPending.Value && i2cIntIrqEnabled.Value));
+            IRQ.Set(i2cIntIrqPending.Value || txRxDoneIrqPending.Value);
         }
 
         public GPIO IRQ
@@ -304,7 +295,7 @@ namespace Antmicro.Renode.Peripherals.I2C
             Receive = 0xC,
             Command = 0x10,
             Status = 0x14,
-            CoreReset = 0x18,
+            Reset = 0x18,
             EventStatus = 0x1c,
             EventPending = 0x20,
             EventEnable = 0x24

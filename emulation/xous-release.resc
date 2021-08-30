@@ -10,7 +10,7 @@ using sysbus
 # if you modify these files.
 i @peripherals/ABRTCMC.cs
 i @peripherals/BetrustedEcI2C.cs
-i @peripherals/BetrustedI2C.cs
+i @peripherals/BetrustedSocI2C.cs
 i @peripherals/BetrustedWatchdog.cs
 i @peripherals/BQ27421.cs
 i @peripherals/engine.cs
@@ -37,6 +37,7 @@ showAnalyzer memlcd
 
 # sysbus LogPeripheralAccess engine true
 # sysbus LogPeripheralAccess sha512 true
+# sysbus LogPeripheralAccess i2c true
 # sysbus LogPeripheralAccess trng_kernel true
 
 sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
@@ -45,7 +46,7 @@ sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
 # logLevel -1 ticktimer
 # logLevel -1 engine
 # logLevel -1 i2c
-# logLevel -1 abracom_rtc
+# logLevel -1 i2c.abracom_rtc
 # logLevel -1 sha512
 
 # Silence COM and WDT and WFI
@@ -78,6 +79,9 @@ mach clear
 ############### Define the Betrusted EC ###############
 mach create "EC"
 machine LoadPlatformDescription @ec/betrusted-ec.repl
+
+# logLevel -1 i2c.bq27421
+
 showAnalyzer uart
 macro reset
 """
@@ -85,8 +89,6 @@ macro reset
     cpu PC 0x10000000
 """
 runMacro $reset
-
-logLevel -1 bq27421
 
 mach clear
 

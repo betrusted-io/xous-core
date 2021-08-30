@@ -34,7 +34,7 @@ memlcd: Video.BetrustedLCD @ sysbus 0xf000c000
 
 // Unrecognized peripheral: com @ 0xf000d000
 
-i2c: I2C.BetrustedI2C @ sysbus 0xf000e000
+i2c: I2C.BetrustedSocI2C @ sysbus 0xf000e000
     -> cpu @ 1006
 
 // Unrecognized peripheral: btevents @ 0xf000f000
