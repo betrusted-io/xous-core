@@ -53,6 +53,9 @@ sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
 # sysbus SilenceRange <0xF0021000, 0xF0021FFF>
 # sysbus SilenceRange <0xF0023000, 0xF0023FFF>
 
+# Load the SPI flash into RAM
+sysbus LoadBinary @precursors/soc_csr.bin 0x20000000
+
 # The macro `reset` gets called implicitly when running `machine Reset`
 macro reset
 """
