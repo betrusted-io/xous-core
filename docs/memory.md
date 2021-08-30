@@ -1,6 +1,8 @@
 
 # Memory Layout
 
+You definitely want to refer to the [Xous Book](https://betrusted.io/xous-book/ch03-01-memory-layout.html#virtual-memory-regions) if you're trying to debug a kernel panic, before reading on here.
+
 Xous assumes a memory-mapped IO system.  Furthermore, it assumes there
 is one section of "general-purpose RAM", and zero or more additional
 memory sections.  Finally, it assumes there is an MMU.

@@ -1228,6 +1228,11 @@ fn boot_sequence(args: KernelArguments, _signature: u32) -> ! {
     } else {
         // resume path
         use utralib::generated::*;
+        // flip my self-power-on switch: otherwise, I might turn off before the whole sequence is finished.
+        let mut power_csr = CSR::new(utra::power::HW_POWER_BASE as *mut u32);
+        power_csr.rmwf(utra::power::POWER_STATE, 1);
+        power_csr.rmwf(utra::power::POWER_SELF, 1);
+
         // TRNG virtual memory mapping already set up, but we pump values out just to make sure
         // the pipeline is fresh. Simulations show this isn't necessary, but I feel paranoid;
         // I worry a subtle bug in the reset logic could leave deterministic values in the pipeline.

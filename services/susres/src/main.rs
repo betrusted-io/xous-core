@@ -61,7 +61,7 @@ mod implementation {
     // on a clean suspend then resume, the loader will queue up this interrupt to be the first thing to
     // run on Xous resume, with a bit in the RESUME register set.
     fn susres_handler(_irq_no: usize, arg: *mut usize) {
-        println!("susres handler");
+        //println!("susres handler");
         let sr = unsafe{ &mut *(arg as *mut SusResHw) };
         // clear the pending interrupt
         sr.csr.wfo(utra::susres::EV_PENDING_SOFT_INT, 1);
@@ -73,7 +73,7 @@ mod implementation {
         }
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
-            println!("going into suspend");
+            //println!("going into suspend");
             if false { // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
@@ -87,12 +87,14 @@ mod implementation {
                 }
             }
 
+            // prevent re-ordering
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
             // power the system down - this should result in an almost immediate loss of power
-            sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
-
-            loop {} // block forever here
+            loop {
+                sr.csr.wfo(utra::susres::POWERDOWN_POWERDOWN, 1);
+            } // block forever here
         } else {
-            println!("going into resume");
+            //println!("going into resume");
             // this unblocks the threads waiting on the resume
             SHOULD_RESUME.store(true, Ordering::Relaxed);
         }
@@ -192,6 +194,12 @@ mod implementation {
 
             sr
         }
+        pub fn ignore_wfi(&mut self) {
+            self.csr.wfo(utra::susres::WFI_OVERRIDE, 1);
+        }
+        pub fn restore_wfi(&mut self) {
+            self.csr.wfo(utra::susres::WFI_OVERRIDE, 0);
+        }
 
         pub fn reboot(&mut self, reboot_soc: bool) {
             if reboot_soc {
@@ -217,7 +225,7 @@ mod implementation {
                     xous::syscall::map_memory(
                         None,
                         None,
-                        128 * 1024, // this matches a 128k L2 cache
+                        512 * 1024, // L2 cache is 128k, but emperically it doesn't fully flush until 512k is written. Maybe has to do with write-back behavior??
                         xous::MemoryFlags::R | xous::MemoryFlags::W | xous::MemoryFlags::RESERVE,
                     ).expect("couldn't allocate RAM for cache flushing")
                 );
@@ -419,6 +427,8 @@ mod implementation {
                 xous::Message::new_scalar(crate::TimeoutOpcode::SetCsr.to_usize().unwrap(), 0, 0, 0, 0)
             ).map(|_| ())
         }
+        pub fn ignore_wfi(&mut self) {}
+        pub fn restore_wfi(&mut self) {}
     }
 }
 
@@ -636,6 +646,7 @@ fn xmain() -> ! {
                             // this now allows all other threads to commence
                             log::trace!("low-level resume done, restoring execution");
                             RESUME_EXEC.store(true, Ordering::Relaxed);
+                            susres_hw.restore_wfi();
                         } else {
                             log::trace!("still waiting on callbacks, returning to main loop");
                         }
@@ -647,6 +658,7 @@ fn xmain() -> ! {
                     // if the 2-second timeout is still pending from a previous suspend, deny the suspend request.
                     // ...just don't suspend that quickly after resuming???
                     if allow_suspend && !timeout_pending {
+                        susres_hw.ignore_wfi();
                         suspend_requested = true;
                         // clear the resume gate
                         SHOULD_RESUME.store(false, Ordering::Relaxed);
@@ -665,8 +677,9 @@ fn xmain() -> ! {
                         ).expect("couldn't initiate timeout before suspend!");
 
                         send_event(&suspend_subscribers);
+                    } else {
+                        log::warn!("suspend requested, but the system was not allowed to suspend. Ignoring request.")
                     }
-                    // denied requests just silently fail.
                 },
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {

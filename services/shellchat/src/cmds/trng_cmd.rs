@@ -34,7 +34,7 @@ impl<'a> ShellCmdApi<'a> for TrngCmd {
                     let ht = env.trng.get_health_tests().unwrap();
                     for core in 0..4 {
                         write!(ret, "RO {}: ", core).unwrap();
-                        for bin in 0..5 {
+                        for bin in 0..4 {
                             write!(ret, "{} ", ht.ro_miniruns[core].run_count[bin]).unwrap();
                         }
                         write!(ret, "\n").unwrap();
