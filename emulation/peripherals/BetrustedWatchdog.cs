@@ -7,7 +7,7 @@
 //
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Core.Structure.Registers;
-using Antmicro.Renode.Peripherals.Bus;
+using Antmicro.Renode.Logging;
 using Antmicro.Renode.Time;
 using System.Threading;
 using System.Collections.Generic;
@@ -28,7 +28,8 @@ namespace Antmicro.Renode.Peripherals.Timers
                             enabled = true;
                         }
                     })
-                    .WithFlag(0, FieldMode.Read | FieldMode.Write, (_, should_reset) => {
+                    .WithFlag(0, FieldMode.Read | FieldMode.Write, writeCallback: (_, should_reset) => {
+                        this.Log(LogLevel.Debug, "Resetting watchdog timer");
                         Interlocked.Exchange(ref counter, 0);
                     })
                 },
@@ -51,7 +52,9 @@ namespace Antmicro.Renode.Peripherals.Timers
         private void OnTick()
         {
             Interlocked.Increment(ref counter);
-            if (((uint)counter) >= this.reset_target) {
+            if (((uint)counter) >= this.reset_target)
+            {
+                this.Log(LogLevel.Error, "Watchdog timer expired -- requesting system reset");
                 this.machine.RequestReset();
             }
         }
@@ -76,7 +79,9 @@ namespace Antmicro.Renode.Peripherals.Timers
         // Convert "approximately 65MHz" ticks to milliseconds
         private uint XilinxClockToMs(uint xilinx_clocks)
         {
-            return (uint) ((((ulong)xilinx_clocks) * 1000) / 65000000);
+            uint adjusted = (uint)((((ulong)xilinx_clocks) * 100) / 65000000);
+            this.Log(LogLevel.Debug, "Watchdog timer set for {0}. Will expire after {1} msec", xilinx_clocks, adjusted * 10);
+            return adjusted;
         }
 
         public long Size
