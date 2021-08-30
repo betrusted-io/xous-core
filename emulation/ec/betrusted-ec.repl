@@ -3,15 +3,21 @@ cpu: CPU.VexRiscv @ sysbus
     PerformanceInMips: 6
 
 uart: UART.LiteX_UART @ {
-        sysbus 0xE0001800
+        sysbus 0xE0003800
     }
-    -> cpu@1000
+    -> cpu@1001
 
 timer0: Timers.LiteX_Timer_32 @ {
-        sysbus 0xe0002000
+        sysbus 0xe0001000
     }
     frequency: 100000000
-    -> cpu@1001
+    -> cpu@1000
+
+i2c: I2C.BetrustedEcI2C @ sysbus 0xE0004800
+    -> cpu @ 1002
+
+ticktimer: Timers.TickTimer @ sysbus 0xe0005000
+    -> cpu @ 1003
 
 sram: Memory.MappedMemory @ {
         sysbus 0x10000000;
@@ -19,15 +25,13 @@ sram: Memory.MappedMemory @ {
     }
     size: 0x00020000
 
-ticktimer: Timers.TickTimer @ sysbus 0xe0005000
-    periodInMs: 1
-    -> cpu @ 1003
-
 flash_mem: Memory.MappedMemory @ {
         sysbus 0x20000000;
         sysbus 0xA0000000 // shadow
     }
     size: 0x8000000
+
+bq27421: Sensors.BQ27421 @ i2c 0x55
 
 sysbus:
     init:

@@ -72,8 +72,333 @@ to the Wishbone/CSR bus are working correctly. The initial reset value of
             </addressBlock>
         </peripheral>
         <peripheral>
-            <name>UART</name>
+            <name>TIMER0</name>
+            <baseAddress>0xE0001000</baseAddress>
+            <groupName>TIMER0</groupName>
+            <registers>
+                <register>
+                    <name>LOAD</name>
+                    <description><![CDATA[Load value when Timer is (re-)enabled. In One-Shot mode, the value written to
+this register specifies the Timer's duration in clock cycles.]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>load</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RELOAD</name>
+                    <description><![CDATA[Reload value when Timer reaches ``0``. In Periodic mode, the value written to
+this register specify the Timer's period in clock cycles.]]></description>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>reload</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EN</name>
+                    <description><![CDATA[Enable flag of the Timer. Set this flag to ``1`` to enable/start the Timer.  Set
+to ``0`` to disable the Timer.]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>en</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>UPDATE_VALUE</name>
+                    <description><![CDATA[Update trigger for the current countdown value. A write to this register latches
+the current countdown value to ``value`` register.]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>update_value</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>VALUE</name>
+                    <description><![CDATA[Latched countdown value. This value is updated by writing to ``update_value``.]]></description>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>value</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_STATUS</name>
+                    <description><![CDATA[This register contains the current raw level of the zero event trigger.  Writes
+to this register have no effect.]]></description>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>zero</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Level of the ``zero`` event]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_PENDING</name>
+                    <description><![CDATA[When a  zero event occurs, the corresponding bit will be set in this register.
+To clear the Event, set the corresponding bit in this register.]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>zero</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[`1` if a `zero` event occurred. This Event is triggered on a **falling** edge.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>EV_ENABLE</name>
+                    <description><![CDATA[This register enables the corresponding zero events.  Write a ``0`` to this
+register to disable individual events.]]></description>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>zero</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write a ``1`` to enable the ``zero`` Event]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x20</size>
+                <usage>registers</usage>
+            </addressBlock>
+            <interrupt>
+                <name>timer0</name>
+                <value>0</value>
+            </interrupt>
+        </peripheral>
+        <peripheral>
+            <name>CRG</name>
             <baseAddress>0xE0001800</baseAddress>
+            <groupName>CRG</groupName>
+            <registers>
+                <register>
+                    <name>WATCHDOG</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>reset_code</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Write `600d` then `c0de` in sequence to this register to reset the watchdog
+timer]]></description>
+                        </field>
+                        <field>
+                            <name>enable</name>
+                            <msb>16</msb>
+                            <bitRange>[16:16]</bitRange>
+                            <lsb>16</lsb>
+                            <description><![CDATA[Enable the watchdog timer. Cannot be disabled once enabled, except with a reset.
+Notably, a watchdog reset will disable the watchdog.]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>GIT</name>
+            <baseAddress>0xE0002000</baseAddress>
+            <groupName>GIT</groupName>
+            <registers>
+                <register>
+                    <name>GITREV</name>
+                    <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
+``03ba1c49``, so this value is 62528585, which should be enough to check out the
+exact git version used to build this firmware.]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x3ba1c49</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>gitrev</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>DIRTY</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x01</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>dirty</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Set to ``1`` if this device was built from a git repo with uncommitted
+modifications.]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>POWER</name>
+            <baseAddress>0xE0002800</baseAddress>
+            <groupName>POWER</groupName>
+            <registers>
+                <register>
+                    <name>POWER</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x03</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>self</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Writing `1` to this keeps the EC powered on]]></description>
+                        </field>
+                        <field>
+                            <name>soc_on</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Writing `1` to this powers on the SoC]]></description>
+                        </field>
+                        <field>
+                            <name>discharge</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[Writing `1` to this connects a low-value resistor across FPGA domain supplies to
+force a full discharge]]></description>
+                        </field>
+                        <field>
+                            <name>kbddrive</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[Writing `1` to this drives the scan column to 1. Do this prior to reading to
+mitigate noise]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>STATS</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>state</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Current power state of the SOC]]></description>
+                        </field>
+                        <field>
+                            <name>monkey</name>
+                            <msb>2</msb>
+                            <bitRange>[2:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Power-on key monitor input]]></description>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x8</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>UART_PHY</name>
+            <baseAddress>0xE0003000</baseAddress>
+            <groupName>UART_PHY</groupName>
+            <registers>
+                <register>
+                    <name>TUNING_WORD</name>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0x1a36e2e</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>tuning_word</name>
+                            <msb>31</msb>
+                            <bitRange>[31:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+            </registers>
+            <addressBlock>
+                <offset>0</offset>
+                <size>0x4</size>
+                <usage>registers</usage>
+            </addressBlock>
+        </peripheral>
+        <peripheral>
+            <name>UART</name>
+            <baseAddress>0xE0003800</baseAddress>
             <groupName>UART</groupName>
             <registers>
                 <register>
@@ -218,294 +543,6 @@ register to disable individual events.]]></description>
                         </field>
                     </fields>
                 </register>
-                <register>
-                    <name>XOVER_RXTX</name>
-                    <addressOffset>0x0020</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>xover_rxtx</name>
-                            <msb>7</msb>
-                            <bitRange>[7:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_TXFULL</name>
-                    <addressOffset>0x0024</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>xover_txfull</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_RXEMPTY</name>
-                    <addressOffset>0x0028</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>xover_rxempty</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_EV_STATUS</name>
-                    <description><![CDATA[This register contains the current raw level of the rx event trigger.  Writes to
-this register have no effect.]]></description>
-                    <addressOffset>0x002c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tx</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``tx`` event]]></description>
-                        </field>
-                        <field>
-                            <name>rx</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``rx`` event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_EV_PENDING</name>
-                    <description><![CDATA[When a  rx event occurs, the corresponding bit will be set in this register.  To
-clear the Event, set the corresponding bit in this register.]]></description>
-                    <addressOffset>0x0030</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tx</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[`1` if a `tx` event occurred. This Event is triggered on a **falling** edge.]]></description>
-                        </field>
-                        <field>
-                            <name>rx</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[`1` if a `rx` event occurred. This Event is triggered on a **falling** edge.]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_EV_ENABLE</name>
-                    <description><![CDATA[This register enables the corresponding rx events.  Write a ``0`` to this
-register to disable individual events.]]></description>
-                    <addressOffset>0x0034</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>tx</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``tx`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>rx</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``rx`` Event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_TXEMPTY</name>
-                    <addressOffset>0x0038</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>xover_txempty</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>XOVER_RXFULL</name>
-                    <addressOffset>0x003c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>xover_rxfull</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x40</size>
-                <usage>registers</usage>
-            </addressBlock>
-            <interrupt>
-                <name>uart</name>
-                <value>0</value>
-            </interrupt>
-        </peripheral>
-        <peripheral>
-            <name>TIMER0</name>
-            <baseAddress>0xE0002000</baseAddress>
-            <groupName>TIMER0</groupName>
-            <registers>
-                <register>
-                    <name>LOAD</name>
-                    <description><![CDATA[Load value when Timer is (re-)enabled. In One-Shot mode, the value written to
-this register specifies the Timer's duration in clock cycles.]]></description>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>load</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>RELOAD</name>
-                    <description><![CDATA[Reload value when Timer reaches ``0``. In Periodic mode, the value written to
-this register specify the Timer's period in clock cycles.]]></description>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>reload</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EN</name>
-                    <description><![CDATA[Enable flag of the Timer. Set this flag to ``1`` to enable/start the Timer.  Set
-to ``0`` to disable the Timer.]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>en</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>UPDATE_VALUE</name>
-                    <description><![CDATA[Update trigger for the current countdown value. A write to this register latches
-the current countdown value to ``value`` register.]]></description>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>update_value</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>VALUE</name>
-                    <description><![CDATA[Latched countdown value. This value is updated by writing to ``update_value``.]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>value</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_STATUS</name>
-                    <description><![CDATA[This register contains the current raw level of the zero event trigger.  Writes
-to this register have no effect.]]></description>
-                    <addressOffset>0x0014</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>zero</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``zero`` event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <description><![CDATA[When a  zero event occurs, the corresponding bit will be set in this register.
-To clear the Event, set the corresponding bit in this register.]]></description>
-                    <addressOffset>0x0018</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>zero</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[`1` if a `zero` event occurred. This Event is triggered on a **falling** edge.]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <description><![CDATA[This register enables the corresponding zero events.  Write a ``0`` to this
-register to disable individual events.]]></description>
-                    <addressOffset>0x001c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>zero</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``zero`` Event]]></description>
-                        </field>
-                    </fields>
-                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
@@ -513,162 +550,9 @@ register to disable individual events.]]></description>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
-                <name>timer0</name>
+                <name>uart</name>
                 <value>1</value>
             </interrupt>
-        </peripheral>
-        <peripheral>
-            <name>CRG</name>
-            <baseAddress>0xE0002800</baseAddress>
-            <groupName>CRG</groupName>
-            <registers>
-                <register>
-                    <name>WATCHDOG</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>reset_code</name>
-                            <msb>15</msb>
-                            <bitRange>[15:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Write `600d` then `c0de` in sequence to this register to reset the watchdog
-timer]]></description>
-                        </field>
-                        <field>
-                            <name>enable</name>
-                            <msb>16</msb>
-                            <bitRange>[16:16]</bitRange>
-                            <lsb>16</lsb>
-                            <description><![CDATA[Enable the watchdog timer. Cannot be disabled once enabled, except with a reset.
-Notably, a watchdog reset will disable the watchdog.]]></description>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x4</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
-            <name>GIT</name>
-            <baseAddress>0xE0003000</baseAddress>
-            <groupName>GIT</groupName>
-            <registers>
-                <register>
-                    <name>GITREV</name>
-                    <description><![CDATA[First 32-bits of the git revision.  This documentation was built from git rev
-``d167b75b``, so this value is 3513235291, which should be enough to check out
-the exact git version used to build this firmware.]]></description>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0xd167b75b</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>gitrev</name>
-                            <msb>31</msb>
-                            <bitRange>[31:0]</bitRange>
-                            <lsb>0</lsb>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>DIRTY</name>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x01</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>dirty</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Set to ``1`` if this device was built from a git repo with uncommitted
-modifications.]]></description>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x8</size>
-                <usage>registers</usage>
-            </addressBlock>
-        </peripheral>
-        <peripheral>
-            <name>POWER</name>
-            <baseAddress>0xE0003800</baseAddress>
-            <groupName>POWER</groupName>
-            <registers>
-                <register>
-                    <name>POWER</name>
-                    <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x03</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>self</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Writing `1` to this keeps the EC powered on]]></description>
-                        </field>
-                        <field>
-                            <name>soc_on</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Writing `1` to this powers on the SoC]]></description>
-                        </field>
-                        <field>
-                            <name>discharge</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Writing `1` to this connects a low-value resistor across FPGA domain supplies to
-force a full discharge]]></description>
-                        </field>
-                        <field>
-                            <name>kbddrive</name>
-                            <msb>3</msb>
-                            <bitRange>[3:3]</bitRange>
-                            <lsb>3</lsb>
-                            <description><![CDATA[Writing `1` to this drives the scan column to 1. Do this prior to reading to
-mitigate noise]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>STATS</name>
-                    <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>state</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Current power state of the SOC]]></description>
-                        </field>
-                        <field>
-                            <name>monkey</name>
-                            <msb>2</msb>
-                            <bitRange>[2:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Power-on key monitor input]]></description>
-                        </field>
-                    </fields>
-                </register>
-            </registers>
-            <addressBlock>
-                <offset>0</offset>
-                <size>0x8</size>
-                <usage>registers</usage>
-            </addressBlock>
         </peripheral>
         <peripheral>
             <name>PICORVSPI</name>
@@ -748,9 +632,254 @@ mitigate noise]]></description>
             <groupName>I2C</groupName>
             <registers>
                 <register>
+                    <name>PRESCALE</name>
+                    <description><![CDATA[Prescaler value. Set to (module clock / (5 * I2C freq) - 1). Example: if module
+clock is equal to sysclk; syclk is 100MHz; and I2C freq is 100kHz, then
+prescaler  is (100MHz / (5 * 100kHz) - 1) = 199. Reset value: 0xFFFF]]></description>
+                    <addressOffset>0x0000</addressOffset>
+                    <resetValue>0xffff</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>prescale</name>
+                            <msb>15</msb>
+                            <bitRange>[15:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>CONTROL</name>
+                    <addressOffset>0x0004</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>Resvd</name>
+                            <msb>5</msb>
+                            <bitRange>[5:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Reserved (for cross-compatibility with OpenCores drivers)]]></description>
+                        </field>
+                        <field>
+                            <name>IEN</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[When set to `1`, interrupts are enabled.]]></description>
+                        </field>
+                        <field>
+                            <name>EN</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[When set to `1`, the core is enabled.]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>TXR</name>
+                    <description><![CDATA[Next byte to transmit to slave devices. LSB indicates R/W during address phases,
+`1` for reading from slaves, `0` for writing to slaves]]></description>
+                    <addressOffset>0x0008</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>txr</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>RXR</name>
+                    <description><![CDATA[Data being read from slaved devices]]></description>
+                    <addressOffset>0x000c</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>rxr</name>
+                            <msb>7</msb>
+                            <bitRange>[7:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>COMMAND</name>
+                    <addressOffset>0x0010</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>IACK</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Interrupt acknowledge; when set, clears a pending interrupt]]></description>
+                        </field>
+                        <field>
+                            <name>Resvd</name>
+                            <msb>2</msb>
+                            <bitRange>[2:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[reserved for cross-compatibility with OpenCores drivers]]></description>
+                        </field>
+                        <field>
+                            <name>ACK</name>
+                            <msb>3</msb>
+                            <bitRange>[3:3]</bitRange>
+                            <lsb>3</lsb>
+                            <description><![CDATA[when a receiver, sent ack (`ACK=0`) or nack (`ACK=1`)]]></description>
+                        </field>
+                        <field>
+                            <name>WR</name>
+                            <msb>4</msb>
+                            <bitRange>[4:4]</bitRange>
+                            <lsb>4</lsb>
+                            <description><![CDATA[write to slave]]></description>
+                        </field>
+                        <field>
+                            <name>RD</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[read from slave]]></description>
+                        </field>
+                        <field>
+                            <name>STO</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[generate stop condition]]></description>
+                        </field>
+                        <field>
+                            <name>STA</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[generate (repeated) start condition]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>STATUS</name>
+                    <addressOffset>0x0014</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>IF</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Interrupt flag, This bit is set when an interrupt is pending, which will cause a
+processor interrupt request if the IEN bit is set. The Interrupt Flag is set
+upon the completion of one byte of data transfer.]]></description>
+                        </field>
+                        <field>
+                            <name>TIP</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[transfer in progress]]></description>
+                        </field>
+                        <field>
+                            <name>Resvd</name>
+                            <msb>4</msb>
+                            <bitRange>[4:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[reserved for cross-compatibility with OpenCores drivers]]></description>
+                        </field>
+                        <field>
+                            <name>ArbLost</name>
+                            <msb>5</msb>
+                            <bitRange>[5:5]</bitRange>
+                            <lsb>5</lsb>
+                            <description><![CDATA[Set when arbitration for the bus is lost]]></description>
+                        </field>
+                        <field>
+                            <name>Busy</name>
+                            <msb>6</msb>
+                            <bitRange>[6:6]</bitRange>
+                            <lsb>6</lsb>
+                            <description><![CDATA[I2C block is busy processing the latest command]]></description>
+                        </field>
+                        <field>
+                            <name>RxACK</name>
+                            <msb>7</msb>
+                            <bitRange>[7:7]</bitRange>
+                            <lsb>7</lsb>
+                            <description><![CDATA[Received acknowledge from slave. 1 = no ack received, 0 = ack received]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>BITBANG_MODE</name>
+                    <description><![CDATA[When set, I2C is driven by bitbang GPIO operations]]></description>
+                    <addressOffset>0x0018</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>bitbang_mode</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>BB</name>
+                    <addressOffset>0x001c</addressOffset>
+                    <resetValue>0x03</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>scl</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                            <description><![CDATA[Directly controls the SCL pin]]></description>
+                        </field>
+                        <field>
+                            <name>sda_val</name>
+                            <msb>1</msb>
+                            <bitRange>[1:1]</bitRange>
+                            <lsb>1</lsb>
+                            <description><![CDATA[Applies its value to SDA when `sda_dir` is 1]]></description>
+                        </field>
+                        <field>
+                            <name>sda_dir</name>
+                            <msb>2</msb>
+                            <bitRange>[2:2]</bitRange>
+                            <lsb>2</lsb>
+                            <description><![CDATA[When `1`, drives SDA; `0` tristates]]></description>
+                        </field>
+                    </fields>
+                </register>
+                <register>
+                    <name>BB_R</name>
+                    <description><![CDATA[The value currently sensed on the SDA pin]]></description>
+                    <addressOffset>0x0020</addressOffset>
+                    <resetValue>0x00</resetValue>
+                    <size>32</size>
+                    <fields>
+                        <field>
+                            <name>bb_r</name>
+                            <msb>0</msb>
+                            <bitRange>[0:0]</bitRange>
+                            <lsb>0</lsb>
+                        </field>
+                    </fields>
+                </register>
+                <register>
                     <name>EV_STATUS</name>
                     <description><![CDATA[USB CC register changed]]></description>
-                    <addressOffset>0x0000</addressOffset>
+                    <addressOffset>0x0024</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -787,7 +916,7 @@ mitigate noise]]></description>
                 <register>
                     <name>EV_PENDING</name>
                     <description><![CDATA[USB CC register changed]]></description>
-                    <addressOffset>0x0004</addressOffset>
+                    <addressOffset>0x0028</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -824,7 +953,7 @@ mitigate noise]]></description>
                 <register>
                     <name>EV_ENABLE</name>
                     <description><![CDATA[USB CC register changed]]></description>
-                    <addressOffset>0x0008</addressOffset>
+                    <addressOffset>0x002c</addressOffset>
                     <resetValue>0x00</resetValue>
                     <size>32</size>
                     <fields>
@@ -861,7 +990,7 @@ mitigate noise]]></description>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0xc</size>
+                <size>0x30</size>
                 <usage>registers</usage>
             </addressBlock>
             <interrupt>
@@ -1131,106 +1260,12 @@ register to disable individual events.]]></description>
                         </field>
                     </fields>
                 </register>
-                <register>
-                    <name>EV_STATUS</name>
-                    <description><![CDATA[Triggered when any error condition occurs]]></description>
-                    <addressOffset>0x0008</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>spi_avail</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Level of the ``spi_avail`` event]]></description>
-                        </field>
-                        <field>
-                            <name>spi_event</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Level of the ``spi_event`` event]]></description>
-                        </field>
-                        <field>
-                            <name>spi_err</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Level of the ``spi_err`` event]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_PENDING</name>
-                    <description><![CDATA[Triggered when any error condition occurs]]></description>
-                    <addressOffset>0x000c</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>spi_avail</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Triggered when Rx FIFO leaves empty state]]></description>
-                        </field>
-                        <field>
-                            <name>spi_event</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Triggered every time a packet completes]]></description>
-                        </field>
-                        <field>
-                            <name>spi_err</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Triggered when any error condition occurs]]></description>
-                        </field>
-                    </fields>
-                </register>
-                <register>
-                    <name>EV_ENABLE</name>
-                    <description><![CDATA[Triggered when any error condition occurs]]></description>
-                    <addressOffset>0x0010</addressOffset>
-                    <resetValue>0x00</resetValue>
-                    <size>32</size>
-                    <fields>
-                        <field>
-                            <name>spi_avail</name>
-                            <msb>0</msb>
-                            <bitRange>[0:0]</bitRange>
-                            <lsb>0</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``spi_avail`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>spi_event</name>
-                            <msb>1</msb>
-                            <bitRange>[1:1]</bitRange>
-                            <lsb>1</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``spi_event`` Event]]></description>
-                        </field>
-                        <field>
-                            <name>spi_err</name>
-                            <msb>2</msb>
-                            <bitRange>[2:2]</bitRange>
-                            <lsb>2</lsb>
-                            <description><![CDATA[Write a ``1`` to enable the ``spi_err`` Event]]></description>
-                        </field>
-                    </fields>
-                </register>
             </registers>
             <addressBlock>
                 <offset>0</offset>
-                <size>0x14</size>
+                <size>0x8</size>
                 <usage>registers</usage>
             </addressBlock>
-            <interrupt>
-                <name>com</name>
-                <value>4</value>
-            </interrupt>
         </peripheral>
         <peripheral>
             <name>WIFI</name>
@@ -1406,17 +1441,12 @@ operation]]></description>
             </addressBlock>
             <interrupt>
                 <name>wifi</name>
-                <value>5</value>
+                <value>4</value>
             </interrupt>
         </peripheral>
     </peripherals>
     <vendorExtensions>
         <memoryRegions>
-            <memoryRegion>
-                <name>VEXRISCV_DEBUG</name>
-                <baseAddress>0xF00F0000</baseAddress>
-                <size>0x00000100</size>
-            </memoryRegion>
             <memoryRegion>
                 <name>SRAM</name>
                 <baseAddress>0x10000000</baseAddress>
@@ -1426,11 +1456,6 @@ operation]]></description>
                 <name>SPIFLASH</name>
                 <baseAddress>0x20000000</baseAddress>
                 <size>0x00100000</size>
-            </memoryRegion>
-            <memoryRegion>
-                <name>I2C</name>
-                <baseAddress>0xB0000000</baseAddress>
-                <size>0x00000040</size>
             </memoryRegion>
             <memoryRegion>
                 <name>COM</name>
