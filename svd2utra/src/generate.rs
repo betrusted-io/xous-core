@@ -569,7 +569,7 @@ where
     /// Read the contents of this register
     pub fn r(&self, reg: Register) -> T {
         // prevent re-ordering
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         unsafe { usize_base.add(reg.offset).read_volatile() }
@@ -579,7 +579,7 @@ where
     /// Read a field from this CSR
     pub fn rf(&self, field: Field) -> T {
         // prevent re-ordering
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
         let usize_base: *mut usize = unsafe { core::mem::transmute(self.base) };
         ((unsafe { usize_base.add(field.register.offset).read_volatile() } >> field.offset)
@@ -599,7 +599,7 @@ where
                 .write_volatile(previous | value_as_usize)
         };
         // prevent re-ordering
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     }
     /// Write a given field without reading it first
     pub fn wfo(&mut self, field: Field, value: T) {
