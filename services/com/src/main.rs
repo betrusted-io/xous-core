@@ -189,6 +189,33 @@ mod implementation {
 
             stats
         }
+
+        pub fn get_more_stats(&mut self) -> [u16; 15] {
+            self.txrx(ComState::STAT.verb);
+            let ack = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            if ack != 0x8888 {
+                log::error!("didn't receive the expected ack header to the stats readout");
+            }
+            let mut ret: [u16; 15] = [0; 15];
+            for r in ret.iter_mut() {
+                *r = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            }
+            ret
+        }
+
+        pub fn poll_usb_cc(&mut self) -> [u32; 2] {
+            self.txrx(ComState::POLL_USB_CC.verb);
+            let event = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            let mut ret: [u16; 3] = [0; 3];
+            for r in ret.iter_mut() {
+                *r = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            }
+            // pack into a format that can be returned as a scalar2
+            [
+                ((event as u32) << 16) | ret[0] as u32,
+                ret[1] as u32 | ((ret[2] as u32) << 16)
+            ]
+        }
     }
 }
 
@@ -261,6 +288,13 @@ mod implementation {
             } else {
                 None
             }
+        }
+        pub fn get_more_stats(&mut self) -> [u16; 15] {
+            [0; 15]
+        }
+
+        pub fn poll_usb_cc(&mut self) -> [u32; 2] {
+            [0; 2]
         }
     }
 }
@@ -467,13 +501,21 @@ fn xmain() -> ! {
                 ).expect("coludn't return accelerometer read data");
             }),
             Some(Opcode::BattStats) => {
-                info!("batt stats request received");
                 let stats = com.get_battstats();
                 let raw_stats: [usize; 2] = stats.into();
-                xous::return_scalar2(msg.sender, raw_stats[1], raw_stats[0])
+                xous::return_scalar2(msg.sender, raw_stats[0], raw_stats[1])
                     .expect("couldn't return batt stats request");
-                info!("done returning batt stats request");
             }
+            Some(Opcode::MoreStats) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let stats = com.get_more_stats();
+                buffer.replace(stats).unwrap();
+            }
+            Some(Opcode::PollUsbCc) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let usb_cc: [u32; 2] = com.poll_usb_cc();
+                xous::return_scalar2(msg.sender, usb_cc[0] as usize, usb_cc[1] as usize)
+                    .expect("couldn't return Usb CC result");
+            }),
             Some(Opcode::BattStatsNb) => {
                 for &maybe_conn in battstats_conns.iter() {
                     if let Some(conn) = maybe_conn {
