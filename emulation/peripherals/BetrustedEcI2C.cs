@@ -6,22 +6,23 @@
 // Full license text is available in 'licenses/MIT.txt'.
 //
 using System.Collections.Generic;
+using System;
 using Antmicro.Renode.Peripherals.Bus;
 using Antmicro.Renode.Core.Structure.Registers;
 using Antmicro.Renode.Core.Structure;
 using Antmicro.Renode.Core;
 using Antmicro.Renode.Logging;
 using Antmicro.Renode.Time;
-using Antmicro.Renode.Utilities;
+using System.Threading;
 
 // This project is a reimplementation of the OpenCoresI2C module.
 
 namespace Antmicro.Renode.Peripherals.I2C
 {
     [AllowedTranslations(AllowedTranslation.ByteToDoubleWord)]
-    public class BetrustedI2C : SimpleContainer<II2CPeripheral>, IDoubleWordPeripheral, IKnownSize
+    public class BetrustedEcI2C : SimpleContainer<II2CPeripheral>, IDoubleWordPeripheral, IKnownSize
     {
-        public BetrustedI2C(Machine machine) : base(machine)
+        public BetrustedEcI2C(Machine machine) : base(machine)
         {
             dataToSlave = new Queue<byte>();
             dataFromSlave = new Queue<byte>();
@@ -31,7 +32,7 @@ namespace Antmicro.Renode.Peripherals.I2C
 
             var registersMap = new Dictionary<long, DoubleWordRegister>()
             {
-                {(long)Registers.ClockPrescale, new DoubleWordRegister(this)
+                {(long)Registers.Prescale, new DoubleWordRegister(this)
                     .WithValueField(0, 16, FieldMode.Read | FieldMode.Write)
                 },
 
@@ -41,11 +42,11 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithReservedBits(0, 6)
                 },
 
-                {(long)Registers.Transmit, new DoubleWordRegister(this)
+                {(long)Registers.Txr, new DoubleWordRegister(this)
                     .WithValueField(0, 8, out transmitBuffer, FieldMode.Write)
                 },
 
-                {(long)Registers.Receive, new DoubleWordRegister(this)
+                {(long)Registers.Rxr, new DoubleWordRegister(this)
                     .WithValueField(0, 8, out receiveBuffer, FieldMode.Read)
                 },
 
@@ -55,22 +56,7 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithFlag(5, FieldMode.Read, valueProviderCallback: _ => false, name: "Arbitration lost")
                     .WithReservedBits(2, 3)
                     .WithFlag(1, FieldMode.Read, valueProviderCallback: _ => false, name: "Transfer in progress")
-                    .WithFlag(0, out i2cIntIrqStatus, FieldMode.Read)
-                },
-
-                {(long)Registers.EventStatus, new DoubleWordRegister(this)
-                    .WithFlag(1, FieldMode.Read, name: "TX_RX_DONE_STATUS", valueProviderCallback: _ => txRxDoneIrqStatus)
-                    .WithFlag(0, FieldMode.Read, name: "I2C_INT_STATUS", valueProviderCallback: _ => i2cIntIrqStatus.Value)
-                },
-
-                {(long)Registers.EventPending, new DoubleWordRegister(this)
-                    .WithFlag(1, out txRxDoneIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "TX_RX_DONE_PENDING", changeCallback: (_, __) => UpdateInterrupts())
-                    .WithFlag(0, out i2cIntIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "I2C_INT_PENDING", changeCallback: (_, __) => UpdateInterrupts())
-                },
-
-                {(long)Registers.EventEnable, new DoubleWordRegister(this)
-                    .WithFlag(1, out txRxDoneIrqEnabled, name: "TX_RX_DONE_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
-                    .WithFlag(0, out i2cIntIrqEnabled, name: "I2C_INT_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(0, out i2cIrqStatus, FieldMode.Read)
                 },
 
                 {(long)Registers.Command, new DoubleWordRegister(this)
@@ -81,7 +67,7 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithFlag(3, FieldMode.Read, name: "ACK", valueProviderCallback: _ => true)
                     // .WithTag("ACK", 3, 1)
                     .WithReservedBits(1, 2)
-                    .WithFlag(0, FieldMode.Write, writeCallback: (_, __) => i2cIntIrqStatus.Value = false)
+                    .WithFlag(0, FieldMode.Write, writeCallback: (_, __) => i2cIrqStatus.Value = false)
                     .WithWriteCallback((_, __) =>
                     {
                         if(!enabled.Value)
@@ -125,13 +111,21 @@ namespace Antmicro.Renode.Peripherals.I2C
                             HandleReadFromSlaveCommand();
                         }
 
-                        if (transactionInProgress) {
-                            machine.ClockSource.AddClockEntry(irqTimeoutCallback);
+                        if (transactionInProgress && 0 == Interlocked.CompareExchange(ref irqTimeoutCallbackQueued, 1, 0)) {
+                            // this.Log(LogLevel.Error, "I2C: Adding clock entry for {0}",this.irqTimeoutCallback);
+                            try {
+                                machine.ClockSource.AddClockEntry(irqTimeoutCallback);
+                            } catch (ArgumentException ex) {
+                                this.Log(LogLevel.Error, "Unable to add clock entry for timeout (queued: {0}): {1}", ex, irqTimeoutCallbackQueued);
+                                // this.Log(LogLevel.Error, "I2C: Done adding clock entry for {0}",this.irqTimeoutCallback);
+                            }
                         }
 
                         if(generateStopCondition.Value)
                         {
-                            selectedSlave.FinishTransmission();
+                            if (selectedSlave != null) {
+                                selectedSlave.FinishTransmission();
+                            }
 
                             generateStopCondition.Value = false;
                             if(!transactionInProgress)
@@ -145,6 +139,26 @@ namespace Antmicro.Renode.Peripherals.I2C
 
                         shouldSendTxRxIrq = true;
                     })
+                },
+                {(long)Registers.EventStatus, new DoubleWordRegister(this)
+                    .WithFlag(3, FieldMode.Read, name: "USBCC_INT_STATUS", valueProviderCallback: _ => usbccIrqStatus)
+                    .WithFlag(2, FieldMode.Read, name: "GYRO_INT_STATUS", valueProviderCallback: _ => gyroIrqStatus)
+                    .WithFlag(1, FieldMode.Read, name: "GG_INT_STATUS", valueProviderCallback: _ => ggIrqStatus)
+                    .WithFlag(0, FieldMode.Read, name: "I2C_INT_STATUS", valueProviderCallback: _ => i2cIrqStatus.Value)
+                },
+
+                {(long)Registers.EventPending, new DoubleWordRegister(this)
+                    .WithFlag(3, out usbccIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "USBCC_INT_PENDING", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(2, out gyroIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "GYRO_INT_PENDING", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(1, out ggIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "GG_INT_PENDING", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(0, out i2cIrqPending, FieldMode.Read | FieldMode.WriteOneToClear, name: "I2C_INT_PENDING", changeCallback: (_, __) => UpdateInterrupts())
+                },
+
+                {(long)Registers.EventEnable, new DoubleWordRegister(this)
+                    .WithFlag(3, out usbccIrqEnabled, name: "USBCC_INT_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(2, out gyroIrqEnabled, name: "GYRO_INT_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(1, out ggIrqEnabled, name: "GG_INT_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
+                    .WithFlag(0, out i2cIrqEnabled, name: "I2C_INT_ENABLE", changeCallback: (_, __) => UpdateInterrupts())
                 }
             };
 
@@ -154,7 +168,9 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void FinishTransaction()
         {
+            // this.Log(LogLevel.Error, "I2C: Removing clock entry for {0}",this.irqTimeoutCallback);
             machine.ClockSource.RemoveClockEntry(FinishTransaction);
+            irqTimeoutCallbackQueued = 0;
             if (shouldSendTxRxIrq)
             {
                 shouldSendTxRxIrq = false;
@@ -184,16 +200,28 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void UpdateInterrupts()
         {
-            if (i2cIntIrqStatus.Value && i2cIntIrqEnabled.Value)
+            if (i2cIrqStatus.Value)
             {
-                i2cIntIrqPending.Value = true;
+                i2cIrqPending.Value = true;
             }
-            if (txRxDoneIrqStatus && txRxDoneIrqEnabled.Value)
+            if (ggIrqStatus)
             {
-                txRxDoneIrqPending.Value = true;
+                ggIrqPending.Value = true;
+            }
+            if (gyroIrqStatus)
+            {
+                gyroIrqPending.Value = true;
+            }
+            if (usbccIrqStatus)
+            {
+                usbccIrqPending.Value = true;
             }
             // this.Log(LogLevel.Noisy, "    Setting status: {0}, enabled: {1}, pending: {2}", txRxDoneIrqStatus, txRxDoneIrqEnabled.Value, txRxDoneIrqPending.Value);
-            IRQ.Set(i2cIntIrqPending.Value || txRxDoneIrqPending.Value);
+            IRQ.Set((i2cIrqPending.Value && i2cIrqEnabled.Value)
+                || (ggIrqPending.Value && ggIrqEnabled.Value)
+                || (gyroIrqPending.Value && gyroIrqEnabled.Value)
+                || (usbccIrqPending.Value && usbccIrqEnabled.Value)
+            );
         }
 
         public GPIO IRQ
@@ -202,7 +230,7 @@ namespace Antmicro.Renode.Peripherals.I2C
             private set;
         }
 
-        public long Size { get { return 0x1000; } }
+        public long Size { get { return 0x800; } }
 
         private bool TryResolveSelectedSlave(out II2CPeripheral selectedSlave)
         {
@@ -260,7 +288,7 @@ namespace Antmicro.Renode.Peripherals.I2C
             }
 
             dataToSlave.Enqueue((byte)transmitBuffer.Value);
-            i2cIntIrqStatus.Value = true;
+            i2cIrqStatus.Value = true;
             UpdateInterrupts();
         }
 
@@ -273,13 +301,23 @@ namespace Antmicro.Renode.Peripherals.I2C
         private readonly IValueRegisterField transmitBuffer;
         private readonly IFlagRegisterField readFromSlave;
         private readonly IFlagRegisterField writeToSlave;
-        private readonly IFlagRegisterField i2cIntIrqStatus;
-        private IFlagRegisterField i2cIntIrqEnabled;
-        private IFlagRegisterField i2cIntIrqPending;
-        private bool txRxDoneIrqStatus;
+
+        private IFlagRegisterField i2cIrqEnabled;
+        private IFlagRegisterField ggIrqEnabled;
+        private IFlagRegisterField gyroIrqEnabled;
+        private IFlagRegisterField usbccIrqEnabled;
+        private IFlagRegisterField i2cIrqStatus;
+        private bool ggIrqStatus;
+        private bool gyroIrqStatus;
+        private bool usbccIrqStatus;
+        private IFlagRegisterField i2cIrqPending;
+        private IFlagRegisterField ggIrqPending;
+        private IFlagRegisterField gyroIrqPending;
+        private IFlagRegisterField usbccIrqPending;
+
         private bool shouldSendTxRxIrq;
-        private IFlagRegisterField txRxDoneIrqEnabled;
-        private IFlagRegisterField txRxDoneIrqPending;
+        private bool txRxDoneIrqStatus;
+        private long irqTimeoutCallbackQueued;
         private readonly IFlagRegisterField enabled;
         private readonly IFlagRegisterField receivedAckFromSlaveNegated;
         private readonly IFlagRegisterField generateStartCondition;
@@ -289,16 +327,18 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private enum Registers
         {
-            ClockPrescale = 0x0,
+            Prescale = 0x0,
             Control = 0x4,
-            Transmit = 0x8,
-            Receive = 0xC,
+            Txr = 0x8,
+            Rxr = 0xC,
             Command = 0x10,
             Status = 0x14,
-            Reset = 0x18,
-            EventStatus = 0x1c,
-            EventPending = 0x20,
-            EventEnable = 0x24
+            BitbangMode = 0x18,
+            Bb = 0x1c,
+            BbR = 0x20,
+            EventStatus = 0x24,
+            EventPending = 0x28,
+            EventEnable = 0x2c
         }
     }
 }

@@ -592,7 +592,7 @@ fn print_peripherals<U: Write>(
                 writeln!(out, "    -> cpu @ {}", 1000 + irq.value)?;
             }
         } else {
-            writeln!(out, "// Unrecognized peripheral: {}", lc_name)?;
+            writeln!(out, "// Unrecognized peripheral: {} @ 0x{:08x}", lc_name, peripheral.base)?;
         }
         writeln!(out)?;
     }
@@ -633,7 +633,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("app_uart", "UART.LiteX_UART");
     cs_peripherals.insert("console", "UART.LiteX_UART");
     cs_peripherals.insert("engine", "Miscellaneous.Engine");
-    cs_peripherals.insert("i2c", "I2C.BetrustedI2C");
+    cs_peripherals.insert("i2c", "I2C.BetrustedSocI2C");
     cs_peripherals.insert("keyboard", "Input.BetrustedKbd");
     cs_peripherals.insert("keyrom", "Miscellaneous.Keyrom");
     cs_peripherals.insert("memlcd", "Video.BetrustedLCD");
@@ -645,6 +645,7 @@ pub fn generate<T: Read, U: Write>(src: T, dest: &mut U) -> Result<(), ParseErro
     cs_peripherals.insert("ticktimer", "Timers.TickTimer");
     cs_peripherals.insert("uart", "UART.LiteX_UART");
     cs_peripherals.insert("wfi", "Miscellaneous.BetrustedWfi");
+    cs_peripherals.insert("wdt", "Timers.BetrustedWatchdog");
 
     print_header(dest).or(Err(ParseError::WriteError))?;
     print_peripherals(

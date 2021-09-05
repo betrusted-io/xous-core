@@ -22,6 +22,6 @@ rm /tmp/soc_csr.bin
 echo "waiting for device to reboot"
 sleep 5
 
-wget https://ci.betrusted.io/latest-ci/bt-ec.bin -O /tmp/bt-ec.bin
-./usb_update.py -e /tmp/bt-ec.bin
-rm /tmp/bt-ec.bin
+wget https://ci.betrusted.io/latest-ci/ec_fw.bin -O /tmp/ec_fw.bin
+./usb_update.py -e /tmp/ec_fw.bin
+rm /tmp/ec_fw.bin
