@@ -310,7 +310,7 @@ fn xmain() -> ! {
     )
     .expect("couldn't create menu thread");
 
-    info!("|status: starting main loop");
+    info!("|status: starting main loop"); // don't change this -- factory test looks for this exact string
     loop {
         let msg = xous::receive_message(status_sid).unwrap();
         log::trace!("|status: Message: {:?}", msg);

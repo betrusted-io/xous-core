@@ -34,16 +34,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     let (x, y, z, id) = env.com.gyro_read_blocking().unwrap();
-                    log::info!("{}|GYRO|{}|{}|{}|{}", SENTINEL, x, y, z, id);
+                    log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
                     let (wf_maj, wf_min, wf_rev) = env.com.get_wf200_fw_rev().unwrap();
-                    log::info!("{}|WF200REV|{}|{}|{}", SENTINEL, wf_maj, wf_min, wf_rev);
+                    log::info!("{}|WF200REV|{}|{}|{}|", SENTINEL, wf_maj, wf_min, wf_rev);
                     let (ec_rev, ec_dirty) =  env.com.get_ec_git_rev().unwrap();
-                    log::info!("{}|ECREV|{:x}|{:?}", SENTINEL, ec_rev, ec_dirty);
+                    log::info!("{}|ECREV|{:x}|{:?}|", SENTINEL, ec_rev, ec_dirty);
                     let morestats = env.com.get_more_stats().unwrap();
-                    log::info!("{}|BATTSTATS|{:?}", SENTINEL, morestats);
-                    let (usbcc_event, usbcc_regs) = env.com.poll_usb_cc().unwrap();
-                    log::info!("{}|USBCC|{:?}|{:?}", SENTINEL, usbcc_event, usbcc_regs);
+                    log::info!("{}|BATTSTATS|{:?}|", SENTINEL, morestats);
+                    let (usbcc_event, usbcc_regs, usbcc_rev) = env.com.poll_usb_cc().unwrap();
+                    log::info!("{}|USBCC|{:?}|{:?}|{}|", SENTINEL, usbcc_event, usbcc_regs, usbcc_rev);
 
+                    log::info!("{}|DONE|", SENTINEL);
                     write!(ret, "Factory test script has run, check serial terminal for output").unwrap();
                     env.llio.wfi_override(false).unwrap();
                 }

@@ -160,11 +160,11 @@ impl Com {
         Ok(stats)
     }
 
-    pub fn poll_usb_cc(&mut self) -> Result<(bool, [u16; 3]), xous::Error> {
+    pub fn poll_usb_cc(&mut self) -> Result<(bool, [u16; 3], u8), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::PollUsbCc.to_usize().unwrap(), 0, 0, 0, 0))?;
         if let xous::Result::Scalar2(val1, val2) = response {
-            let event = if (val1 >> 16) == 0 {
+            let event = if ((val1 >> 16) & 0xff) == 0 {
                 false
             } else {
                 true
@@ -172,9 +172,10 @@ impl Com {
             let regs: [u16; 3] = [
                 (val1 & 0xFFFF) as u16,
                 (val2 & 0xFFFF) as u16,
-                ((val2 >> 16) & 0xFFFF) as u16
+                ((val2 >> 16) & 0xFF) as u16
             ];
-            Ok((event, regs))
+            let rev: u8 = ((val1 >> 24) & 0xff) as u8;
+            Ok((event, regs, rev))
         } else {
             Err(xous::Error::InternalError)
         }

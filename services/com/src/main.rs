@@ -210,9 +210,10 @@ mod implementation {
             for r in ret.iter_mut() {
                 *r = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
             }
+            let rev = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
             // pack into a format that can be returned as a scalar2
             [
-                ((event as u32) << 16) | ret[0] as u32,
+                ((rev & 0xff) as u32) << 24 | (((event & 0xff) as u32) << 16) | ret[0] as u32,
                 ret[1] as u32 | ((ret[2] as u32) << 16)
             ]
         }
