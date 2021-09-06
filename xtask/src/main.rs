@@ -878,7 +878,7 @@ fn generate_locales() -> Result<(), std::io::Error> {
 }
 
 fn whycheproof_import() -> Result<(), DynError> {
-    let input_file = "wycheproof-import/x25519_test.json";
+    let input_file = "tools/wycheproof-import/x25519_test.json";
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
     let status = Command::new(cargo())
         .current_dir(project_root())

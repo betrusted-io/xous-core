@@ -77,7 +77,7 @@ members = [
   "services/spinor",
   "services/root-keys",
   "services/jtag",
-  "wycheproof-import",
+  "tools/wycheproof-import",
 ]
 resolver = "2"
 
