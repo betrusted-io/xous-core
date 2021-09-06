@@ -299,7 +299,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed]";
+        let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed] [wycheproof]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
