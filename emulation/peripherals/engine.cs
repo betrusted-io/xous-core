@@ -455,6 +455,12 @@ namespace Antmicro.Renode.Peripherals.Miscellaneous
                             this.illegalOpcodeStatus = true;
                             throw new Exception("Unhandled opcode");
                     }
+                    //this.Log(LogLevel.Error, "RAM[0x{0:X}] {1}\n   Ra:{2:x}\n   Rb:{3:x}\n   W:{4:x}", this.mpc, op,
+                    //    this.engineRam.ReadRegister(op.Ra, op.Ca),
+                    //    this.engineRam.ReadRegister(op.Rb, op.Cb),
+                    //    this.engineRam.ReadRegister(op.Wd, false)
+                    //);
+
                     // Interlocked.Increment(ref this.mpc);
                     this.mpc += 1;
                     if (op.Op == 10)
