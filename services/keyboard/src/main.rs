@@ -293,13 +293,19 @@ mod implementation {
             let ticktimer = ticktimer_server::Ticktimer::new().expect("couldn't connect to ticktimer");
             let timestamp = ticktimer.elapsed_ms();
 
+            let default_map = if cfg!(feature = "braille") {
+                KeyMap::Braille
+            } else {
+                KeyMap::Qwerty
+            };
+
             let mut kbd = Keyboard {
                 conn: xous::connect(sid).unwrap(),
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
                 new_state: HashSet::with_capacity(16), // pre-allocate space since this has to work in an interrupt context
                 last_state: HashSet::with_capacity(16),
                 ticktimer,
-                map: KeyMap::Qwerty,
+                map: default_map,
                 delay: 500,
                 rate: 20,
                 shift_down: false,

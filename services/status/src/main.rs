@@ -277,7 +277,7 @@ fn xmain() -> ! {
     let stats_interval;
     let batt_interval;
     let secnotes_interval;
-    if cfg!(feature = "slowstatus") {
+    if cfg!(feature = "braille") {
         // lower the status output rate for braille mode, debugging, etc.
         stats_interval = 30;
         batt_interval = 60;
