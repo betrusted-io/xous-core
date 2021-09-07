@@ -205,12 +205,77 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     xous::destroy_server(sid).unwrap();
 }
 
+mod wycheproof {
+    pub const WYCHEPROOF_NO_TEST_CASES: usize = 518;
+    pub const WHYCHEPROOF_TEST_CASE_SIZE: usize = 96;
+
+    #[export_name = "wycheproof_vectors"]
+    pub static WYCHEPROOF_VECTORS: &[u8; WYCHEPROOF_NO_TEST_CASES * WHYCHEPROOF_TEST_CASE_SIZE] =
+        include_bytes!("x25519_test.bin");
+
+    pub struct WycheproofTestCase {
+        // inferred from the index; not read from the binary data
+        public: [u8; 32],
+        id: usize,
+        private: [u8; 32],
+        shared: [u8; 32],
+    }
+
+    impl WycheproofTestCase {
+        pub fn read(test_index: usize) -> Self {
+            use std::io::Read;
+            let test_offset = test_index * WHYCHEPROOF_TEST_CASE_SIZE;
+            let mut public = [0u8; 32];
+            (&WYCHEPROOF_VECTORS[test_offset..test_offset + 32])
+                .read_exact(&mut public)
+                .unwrap();
+            let mut private = [0u8; 32];
+            (&WYCHEPROOF_VECTORS[test_offset + 32..test_offset + 64])
+                .read_exact(&mut private)
+                .unwrap();
+            let mut shared = [0u8; 32];
+            (&WYCHEPROOF_VECTORS[test_offset + 64..test_offset + 96])
+                .read_exact(&mut shared)
+                .unwrap();
+
+            WycheproofTestCase {
+                id: test_index + 1,
+                public,
+                private,
+                shared,
+            }
+        }
+
+        pub fn run(&self) -> Option<TestCaseError> {
+            use x25519_dalek::{PublicKey, StaticSecret};
+            let private = StaticSecret::from(self.private);
+            let public = PublicKey::from(self.public);
+            let shared = private.diffie_hellman(&public).to_bytes();
+            if shared != self.shared {
+                Some(TestCaseError {
+                    test_id: self.id,
+                    expected: self.shared,
+                    actual: shared,
+                })
+            } else {
+                None
+            }
+        }
+    }
+
+    pub struct TestCaseError {
+        pub(crate) test_id: usize,
+        pub(crate) expected: [u8; 32],
+        pub(crate) actual: [u8; 32],
+    }
+}
 #[derive(Debug)]
 pub struct Engine {
     susres: susres::Susres,
     benchmark_cid: xous::CID,
     start_time: Option<u64>,
 }
+
 impl Engine {
     pub fn new(xns: &xous_names::XousNames, env: &mut CommonEnv) -> Self {
         let sid = xous::create_server().unwrap();
@@ -234,7 +299,7 @@ impl<'a> ShellCmdApi<'a> for Engine {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed]";
+        let helpstring = "engine [check] [bench] [benchdh] [susres] [dh] [ed] [wycheproof]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -447,6 +512,22 @@ impl<'a> ShellCmdApi<'a> for Engine {
                     }
                     if pass {
                         write!(ret, "Passed ed25519 simple check").unwrap();
+                    }
+                }
+                "wycheproof" => {
+                    use wycheproof::*;
+                    use hex::ToHex;
+                    let failures: Vec<TestCaseError> = (0..WYCHEPROOF_NO_TEST_CASES)
+                        .filter_map(|test_index| WycheproofTestCase::read(test_index).run())
+                        .collect();
+                    write!(ret, "Ran {} tests. {} failures.", WYCHEPROOF_NO_TEST_CASES, failures.len()).unwrap();
+                    if failures.len() > 0 {
+                        write!(ret, "\nFailed tests: {:?}", failures.iter().map(|tc| tc.test_id).collect::<Vec<usize>>()).unwrap();
+                        for failure in failures {
+                            log::error!("wycheproof test #{} failed:", failure.test_id);
+                            log::error!("expected: {}", failure.expected.encode_hex::<std::string::String>());
+                            log::error!("actual:   {}", failure.actual.encode_hex::<std::string::String>());
+                        }
                     }
                 }
                 _ => {

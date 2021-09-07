@@ -73,6 +73,12 @@ pub(crate) enum Opcode {
     /// Query Full charge capacity of the battery
     //BattFullCapacity,
 
+    /// More charger and gas gauge status, primarily for diagnostics
+    MoreStats,
+
+    /// Poll the USB CC chip
+    PollUsbCc,
+
     /// Turn Boost Mode On
     BoostOn,
 

@@ -140,6 +140,47 @@ impl Com {
         Ok(())
     }
 
+    pub fn get_batt_stats_blocking(&mut self) -> Result<BattStats, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::BattStats.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(rs0, rs1) = response {
+            let bs: BattStats = [rs0, rs1].into();
+            Ok(bs)
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
+    pub fn get_more_stats(&mut self) -> Result<[u16; 15], xous::Error> {
+        let alloc_stats: [u16; 15] = [0; 15];
+        let mut buf = Buffer::into_buf(alloc_stats).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::MoreStats.to_u32().unwrap())?;
+
+        let stats: [u16; 15] = buf.to_original::<[u16; 15], _>().unwrap();
+        Ok(stats)
+    }
+
+    pub fn poll_usb_cc(&mut self) -> Result<(bool, [u16; 3], u8), xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::PollUsbCc.to_usize().unwrap(), 0, 0, 0, 0))?;
+        if let xous::Result::Scalar2(val1, val2) = response {
+            let event = if ((val1 >> 16) & 0xff) == 0 {
+                false
+            } else {
+                true
+            };
+            let regs: [u16; 3] = [
+                (val1 & 0xFFFF) as u16,
+                (val2 & 0xFFFF) as u16,
+                ((val2 >> 16) & 0xFF) as u16
+            ];
+            let rev: u8 = ((val1 >> 24) & 0xff) as u8;
+            Ok((event, regs, rev))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn wifi_disable(&self) -> Result<(), xous::Error> {
         send_message(self.conn, Message::new_scalar(Opcode::Wf200Disable.to_usize().unwrap(), 0, 0, 0, 0,)).map(|_| ())
     }

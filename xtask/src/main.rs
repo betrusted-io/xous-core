@@ -193,6 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("nuke-soc") => update_usb(false, false, true, false)?,
         Some("burn-soc") => update_usb(false, false, false, true)?,
         Some("generate-locales") => generate_locales()?,
+        Some("wycheproof-import") => whycheproof_import()?,
         _ => print_help(),
     }
     Ok(())
@@ -221,6 +222,7 @@ burn-loader             invoke the `usb_update.py` utility to burn the loader
 burn-soc                invoke the `usb_update.py` utility to stage the SoC gateware, which must then be provisioned with secret material using the Precursor device.
 nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
 generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
+wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
@@ -873,6 +875,30 @@ fn project_root() -> PathBuf {
 fn generate_locales() -> Result<(), std::io::Error> {
     let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
     filetime::set_file_mtime("locales/src/lib.rs", ts)
+}
+
+fn whycheproof_import() -> Result<(), DynError> {
+    let input_file = "tools/wycheproof-import/x25519_test.json";
+    let output_file = "services/shellchat/src/cmds/x25519_test.bin";
+    let status = Command::new(cargo())
+        .current_dir(project_root())
+        .args(&[
+            "run",
+            "--package",
+            "wycheproof-import",
+            "--",
+            input_file,
+            output_file
+        ])
+        .status()?;
+    if !status.success() {
+        return Err("wycheproof-import failed. If any, the output will not be usable.".into());
+    }
+
+    println!();
+    println!("Wrote wycheproof x25519 testvectors to '{}'.", output_file);
+
+    return Ok(())
 }
 
 // fn dist_dir() -> PathBuf {
