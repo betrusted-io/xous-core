@@ -39,6 +39,9 @@ num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 rkyv = {version = "0.4.3", default-features = false, features = ["const_generics"]}
 
+# for audio self-test analysis
+spectrum-analyzer = "0.5.2"
+
 # for the curve25519 tests
 # hardware acceleration adaptations are inserted into a fork of the main branch.
 rand_core = "0.5"
