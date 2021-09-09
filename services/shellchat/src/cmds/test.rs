@@ -161,7 +161,6 @@ impl<'a> ShellCmdApi<'a> for Test {
                         self.left_play = true;
                         self.right_play = true;
                     }
-                    log::info!("starting audio test with freq {} left {} right {}", self.freq, self.left_play, self.right_play);
                     self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
                     env.ticktimer.sleep_ms(50).unwrap();
 
@@ -175,8 +174,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     self.play_sample = 0.0;
                     self.rec_sample = 0;
 
-                    log::info!("starting playback");
                     self.codec.resume().unwrap();
+                    log::info!("{}|ASTART|{}|{}|{}|", SENTINEL, self.freq, self.left_play, self.right_play);
 
                 }
                 "astop" => {
@@ -189,23 +188,16 @@ impl<'a> ShellCmdApi<'a> for Test {
 
                     // now do FFT analysis on the sample buffer
                     // analyze one channel at a time
-                    let mut left_samples = Vec::<f32>::new();
                     let mut right_samples = Vec::<f32>::new();
                     let recslice = self.recbuf.as_slice::<u32>();
                     for &sample in recslice[recslice.len()-4096..].iter() {
-                        left_samples.push( ((sample & 0xFFFF) as i16) as f32 );
-                        right_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 );
+                        right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
+                        //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
                     }
-                    let hann_left = hann_window(&left_samples);
+                    // only left channel is considered, because in reality the left is just a copy of the right because
+                    // we are taking a mono microphone signal and mixing it into both ADCs
+
                     let hann_right = hann_window(&right_samples);
-                    log::info!("hann_left len: {}", hann_left.len());
-                    let spectrum_left = samples_fft_to_spectrum(
-                        &hann_left,
-                        SAMPLE_RATE_HZ as _,
-                        FrequencyLimit::All,
-                        None,
-                        None
-                    );
                     let spectrum_right = samples_fft_to_spectrum(
                         &hann_right,
                         SAMPLE_RATE_HZ as _,
@@ -213,10 +205,16 @@ impl<'a> ShellCmdApi<'a> for Test {
                         None,
                         None
                     );
-                    log::info!("left");
-                    asciiplot(spectrum_left);
-                    log::info!("right");
-                    asciiplot(spectrum_right);
+                    asciiplot(&spectrum_right);
+                    let ratio = analyze(&spectrum_right, self.freq);
+                    if ratio > 1.0 {
+                        log::info!("{}|ASTOP|PASS|{}|{}|{}|{}|", SENTINEL, ratio, self.freq, self.left_play, self.right_play);
+                    } else {
+                        log::info!("{}|ASTOP|FAIL|{}|{}|{}|{}|", SENTINEL, ratio, self.freq, self.left_play, self.right_play);
+                    }
+
+                    log::info!("off-target 1 {}", analyze(&spectrum_right, 329.63));
+                    log::info!("off-target 2 {}", analyze(&spectrum_right, 261.63));
                     /*
                     Left off notes:
                       - simplify to single tones played for 3 seconds
@@ -245,11 +243,11 @@ impl<'a> ShellCmdApi<'a> for Test {
     }
 
     fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        const AMPLITUDE: f32 = 0.9;
+        const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
             Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: _}) => {
-                log::info!("{} extending playback", free_play);
+                log::debug!("{} extending playback", free_play);
                 let mut frames: FrameRing = FrameRing::new();
                 let frames_to_push = if frames.writeable_count() < *free_play {
                     frames.writeable_count()
@@ -257,7 +255,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     *free_play
                 };
                 self.framecount += frames_to_push as u32;
-                log::info!("f{} p{}", self.framecount, frames_to_push);
+                log::debug!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
                     let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                     // put the "expensive" f32 comparison outside the cosine wave table computation loop
@@ -266,7 +264,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
                         let left = if self.left_play { raw_sine as u16 } else { ZERO_PCM };
                         let right = if self.right_play { raw_sine as u16 } else { ZERO_PCM };
-                        *sample = left as u32 | (right as u32) << 16;
+                        *sample = right as u32 | (left as u32) << 16;
                         self.play_sample += 1.0;
                     }
 
@@ -306,11 +304,46 @@ impl<'a> ShellCmdApi<'a> for Test {
     }
 }
 
-fn asciiplot(fs: FrequencySpectrum) {
+// plus minus this amount for frequencing searching
+// this is set less by our desired accuracy of the frequency
+// than by the artifacts of the analysis: the FFT window has some "skirt" to it
+// by a few Hz, and this ratio tries to capture about 90% of the power within the hanning window's skirt.
+const ANALYSIS_DELTA: f32 = 10.0;
+fn analyze(fs: &FrequencySpectrum, target: f32) -> f32 {
+    let mut total_power: f32 = 0.0;
+    let mut h1_power: f32 = 0.0;
+    let mut h2_power: f32 = 0.0;
+    let mut outside_power: f32 = 0.0;
+
+    for &(freq, mag) in fs.data().iter() {
+        let f = freq.val();
+        let m = mag.val();
+        total_power += m;
+        if (f >= target - ANALYSIS_DELTA) && (f <= target + ANALYSIS_DELTA) {
+            h1_power += m;
+        } else if (f >= (target * 2.0 - ANALYSIS_DELTA)) && (f <= (target * 2.0 + ANALYSIS_DELTA)) {
+            h2_power += m;
+        } else if f >= ANALYSIS_DELTA { // don't count the DC offset
+            outside_power += m;
+        } else {
+            log::debug!("ignoring {}Hz @ {}", f, m);
+        }
+    }
+    log::debug!("h1: {}, h2: {}, outside: {}, total: {}", h1_power, h2_power, outside_power, total_power);
+
+    let ratio = if outside_power > 0.0 {
+        (h1_power + h2_power) / outside_power
+    } else {
+        1_000_000.0
+    };
+    ratio
+}
+
+fn asciiplot(fs: &FrequencySpectrum) {
     let (max_f, max_val) = fs.max();
-    const LINES: usize = 40;
+    const LINES: usize = 100;
     const WIDTH: usize = 80;
-    const MAX_F: usize = 4000;
+    const MAX_F: usize = 1000;
 
     for f in (0..MAX_F).step_by(MAX_F / LINES) {
         let (freq, val) = fs.freq_val_closest(f as f32);
