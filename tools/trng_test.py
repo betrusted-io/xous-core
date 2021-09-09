@@ -166,8 +166,8 @@ class PrecursorUsb:
                 exit(1)
 
     def ping_wdt(self):
-        self.poke(self.register('wdt_watchdog'), 0x600d, display=False)
-        self.poke(self.register('wdt_watchdog'), 0xc0de, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
 
     def load_csrs(self):
         LOC_CSRCSV = 0x20277000 # this address shouldn't change because it's how we figure out our version number
