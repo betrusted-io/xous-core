@@ -4,13 +4,14 @@ use xous::{MessageEnvelope, Message};
 use llio::I2cStatus;
 
 use codec::*;
-use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
+use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
 use rtc::{DateTime, Weekday};
 
 #[derive(Debug)]
 pub struct Test {
     state: u32,
+    // audio
     codec: codec::Codec,
     recbuf: xous::MemoryRange,
     callback_id: Option<u32>,
@@ -18,6 +19,10 @@ pub struct Test {
     framecount: u32,
     play_sample: f32, // count of play samples generated. in f32 to avoid int<->f32 conversions
     rec_sample: usize, // count of record samples recorded. in usize because we're not doing f32 wave table computations on this
+    left_play: bool,
+    right_play: bool,
+    freq: f32,
+    // rtc
     start_time: Option<DateTime>,
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
@@ -45,6 +50,9 @@ impl Test {
             framecount: 0,
             play_sample: 0.0,
             rec_sample: 0,
+            left_play: true,
+            right_play: true,
+            freq: 440.0,
             start_time: None,
             end_time: None,
             start_elapsed: None,
@@ -54,6 +62,7 @@ impl Test {
 }
 
 const SAMPLE_RATE_HZ: f32 = 8000.0;
+// note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
@@ -133,8 +142,26 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "Factory test script has run, check serial terminal for output").unwrap();
                     env.llio.wfi_override(false).unwrap();
                 }
-                #[cfg(feature="audio_tests")]
-                "audio" => {
+                "astart" => {
+                    self.freq = if let Some(freq_str) = tokens.next() {
+                        match freq_str.parse::<f32>() {
+                            Ok(f) => f,
+                            Err(_) => 440.0,
+                        }
+                    } else {
+                        440.0
+                    };
+                    if let Some(channel_str) = tokens.next() {
+                        match channel_str {
+                            "left" => {self.left_play = true; self.right_play = false;},
+                            "right" => {self.right_play = true; self.left_play = false;},
+                            _ => {self.left_play = true; self.right_play = true;}
+                        }
+                    } else {
+                        self.left_play = true;
+                        self.right_play = true;
+                    }
+                    log::info!("starting audio test with freq {} left {} right {}", self.freq, self.left_play, self.right_play);
                     self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
                     env.ticktimer.sleep_ms(50).unwrap();
 
@@ -151,8 +178,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("starting playback");
                     self.codec.resume().unwrap();
 
-                    env.ticktimer.sleep_ms(4000).unwrap();
-
+                }
+                "astop" => {
                     self.codec.pause().unwrap(); // this should stop callbacks from occurring too.
                     write!(ret, "Playback stopped at {} frames.", self.framecount).unwrap();
                     self.framecount = 0;
@@ -164,12 +191,14 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // analyze one channel at a time
                     let mut left_samples = Vec::<f32>::new();
                     let mut right_samples = Vec::<f32>::new();
-                    for &sample in self.recbuf.as_slice::<u32>().iter() {
+                    let recslice = self.recbuf.as_slice::<u32>();
+                    for &sample in recslice[recslice.len()-4096..].iter() {
                         left_samples.push( ((sample & 0xFFFF) as i16) as f32 );
                         right_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 );
                     }
                     let hann_left = hann_window(&left_samples);
                     let hann_right = hann_window(&right_samples);
+                    log::info!("hann_left len: {}", hann_left.len());
                     let spectrum_left = samples_fft_to_spectrum(
                         &hann_left,
                         SAMPLE_RATE_HZ as _,
@@ -185,13 +214,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                         None
                     );
                     log::info!("left");
-                    for (fr, fr_val) in spectrum_left.data().iter() {
-                        log::info!("{}Hz => {}", fr, fr_val)
-                    }
+                    asciiplot(spectrum_left);
                     log::info!("right");
-                    for (fr, fr_val) in spectrum_right.data().iter() {
-                        log::info!("{}Hz => {}", fr, fr_val)
-                    }
+                    asciiplot(spectrum_right);
                     /*
                     Left off notes:
                       - simplify to single tones played for 3 seconds
@@ -220,15 +245,11 @@ impl<'a> ShellCmdApi<'a> for Test {
     }
 
     fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        const OMEGA1: f32 = 440.0 * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;  // A4
-        const OMEGA2: f32 = 329.63 * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ; // E4
-        const OMEGA3: f32 = 261.63 * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ; // C4
-        const AMPLITUDE: f32 = 0.707;
+        const AMPLITUDE: f32 = 0.9;
 
         match &msg.body {
-            #[cfg(feature="audio_tests")]
             Message::Scalar(xous::ScalarMessage{id: _, arg1: free_play, arg2: _avail_rec, arg3: _, arg4: _}) => {
-                log::debug!("{} extending playback", free_play);
+                log::info!("{} extending playback", free_play);
                 let mut frames: FrameRing = FrameRing::new();
                 let frames_to_push = if frames.writeable_count() < *free_play {
                     frames.writeable_count()
@@ -236,31 +257,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                     *free_play
                 };
                 self.framecount += frames_to_push as u32;
-                log::debug!("f{} p{}", self.framecount, frames_to_push);
+                log::info!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
                     let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
                     // put the "expensive" f32 comparison outside the cosine wave table computation loop
-                    if self.play_sample < SAMPLE_RATE_HZ { // 1 second A4
-                        for sample in frame.iter_mut() {
-                            // left channel, A4 note
-                            let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * OMEGA1 ) * i16::MAX as f32) as i16;
-                            *sample = raw_sine as u32 | (ZERO_PCM as u32) << 16;
-                            self.play_sample += 1.0;
-                        }
-                    } else if self.play_sample < SAMPLE_RATE_HZ * 2.0 {
-                        for sample in frame.iter_mut() { // next second E4
-                            // right channel, E4 note
-                            let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * OMEGA2 ) * i16::MAX as f32) as i16;
-                            *sample = ZERO_PCM as u32 | (raw_sine as u32) << 16;
-                            self.play_sample += 1.0;
-                        }
-                    } else {
-                        for sample in frame.iter_mut() { // rest C4
-                            // both channels, C4 note
-                            let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * OMEGA3 ) * i16::MAX as f32) as i16;
-                            *sample = raw_sine as u32 | (raw_sine as u32) << 16;
-                            self.play_sample += 1.0;
-                        }
+                    let omega = self.freq * 2.0 * std::f32::consts::PI / SAMPLE_RATE_HZ;
+                    for sample in frame.iter_mut() {
+                        let raw_sine: i16 = (AMPLITUDE * f32::cos( self.play_sample * omega ) * i16::MAX as f32) as i16;
+                        let left = if self.left_play { raw_sine as u16 } else { ZERO_PCM };
+                        let right = if self.right_play { raw_sine as u16 } else { ZERO_PCM };
+                        *sample = left as u32 | (right as u32) << 16;
+                        self.play_sample += 1.0;
                     }
 
                     frames.nq_frame(frame).unwrap();
@@ -272,13 +279,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                 let rec_len = rec_samples.len();
                 loop {
                     if let Some(frame) = frames.dq_frame() {
-                        for sample in rec_samples.iter_mut() {
-                            *sample = frame[self.rec_sample];
+                        for &sample in frame.iter() {
+                            rec_samples[self.rec_sample] = sample;
                             // increment and wrap around on overflow
                             // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
                             // should be no problem for the analysis phase.
                             self.rec_sample += 1;
-                            if self.rec_sample > rec_len {
+                            if self.rec_sample >= rec_len {
                                 self.rec_sample = 0;
                             }
                         }
@@ -299,6 +306,19 @@ impl<'a> ShellCmdApi<'a> for Test {
     }
 }
 
+fn asciiplot(fs: FrequencySpectrum) {
+    let (max_f, max_val) = fs.max();
+    const LINES: usize = 40;
+    const WIDTH: usize = 80;
+    const MAX_F: usize = 4000;
+
+    for f in (0..MAX_F).step_by(MAX_F / LINES) {
+        let (freq, val) = fs.freq_val_closest(f as f32);
+        let pos = ((val.val() / max_val.val()) * WIDTH as f32) as usize;
+        log::info!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
+    }
+    log::info!("max freq: {}, max_val: {}", max_f, max_val);
+}
 
 
 /// convert binary to BCD

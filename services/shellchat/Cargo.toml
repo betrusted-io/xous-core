@@ -68,8 +68,7 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
-audio_tests = []
-default = ["audio_tests"] # "debugprint"
+default = [] # "debugprint"
 
 [target.'cfg(any(windows,unix))'.dependencies]
 debug-here = "*"
