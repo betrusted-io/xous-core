@@ -80,6 +80,48 @@ impl Codec {
             Message::new_scalar(Opcode::PauseStream.to_usize().unwrap(), 0, 0, 0, 0)
         ).map(|_| ())
     }
+
+    /// gain goes from 0dB down to -80dB
+    pub fn set_speaker_volume(&self, op: VolumeOps, gain: Option<f32>) -> Result<(), xous::Error> {
+        let code = if let Some(g) = gain {
+            if g > 0.0 {
+                0 as usize
+            } else {
+                (-g * 10.0) as usize
+            }
+        } else {
+            800 // -80.0 dB => mute
+        };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetSpeakerVolume.to_usize().unwrap(),
+                op.to_usize().unwrap(),
+                code, // gain as -dB * 10 as usize
+                0,
+                0
+            )
+        ).map(|_| ())
+    }
+    /// gain goes from 0dB down to -80dB
+    pub fn set_headphone_volume(&self, op: VolumeOps, gain: Option<f32>) -> Result<(), xous::Error> {
+        let code = if let Some(g) = gain {
+            if g > 0.0 {
+                0 as usize
+            } else {
+                (-g * 10.0) as usize
+            }
+        } else {
+            800 // -80.0 dB => mute
+        };
+        send_message(self.conn,
+            Message::new_scalar(Opcode::SetHeadphoneVolume.to_usize().unwrap(),
+                op.to_usize().unwrap(),
+                code, // gain as -dB * 10 as usize
+                0,
+                0
+            )
+        ).map(|_| ())
+    }
+
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

@@ -48,6 +48,8 @@ fn xmain() -> ! {
     }
     */
 
+    let mut speaker_analog_gain_db: f32 = -6.0;
+    let mut headphone_analog_gain_db: f32 = -15.0;
     let mut audio_cb_conns: [Option<ScalarCallback>; 32] = [None; 32];
     loop {
         let mut msg = xous::receive_message(codec_sid).unwrap();
@@ -151,6 +153,60 @@ fn xmain() -> ! {
             Some(api::Opcode::AnotherFrame) => xous::msg_scalar_unpack!(msg, _rdcount, _wrcount, _, _, {
                 //log::trace!("A rd {} wr {}", rdcount, wrcount);
                 send_event(&audio_cb_conns, codec.free_play_frames(), codec.available_rec_frames());
+            }),
+            Some(api::Opcode::SetSpeakerVolume) => xous::msg_scalar_unpack!(msg, op, gain_code, _, _, {
+                match FromPrimitive::from_usize(op) {
+                    Some(VolumeOps::Set) => {
+                        speaker_analog_gain_db = -(gain_code as f32) / 10.0;
+                    },
+                    Some(VolumeOps::Mute) => {
+                        speaker_analog_gain_db = -80.0;
+                    },
+                    Some(VolumeOps::RestoreDefault) => {
+                        speaker_analog_gain_db = -6.0;
+                    },
+                    Some(VolumeOps::UpOne) => {
+                        speaker_analog_gain_db += 3.0;
+                        if speaker_analog_gain_db >= 0.0 {
+                            speaker_analog_gain_db = 0.0;
+                        }
+                    },
+                    Some(VolumeOps::DownOne) => {
+                        speaker_analog_gain_db -= 3.0;
+                        if speaker_analog_gain_db <= -80.0 {
+                            speaker_analog_gain_db = -80.0;
+                        }
+                    },
+                    _ => log::error!("got speaker volume primitive that we don't recognize, ignoring!"),
+                };
+                codec.set_speaker_gain_db(speaker_analog_gain_db);
+            }),
+            Some(api::Opcode::SetHeadphoneVolume) => xous::msg_scalar_unpack!(msg, op, gain_code, _, _, {
+                match FromPrimitive::from_usize(op) {
+                    Some(VolumeOps::Set) => {
+                        headphone_analog_gain_db = -(gain_code as f32) / 10.0;
+                    },
+                    Some(VolumeOps::Mute) => {
+                        headphone_analog_gain_db = -80.0;
+                    },
+                    Some(VolumeOps::RestoreDefault) => {
+                        headphone_analog_gain_db = -6.0;
+                    },
+                    Some(VolumeOps::UpOne) => {
+                        headphone_analog_gain_db += 3.0;
+                        if headphone_analog_gain_db >= 0.0 {
+                            headphone_analog_gain_db = 0.0;
+                        }
+                    },
+                    Some(VolumeOps::DownOne) => {
+                        headphone_analog_gain_db -= 3.0;
+                        if headphone_analog_gain_db <= -80.0 {
+                            headphone_analog_gain_db = -80.0;
+                        }
+                    },
+                    _ => log::error!("got speaker volume primitive that we don't recognize, ignoring!"),
+                };
+                codec.set_headphone_gain_db(headphone_analog_gain_db);
             }),
             None => {
                 log::error!("couldn't convert opcode");
