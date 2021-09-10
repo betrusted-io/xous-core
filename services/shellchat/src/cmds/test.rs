@@ -105,6 +105,65 @@ impl<'a> ShellCmdApi<'a> for Test {
                     let (usbcc_event, usbcc_regs, usbcc_rev) = env.com.poll_usb_cc().unwrap();
                     log::info!("{}|USBCC|{:?}|{:?}|{}|", SENTINEL, usbcc_event, usbcc_regs, usbcc_rev);
 
+                    let mut av_pass = [true, true];
+                    let mut ro_pass = true;
+                    let mut av_excurs: [u32; 2] = [0; 2];
+                    let mut ht = env.trng.get_health_tests().unwrap();
+                    for _ in 0..3 { // run the test 3 times
+                        av_excurs = [
+                            (((ht.av_excursion[0].max as f64 - ht.av_excursion[0].min as f64) / 4096.0) * 1000.0) as u32,
+                            (((ht.av_excursion[1].max as f64 - ht.av_excursion[1].min as f64) / 4096.0) * 1000.0) as u32,
+                        ];
+                        // 78mv minimum excursion requirement for good entropy generation
+                        if av_excurs[0] < 78 { av_pass[0] = false; }
+                        if av_excurs[1] < 78 { av_pass[1] = false; }
+                        for core in ht.ro_miniruns.iter() {
+                            for (bin, &val) in core.run_count.iter().enumerate() {
+                                match bin {
+                                    0 => {
+                                        if val < 440 || val > 584 { ro_pass = false; }
+                                    },
+                                    1 => {
+                                        if val < 193 || val > 318 { ro_pass = false; }
+                                    },
+                                    2 => {
+                                        if val < 80 || val > 175 { ro_pass = false; }
+                                    },
+                                    3 => {
+                                        if val < 29 || val > 99 { ro_pass = false; }
+                                    }
+                                    _ => {
+                                        log::error!("internal error: too many bins in trng test!");
+                                    }
+                                }
+                            }
+                        }
+                        const ROUNDS: usize = 16; // pump a bunch of data to trigger another trng buffer refill, resetting the stats
+                        for _ in 0..ROUNDS {
+                            let mut buf: [u32; 1024] = [0; 1024];
+                            env.trng.fill_buf(&mut buf).unwrap();
+                            log::debug!("pump samples: {:x}, {:x}, {:x}", buf[0], buf[512], buf[1023]); // prevent the pump values from being optimized out
+                        }
+                        ht = env.trng.get_health_tests().unwrap();
+                    }
+                    if av_pass[0] && av_pass[1] && ro_pass {
+                        log::info!("{}|TRNG|PASS|{}|{}|{}|{}|{}|{}|", SENTINEL, av_excurs[0], av_excurs[1],
+                            ht.ro_miniruns[0].run_count[0],
+                            ht.ro_miniruns[0].run_count[1],
+                            ht.ro_miniruns[0].run_count[2],
+                            ht.ro_miniruns[0].run_count[3],
+                        );
+                    }
+                    if !av_pass[0] {
+                        log::info!("{}|TRNG|FAIL|AV0|", SENTINEL);
+                    }
+                    if !av_pass[1] {
+                        log::info!("{}|TRNG|FAIL|AV1|", SENTINEL);
+                    }
+                    if !ro_pass {
+                        log::info!("{}|TRNG|FAIL|RO|", SENTINEL);
+                    }
+
                     env.ticktimer.sleep_ms(3000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
                     self.end_time = rtc_get(&mut env.llio);
