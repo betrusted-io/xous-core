@@ -78,4 +78,11 @@ impl Codec {
 
     pub fn audio_i2s_stop(&mut self) {
     }
+
+    pub fn set_speaker_gain_db(&mut self, _gain_db: f32) {
+    }
+
+    pub fn set_headphone_gain_db(&mut self, _gain_db: f32) {
+    }
+
 }
