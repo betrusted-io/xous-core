@@ -21,6 +21,7 @@ pub struct Test {
     rec_sample: usize, // count of record samples recorded. in usize because we're not doing f32 wave table computations on this
     left_play: bool,
     right_play: bool,
+    speaker_play: bool,
     freq: f32,
     // rtc
     start_time: Option<DateTime>,
@@ -52,6 +53,7 @@ impl Test {
             rec_sample: 0,
             left_play: true,
             right_play: true,
+            speaker_play: true,
             freq: 440.0,
             start_time: None,
             end_time: None,
@@ -153,16 +155,29 @@ impl<'a> ShellCmdApi<'a> for Test {
                     };
                     if let Some(channel_str) = tokens.next() {
                         match channel_str {
-                            "left" => {self.left_play = true; self.right_play = false;},
-                            "right" => {self.right_play = true; self.left_play = false;},
-                            _ => {self.left_play = true; self.right_play = true;}
+                            "left" => {self.left_play = true; self.right_play = false; self.speaker_play = false;},
+                            "right" => {self.right_play = true; self.left_play = false; self.speaker_play = false;},
+                            "speaker" => {self.left_play = true; self.right_play = false; self.speaker_play = true;},
+                            _ => {self.left_play = true; self.right_play = true; self.speaker_play = true;}
                         }
                     } else {
                         self.left_play = true;
                         self.right_play = true;
+                        self.speaker_play = true;
                     }
                     self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
                     env.ticktimer.sleep_ms(50).unwrap();
+
+                    if self.speaker_play {
+                        self.codec.set_speaker_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    } else {
+                        self.codec.set_speaker_volume(VolumeOps::Mute, None).unwrap();
+                    }
+                    if self.left_play || self.right_play {
+                        self.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    } else {
+                        self.codec.set_headphone_volume(VolumeOps::Mute, None).unwrap();
+                    }
 
                     if self.callback_id.is_none() {
                         let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
@@ -194,9 +209,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         right_samples.push( ((sample & 0xFFFF) as i16) as f32 );
                         //left_samples.push( (((sample >> 16) & 0xFFFF) as i16) as f32 ); // reminder of how to extract the right channel
                     }
-                    // only left channel is considered, because in reality the left is just a copy of the right because
+                    // only one channel is considered, because in reality the left is just a copy of the right, as
                     // we are taking a mono microphone signal and mixing it into both ADCs
 
+                    let db = db_compute(&right_samples);
                     let hann_right = hann_window(&right_samples);
                     let spectrum_right = samples_fft_to_spectrum(
                         &hann_right,
@@ -207,22 +223,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                     );
                     asciiplot(&spectrum_right);
                     let ratio = analyze(&spectrum_right, self.freq);
-                    if ratio > 1.0 {
-                        log::info!("{}|ASTOP|PASS|{}|{}|{}|{}|", SENTINEL, ratio, self.freq, self.left_play, self.right_play);
+                    // ratio typical range 0.35 (speaker) to 3.5 (headphones)
+                    // speaker has a wider spectrum because we don't have a filter on the PWM, so there are sampling issues feeding it back into the mic
+                    // db typical <10 (silence) to 78 (full amplitude)
+                    if (ratio > 0.25) && (db > 60.0) {
+                        log::info!("{}|ARESULT|PASS|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
                     } else {
-                        log::info!("{}|ASTOP|FAIL|{}|{}|{}|{}|", SENTINEL, ratio, self.freq, self.left_play, self.right_play);
+                        log::info!("{}|ARESULT|FAIL|{}|{}|{}|{}|{}|", SENTINEL, ratio, db, self.freq, self.left_play, self.right_play);
                     }
-
-                    log::info!("off-target 1 {}", analyze(&spectrum_right, 329.63));
-                    log::info!("off-target 2 {}", analyze(&spectrum_right, 261.63));
-                    /*
-                    Left off notes:
-                      - simplify to single tones played for 3 seconds
-                      - one tone each for hp left, hp right, and speaker
-                      - analysis only needs to happen on one channel, as mic is mono. pick one, see if it works.
-                      - in addition to frequency analysis, need to pick amplitude threshold
-                      - need to integrate spectrum and calculate %age of total power in a given bin for a pass/fail criteria
-                     */
+                    log::debug!("off-target 1 {}", analyze(&spectrum_right, 329.63));
+                    log::debug!("off-target 2 {}", analyze(&spectrum_right, 261.63));
+                    log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "devboot" => {
                     env.gam.set_devboot(true).unwrap();
@@ -339,6 +350,22 @@ fn analyze(fs: &FrequencySpectrum, target: f32) -> f32 {
     ratio
 }
 
+fn db_compute(samps: &[f32]) -> f32 {
+    let mut cum = 0.0;
+    for &s in samps.iter() {
+        cum += s;
+    }
+    let mid = cum / samps.len() as f32;
+    cum = 0.0;
+    for &s in samps.iter() {
+        let a = s - mid;
+        cum += a * a;
+    }
+    cum /= samps.len() as f32;
+    let db = 10.0 * f32::log10(cum);
+    db
+}
+
 fn asciiplot(fs: &FrequencySpectrum) {
     let (max_f, max_val) = fs.max();
     const LINES: usize = 100;
@@ -348,9 +375,9 @@ fn asciiplot(fs: &FrequencySpectrum) {
     for f in (0..MAX_F).step_by(MAX_F / LINES) {
         let (freq, val) = fs.freq_val_closest(f as f32);
         let pos = ((val.val() / max_val.val()) * WIDTH as f32) as usize;
-        log::info!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
+        log::debug!("{:>5} | {:width$}*", freq.val() as u32, " ", width = pos);
     }
-    log::info!("max freq: {}, max_val: {}", max_f, max_val);
+    log::debug!("max freq: {}, max_val: {}", max_f, max_val);
 }
 
 
