@@ -228,6 +228,25 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "Factory test script has run, check serial terminal for output").unwrap();
                     env.llio.wfi_override(false).unwrap();
                 }
+                "bl2" => {
+                    env.llio.wfi_override(true).unwrap();
+                    env.com.set_backlight(255, 255).unwrap();
+                    log::info!("{}|BL2|", SENTINEL);
+                }
+                "bl1" => {
+                    env.llio.wfi_override(true).unwrap();
+                    env.com.set_backlight(180, 180).unwrap();
+                    log::info!("{}|BL1|", SENTINEL);
+                }
+                "bl0" => {
+                    env.llio.wfi_override(true).unwrap();
+                    env.com.set_backlight(0, 0).unwrap();
+                    log::info!("{}|BL0|", SENTINEL);
+                }
+                "wfireset" => {
+                    env.llio.wfi_override(false).unwrap();
+                    log::info!("{}|WFIRESET|", SENTINEL);
+                }
                 "astart" => {
                     self.freq = if let Some(freq_str) = tokens.next() {
                         match freq_str.parse::<f32>() {
