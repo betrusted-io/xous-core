@@ -94,6 +94,26 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // set uart MUX, and turn off WFI so UART reports are "clean" (no stuck characters when CPU is in WFI)
                     env.llio.set_uart_mux(llio::UartType::Log).unwrap();
                     env.llio.wfi_override(true).unwrap();
+
+                    let vccint = env.llio.adc_vccint().unwrap() as f32 / 1365.0;
+                    if vccint < 0.92 || vccint > 0.98 {
+                        log::info!("{}|VCCINT|FAIL|{}", SENTINEL, vccint);
+                    } else {
+                        log::info!("{}|VCCINT|PASS|{}", SENTINEL, vccint);
+                    }
+                    let vccaux = env.llio.adc_vccaux().unwrap() as f32 / 1365.0;
+                    if vccaux < 1.71 || vccaux > 1.89 {
+                        log::info!("{}|VCCAUX|FAIL|{}", SENTINEL, vccaux);
+                    } else {
+                        log::info!("{}|VCCAUX|PASS|{}", SENTINEL, vccaux);
+                    }
+                    let vccbram = env.llio.adc_vccbram().unwrap() as f32 / 1365.0;
+                    if vccbram < 0.92 || vccaux > 0.98 {
+                        log::info!("{}|VCCBRAM|FAIL|{}", SENTINEL, vccbram);
+                    } else {
+                        log::info!("{}|VCCBRAM|PASS|{}", SENTINEL, vccbram);
+                    }
+
                     let (x, y, z, id) = env.com.gyro_read_blocking().unwrap();
                     log::info!("{}|GYRO|{}|{}|{}|{}|", SENTINEL, x, y, z, id);
                     let (wf_maj, wf_min, wf_rev) = env.com.get_wf200_fw_rev().unwrap();
@@ -155,13 +175,18 @@ impl<'a> ShellCmdApi<'a> for Test {
                         );
                     }
                     if !av_pass[0] {
-                        log::info!("{}|TRNG|FAIL|AV0|", SENTINEL);
+                        log::info!("{}|TRNG|FAIL|AV0|{}|", SENTINEL, av_excurs[0]);
                     }
                     if !av_pass[1] {
-                        log::info!("{}|TRNG|FAIL|AV1|", SENTINEL);
+                        log::info!("{}|TRNG|FAIL|AV1|{}|", SENTINEL, av_excurs[1]);
                     }
                     if !ro_pass {
-                        log::info!("{}|TRNG|FAIL|RO|", SENTINEL);
+                        log::info!("{}|TRNG|FAIL|RO|{}|{}|{}|{}|", SENTINEL,
+                            ht.ro_miniruns[0].run_count[0],
+                            ht.ro_miniruns[0].run_count[1],
+                            ht.ro_miniruns[0].run_count[2],
+                            ht.ro_miniruns[0].run_count[3],
+                        );
                     }
 
                     env.ticktimer.sleep_ms(3000).unwrap(); // wait so we have some realistic delta on the datetime function
