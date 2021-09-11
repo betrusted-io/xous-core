@@ -108,7 +108,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|VCCAUX|PASS|{}", SENTINEL, vccaux);
                     }
                     let vccbram = env.llio.adc_vccbram().unwrap() as f32 / 1365.0;
-                    if vccbram < 0.92 || vccaux > 0.98 {
+                    if vccbram < 0.92 || vccbram > 0.98 {
                         log::info!("{}|VCCBRAM|FAIL|{}", SENTINEL, vccbram);
                     } else {
                         log::info!("{}|VCCBRAM|PASS|{}", SENTINEL, vccbram);
