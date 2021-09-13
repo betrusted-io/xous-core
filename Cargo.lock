@@ -418,6 +418,7 @@ dependencies = [
  "rkyv 0.4.3",
  "susres",
  "ticktimer-server",
+ "trng",
  "typenum",
  "utralib",
  "xous",
@@ -428,7 +429,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=ebbe15a5285cc4b9de7edf279949f034e82709dd#ebbe15a5285cc4b9de7edf279949f034e82709dd"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=5338f9959572d57f1014d04aa129804da5b4d339#5338f9959572d57f1014d04aa129804da5b4d339"
 
 [[package]]
 name = "com_rs-ref"

@@ -76,7 +76,7 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         self.state += 1;
         let mut ret = String::<1024>::new();
-        write!(ret, "Test has run {} times.\n", self.state).unwrap();
+        write!(ret, "Test has run {} times.", self.state).unwrap();
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -189,7 +189,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                         );
                     }
 
-                    env.ticktimer.sleep_ms(3000).unwrap(); // wait so we have some realistic delta on the datetime function
+                    let ut = env.com.get_ec_uptime().unwrap();
+                    env.llio.ec_reset().unwrap();
+
+                    env.ticktimer.sleep_ms(4000).unwrap(); // wait so we have some realistic delta on the datetime function
                     self.end_elapsed = Some(env.ticktimer.elapsed_ms());
                     self.end_time = rtc_get(&mut env.llio);
 
@@ -224,6 +227,14 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|RTC|FAIL|NO_END|", SENTINEL);
                     }
 
+                    let ut_after = env.com.get_ec_uptime().unwrap();
+
+                    if ut < ut_after || ut_after > 4200 {
+                        log::info!("{}|ECRESET|FAIL|{}|{}|", SENTINEL, ut, ut_after);
+                    } else {
+                        log::info!("{}|ECRESET|PASS|{}|{}|", SENTINEL, ut, ut_after);
+                    }
+
                     log::info!("{}|DONE|", SENTINEL);
                     write!(ret, "Factory test script has run, check serial terminal for output").unwrap();
                     env.llio.wfi_override(false).unwrap();
@@ -246,6 +257,25 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "wfireset" => {
                     env.llio.wfi_override(false).unwrap();
                     log::info!("{}|WFIRESET|", SENTINEL);
+                }
+                "wfioff" => {
+                    env.llio.wfi_override(true).unwrap();
+                    log::info!("{}|WFIOFF|", SENTINEL);
+                }
+                "vibe" => {
+                    env.llio.vibe(llio::VibePattern::Long).unwrap();
+                    log::info!("{}|VIBE|", SENTINEL);
+                }
+                "booston" => {
+                    env.llio.boost_on(true).unwrap();
+                    env.com.set_boost(true).unwrap();
+                    log::info!("{}|BOOSTON|", SENTINEL);
+                }
+                "boostoff" => {
+                    env.com.set_boost(false).unwrap();
+                    env.ticktimer.sleep_ms(50).unwrap();
+                    env.llio.boost_on(false).unwrap();
+                    log::info!("{}|BOOSTOFF|", SENTINEL);
                 }
                 "astart" => {
                     self.freq = if let Some(freq_str) = tokens.next() {

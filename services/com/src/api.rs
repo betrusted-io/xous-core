@@ -61,6 +61,12 @@ pub struct FlashRecord {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
+    /// Refresh the TRNG seed for the EC
+    ReseedTrng,
+
+    /// Fetch the uptime of the EC
+    GetUptime,
+
     /// Battery stats
     BattStats,
 

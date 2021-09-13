@@ -78,6 +78,22 @@ impl Com {
         }
     }
 
+    pub fn reseed_ec_trng(&self) -> Result<(), xous::Error> {
+        send_message(self.conn,
+            Message::new_scalar(Opcode::ReseedTrng.to_usize().unwrap(), 0, 0, 0, 0)
+        ).map(|_| ())
+    }
+    pub fn get_ec_uptime(&self) -> Result<u64, xous::Error> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::GetUptime.to_usize().unwrap(), 0, 0, 0, 0)
+        )?;
+        if let xous::Result::Scalar2(lsb, msb) = response {
+            Ok( lsb as u64 | (msb as u64) << 32)
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn get_wf200_fw_rev(&self) -> Result<(u8, u8, u8), xous::Error> {
         let response = send_message(self.conn,
             Message::new_blocking_scalar(Opcode::Wf200Rev.to_usize().unwrap(), 0, 0, 0, 0))?;

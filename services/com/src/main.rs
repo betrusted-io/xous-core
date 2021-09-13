@@ -331,6 +331,17 @@ fn xmain() -> ! {
     const FLASH_LEN: u32 = 0x10_0000;
     const FLASH_TIMEOUT: u32 = 250;
 
+    // initial seed of the COM trng
+    let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG");
+    com.txrx(ComState::TRNG_SEED.verb);
+    for _ in 0..2 {
+        let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+        for _ in 0..4 {
+            com.txrx(rng as u16);
+            rng >>= 16;
+        }
+    }
+
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
@@ -346,6 +357,25 @@ fn xmain() -> ! {
                 if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
+            }),
+            Some(Opcode::ReseedTrng) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::TRNG_SEED.verb);
+                for _ in 0..2 {
+                    let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+                    for _ in 0..4 {
+                        com.txrx(rng as u16);
+                        rng >>= 16;
+                    }
+                }
+            }),
+            Some(Opcode::GetUptime) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let mut uptime: u64 = 0;
+                com.txrx(ComState::UPTIME.verb);
+                for _ in 0..4 {
+                    uptime >>= 16;
+                    uptime |= (com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u64) << 48;
+                }
+                xous::return_scalar2(msg.sender, uptime as usize, (uptime >> 32) as usize).expect("couldn't return uptime");
             }),
             Some(Opcode::FlashAcquire) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
                 let acquired = if flash_id.is_none() {
