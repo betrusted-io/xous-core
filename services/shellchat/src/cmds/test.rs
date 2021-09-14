@@ -23,7 +23,7 @@ pub struct Test {
     right_play: bool,
     speaker_play: bool,
     freq: f32,
-    // rtc
+    //rtc: rtc::Rtc,
     start_time: Option<DateTime>,
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
@@ -55,6 +55,7 @@ impl Test {
             right_play: true,
             speaker_play: true,
             freq: 440.0,
+            //rtc: rtc::Rtc::new(&xns).unwrap(),
             start_time: None,
             end_time: None,
             start_elapsed: None,
@@ -227,6 +228,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|RTC|FAIL|NO_END|", SENTINEL);
                     }
 
+                    env.com.link_reset().unwrap();
+                    env.com.reseed_ec_trng().unwrap();
                     let ut_after = env.com.get_ec_uptime().unwrap();
 
                     if ut < ut_after || ut_after > 4200 {
@@ -276,6 +279,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.ticktimer.sleep_ms(50).unwrap();
                     env.llio.boost_on(false).unwrap();
                     log::info!("{}|BOOSTOFF|", SENTINEL);
+                }
+                "kill" => {
+                    log::info!("{}|KILL|", SENTINEL);
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.llio.self_destruct(0x2718_2818).unwrap();
+                    env.llio.self_destruct(0x3141_5926).unwrap();
+                    env.ticktimer.sleep_ms(100).unwrap();
                 }
                 "astart" => {
                     self.freq = if let Some(freq_str) = tokens.next() {

@@ -247,6 +247,7 @@ mod implementation {
             // (these "should" be redundant)
             self.power_csr.rmwf(utra::power::POWER_SELF, 1);
             self.power_csr.rmwf(utra::power::POWER_STATE, 1);
+            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1);
 
             self.event_susres.resume();
             self.gpio_susres.resume();
@@ -400,6 +401,7 @@ mod implementation {
             }
         }
         pub fn ec_reset(&mut self) {
+            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1); // make sure the power is "on" if we're resetting it
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
             self.ticktimer.sleep_ms(20).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
@@ -705,6 +707,7 @@ fn xmain() -> ! {
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
+    llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");

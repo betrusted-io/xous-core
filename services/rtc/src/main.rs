@@ -581,6 +581,7 @@ fn xmain() -> ! {
     // - GAM
     // - shellchat/rtc
     // - shellchat/sleep x2
+    // - factory test
     // - UX thread (self, created without xns, so does not count)
     // - rootkeys (for coordinating reboot)
     let rtc_sid = xns.register_name(api::SERVER_NAME_RTC, Some(5)).expect("can't register server");

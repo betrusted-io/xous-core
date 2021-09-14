@@ -61,6 +61,9 @@ pub struct FlashRecord {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
+    /// Reset the COM link - useful after an EC reset
+    LinkReset,
+
     /// Refresh the TRNG seed for the EC
     ReseedTrng,
 
