@@ -398,7 +398,10 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
+                    let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
+                    // activate SSID scanning while the test runs
+                    env.com.set_ssid_scanning(true).expect("couldn't turn on SSID scanning");
                     //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
                     ret.clear();
                     #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -425,7 +428,12 @@ impl<'a> ShellCmdApi<'a> for Test {
                         GlyphStyle::Small,
                         8
                     );
+
+                    // brief pause to check the screen
                     test_modal.gam.selftest(18_000);
+
+                    /*
+                    // now keyboard test
                     log::info!("making helper");
                     test_modal.spawn_helper(kbdtest_sid, test_modal.sid,
                         TestOp::ModalRedraw.to_u32().unwrap(),
@@ -521,8 +529,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                         }
                     });
                     handle.join().unwrap();
+                    */
+                    susres.initiate_suspend().unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap(); // pause for the suspend/resume cycle
 
-                    write!(ret, "CHECK: was backlight on?\nIf so, then PASS").unwrap();
+                    write!(ret, "{}\nCHECK: was backlight on?\nIf so, then PASS\nThen engage PROG switch.",
+                        env.com.ssid_fetch_as_string().unwrap()
+                    ).unwrap();
                     env.com.set_backlight(0, 0).unwrap();
                     env.llio.wfi_override(false).unwrap();
                 }
