@@ -13,6 +13,7 @@ use keyboard::RowCol;
 use std::collections::HashMap;
 use gam::modal::*;
 use num_traits::*;
+use core::fmt::Write;
 
 #[derive(Debug)]
 pub struct Test {
@@ -91,8 +92,6 @@ impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        use core::fmt::Write;
-
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;
@@ -401,13 +400,14 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "oqc" => {
                     env.llio.wfi_override(true).unwrap();
                     //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
+                    /* // temp clear so renode can run
                     ret.clear();
                     if 0x362f093 != self.jtag.get_id().unwrap() {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
                     env.com.set_backlight(196, 196).unwrap();
-
+                    */
                     log::info!("building modal");
                     const OQC_SERVER: &str = "_OQC server_";
                     let kbdtest_sid = env.xns.register_name(OQC_SERVER, Some(1)).unwrap();
@@ -417,12 +417,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         TestOp::UxGutter.to_u32().unwrap()
                     );
                     test_action.manual_dismiss = false;
-                    let mut bot_str = std::string::String::from("test");
                     let mut test_modal = Modal::new(
                         "test modal",
                         ActionType::Notification(test_action),
                         Some("Keyboard Test"),
-                        Some(&bot_str),
+                        Some("test"),
                         GlyphStyle::Small,
                         8
                     );
@@ -451,6 +450,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                             let mut count = 0;
                             let mut remaining = populate_vectors();
 
+                            let mut bot_str = String::<1024>::new();
                             loop {
                                 let msg = xous::receive_message(kbdtest_sid).unwrap();
                                 log::info!("got msg: {:?}", msg);
@@ -463,13 +463,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                                                 Some(_hit) => {
                                                     log::info!("got {}", map_codes(key));
                                                     remaining.insert(key, true);
-                                                    bot_str.push_str(map_codes(key));
+                                                    write!(bot_str, "{}", map_codes(key)).unwrap();
                                                 },
                                                 None => log::warn!("got unexpected r/c: {:?}", key),
                                             };
                                             log::info!("update modal");
                                             test_modal.modify(None, None, false,
-                                                Some(&bot_str), false, None);
+                                                Some(bot_str.as_str().unwrap()), false, None);
                                             log::info!("redraw modal");
                                             test_modal.redraw();
                                             xous::yield_slice();

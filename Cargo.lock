@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.5"
+version = "0.9.8"
 dependencies = [
  "block-buffer",
  "digest",
