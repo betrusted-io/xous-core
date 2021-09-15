@@ -37,6 +37,6 @@ chrono = "0.4"
 
 [features]
 debugprint = []
-slowstatus = [] # used for braille mode, so console isn't overwhelmed with status
+braille = [] # used for braille mode, so console isn't overwhelmed with status
 # default = ["debugprint"] # "debugprint"
 default = []

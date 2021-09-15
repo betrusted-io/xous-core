@@ -36,9 +36,26 @@ pub(crate) enum Opcode {
     /// send a frame ready notification
     AnotherFrame,
 
+    /// set speaker volume
+    SetSpeakerVolume,
+
+    /// set headphone volume -- L&R channels are ganged together in this API, but codec can do separately
+    SetHeadphoneVolume,
+
     /// Suspend/resume callback
     SuspendResume,
 }
+
+
+#[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum VolumeOps {
+    UpOne,
+    DownOne,
+    Set,
+    Mute,
+    RestoreDefault,
+}
+
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum EventCallback {

@@ -30,6 +30,23 @@ pub struct Codec {
 
 static SILENCE: [u32; FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; FIFO_DEPTH];
 
+/// gain is specified in dB, and has a useful range from 0 to -80dB
+fn analog_volume_db_to_code(g: f32) -> u8 {
+    if g >= 0.0 {
+        0
+    } else if g >= -17.5 {
+        (-g * 2.0) as u8
+    } else if g >= -34.6 {
+        (-g * 2.0 - 0.4) as u8
+    } else if g >= -49.3 {
+        (100.0 - (50.0 + g) * 0.7202) as u8
+    } else if g >= -72.2 {
+        127
+    } else {
+        127
+    }
+}
+
 fn audio_handler(_irq_no: usize, arg: *mut usize) {
     let codec = unsafe { &mut *(arg as *mut Codec) };
     let volatile_audio = codec.fifo.as_mut_ptr() as *mut u32;
@@ -202,6 +219,37 @@ impl Codec {
     }
     pub fn is_live(&self) -> bool {
         self.live
+    }
+
+    pub fn set_speaker_gain_db(&mut self, gain_db: f32) {
+        if gain_db <= -79.0 {
+            // mute
+            self.w(0, &[1]); // select page 1
+            self.w(32, &[0b0_0_00011_0]); // class D amp powered off
+        } else {
+            let code = analog_volume_db_to_code(gain_db);
+            self.w(0, &[1]); // select page 1
+            self.w(32, &[0b1_0_00011_0]); // class D amp powered on
+            self.w(38, &[
+                0b1_000_0000 | code,
+                ]);
+        }
+    }
+
+    pub fn set_headphone_gain_db(&mut self, gain_db: f32) {
+        if gain_db <= -79.0 {
+            // mute
+            self.w(0, &[1]); // select page 1
+            self.w(31, &[0b0_0_0_10_1_0_0]); // headphones powered down
+        } else {
+            let code = analog_volume_db_to_code(gain_db);
+            self.w(0, &[1]); // select page 1
+            self.w(31, &[0b1_1_00011_0]); // headphones powered up
+            self.w(36, &[
+                0b1_000_0000 | code, // HPL
+                0b1_000_0000 | code, // HPR
+                ]);
+        }
     }
 
     fn w(&mut self, adr: u8, data: &[u8]) -> bool {

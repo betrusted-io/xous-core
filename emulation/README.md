@@ -19,8 +19,8 @@ Since there is no external compiler, it can be difficult to know if your code is
 Fortunately, Visual Studio Code is free and has excellent C# tooling. All you need to do is point it at your Renode installation, load the C# plugin, and open a `.cs` file.
 
 1. Copy `peripherals.csproj.template` to `peripherals.csproj`
-2. Open `peripherals.csproj` and point `<RenodePath>` to your Renode installation directory
-3. Install [C# for VSCode](vscode:extension/ms-dotnettools.csharp)
+2. Open `peripherals.csproj` and point `<RenodePath>` to your Renode installation directory. On ubuntu, this may be `/opt/renode/bin/`.
+3. Install [C# for VSCode](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csharp)
 4. You can refer to [core Renode peripherals](https://github.com/renode/renode-infrastructure/tree/master/src/Emulator/Peripherals/Peripherals) as examples of what C# code looks like.
 
 ## Debugging with GDB

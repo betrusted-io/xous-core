@@ -480,7 +480,9 @@ fn xmain() -> ! {
                         tv.text.as_str().unwrap().len()
                     );
                 }
-                log::debug!("{}", tv);
+                if cfg!(feature = "braille") {
+                    log::info!("{}", tv);
+                }
                 let do_xor = tv.invert;
                 blitstr::paint_str(
                     display.native_buffer(),

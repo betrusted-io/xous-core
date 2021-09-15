@@ -166,11 +166,11 @@ class PrecursorUsb:
                 exit(1)
 
     def ping_wdt(self):
-        self.poke(self.register('wdt_watchdog'), 0x600d, display=False)
-        self.poke(self.register('wdt_watchdog'), 0xc0de, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
+        self.poke(self.register('wdt_watchdog'), 1, display=False)
 
     def load_csrs(self):
-        LOC_CSRCSV = 0x20278000 # this address shouldn't change because it's how we figure out our version number
+        LOC_CSRCSV = 0x20277000 # this address shouldn't change because it's how we figure out our version number
 
         csr_data = self.burst_read(LOC_CSRCSV, 0x8000)
         hasher = hashlib.sha512()
@@ -254,17 +254,32 @@ def main():
     pc_usb.load_csrs() # prime the CSR values
     if "v0.8" in pc_usb.gitrev:
         LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
         LOC_LOADER = 0x00500000
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
+    elif "v0.9" in pc_usb.gitrev:
+        LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
+        LOC_LOADER = 0x00500000
+        LOC_KERNEL = 0x00980000
+        LOC_WF200  = 0x07F80000
+        LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
     elif args.force == True:
         # try the v0.8 offsets
         LOC_SOC    = 0x00000000
+        LOC_STAGING= 0x00280000
         LOC_LOADER = 0x00500000
         LOC_KERNEL = 0x00980000
         LOC_WF200  = 0x07F80000
         LOC_EC     = 0x07FCE000
+        LOC_AUDIO  = 0x06340000
+        LEN_AUDIO  = 0x01C40000
     else:
         sys.stderr.write("SoC is from an unknow rev '{}', use --force to continue anyways with v0.8 firmware offsets".format(pc_usb.load_csrs()))
         exit(1)

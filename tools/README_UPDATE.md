@@ -89,11 +89,11 @@ optional arguments:
 ```
 
 You can try reading the first word out of the ROM to see if `usb_update.py` is working correctly.
-It's located at 0x20000000, and it's always `0x665599aa` (this is the Xilinx FPGA bitstream sync word),
+It's located at 0x20000008, and it's always `0x665599aa` (this is the Xilinx FPGA bitstream sync word),
 as follows:
 
 ```
-% python3 ./usb_update.py --peek 0x20000000
+% python3 ./usb_update.py --peek 0x20000008
 0x665599aa
 ```
 

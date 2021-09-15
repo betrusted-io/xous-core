@@ -61,6 +61,12 @@ pub struct FlashRecord {
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum Opcode {
+    /// Refresh the TRNG seed for the EC
+    ReseedTrng,
+
+    /// Fetch the uptime of the EC
+    GetUptime,
+
     /// Battery stats
     BattStats,
 
@@ -72,6 +78,12 @@ pub(crate) enum Opcode {
 
     /// Query Full charge capacity of the battery
     //BattFullCapacity,
+
+    /// More charger and gas gauge status, primarily for diagnostics
+    MoreStats,
+
+    /// Poll the USB CC chip
+    PollUsbCc,
 
     /// Turn Boost Mode On
     BoostOn,

@@ -189,6 +189,34 @@ mod implementation {
 
             stats
         }
+
+        pub fn get_more_stats(&mut self) -> [u16; 15] {
+            self.txrx(ComState::STAT.verb);
+            let ack = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            if ack != 0x8888 {
+                log::error!("didn't receive the expected ack header to the stats readout");
+            }
+            let mut ret: [u16; 15] = [0; 15];
+            for r in ret.iter_mut() {
+                *r = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            }
+            ret
+        }
+
+        pub fn poll_usb_cc(&mut self) -> [u32; 2] {
+            self.txrx(ComState::POLL_USB_CC.verb);
+            let event = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            let mut ret: [u16; 3] = [0; 3];
+            for r in ret.iter_mut() {
+                *r = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            }
+            let rev = self.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+            // pack into a format that can be returned as a scalar2
+            [
+                ((rev & 0xff) as u32) << 24 | (((event & 0xff) as u32) << 16) | ret[0] as u32,
+                ret[1] as u32 | ((ret[2] as u32) << 16)
+            ]
+        }
     }
 }
 
@@ -262,6 +290,13 @@ mod implementation {
                 None
             }
         }
+        pub fn get_more_stats(&mut self) -> [u16; 15] {
+            [0; 15]
+        }
+
+        pub fn poll_usb_cc(&mut self) -> [u32; 2] {
+            [0; 2]
+        }
     }
 }
 
@@ -296,6 +331,17 @@ fn xmain() -> ! {
     const FLASH_LEN: u32 = 0x10_0000;
     const FLASH_TIMEOUT: u32 = 250;
 
+    // initial seed of the COM trng
+    let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG");
+    com.txrx(ComState::TRNG_SEED.verb);
+    for _ in 0..2 {
+        let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+        for _ in 0..4 {
+            com.txrx(rng as u16);
+            rng >>= 16;
+        }
+    }
+
     trace!("starting main loop");
     loop {
         let mut msg = xous::receive_message(com_sid).unwrap();
@@ -311,6 +357,25 @@ fn xmain() -> ! {
                 if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
+            }),
+            Some(Opcode::ReseedTrng) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::TRNG_SEED.verb);
+                for _ in 0..2 {
+                    let mut rng = trng.get_u64().expect("couldn't fetch rngs");
+                    for _ in 0..4 {
+                        com.txrx(rng as u16);
+                        rng >>= 16;
+                    }
+                }
+            }),
+            Some(Opcode::GetUptime) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let mut uptime: u64 = 0;
+                com.txrx(ComState::UPTIME.verb);
+                for _ in 0..4 {
+                    uptime >>= 16;
+                    uptime |= (com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT)) as u64) << 48;
+                }
+                xous::return_scalar2(msg.sender, uptime as usize, (uptime >> 32) as usize).expect("couldn't return uptime");
             }),
             Some(Opcode::FlashAcquire) => msg_blocking_scalar_unpack!(msg, id0, id1, id2, id3, {
                 let acquired = if flash_id.is_none() {
@@ -467,13 +532,21 @@ fn xmain() -> ! {
                 ).expect("coludn't return accelerometer read data");
             }),
             Some(Opcode::BattStats) => {
-                info!("batt stats request received");
                 let stats = com.get_battstats();
                 let raw_stats: [usize; 2] = stats.into();
-                xous::return_scalar2(msg.sender, raw_stats[1], raw_stats[0])
+                xous::return_scalar2(msg.sender, raw_stats[0], raw_stats[1])
                     .expect("couldn't return batt stats request");
-                info!("done returning batt stats request");
             }
+            Some(Opcode::MoreStats) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let stats = com.get_more_stats();
+                buffer.replace(stats).unwrap();
+            }
+            Some(Opcode::PollUsbCc) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let usb_cc: [u32; 2] = com.poll_usb_cc();
+                xous::return_scalar2(msg.sender, usb_cc[0] as usize, usb_cc[1] as usize)
+                    .expect("couldn't return Usb CC result");
+            }),
             Some(Opcode::BattStatsNb) => {
                 for &maybe_conn in battstats_conns.iter() {
                     if let Some(conn) = maybe_conn {

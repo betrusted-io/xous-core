@@ -40,7 +40,7 @@ utralib = { path = "utralib" }
 [patch.crates-io.sha2]
 path = "./sha2"
 package = "sha2"
-default-features = false
+#default-features = false
 
 [patch.crates-io.utralib]
 path = "utralib"
