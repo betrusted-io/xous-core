@@ -115,10 +115,9 @@ impl XousDisplay {
         if drew_note {
             let note = crate::sleep_note::LOGO_MAP;
             let note_lines = note.len() / FB_WIDTH_WORDS;
-            let start_line = (FB_LINES - note_lines) / 2;
             let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
-            for lines in start_line..start_line + note_lines {
-                // set the dirty bits to force a redraw of the restored data
+            for lines in 0..FB_LINES {
+                // set the dirty bits of all lines to force a redraw of the restored data
                 unsafe {
                     (*hwfb)[lines * FB_WIDTH_WORDS + (FB_WIDTH_WORDS - 1)] |= 0x1_0000;
                 }
