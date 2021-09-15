@@ -8,7 +8,9 @@ const HEIGHT: usize = 536;
 
 /// Width of the screen in 32-bit words
 const WIDTH_WORDS: usize = 11;
-const FB_SIZE: usize = WIDTH_WORDS * HEIGHT; // 44 bytes by 536 lines
+pub const FB_WIDTH_WORDS: usize = WIDTH_WORDS;
+pub const FB_LINES: usize = HEIGHT;
+pub const FB_SIZE: usize = WIDTH_WORDS * HEIGHT; // 44 bytes by 536 lines
 
 const MAX_FPS: u64 = 60;
 const DARK_COLOUR: u32 = 0xB5B5AD;
@@ -83,10 +85,13 @@ impl XousDisplay {
         Point::new(WIDTH as i16, HEIGHT as i16)
     }
 
-    pub fn blit_screen(&mut self, bmp: [u32; FB_SIZE]) {
+    pub fn blit_screen(&mut self, bmp: &[u32]) {
         for (dest, src) in self.emulated_buffer.iter_mut().zip(bmp.iter()) {
             *dest = *src;
         }
+    }
+    pub fn as_slice(&self) -> &[u32] {
+        &self.emulated_buffer
     }
 
     pub fn native_buffer(&mut self) -> &mut [u32; FB_SIZE] {

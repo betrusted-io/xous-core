@@ -320,6 +320,13 @@ impl Gam {
             ena, 0, 0, 0,)
         ).map(|_| ())
     }
+    pub fn selftest(&self, duration_ms: usize) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::TestPattern.to_usize().unwrap(), duration_ms, 0, 0, 0),
+        )
+        .expect("couldn't self test");
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

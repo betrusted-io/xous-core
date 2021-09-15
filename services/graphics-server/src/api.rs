@@ -95,6 +95,9 @@ pub(crate) enum Opcode {
     BulkReadFonts,
     RestartBulkRead,
 
+    /// generates a test pattern
+    TestPattern,
+
     /// SuspendResume callback
     SuspendResume,
 

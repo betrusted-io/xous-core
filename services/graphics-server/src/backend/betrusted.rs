@@ -3,10 +3,10 @@ use susres::{ManagedMem, RegManager, RegOrField, SuspendResume};
 use utralib::generated::*;
 use xous::MemoryRange;
 
-const FB_WIDTH_WORDS: usize = 11;
+pub const FB_WIDTH_WORDS: usize = 11;
 const FB_WIDTH_PIXELS: usize = 336;
-const FB_LINES: usize = 536;
-const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
+pub const FB_LINES: usize = 536;
+pub const FB_SIZE: usize = FB_WIDTH_WORDS * FB_LINES; // 44 bytes by 536 lines
 const CONFIG_CLOCK_FREQUENCY: u32 = 100_000_000;
 
 pub struct XousDisplay {
@@ -170,7 +170,7 @@ impl XousDisplay {
         unsafe { &mut *(self.fb.as_mut_ptr() as *mut [u32; FB_SIZE]) }
     }
 
-    pub fn blit_screen(&mut self, bmp: [u32; FB_SIZE]) {
+    pub fn blit_screen(&mut self, bmp: &[u32]) {
         let framebuffer = self.fb.as_mut_ptr() as *mut u32;
 
         for words in 0..FB_SIZE {
@@ -181,6 +181,10 @@ impl XousDisplay {
         self.update_all();
 
         while self.busy() {}
+    }
+
+    pub fn as_slice(&self) -> &[u32] {
+        &self.fb.as_slice::<u32>()[..FB_SIZE]
     }
 
     /// Beneath this line are pure-HAL layer, and should not be user-visible

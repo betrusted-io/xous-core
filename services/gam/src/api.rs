@@ -152,6 +152,9 @@ pub(crate) enum Opcode {
     /// Turn on Devboot Flag
     Devboot,
 
+    /// Show a test pattern. Can only call this once (to prevent abuse)
+    TestPattern,
+
     Quit,
 }
 

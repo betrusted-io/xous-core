@@ -400,14 +400,14 @@ impl<'a> ShellCmdApi<'a> for Test {
                 "oqc" => {
                     env.llio.wfi_override(true).unwrap();
                     //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
-                    /* // temp clear so renode can run
                     ret.clear();
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
                     if 0x362f093 != self.jtag.get_id().unwrap() {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
                     env.com.set_backlight(196, 196).unwrap();
-                    */
                     log::info!("building modal");
                     const OQC_SERVER: &str = "_OQC server_";
                     let kbdtest_sid = env.xns.register_name(OQC_SERVER, Some(1)).unwrap();
@@ -425,6 +425,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         GlyphStyle::Small,
                         8
                     );
+                    test_modal.gam.selftest(18_000);
                     log::info!("making helper");
                     test_modal.spawn_helper(kbdtest_sid, test_modal.sid,
                         TestOp::ModalRedraw.to_u32().unwrap(),
