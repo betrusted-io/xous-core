@@ -455,36 +455,18 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 let msg = xous::receive_message(kbdtest_sid).unwrap();
                                 log::info!("got msg: {:?}", msg);
                                 match FromPrimitive::from_usize(msg.body.id()) {
-                                    Some(TestOp::KeyCode) => {
-                                        log::info!("keycode: {:?}", msg.body);
-                                        let buffer = unsafe {
-                                            xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                                        };
-                                        log::info!("deserialize");
-                                        let krs = buffer.to_original::<[(u8, u8); 32],_>().unwrap();
-                                        let mut rawstates = keyboard::KeyRawStates::new();
-                                        for &(r, c) in krs[..16].iter() {
-                                            if r != 255 || c != 255 {
-                                                rawstates.keydowns.push(RowCol{r, c});
-                                            }
-                                        }
-                                        for &(r, c) in krs[16..].iter() {
-                                            if r!= 255 || c != 255 {
-                                                rawstates.keyups.push(RowCol{r, c});
-                                            }
-                                        }
+                                    Some(TestOp::KeyCode) => xous::msg_scalar_unpack!(msg, is_keyup, r, c, _, {
                                         log::info!("rawstates");
-                                        if rawstates.keydowns.len() > 0 {
-                                            for &key in rawstates.keydowns.iter() {
-                                                match remaining.get(&key) {
-                                                    Some(_hit) => {
-                                                        log::info!("got {}", map_codes(key));
-                                                        remaining.insert(key, true);
-                                                        bot_str.push_str(map_codes(key));
-                                                    },
-                                                    None => log::warn!("got unexpected r/c: {:?}", key),
-                                                };
-                                            }
+                                        if is_keyup == 0 { // only worry about keydowns
+                                            let key = RowCol::new(r as u8, c as u8);
+                                            match remaining.get(&key) {
+                                                Some(_hit) => {
+                                                    log::info!("got {}", map_codes(key));
+                                                    remaining.insert(key, true);
+                                                    bot_str.push_str(map_codes(key));
+                                                },
+                                                None => log::warn!("got unexpected r/c: {:?}", key),
+                                            };
                                             log::info!("update modal");
                                             test_modal.modify(None, None, false,
                                                 Some(&bot_str), false, None);
@@ -512,7 +494,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                                             log::info!("test threshold hit, exiting");
                                             break;
                                         }
-                                    },
+                                        //xous::return_scalar(msg.sender, 0).unwrap();
+                                    }),
                                     Some(TestOp::UxGutter) => {
                                         log::info!("gutter");
                                         // an intentional NOP for UX actions that require a destintation but need no action

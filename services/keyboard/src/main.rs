@@ -961,18 +961,24 @@ fn xmain() -> ! {
                 && (rawstates.keydowns.len() > 0 || rawstates.keyups.len() > 0)
                 {
                     // manual serialization of KeyRawStates, because rkyv can't derive a serializer.
-                    let mut krs_ser: [(u8, u8); 32] = [(255, 255); 32];
-                    for (&src, (r, c)) in rawstates.keydowns.iter().zip(krs_ser[..16].iter_mut()) {
-                        *r = src.r;
-                        *c = src.c;
+                    for &rc in rawstates.keydowns.iter() {
+                        xous::send_message(raw_listener_conn.unwrap(),
+                            xous::Message::new_scalar(raw_listener_op.unwrap() as usize,
+                                0,
+                                rc.r as usize,
+                                rc.c as usize,
+                                0
+                        )).unwrap();
                     }
-                    for (&src, (r, c)) in rawstates.keyups.iter().zip(krs_ser[16..].iter_mut()) {
-                        *r = src.r;
-                        *c = src.c;
+                    for &rc in rawstates.keyups.iter() {
+                        xous::send_message(raw_listener_conn.unwrap(),
+                            xous::Message::new_scalar(raw_listener_op.unwrap() as usize,
+                                1,
+                                rc.r as usize,
+                                rc.c as usize,
+                                0
+                        )).unwrap();
                     }
-
-                    let buf = Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
-                    buf.send(raw_listener_conn.unwrap(), raw_listener_op.unwrap()).expect("couldn't send raw scancodes");
                 }
 
                 // interpret scancodes
