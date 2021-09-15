@@ -66,7 +66,7 @@ impl Susres {
         })
     }
 
-    pub fn initiate_suspend(&mut self) -> Result<(), xous::Error> {
+    pub fn initiate_suspend(&self) -> Result<(), xous::Error> {
         log::trace!("suspend initiated");
         send_message(self.conn,
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
