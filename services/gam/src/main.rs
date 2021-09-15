@@ -88,7 +88,7 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 6;
+const MAX_UX_CONTEXTS: usize = 7;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;

@@ -54,6 +54,9 @@ pub(crate) enum Opcode {
     /// request for ScanCodes
     RegisterListener,
 
+    /// request for raw keyups/downs
+    RegisterRawListener,
+
     /// set repeat delay, rate; both in ms
     SetRepeat, //(u32, u32),
 
@@ -80,4 +83,30 @@ pub(crate) enum Opcode {
 pub(crate) struct KeyboardRegistration {
     pub server_name: xous_ipc::String::<64>,
     pub listener_op_id: usize,
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RowCol {
+    pub r: u8,
+    pub c: u8,
+}
+impl RowCol {
+    #[allow(dead_code)]
+    pub fn new(r: u8, c: u8) -> RowCol {
+        RowCol { r, c }
+    }
+}
+
+#[derive(Debug)]
+pub struct KeyRawStates {
+    pub keydowns: Vec::<RowCol>,
+    pub keyups: Vec::<RowCol>,
+}
+impl KeyRawStates {
+    pub fn new() -> Self {
+        KeyRawStates {
+            keydowns: Vec::with_capacity(16),
+            keyups: Vec::with_capacity(16),
+        }
+    }
 }
