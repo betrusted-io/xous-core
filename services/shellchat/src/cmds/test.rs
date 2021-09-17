@@ -7,12 +7,6 @@ use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
 use rtc::{DateTime, Weekday};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use keyboard::RowCol;
-use std::collections::HashMap;
-use gam::modal::*;
-use num_traits::*;
 use core::fmt::Write;
 
 #[derive(Debug)]
@@ -35,7 +29,8 @@ pub struct Test {
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
-    kbd: Arc<Mutex<keyboard::Keyboard>>,
+    //kbd: Arc<Mutex<keyboard::Keyboard>>,
+    oqc: oqc_test::Oqc,
     jtag: jtag::Jtag,
 }
 impl Test {
@@ -69,7 +64,8 @@ impl Test {
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
-            kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
+            //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
+            oqc: oqc_test::Oqc::new(&xns).unwrap(),
             jtag: jtag::Jtag::new(&xns).unwrap(),
         }
     }
@@ -409,134 +405,57 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
-                    #[cfg(any(target_os = "none", target_os = "xous"))]
-                    env.com.set_backlight(196, 196).unwrap();
-                    log::info!("building modal");
-                    const OQC_SERVER: &str = "_OQC server_";
-                    let kbdtest_sid = env.xns.register_name(OQC_SERVER, Some(1)).unwrap();
-                    let test_cid = xous::connect(kbdtest_sid).unwrap();
-                    let mut test_action = Notification::new(
-                        test_cid,
-                        TestOp::UxGutter.to_u32().unwrap()
-                    );
-                    test_action.manual_dismiss = false;
-                    let mut test_modal = Modal::new(
-                        "test modal",
-                        ActionType::Notification(test_action),
-                        Some("Keyboard Test"),
-                        Some("test"),
-                        GlyphStyle::Small,
-                        8
-                    );
-
-                    // brief pause to check the screen
-                    test_modal.gam.selftest(18_000);
+                    susres.initiate_suspend().unwrap();
+                    env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
                     /*
-                    // now keyboard test
-                    log::info!("making helper");
-                    test_modal.spawn_helper(kbdtest_sid, test_modal.sid,
-                        TestOp::ModalRedraw.to_u32().unwrap(),
-                        TestOp::ModalKeys.to_u32().unwrap(),
-                        TestOp::ModalDrop.to_u32().unwrap(),
-                    );
-                    log::info!("raising modal");
-                    test_modal.activate();
-                    test_modal.redraw();
+                    self.freq = 659.25;
+                    self.left_play = true;
+                    self.right_play = true;
+                    self.speaker_play = true;
+                    self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
+                    env.ticktimer.sleep_ms(50).unwrap();
+                    self.codec.set_speaker_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    self.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    if self.callback_id.is_none() {
+                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        log::trace!("hooking frame callback with ID {}", cb_id);
+                        self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
+                        self.callback_id = Some(cb_id);
+                    }
+                    self.play_sample = 0.0;
+                    self.rec_sample = 0;
+                    self.codec.resume().unwrap();
+                    */
 
-                    log::info!("spawning helper thread");
-                    let handle = thread::spawn({
-                        log::info!("clone kbd");
-                        let kbd = Arc::clone(&self.kbd);
-                        log::info!("move kbd");
-                        move || {
-                            log::info!("oqc server starting");
-                            kbd.lock().unwrap()
-                                .register_raw_listener(
-                                    OQC_SERVER,
-                                    TestOp::KeyCode.to_usize().unwrap()
-                                );
-                            let mut count = 0;
-                            let mut remaining = populate_vectors();
+                    self.oqc.trigger(60_000);
 
-                            let mut bot_str = String::<1024>::new();
-                            loop {
-                                let msg = xous::receive_message(kbdtest_sid).unwrap();
-                                log::info!("got msg: {:?}", msg);
-                                match FromPrimitive::from_usize(msg.body.id()) {
-                                    Some(TestOp::KeyCode) => xous::msg_scalar_unpack!(msg, is_keyup, r, c, _, {
-                                        log::info!("rawstates");
-                                        if is_keyup == 0 { // only worry about keydowns
-                                            let key = RowCol::new(r as u8, c as u8);
-                                            match remaining.get(&key) {
-                                                Some(_hit) => {
-                                                    log::info!("got {}", map_codes(key));
-                                                    remaining.insert(key, true);
-                                                    write!(bot_str, "{}", map_codes(key)).unwrap();
-                                                },
-                                                None => log::warn!("got unexpected r/c: {:?}", key),
-                                            };
-                                            log::info!("update modal");
-                                            test_modal.modify(None, None, false,
-                                                Some(bot_str.as_str().unwrap()), false, None);
-                                            log::info!("redraw modal");
-                                            test_modal.redraw();
-                                            xous::yield_slice();
-                                        }
-                                        log::info!("epilogue");
-                                        // iterate and see if all keys have been hit
-                                        let mut finished = true;
-                                        for &vals in remaining.values() {
-                                            if vals == false {
-                                                log::info!("short-circuit remaining eval");
-                                                finished = false;
-                                                break;
-                                            }
-                                        }
-                                        if finished {
-                                            log::info!("all keys hit, exiting");
-                                            break;
-                                        }
-
-                                        count += 1;
-                                        if count > 10 {
-                                            log::info!("test threshold hit, exiting");
-                                            break;
-                                        }
-                                        //xous::return_scalar(msg.sender, 0).unwrap();
-                                    }),
-                                    Some(TestOp::UxGutter) => {
-                                        log::info!("gutter");
-                                        // an intentional NOP for UX actions that require a destintation but need no action
-                                    },
-                                    Some(TestOp::ModalRedraw) => {
-                                        log::info!("modal redraw handler");
-                                        test_modal.redraw();
-                                    },
-                                    Some(TestOp::ModalKeys) => xous::msg_scalar_unpack!(msg, _k1, _k2, _k3, _k4, {
-                                        log::info!("modal keys message, ignoring");
-                                        // ignore keys, we have our own key routine
-                                    }),
-                                    Some(TestOp::ModalDrop) => {
-                                        log::error!("test modal quit unexpectedly");
-                                    }
-                                    _ => {
-                                        log::error!("unrecognized message: {:?}", msg);
-                                    }
+                    loop {
+                        match self.oqc.status() {
+                            Some(true) => {
+                                write!(ret, "{}\nCHECK: was backlight on?\nIf so, then PASS\nNow engage PROG switch.",
+                                    env.com.ssid_fetch_as_string().unwrap()
+                                ).unwrap();
+                                break;
+                            }
+                            Some(false) => {
+                                write!(ret, "Keyboard test failed.").unwrap();
+                                break;
+                            }
+                            None => {
+                                env.ticktimer.sleep_ms(500).unwrap();
+                                if self.freq >= 659.0 && self.freq <= 660.0 {
+                                    self.freq = 783.99;
+                                } else if self.freq >= 783.0 && self.freq <= 784.0 {
+                                    self.freq = 987.77;
+                                } else {
+                                    self.freq = 659.25
                                 }
                             }
-                            test_modal.gam.relinquish_focus().unwrap();
                         }
-                    });
-                    handle.join().unwrap();
-                    */
-                    susres.initiate_suspend().unwrap();
-                    env.ticktimer.sleep_ms(500).unwrap(); // pause for the suspend/resume cycle
+                    }
+                    self.codec.pause().unwrap();
 
-                    write!(ret, "{}\nCHECK: was backlight on?\nIf so, then PASS\nThen engage PROG switch.",
-                        env.com.ssid_fetch_as_string().unwrap()
-                    ).unwrap();
-                    env.com.set_backlight(0, 0).unwrap();
                     env.llio.wfi_override(false).unwrap();
                 }
                 "devboot" => {
@@ -770,127 +689,5 @@ fn rtc_get(llio: &mut llio::Llio) -> Option<DateTime> {
             }
         }
         _ => None
-    }
-}
-
-fn populate_vectors() -> HashMap::<RowCol, bool> {
-    let mut vectors = HashMap::<RowCol, bool>::new();
-    vectors.insert(RowCol::new(0, 0), false);
-    vectors.insert(RowCol::new(0, 1), false);
-    vectors.insert(RowCol::new(0, 2), false);
-    vectors.insert(RowCol::new(0, 3), false);
-    vectors.insert(RowCol::new(0, 4), false);
-    vectors.insert(RowCol::new(4, 5), false);
-    vectors.insert(RowCol::new(4, 6), false);
-    vectors.insert(RowCol::new(4, 7), false);
-    vectors.insert(RowCol::new(4, 8), false);
-    vectors.insert(RowCol::new(4, 9), false);
-    vectors.insert(RowCol::new(1, 0), false);
-    vectors.insert(RowCol::new(1, 1), false);
-    vectors.insert(RowCol::new(1, 2), false);
-    vectors.insert(RowCol::new(1, 3), false);
-    vectors.insert(RowCol::new(1, 4), false);
-    vectors.insert(RowCol::new(5, 5), false);
-    vectors.insert(RowCol::new(5, 6), false);
-    vectors.insert(RowCol::new(5, 7), false);
-    vectors.insert(RowCol::new(5, 8), false);
-    vectors.insert(RowCol::new(5, 9), false);
-    vectors.insert(RowCol::new(2, 0), false);
-    vectors.insert(RowCol::new(2, 1), false);
-    vectors.insert(RowCol::new(2, 2), false);
-    vectors.insert(RowCol::new(2, 3), false);
-    vectors.insert(RowCol::new(2, 4), false);
-    vectors.insert(RowCol::new(6, 5), false);
-    vectors.insert(RowCol::new(6, 6), false);
-    vectors.insert(RowCol::new(6, 7), false);
-    vectors.insert(RowCol::new(6, 8), false);
-    vectors.insert(RowCol::new(6, 9), false);
-    vectors.insert(RowCol::new(3, 0), false);
-    vectors.insert(RowCol::new(3, 1), false);
-    vectors.insert(RowCol::new(3, 2), false);
-    vectors.insert(RowCol::new(3, 3), false);
-    vectors.insert(RowCol::new(3, 4), false);
-    vectors.insert(RowCol::new(7, 5), false);
-    vectors.insert(RowCol::new(7, 6), false);
-    vectors.insert(RowCol::new(7, 7), false);
-    vectors.insert(RowCol::new(7, 8), false);
-    vectors.insert(RowCol::new(7, 9), false);
-    vectors.insert(RowCol::new(8, 5), false);
-    vectors.insert(RowCol::new(8, 6), false);
-    vectors.insert(RowCol::new(8, 7), false);
-    vectors.insert(RowCol::new(8, 8), false);
-    vectors.insert(RowCol::new(8, 9), false);
-    vectors.insert(RowCol::new(8, 0), false);
-    vectors.insert(RowCol::new(8, 1), false);
-    vectors.insert(RowCol::new(3, 8), false);
-    vectors.insert(RowCol::new(3, 9), false);
-    vectors.insert(RowCol::new(8, 3), false);
-    vectors.insert(RowCol::new(3, 6), false);
-    vectors.insert(RowCol::new(6, 4), false);
-    vectors.insert(RowCol::new(8, 2), false);
-    vectors.insert(RowCol::new(5, 2), false);
-
-    vectors
-}
-
-fn map_codes(code: RowCol) -> &'static str {
-    let rc = (code.r, code.c);
-
-    match rc {
-        (0, 0) => "1",
-        (0, 1) => "2",
-        (0, 2) => "3",
-        (0, 3) => "4",
-        (0, 4) => "5",
-        (4, 5) => "6",
-        (4, 6) => "7",
-        (4, 7) => "8",
-        (4, 8) => "9",
-        (4, 9) => "0",
-        (1, 0) => "q",
-        (1, 1) => "w",
-        (1, 2) => "e",
-        (1, 3) => "r",
-        (1, 4) => "t",
-        (5, 5) => "y",
-        (5, 6) => "u",
-        (5, 7) => "i",
-        (5, 8) => "o",
-        (5, 9) => "p",
-        (2, 0) => "a",
-        (2, 1) => "s",
-        (2, 2) => "d",
-        (2, 3) => "f",
-        (2, 4) => "g",
-        (6, 5) => "h",
-        (6, 6) => "j",
-        (6, 7) => "k",
-        (6, 8) => "l",
-        (6, 9) => "BS",
-        (3, 0) => "!",
-        (3, 1) => "z",
-        (3, 2) => "x",
-        (3, 3) => "c",
-        (3, 4) => "v",
-        (7, 5) => "b",
-        (7, 6) => "n",
-        (7, 7) => "m",
-        (7, 8) => "?",
-        (7, 9) => "↩️",
-        (8, 5) => "LS",
-        (8, 6) => ",",
-        (8, 7) => "SP",
-        (8, 8) => ".",
-        (8, 9) => "RS",
-        (8, 0) => "F1",
-        (8, 1) => "F2",
-        (3, 8) => "F3",
-        (3, 9) => "F4",
-        (8, 3) => "⬅️",
-        (3, 6) => "➡️",
-        (6, 4) => "⬆️",
-        (8, 2) => "⬇️",
-        (5, 2) => "MID",
-        _ => "ERR!",
     }
 }

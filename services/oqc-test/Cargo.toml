@@ -1,0 +1,25 @@
+[package]
+name = "oqc-test"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2018"
+description = "OQC test program"
+
+[dependencies]
+xous = { path = "../../xous-rs" }
+xous-ipc = { path = "../../xous-ipc" }
+log-server = { path = "../log-server" }
+ticktimer-server = { path = "../ticktimer-server" }
+xous-names = { path = "../xous-names" }
+log = "0.4"
+num-derive = {version = "0.3", default-features = false}
+num-traits = {version = "0.2", default-features = false}
+gam = {path = "../gam"}
+keyboard = {path = "../keyboard"}
+com = {path = "../com"}
+
+[target.'cfg(not(any(windows,unix)))'.dependencies]
+utralib = { path = "../../utralib"}
+
+[features]
+default = []

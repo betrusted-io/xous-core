@@ -32,6 +32,7 @@ default-members = [
   "services/spinor",
   "services/root-keys",
   "services/jtag",
+  "services/oqc-test",
 ]
 members = [
   "xous-ipc",
@@ -78,6 +79,7 @@ members = [
   "services/root-keys",
   "services/jtag",
   "tools/wycheproof-import",
+  "services/oqc-test",
 ]
 resolver = "2"
 

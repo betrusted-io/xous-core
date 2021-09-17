@@ -821,7 +821,7 @@ fn xmain() -> ! {
     // connections expected:
     //  - GAM
     //  - graphics (if building for hosted mode)
-    //  - shellchat (for factory test)
+    //  - oqc (for factory test)
     #[cfg(any(target_os = "none", target_os = "xous"))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -961,24 +961,18 @@ fn xmain() -> ! {
                 && (rawstates.keydowns.len() > 0 || rawstates.keyups.len() > 0)
                 {
                     // manual serialization of KeyRawStates, because rkyv can't derive a serializer.
-                    for &rc in rawstates.keydowns.iter() {
-                        xous::send_message(raw_listener_conn.unwrap(),
-                            xous::Message::new_scalar(raw_listener_op.unwrap() as usize,
-                                0,
-                                rc.r as usize,
-                                rc.c as usize,
-                                0
-                        )).unwrap();
+                    let mut krs_ser: [(u8, u8); 32] = [(255, 255); 32];
+                    for (&src, (r, c)) in rawstates.keydowns.iter().zip(krs_ser[..16].iter_mut()) {
+                        *r = src.r;
+                        *c = src.c;
                     }
-                    for &rc in rawstates.keyups.iter() {
-                        xous::send_message(raw_listener_conn.unwrap(),
-                            xous::Message::new_scalar(raw_listener_op.unwrap() as usize,
-                                1,
-                                rc.r as usize,
-                                rc.c as usize,
-                                0
-                        )).unwrap();
+                    for (&src, (r, c)) in rawstates.keyups.iter().zip(krs_ser[16..].iter_mut()) {
+                        *r = src.r;
+                        *c = src.c;
                     }
+
+                    let buf = Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
+                    buf.lend(raw_listener_conn.unwrap(), raw_listener_op.unwrap()).expect("couldn't send raw scancodes");
                 }
 
                 // interpret scancodes
@@ -997,20 +991,22 @@ fn xmain() -> ! {
                     if vibe {
                         llio.vibe(llio::VibePattern::Short).unwrap();
                     }
-                    let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
-                    for i in 0..kc.len() {
-                        keys[i] = kc[i];
+                    for kv in kc.chunks(4) {
+                        let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+                        for i in 0..kv.len() {
+                            keys[i] = kv[i];
+                        }
+                        log::trace!("sending keys {:?}", keys);
+                        xous::send_message(listener_conn.unwrap(),
+                            xous::Message::new_scalar(
+                                listener_op.unwrap(),
+                                keys[0] as u32 as usize,
+                                keys[1] as u32 as usize,
+                                keys[2] as u32 as usize,
+                                keys[3] as u32 as usize,
+                            )
+                        ).expect("couldn't send key codes to listener");
                     }
-                    log::trace!("sending keys {:?}", keys);
-                    xous::send_message(listener_conn.unwrap(),
-                        xous::Message::new_scalar(
-                            listener_op.unwrap(),
-                            keys[0] as u32 as usize,
-                            keys[1] as u32 as usize,
-                            keys[2] as u32 as usize,
-                            keys[3] as u32 as usize,
-                        )
-                    ).expect("couldn't send key codes to listener");
                 }
                 // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.
                 if kbd.is_repeating_key() {

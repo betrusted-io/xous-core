@@ -299,7 +299,7 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // unlimited connections allowed, this is a user app and it's up to the app to decide its policy
     let shch_sid = xns.register_name(SERVER_NAME_SHELLCHAT, None).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", shch_sid);
+    //log::trace!("registered with NS -- {:?}", shch_sid);
 
     let mut repl = Repl::new(&xns, shch_sid);
     let mut update_repl = false;

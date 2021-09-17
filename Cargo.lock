@@ -1297,6 +1297,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "oqc-test"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "gam",
+ "keyboard",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "orbclient"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1869,6 +1887,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "oqc-test",
  "rand_core 0.5.1",
  "rkyv 0.4.3",
  "root-keys",
