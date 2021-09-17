@@ -401,6 +401,15 @@ mod implementation {
                 true
             }
         }
+        fn get_hw_time(&self) -> u64 {
+            self.csr.r(utra::susres::TIME0) as u64 | ((self.csr.r(utra::susres::TIME1) as u64) << 32)
+        }
+        pub fn debug_delay(&self, duration: u32) {
+            let start = self.get_hw_time();
+            while ((self.get_hw_time() - start) as u32) < duration {
+                xous::yield_slice();
+            }
+        }
     }
 
 }
@@ -477,15 +486,17 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                         hw.r(utra::susres::TIME0) as u64 | ((hw.r(utra::susres::TIME1) as u64) << 32)
                     }
                     if let Some(hw) = csr {
-                        let now = get_hw_time(hw);
+                        let start = get_hw_time(hw);
                         let timeout = TIMEOUT_TIME.load(Ordering::Relaxed); // ignore updates to timeout once we're waiting
-                        while ((get_hw_time(hw) - now) as u32) < timeout {
+                        while ((get_hw_time(hw) - start) as u32) < timeout {
+                            // log::info!("delta t: {}", (get_hw_time(hw) - start) as u32);
                             xous::yield_slice();
                         }
                     } else {
                         panic!("hardware CSR not sent to timeout_thread before it was instructed to run");
                     }
                 }
+                log::trace!("HW timeout reached");
                 match send_message(TIMEOUT_CONN.load(Ordering::Relaxed),
                     Message::new_scalar(Opcode::SuspendTimeout.to_usize().unwrap(), 0, 0, 0, 0)
                 ) {
@@ -628,6 +639,7 @@ fn xmain() -> ! {
                         for maybe_sub in suspend_subscribers.iter() {
                             if let Some(sub) = maybe_sub {
                                 if sub.ready_to_suspend == false {
+                                    log::trace!("not ready: {}", sub.token);
                                     all_ready = false;
                                     break;
                                 }
@@ -636,6 +648,7 @@ fn xmain() -> ! {
                         if all_ready {
                             log::trace!("all callbacks reporting in, doing suspend");
                             timeout_pending = false;
+                            //susres_hw.debug_delay(500);
                             susres_hw.do_suspend(false);
                             // when do_suspend() returns, it means we've resumed
                             suspend_requested = false;
@@ -683,7 +696,7 @@ fn xmain() -> ! {
                 },
                 Some(Opcode::SuspendTimeout) => {
                     if timeout_pending {
-                        log::trace!("suspend call has timed out, forcing a suspend");
+                        log::info!("suspend call has timed out, forcing a suspend");
                         // record which tokens had not reported in
                         for maybe_sub in suspend_subscribers.iter_mut() {
                             if let Some(sub) = maybe_sub {
