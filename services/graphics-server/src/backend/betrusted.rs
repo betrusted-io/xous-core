@@ -113,8 +113,6 @@ impl XousDisplay {
         self.srfb.resume();
 
         if drew_note {
-            let note = crate::sleep_note::LOGO_MAP;
-            let note_lines = note.len() / FB_WIDTH_WORDS;
             let hwfb: *mut [u32; FB_SIZE] = self.hwfb.as_mut_ptr() as *mut [u32; FB_SIZE];
             for lines in 0..FB_LINES {
                 // set the dirty bits of all lines to force a redraw of the restored data

@@ -101,7 +101,6 @@ fn xmain() -> ! {
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
         .expect("can't register server");
-    log::trace!("Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();
@@ -336,12 +335,17 @@ fn xmain() -> ! {
                                     tv.bounds_computed
                                 );
                             } else {
-                                log::warn!(
+                                log::debug!(
                                     "does not intersect, clip_rect: {:?}, br: {:?}",
                                     clip_rect,
                                     br
                                 );
-                                tv.bounds_computed = Some(Rectangle::new(tl, clip_rect.br()));
+                                tv.bounds_computed = Some(Rectangle::new(tl,
+                                    Point::new(
+                                        if br.x < clip_rect.br.x { br.x } else { clip_rect.br.x - tv.margin.x },
+                                        if br.y < clip_rect.br.y { br.y } else { clip_rect.br.y - tv.margin.y },
+                                    )
+                                ));
                             }
                         }
                         TextBounds::GrowableFromBl(bl, width) => {
@@ -723,8 +727,6 @@ fn xmain() -> ! {
                 log::error!("received opcode scalar that is not handled");
             }
         }
-        display.update();
-        display.redraw();
     }
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(sid).unwrap();
