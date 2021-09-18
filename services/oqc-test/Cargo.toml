@@ -17,6 +17,7 @@ num-traits = {version = "0.2", default-features = false}
 gam = {path = "../gam"}
 keyboard = {path = "../keyboard"}
 com = {path = "../com"}
+llio = {path = "../llio"}
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

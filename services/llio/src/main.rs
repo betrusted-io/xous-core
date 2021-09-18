@@ -694,12 +694,14 @@ fn xmain() -> ! {
     // - shellchat/environment
     // - spinor (for turning off wfi during writes)
     // - rootkeys (for reboots)
-    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(7)).expect("can't register server");
+    // - oqc-test (for testing the vibe motor)
+    let num_conns = 8;
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(num_conns)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
     // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(7)).expect("can't register I2C thread");
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(num_conns)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");

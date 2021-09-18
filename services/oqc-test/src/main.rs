@@ -5,7 +5,6 @@ mod api;
 use api::*;
 use num_traits::*;
 use gam::modal::*;
-use std::collections::HashMap;
 use keyboard::{RowCol, KeyRawStates};
 
 #[xous::xous_main]
@@ -17,11 +16,17 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // one connection expected:
     //   - shellchat program initiator
-    let oqc_sid = xns.register_name(api::SERVER_NAME_OQC, Some(1)).expect("can't register server");
+    //   - keyboard callback
+    let oqc_sid = xns.register_name(api::SERVER_NAME_OQC, Some(2)).expect("can't register server");
 
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     let kbd = keyboard::Keyboard::new(&xns).unwrap();
+    kbd.register_raw_listener(
+        SERVER_NAME_OQC,
+        Opcode::KeyCode.to_usize().unwrap()
+    );
     let com = com::Com::new(&xns).unwrap();
+    let llio = llio::Llio::new(&xns).unwrap();
 
     let test_cid = xous::connect(oqc_sid).unwrap();
     let mut test_action = Notification::new(
@@ -56,14 +61,10 @@ fn xmain() -> ! {
                         Opcode::ModalKeys.to_u32().unwrap(),
                         Opcode::ModalDrop.to_u32().unwrap(),
                     );
-                    kbd.register_raw_listener(
-                        SERVER_NAME_OQC,
-                        Opcode::KeyCode.to_usize().unwrap()
-                    );
 
                     // test the screen
                     com.set_backlight(255, 255).unwrap();
-                    test_modal.gam.selftest(3_000); // 12_000 by default
+                    test_modal.gam.selftest(8_000); // 12_000 by default
 
                     // now start the keyboard test
                     timeout = if timeout_set > 120_000 {
@@ -79,6 +80,7 @@ fn xmain() -> ! {
                         Some(bot_str.as_str()), false, None);
                     test_modal.activate();
                     test_modal.redraw();
+                    test_modal.gam.set_vibe(true).unwrap();
 
                     // start a thread that advances the timer when not hitting keys
                     xous::create_thread_2(ping_thread, xous::connect(oqc_sid).unwrap() as usize, timeout as usize).unwrap();
@@ -89,76 +91,88 @@ fn xmain() -> ! {
                 test_run = true;
             }),
             Some(Opcode::KeyCode) => {
-                if test_finished {
-                    // we'll continue to get keycodes, but ignore them once the test is finished
-                    continue;
-                }
-                let elapsed = ticktimer.elapsed_ms();
-                if elapsed - start_time < timeout {
-                    let buffer = unsafe {
-                        xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
-                    };
-                    let krs = buffer.to_original::<[(u8, u8); 32],_>().unwrap();
-                    let mut rawstates = KeyRawStates::new();
-                    for &(r, c) in krs[..16].iter() {
-                        if r != 255 || c != 255 {
-                            rawstates.keydowns.push(RowCol{r, c});
-                        }
+                if test_run {
+                    if test_finished {
+                        // we'll continue to get keycodes, but ignore them once the test is finished
+                        continue;
                     }
-                    for &(r, c) in krs[16..].iter() {
-                        if r!= 255 || c != 255 {
-                            rawstates.keyups.push(RowCol{r, c});
+                    let elapsed = ticktimer.elapsed_ms();
+                    if elapsed - start_time < timeout {
+                        let buffer = unsafe {
+                            xous_ipc::Buffer::from_memory_message(msg.body.memory_message().unwrap())
+                        };
+                        let krs = buffer.to_original::<[(u8, u8); 32],_>().unwrap();
+                        let mut rawstates = KeyRawStates::new();
+                        for &(r, c) in krs[..16].iter() {
+                            if r != 255 || c != 255 {
+                                rawstates.keydowns.push(RowCol{r, c});
+                            }
                         }
-                    }
+                        for &(r, c) in krs[16..].iter() {
+                            if r!= 255 || c != 255 {
+                                rawstates.keyups.push(RowCol{r, c});
+                            }
+                        }
 
-                    if rawstates.keydowns.len() > 0 { // only worry about keydowns
-                        for &key in rawstates.keydowns.iter() {
-                            match remaining.get(&key) {
-                                Some(_hit) => {
-                                    log::info!("got {}", map_codes(key));
-                                    remaining.insert(key, true);
-                                },
-                                None => {
-                                    if key.r != 254 { // 254 is (ab)used by the tester thread to create a ping event
-                                        log::warn!("got unexpected r/c: {:?}", key)
+                        if rawstates.keydowns.len() > 0 { // only worry about keydowns
+                            for &key in rawstates.keydowns.iter() {
+                                for (rc, hit) in remaining.iter_mut() {
+                                    if *rc == key {
+                                        *hit = true;
                                     }
-                                },
-                            };
+                                }
+                                /*
+                                match remaining.get(&key) {
+                                    Some(_hit) => {
+                                        log::info!("got {}", map_codes(key));
+                                        remaining.insert(key, true);
+                                    },
+                                    None => {
+                                        if key.r != 254 { // 254 is (ab)used by the tester thread to create a ping event
+                                            log::warn!("got unexpected r/c: {:?}", key)
+                                        }
+                                    },
+                                };
+                                */
+                            }
+                            if elapsed - last_redraw_time > 100 { // rate limit redraws to 10Hz
+                                render_string(&mut bot_str, &remaining, timeout - (elapsed - start_time));
+                                test_modal.modify(None, None, false,
+                                    Some(bot_str.as_str()), false, None);
+                                test_modal.redraw();
+                                last_redraw_time = elapsed;
+                                llio.vibe(llio::VibePattern::Short).unwrap();
+                            }
                         }
-                        if elapsed - last_redraw_time > 100 { // rate limit redraws to 10Hz
-                            render_string(&mut bot_str, &remaining, timeout - (elapsed - start_time));
-                            test_modal.modify(None, None, false,
-                                Some(bot_str.as_str()), false, None);
-                            test_modal.redraw();
-                            last_redraw_time = elapsed;
-                        }
-                    }
 
-                    // iterate and see if all keys have been hit
-                    let mut finished = true;
-                    for &vals in remaining.values() {
-                        if vals == false {
-                            finished = false;
-                            break;
+                        // iterate and see if all keys have been hit
+                        let mut finished = true;
+                        for &(_rc, vals) in remaining.iter() {
+                            if vals == false {
+                                finished = false;
+                                break;
+                            }
                         }
-                    }
-                    if finished {
-                        passing = Some(true);
+                        if finished {
+                            passing = Some(true);
+                            com.set_backlight(0, 0).unwrap();
+                            test_modal.gam.relinquish_focus().unwrap();
+                            log::info!("all keys hit, exiting");
+                            test_finished = true;
+                        }
+                    } else {
+                        // timeout
+                        passing = Some(false);
                         com.set_backlight(0, 0).unwrap();
                         test_modal.gam.relinquish_focus().unwrap();
-                        log::info!("all keys hit, exiting");
+                        log::info!("test done, relinquishing focus");
                         test_finished = true;
                     }
                 } else {
-                    // timeout
-                    passing = Some(false);
-                    com.set_backlight(0, 0).unwrap();
-                    test_modal.gam.relinquish_focus().unwrap();
-                    log::info!("test done, relinquishing focus");
-                    test_finished = true;
-                }
-                if !test_run {
-                    log::warn!("OQC got keycodes when unexpected");
+                    // simply ignore the reports in
+                    // we have to register our key listener early on, otherwise the rootkeys won't work for normal use
+                    // we do want the keyboard listener slots to be fully occupied, otherwise something nefarious could
+                    // squat the unused port...
                 }
             },
             Some(Opcode::Status) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
@@ -200,62 +214,62 @@ fn xmain() -> ! {
     xous::terminate_process(0)
 }
 
-fn populate_vectors() -> HashMap::<RowCol, bool> {
-    let mut vectors = HashMap::<RowCol, bool>::new();
-    vectors.insert(RowCol::new(0, 0), false);
-    vectors.insert(RowCol::new(0, 1), false);
-    vectors.insert(RowCol::new(0, 2), false);
-    vectors.insert(RowCol::new(0, 3), false);
-    vectors.insert(RowCol::new(0, 4), false);
-    vectors.insert(RowCol::new(4, 5), false);
-    vectors.insert(RowCol::new(4, 6), false);
-    vectors.insert(RowCol::new(4, 7), false);
-    vectors.insert(RowCol::new(4, 8), false);
-    vectors.insert(RowCol::new(4, 9), false);
-    vectors.insert(RowCol::new(1, 0), false);
-    vectors.insert(RowCol::new(1, 1), false);
-    vectors.insert(RowCol::new(1, 2), false);
-    vectors.insert(RowCol::new(1, 3), false);
-    vectors.insert(RowCol::new(1, 4), false);
-    vectors.insert(RowCol::new(5, 5), false);
-    vectors.insert(RowCol::new(5, 6), false);
-    vectors.insert(RowCol::new(5, 7), false);
-    vectors.insert(RowCol::new(5, 8), false);
-    vectors.insert(RowCol::new(5, 9), false);
-    vectors.insert(RowCol::new(2, 0), false);
-    vectors.insert(RowCol::new(2, 1), false);
-    vectors.insert(RowCol::new(2, 2), false);
-    vectors.insert(RowCol::new(2, 3), false);
-    vectors.insert(RowCol::new(2, 4), false);
-    vectors.insert(RowCol::new(6, 5), false);
-    vectors.insert(RowCol::new(6, 6), false);
-    vectors.insert(RowCol::new(6, 7), false);
-    vectors.insert(RowCol::new(6, 8), false);
-    vectors.insert(RowCol::new(6, 9), false);
-    vectors.insert(RowCol::new(3, 0), false);
-    vectors.insert(RowCol::new(3, 1), false);
-    vectors.insert(RowCol::new(3, 2), false);
-    vectors.insert(RowCol::new(3, 3), false);
-    vectors.insert(RowCol::new(3, 4), false);
-    vectors.insert(RowCol::new(7, 5), false);
-    vectors.insert(RowCol::new(7, 6), false);
-    vectors.insert(RowCol::new(7, 7), false);
-    vectors.insert(RowCol::new(7, 8), false);
-    vectors.insert(RowCol::new(7, 9), false);
-    vectors.insert(RowCol::new(8, 5), false);
-    vectors.insert(RowCol::new(8, 6), false);
-    vectors.insert(RowCol::new(8, 7), false);
-    vectors.insert(RowCol::new(8, 8), false);
-    vectors.insert(RowCol::new(8, 9), false);
-    vectors.insert(RowCol::new(8, 0), false);
-    vectors.insert(RowCol::new(8, 1), false);
-    vectors.insert(RowCol::new(3, 8), false);
-    vectors.insert(RowCol::new(3, 9), false);
-    vectors.insert(RowCol::new(8, 3), false);
-    vectors.insert(RowCol::new(3, 6), false);
-    vectors.insert(RowCol::new(6, 4), false);
-    vectors.insert(RowCol::new(8, 2), false);
-    vectors.insert(RowCol::new(5, 2), false);
+fn populate_vectors() -> Vec::<(RowCol, bool)> {
+    let mut vectors = Vec::<(RowCol, bool)>::new();
+    vectors.push((RowCol::new(0, 0), false));
+    vectors.push((RowCol::new(0, 1), false));
+    vectors.push((RowCol::new(0, 2), false));
+    vectors.push((RowCol::new(0, 3), false));
+    vectors.push((RowCol::new(0, 4), false));
+    vectors.push((RowCol::new(4, 5), false));
+    vectors.push((RowCol::new(4, 6), false));
+    vectors.push((RowCol::new(4, 7), false));
+    vectors.push((RowCol::new(4, 8), false));
+    vectors.push((RowCol::new(4, 9), false));
+    vectors.push((RowCol::new(1, 0), false));
+    vectors.push((RowCol::new(1, 1), false));
+    vectors.push((RowCol::new(1, 2), false));
+    vectors.push((RowCol::new(1, 3), false));
+    vectors.push((RowCol::new(1, 4), false));
+    vectors.push((RowCol::new(5, 5), false));
+    vectors.push((RowCol::new(5, 6), false));
+    vectors.push((RowCol::new(5, 7), false));
+    vectors.push((RowCol::new(5, 8), false));
+    vectors.push((RowCol::new(5, 9), false));
+    vectors.push((RowCol::new(2, 0), false));
+    vectors.push((RowCol::new(2, 1), false));
+    vectors.push((RowCol::new(2, 2), false));
+    vectors.push((RowCol::new(2, 3), false));
+    vectors.push((RowCol::new(2, 4), false));
+    vectors.push((RowCol::new(6, 5), false));
+    vectors.push((RowCol::new(6, 6), false));
+    vectors.push((RowCol::new(6, 7), false));
+    vectors.push((RowCol::new(6, 8), false));
+    vectors.push((RowCol::new(6, 9), false));
+    vectors.push((RowCol::new(3, 0), false));
+    vectors.push((RowCol::new(3, 1), false));
+    vectors.push((RowCol::new(3, 2), false));
+    vectors.push((RowCol::new(3, 3), false));
+    vectors.push((RowCol::new(3, 4), false));
+    vectors.push((RowCol::new(7, 5), false));
+    vectors.push((RowCol::new(7, 6), false));
+    vectors.push((RowCol::new(7, 7), false));
+    vectors.push((RowCol::new(7, 8), false));
+    vectors.push((RowCol::new(7, 9), false));
+    vectors.push((RowCol::new(8, 5), false));
+    vectors.push((RowCol::new(8, 6), false));
+    vectors.push((RowCol::new(8, 7), false));
+    vectors.push((RowCol::new(8, 8), false));
+    vectors.push((RowCol::new(8, 9), false));
+    vectors.push((RowCol::new(8, 0), false));
+    vectors.push((RowCol::new(8, 1), false));
+    vectors.push((RowCol::new(3, 8), false));
+    vectors.push((RowCol::new(3, 9), false));
+    vectors.push((RowCol::new(8, 3), false));
+    vectors.push((RowCol::new(3, 6), false));
+    vectors.push((RowCol::new(6, 4), false));
+    vectors.push((RowCol::new(8, 2), false));
+    vectors.push((RowCol::new(5, 2), false));
 
     vectors
 }
@@ -305,6 +319,7 @@ fn map_codes(code: RowCol) -> &'static str {
         (7, 8) => "?",
         //(7, 9) => "↩️",
         (7, 9) => "RET",
+
         (8, 5) => "LS",
         (8, 6) => ",",
         (8, 7) => "SP",
@@ -327,25 +342,30 @@ fn map_codes(code: RowCol) -> &'static str {
     }
 }
 
-fn render_string(txt: &mut String, remaining: &HashMap<RowCol, bool>, time_remaining: u64) {
+fn render_string(txt: &mut String, remaining: &Vec::<(RowCol, bool)>, time_remaining: u64) {
     txt.clear();
-    let mut keyrowstrs: [String; 5] = [
+    let mut keyrowstrs: [String; 7] = [
+        String::new(),
+        String::new(),
         String::new(),
         String::new(),
         String::new(),
         String::new(),
         String::new(),
     ];
-    for (&code, &was_hit) in remaining.iter() {
+    for &(code, was_hit) in remaining.iter() {
         if !was_hit {
             // lookup table to help organize the key hits remaining
             let draw_row = match code.r {
-                0 | 4 => 0,
-                1 | 5 => 1,
-                2 | 6 => 2,
-                3 => if code.c > 5 {3} else {4}
-                7 => 3,
-                _ => 4,
+                0 | 4 => 2,
+                1 => 3,
+                5 => if code.c != 2 {3} else {0},
+                2 => 4,
+                6 => if code.c != 4 {4} else {0},
+                3 => if code.c <= 4 {5} else { if code.c == 6 {0} else {1} }
+                7 => 5,
+                8 => if code.c >= 5 {6} else { if code.c <= 1 {1} else {0} },
+                _ => 6,
             };
             keyrowstrs[draw_row].push_str(map_codes(code));
             keyrowstrs[draw_row].push_str(" ");
