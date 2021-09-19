@@ -410,6 +410,17 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
+
+                    let battstats = env.com.get_more_stats().unwrap();
+                    if battstats[12] < 3900 {
+                        write!(ret, "FAIL: Battery voltage too low ({}mV) for shipment. Charge to >3900mV before OQC testing.", battstats[12]).unwrap();
+                        return Ok(Some(ret));
+                    }
+                    if battstats[12] > 4200 {
+                        write!(ret, "FAIL: Battery voltage too high ({}mV).\nSuspect issue with U17P or U11K.", battstats[12]).unwrap();
+                        return Ok(Some(ret));
+                    }
+
                     susres.initiate_suspend().unwrap();
                     env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
 
@@ -418,9 +429,15 @@ impl<'a> ShellCmdApi<'a> for Test {
                     loop {
                         match self.oqc.status() {
                             Some(true) => {
-                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\nIf so, then PASS\nNow engage PROG switch.",
-                                    env.com.ssid_fetch_as_string().unwrap()
+                                let ssid_str = env.com.ssid_fetch_as_string().unwrap();
+                                use std::str::FromStr;
+                                let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
+                                let s = ssid.replace(".", "");
+                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\nNow press PROG button.\n",
+                                    &s
                                 ).unwrap();
+                                let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
+                                write!(ret, "Version {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
                                 break;
                             }
                             Some(false) => {
