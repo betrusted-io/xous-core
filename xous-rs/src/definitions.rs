@@ -43,6 +43,7 @@ pub const EC_REGION_LEN: u32 = 0x0008_0000;
 pub mod exceptions;
 pub use exceptions::*;
 
+#[repr(C)]
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct MessageSender {
     data: usize,
@@ -76,6 +77,7 @@ impl core::fmt::Display for MessageSender {
 }
 
 /// Server ID
+#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct SID([u32; 4]);
 impl SID {
@@ -149,6 +151,7 @@ pub type TID = usize;
 /// Equivalent to a RISC-V Hart ID
 pub type CpuID = usize;
 
+#[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct MemoryRange {
     addr: MemoryAddress,
@@ -160,6 +163,7 @@ bitflags! {
     /// Flags to be passed to the MapMemory struct.
     /// Note that it is an error to have memory be
     /// writable and not readable.
+    #[repr(C)]
     pub struct MemoryFlags: usize {
         /// Free this memory
         const FREE      = 0b0000_0000;
@@ -706,6 +710,7 @@ impl MemoryRange {
 }
 
 /// Which memory region the operation should affect.
+#[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum MemoryType {
     /// The address where addresses go when no `virt` is specified.

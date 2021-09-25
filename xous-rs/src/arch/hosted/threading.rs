@@ -7,6 +7,7 @@ use crate::{Result, TID};
 thread_local!(pub static THREAD_ID: RefCell<Option<TID>> = RefCell::new(None));
 
 /// Describes the parameters required to create a new thread on this platform.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {}
 pub struct WaitHandle<T>(std::thread::JoinHandle<T>);

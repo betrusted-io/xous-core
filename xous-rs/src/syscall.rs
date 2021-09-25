@@ -11,6 +11,7 @@ use core::convert::{TryFrom, TryInto};
 #[cfg(feature = "processes-as-threads")]
 pub use crate::arch::ProcessArgsAsThread;
 
+#[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum SysCall {
     /// Allocates pages of memory, equal to a total of `size` bytes.  A physical

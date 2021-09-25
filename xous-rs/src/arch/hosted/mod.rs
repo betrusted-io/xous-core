@@ -117,6 +117,7 @@ impl ProcessKey {
 
 /// Describes all parameters that are required to start a new process
 /// on this platform.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessInit {
     pub key: ProcessKey,

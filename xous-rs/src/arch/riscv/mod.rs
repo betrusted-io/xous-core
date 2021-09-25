@@ -11,6 +11,7 @@ pub struct ProcessArgs {
     name: [u8; 16],
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ThreadInit {
     /// Function pointer that accepts 0-4 arguments
@@ -59,6 +60,7 @@ impl Default for ThreadInit {
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessKey([u8; 8]);
 impl ProcessKey {
@@ -67,6 +69,7 @@ impl ProcessKey {
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct ProcessInit {
     pub key: ProcessKey,
