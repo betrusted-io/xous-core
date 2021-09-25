@@ -305,13 +305,14 @@ pub extern "C" fn trap_handler(
         // immediately obvious that we screwed up. On harware this will trigger
         // a watchdog reset.
         println!(
-            "{}: CPU Exception on PID {}: {}",
+            "{}: CPU Exception on PID {} ({:?}): {}",
             if is_kernel_failure {
                 "!!! KERNEL FAILURE !!!"
             } else {
                 "PROGRAM HALT"
             },
             pid,
+            MemoryMapping::current(),
             ex
         );
         ArchProcess::with_current(|process| {
