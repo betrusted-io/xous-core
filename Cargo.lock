@@ -2134,6 +2134,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-stub2"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
