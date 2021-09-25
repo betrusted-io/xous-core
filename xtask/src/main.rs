@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
-    let base_pkgs = ["ticktimer-server", "log-server", "test-stub2"];
+    let base_pkgs = ["ticktimer-server", "log-server" /*, "test-stub2", "susres", "xous-names", "trng" */];
     let cbtest_pkgs = [
         "ticktimer-server",
         "log-server",
@@ -127,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("renode-image-debug") => renode_image(true, &hw_pkgs, &[])?,
         Some("run") => run(false, &hw_pkgs)?,
         Some("hw-image") => {
-            build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
+            build_hw_image(false, env::args().nth(2), &base_pkgs, lkey, kkey, None, &[])?
         }
         Some("benchmark") => build_hw_image(
             false,

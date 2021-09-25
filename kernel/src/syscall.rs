@@ -631,6 +631,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 let virt_ptr = virt
                     .map(|x| x.get() as *mut u8)
                     .unwrap_or(core::ptr::null_mut());
+                let mut req_flags = req_flags;
+                if phys.is_none() {
+                    req_flags |=  xous_kernel::MemoryFlags::X;
+                }
 
                 // Don't let the address exceed the user area (unless it's PID 1)
                 if pid.get() != 1
@@ -721,7 +725,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             };
             MemoryManager::with_mut(|mm| {
                 Ok(xous_kernel::Result::MemoryRange(
-                    mm.reserve_range(start, delta, flags)?,
+                    mm.reserve_range(start, delta, flags | xous_kernel::MemoryFlags::X)?,
                 ))
             })
         }
