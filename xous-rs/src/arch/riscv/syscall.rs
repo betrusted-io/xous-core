@@ -1,4 +1,4 @@
-extern "Rust" {
+extern "C" {
     fn _xous_syscall(
         nr: usize,
         a1: usize,
@@ -8,7 +8,11 @@ extern "Rust" {
         a5: usize,
         a6: usize,
         a7: usize,
-        ret: &mut crate::Result,
+        ret: *mut crate::Result,
+    );
+    fn _xous_syscall_ptr(
+        args: &[usize; 8],
+        ret: *mut crate::Result,
     );
 }
 
@@ -19,8 +23,8 @@ pub fn syscall(call: SysCall) -> SysCallResult {
     let mut ret = crate::Result::Ok;
     let args = call.as_args();
     unsafe {
-        _xous_syscall(
-            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret,
+        _xous_syscall_ptr(
+            &args, &mut ret as *mut _,
         )
     };
     match ret {
@@ -28,3 +32,17 @@ pub fn syscall(call: SysCall) -> SysCallResult {
         other => Ok(other),
     }
 }
+
+// pub fn syscall(call: SysCall) -> SysCallResult {
+//     let mut ret = crate::Result::Ok;
+//     let args = call.as_args();
+//     unsafe {
+//         _xous_syscall(
+//             args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], &mut ret as *mut _,
+//         )
+//     };
+//     match ret {
+//         crate::Result::Error(e) => Err(e),
+//         other => Ok(other),
+//     }
+// }

@@ -19,6 +19,31 @@ _xous_syscall:
     sw          a7, 7*REGBYTES(t0)
     ret
 
+.global _xous_syscall_ptr
+.global _xous_syscall_rust_ptr
+_xous_syscall_rust_ptr:
+_xous_syscall_ptr:
+    mv          t0, a0
+    mv          t1, a1
+    lw          a0, 0*REGBYTES(t0)
+    lw          a1, 1*REGBYTES(t0)
+    lw          a2, 2*REGBYTES(t0)
+    lw          a3, 3*REGBYTES(t0)
+    lw          a4, 4*REGBYTES(t0)
+    lw          a5, 5*REGBYTES(t0)
+    lw          a6, 6*REGBYTES(t0)
+    lw          a7, 7*REGBYTES(t0)
+    ecall
+    sw          a0, 0*REGBYTES(t1)
+    sw          a1, 1*REGBYTES(t1)
+    sw          a2, 2*REGBYTES(t1)
+    sw          a3, 3*REGBYTES(t1)
+    sw          a4, 4*REGBYTES(t1)
+    sw          a5, 5*REGBYTES(t1)
+    sw          a6, 6*REGBYTES(t1)
+    sw          a7, 7*REGBYTES(t1)
+    ret
+
 .global vex_aes_enc_id_0
 vex_aes_enc_id_0:
     .word       0x00b5050b // vex_aes_enc_id a0, a1, a0, #0
