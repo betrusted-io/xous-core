@@ -27,7 +27,7 @@ mod fontmap;
 use api::BulkRead;
 
 fn draw_boot_logo(display: &mut XousDisplay) {
-    display.blit_screen(poweron::LOGO_MAP);
+    display.blit_screen(&poweron::LOGO_MAP);
 }
 
 #[cfg(any(target_os = "none", target_os = "xous"))]
@@ -101,7 +101,6 @@ fn xmain() -> ! {
     let sid = xns
         .register_name(api::SERVER_NAME_GFX, Some(2))
         .expect("can't register server");
-    log::trace!("Server listening on address {:?}", sid);
 
     // Create a new monochrome simulator display.
     let mut display = XousDisplay::new();
@@ -336,12 +335,17 @@ fn xmain() -> ! {
                                     tv.bounds_computed
                                 );
                             } else {
-                                log::warn!(
+                                log::debug!(
                                     "does not intersect, clip_rect: {:?}, br: {:?}",
                                     clip_rect,
                                     br
                                 );
-                                tv.bounds_computed = Some(Rectangle::new(tl, clip_rect.br()));
+                                tv.bounds_computed = Some(Rectangle::new(tl,
+                                    Point::new(
+                                        if br.x < clip_rect.br.x { br.x } else { clip_rect.br.x - tv.margin.x },
+                                        if br.y < clip_rect.br.y { br.y } else { clip_rect.br.y - tv.margin.y },
+                                    )
+                                ));
                             }
                         }
                         TextBounds::GrowableFromBl(bl, width) => {
@@ -566,7 +570,7 @@ fn xmain() -> ! {
                 .expect("could not return QueryGlyphProps request");
             }),
             Some(Opcode::DrawSleepScreen) => msg_scalar_unpack!(msg, _, _, _, _, {
-                display.blit_screen(logo::LOGO_MAP);
+                display.blit_screen(&logo::LOGO_MAP);
                 display.update();
                 display.redraw();
             }),
@@ -613,12 +617,116 @@ fn xmain() -> ! {
                 bulkread.from_offset += readlen as u32;
                 buf.replace(bulkread).unwrap();
             }
+            Some(Opcode::TestPattern) => msg_blocking_scalar_unpack!(msg, duration, _, _, _, {
+                let mut stashmem = xous::syscall::map_memory(
+                    None,
+                    None,
+                    ((backend::FB_SIZE * 4) + 4096) & !4095,
+                    xous::MemoryFlags::R | xous::MemoryFlags::W,
+                ).expect("couldn't map stash frame buffer");
+                let stash = &mut stashmem.as_slice_mut()[..backend::FB_SIZE];
+                for (&src, dst) in display.as_slice().iter().zip(stash.iter_mut()) {
+                    *dst = src;
+                }
+                for lines in 0..backend::FB_LINES { // mark all lines dirty
+                    stash[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                }
+
+                let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+                let start_time = ticktimer.elapsed_ms();
+                let mut testmem = xous::syscall::map_memory(
+                    None,
+                    None,
+                    ((backend::FB_SIZE * 4) + 4096) & !4095,
+                    xous::MemoryFlags::R | xous::MemoryFlags::W,
+                ).expect("couldn't map stash frame buffer");
+                let testpat = &mut testmem.as_slice_mut()[..backend::FB_SIZE];
+                const DWELL: usize = 1000;
+                while ticktimer.elapsed_ms() - start_time < duration as u64 {
+                    // all black
+                    for w in testpat.iter_mut() {
+                        *w = 0;
+                    }
+                    for lines in 0..backend::FB_LINES { // mark dirty bits
+                        testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                    }
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                    // all white
+                    for w in testpat.iter_mut() {
+                        *w = 0xFFFF_FFFF;
+                    }
+                    // dirty bits already set
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                    // vertical bars
+                    for lines in 0..backend::FB_LINES {
+                        for words in 0..backend::FB_WIDTH_WORDS {
+                            testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xaaaa_aaaa;
+                        }
+                    }
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                    for lines in 0..backend::FB_LINES {
+                        for words in 0..backend::FB_WIDTH_WORDS {
+                            testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x5555_5555;
+                        }
+                    }
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                    // horiz bars
+                    for lines in 0..backend::FB_LINES {
+                        for words in 0..backend::FB_WIDTH_WORDS {
+                            if lines % 2 == 0 {
+                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
+                            } else {
+                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                            }
+                        }
+                        testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                    }
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                    for lines in 0..backend::FB_LINES {
+                        for words in 0..backend::FB_WIDTH_WORDS {
+                            if lines % 2 == 1 {
+                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0x0;
+                            } else {
+                                testpat[lines * backend::FB_WIDTH_WORDS + words] = 0xffff_ffff;
+                            }
+                        }
+                        testpat[lines * backend::FB_WIDTH_WORDS + (backend::FB_WIDTH_WORDS - 1)] |= 0x1_0000;
+                    }
+                    display.blit_screen(testpat);
+                    display.update();
+                    display.redraw();
+                    ticktimer.sleep_ms(DWELL).unwrap();
+
+                }
+                display.blit_screen(stash);
+
+                xous::return_scalar(msg.sender, duration).expect("couldn't ack test pattern");
+            }),
             Some(Opcode::Quit) => break,
             None => {
                 log::error!("received opcode scalar that is not handled");
             }
         }
-        display.update();
     }
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(sid).unwrap();

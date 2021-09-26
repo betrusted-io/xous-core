@@ -88,7 +88,7 @@ pub(crate) struct UxContext {
     /// opcode ID for AudioFrame
     pub audioframe_id: Option<u32>,
 }
-const MAX_UX_CONTEXTS: usize = 6;
+const MAX_UX_CONTEXTS: usize = 7;
 // const BOOT_APP_NAME: &'static str = "shellchat"; // this is the app to display on boot -- we will eventually need this once we have more than one app?
 pub const ROOTKEY_MODAL_NAME: &'static str = "rootkeys modal";
 const BOOT_CONTEXT_TRUSTLEVEL: u8 = 254;
@@ -642,6 +642,7 @@ fn xmain() -> ! {
 
     let mut powerdown_requested = false;
     let mut last_time: u64 = ticktimer.elapsed_ms();
+    let mut did_test = false; // allow one go at the test pattern
     log::trace!("entering main loop");
 
     #[cfg(not(any(target_os = "none", target_os = "xous")))]
@@ -1016,6 +1017,18 @@ fn xmain() -> ! {
             Some(Opcode::Devboot) => msg_scalar_unpack!(msg, ena, _,  _,  _, {
                 if ena != 0 { gfx.set_devboot(true).expect("couldn't send devboot message"); }
                 else { gfx.set_devboot(false).expect("couldn't send devboot message"); }
+            }),
+            Some(Opcode::TestPattern) => msg_blocking_scalar_unpack!(msg, duration_ms, _, _, _, {
+                if !did_test {
+                    did_test = true;
+                    let checked_duration = if duration_ms > 60_000 {
+                        60_000
+                    } else {
+                        duration_ms
+                    };
+                    gfx.selftest(checked_duration);
+                }
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack self test");
             }),
             Some(Opcode::Quit) => break,
             None => {log::error!("unhandled message {:?}", msg);}

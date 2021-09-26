@@ -10,27 +10,6 @@ use num_traits::*;
 use xous_ipc::Buffer;
 use xous::{CID, msg_scalar_unpack};
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct RowCol {
-    pub r: u8,
-    pub c: u8,
-}
-
-#[derive(Debug)]
-pub (crate) struct KeyRawStates {
-    pub keydowns: Vec::<RowCol>,
-    pub keyups: Vec::<RowCol>,
-}
-impl KeyRawStates {
-    pub fn new() -> Self {
-        KeyRawStates {
-            keydowns: Vec::with_capacity(16),
-            keyups: Vec::with_capacity(16),
-        }
-    }
-}
-
-
 /// Compute the dvorak key mapping of row/col to key tuples
 #[allow(dead_code)]
 fn map_dvorak(code: RowCol) -> ScanCode {
@@ -842,10 +821,11 @@ fn xmain() -> ! {
     // connections expected:
     //  - GAM
     //  - graphics (if building for hosted mode)
+    //  - oqc (for factory test)
     #[cfg(any(target_os = "none", target_os = "xous"))]
-    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(1)).expect("can't register server");
-    #[cfg(not(any(target_os = "none", target_os = "xous")))]
     let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(2)).expect("can't register server");
+    #[cfg(not(any(target_os = "none", target_os = "xous")))]
+    let kbd_sid = xns.register_name(api::SERVER_NAME_KBD, Some(3)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", kbd_sid);
 
     // Create a new kbd object
@@ -860,6 +840,8 @@ fn xmain() -> ! {
 
     let mut listener_conn: Option<CID> = None;
     let mut listener_op: Option<usize> = None;
+    let mut raw_listener_conn: Option<CID> = None;
+    let mut raw_listener_op: Option<u32> = None;
 
     let mut vibe = false;
     let llio = llio::Llio::new(&xns).unwrap();
@@ -895,6 +877,21 @@ fn xmain() -> ! {
                         log::error!("couldn't connect to listener: {:?}", e);
                         listener_conn = None;
                         listener_op = None;
+                    }
+                }
+            },
+            Some(Opcode::RegisterRawListener) => {
+                let buffer = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                let kr = buffer.as_flat::<KeyboardRegistration, _>().unwrap();
+                match xns.request_connection_blocking(kr.server_name.as_str()) {
+                    Ok(cid) => {
+                        raw_listener_conn = Some(cid);
+                        raw_listener_op = Some(kr.listener_op_id as u32);
+                    }
+                    Err(e) => {
+                        log::error!("couldn't connect to listener: {:?}", e);
+                        raw_listener_conn = None;
+                        raw_listener_op = None;
                     }
                 }
             },
@@ -960,6 +957,24 @@ fn xmain() -> ! {
             Some(Opcode::HandlerTrigger) => {
                 let rawstates = kbd.update();
 
+                if raw_listener_conn.is_some() && raw_listener_op.is_some()
+                && (rawstates.keydowns.len() > 0 || rawstates.keyups.len() > 0)
+                {
+                    // manual serialization of KeyRawStates, because rkyv can't derive a serializer.
+                    let mut krs_ser: [(u8, u8); 32] = [(255, 255); 32];
+                    for (&src, (r, c)) in rawstates.keydowns.iter().zip(krs_ser[..16].iter_mut()) {
+                        *r = src.r;
+                        *c = src.c;
+                    }
+                    for (&src, (r, c)) in rawstates.keyups.iter().zip(krs_ser[16..].iter_mut()) {
+                        *r = src.r;
+                        *c = src.c;
+                    }
+
+                    let buf = Buffer::into_buf(krs_ser).or(Err(xous::Error::InternalError)).expect("couldn't serialize krs buffer");
+                    buf.lend(raw_listener_conn.unwrap(), raw_listener_op.unwrap()).expect("couldn't send raw scancodes");
+                }
+
                 // interpret scancodes
                 // the track_* functions track the keyup/keydowns to modify keys with shift, hold, and chord state
                 let kc: Vec<char> = match kbd.get_map() {
@@ -976,20 +991,22 @@ fn xmain() -> ! {
                     if vibe {
                         llio.vibe(llio::VibePattern::Short).unwrap();
                     }
-                    let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
-                    for i in 0..kc.len() {
-                        keys[i] = kc[i];
+                    for kv in kc.chunks(4) {
+                        let mut keys: [char; 4] = ['\u{0000}', '\u{0000}', '\u{0000}', '\u{0000}'];
+                        for i in 0..kv.len() {
+                            keys[i] = kv[i];
+                        }
+                        log::trace!("sending keys {:?}", keys);
+                        xous::send_message(listener_conn.unwrap(),
+                            xous::Message::new_scalar(
+                                listener_op.unwrap(),
+                                keys[0] as u32 as usize,
+                                keys[1] as u32 as usize,
+                                keys[2] as u32 as usize,
+                                keys[3] as u32 as usize,
+                            )
+                        ).expect("couldn't send key codes to listener");
                     }
-                    log::trace!("sending keys {:?}", keys);
-                    xous::send_message(listener_conn.unwrap(),
-                        xous::Message::new_scalar(
-                            listener_op.unwrap(),
-                            keys[0] as u32 as usize,
-                            keys[1] as u32 as usize,
-                            keys[2] as u32 as usize,
-                            keys[3] as u32 as usize,
-                        )
-                    ).expect("couldn't send key codes to listener");
                 }
                 // as long as we have a keydown, keep pinging the loop at a high rate. this consumes more power, but keydowns are relatively rare.
                 if kbd.is_repeating_key() {

@@ -7,6 +7,10 @@ use codec::*;
 use spectrum_analyzer::{FrequencyLimit, FrequencySpectrum, samples_fft_to_spectrum};
 use spectrum_analyzer::windows::hann_window;
 use rtc::{DateTime, Weekday};
+use core::fmt::Write;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+static AUDIO_OQC: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 pub struct Test {
@@ -23,11 +27,15 @@ pub struct Test {
     right_play: bool,
     speaker_play: bool,
     freq: f32,
-    // rtc
+    //rtc: rtc::Rtc,
     start_time: Option<DateTime>,
     end_time: Option<DateTime>,
     start_elapsed: Option<u64>,
     end_elapsed: Option<u64>,
+    //kbd: Arc<Mutex<keyboard::Keyboard>>,
+    oqc: oqc_test::Oqc,
+    oqc_start: u64,
+    jtag: jtag::Jtag,
 }
 impl Test {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -55,10 +63,15 @@ impl Test {
             right_play: true,
             speaker_play: true,
             freq: 440.0,
+            //rtc: rtc::Rtc::new(&xns).unwrap(),
             start_time: None,
             end_time: None,
             start_elapsed: None,
             end_elapsed: None,
+            //kbd: Arc::new(Mutex::new(keyboard::Keyboard::new(&xns).unwrap())),
+            oqc: oqc_test::Oqc::new(&xns).unwrap(),
+            oqc_start: 0,
+            jtag: jtag::Jtag::new(&xns).unwrap(),
         }
     }
 }
@@ -66,12 +79,20 @@ impl Test {
 const SAMPLE_RATE_HZ: f32 = 8000.0;
 // note to self: A4 = 440.0, E4 = 329.63, C4 = 261.63
 
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum TestOp {
+    KeyCode,
+    UxGutter,
+    ModalRedraw,
+    ModalKeys,
+    ModalDrop,
+}
+
+
 impl<'a> ShellCmdApi<'a> for Test {
     cmd_api!(test);
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
-        use core::fmt::Write;
-
         const SENTINEL: &'static str = "|TSTR";
 
         self.state += 1;
@@ -227,6 +248,8 @@ impl<'a> ShellCmdApi<'a> for Test {
                         log::info!("{}|RTC|FAIL|NO_END|", SENTINEL);
                     }
 
+                    env.com.link_reset().unwrap();
+                    env.com.reseed_ec_trng().unwrap();
                     let ut_after = env.com.get_ec_uptime().unwrap();
 
                     if ut < ut_after || ut_after > 4200 {
@@ -276,6 +299,13 @@ impl<'a> ShellCmdApi<'a> for Test {
                     env.ticktimer.sleep_ms(50).unwrap();
                     env.llio.boost_on(false).unwrap();
                     log::info!("{}|BOOSTOFF|", SENTINEL);
+                }
+                "kill" => {
+                    log::info!("{}|KILL|", SENTINEL);
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.llio.self_destruct(0x2718_2818).unwrap();
+                    env.llio.self_destruct(0x3141_5926).unwrap();
+                    env.ticktimer.sleep_ms(100).unwrap();
                 }
                 "astart" => {
                     self.freq = if let Some(freq_str) = tokens.next() {
@@ -368,6 +398,80 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::debug!("off-target 2 {}", analyze(&spectrum_right, 261.63));
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
+                "oqc" => {
+                    let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
+                    env.llio.wfi_override(true).unwrap();
+                    // activate SSID scanning while the test runs
+                    env.com.set_ssid_scanning(true).expect("couldn't turn on SSID scanning");
+                    //xous::rsyscall(xous::SysCall::IncreaseHeap(65536, xous::MemoryFlags::R | xous::MemoryFlags::W)).expect("couldn't increase our heap");
+                    ret.clear();
+                    #[cfg(any(target_os = "none", target_os = "xous"))]
+                    if 0x362f093 != self.jtag.get_id().unwrap() {
+                        write!(ret, "FAIL: JTAG self access").unwrap();
+                        return Ok(Some(ret));
+                    }
+
+                    let battstats = env.com.get_more_stats().unwrap();
+                    if battstats[12] < 3900 {
+                        write!(ret, "FAIL: Battery voltage too low ({}mV) for shipment. Charge to >3900mV before OQC testing.", battstats[12]).unwrap();
+                        return Ok(Some(ret));
+                    }
+                    if battstats[12] > 4200 {
+                        write!(ret, "FAIL: Battery voltage too high ({}mV).\nSuspect issue with U17P or U11K.", battstats[12]).unwrap();
+                        return Ok(Some(ret));
+                    }
+
+                    susres.initiate_suspend().unwrap();
+                    env.ticktimer.sleep_ms(1000).unwrap(); // pause for the suspend/resume cycle
+
+                    self.oqc.trigger(60_000);
+
+                    loop {
+                        match self.oqc.status() {
+                            Some(true) => {
+                                let ssid_str = env.com.ssid_fetch_as_string().unwrap();
+                                use std::str::FromStr;
+                                let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
+                                let s = ssid.replace(".", "");
+                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\nNow press PROG button.\n",
+                                    &s
+                                ).unwrap();
+                                let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
+                                write!(ret, "Version {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
+                                break;
+                            }
+                            Some(false) => {
+                                write!(ret, "Keyboard test failed.").unwrap();
+                                break;
+                            }
+                            None => {
+                                env.ticktimer.sleep_ms(500).unwrap();
+                            }
+                        }
+                    }
+
+                    AUDIO_OQC.store(true, Ordering::Relaxed);
+                    self.freq = 659.25;
+                    self.left_play = true;
+                    self.right_play = true;
+                    self.speaker_play = true;
+                    self.codec.setup_8k_stream().expect("couldn't set the CODEC to expected defaults");
+                    env.ticktimer.sleep_ms(50).unwrap();
+                    self.codec.set_speaker_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    self.codec.set_headphone_volume(VolumeOps::RestoreDefault, None).unwrap();
+                    if self.callback_id.is_none() {
+                        let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
+                        log::trace!("hooking frame callback with ID {}", cb_id);
+                        self.codec.hook_frame_callback(cb_id, self.callback_conn).unwrap(); // any non-handled IDs get routed to our callback port
+                        self.callback_id = Some(cb_id);
+                    }
+                    self.play_sample = 0.0;
+                    self.rec_sample = 0;
+                    self.oqc_start = env.ticktimer.elapsed_ms();
+                    self.codec.resume().unwrap();
+
+                    env.llio.wfi_override(false).unwrap();
+                }
                 "devboot" => {
                     env.gam.set_devboot(true).unwrap();
                     write!(ret, "devboot on").unwrap();
@@ -376,6 +480,32 @@ impl<'a> ShellCmdApi<'a> for Test {
                     // this should do nothing if devboot was already set
                     env.gam.set_devboot(false).unwrap();
                     write!(ret, "devboot off").unwrap();
+                }
+                "ship" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "System can't go into ship mode while charging. Unplug charging cable and try again.").unwrap();
+                    } else {
+                        if Ok(true) == env.gam.shipmode_blank_request() {
+                            env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                            // allow EC to snoop, so that it can wake up the system
+                            env.llio.allow_ec_snoop(true).unwrap();
+                            // allow the EC to power me down
+                            env.llio.allow_power_off(true).unwrap();
+                            // now send the power off command
+                            env.com.ship_mode().unwrap();
+
+                            // now send the power off command
+                            env.com.power_off_soc().unwrap();
+
+                            log::info!("CMD: ship mode now!");
+                            // pause execution, nothing after this should be reachable
+                            env.ticktimer.sleep_ms(10000).unwrap(); // ship mode happens in 10 seconds
+                            log::info!("CMD: if you can read this, ship mode failed!");
+                        }
+                        write!(ret, "Ship mode request denied").unwrap();
+                    }
                 }
                 _ => {
                     () // do nothing
@@ -386,7 +516,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         Ok(Some(ret))
     }
 
-    fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
+    fn callback(&mut self, msg: &MessageEnvelope, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         const AMPLITUDE: f32 = 0.8;
 
         match &msg.body {
@@ -399,6 +529,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     *free_play
                 };
                 self.framecount += frames_to_push as u32;
+
                 log::debug!("f{} p{}", self.framecount, frames_to_push);
                 for _ in 0..frames_to_push {
                     let mut frame: [u32; codec::FIFO_DEPTH] = [ZERO_PCM as u32 | (ZERO_PCM as u32) << 16; codec::FIFO_DEPTH];
@@ -417,23 +548,37 @@ impl<'a> ShellCmdApi<'a> for Test {
                 }
                 self.codec.swap_frames(&mut frames).unwrap();
 
-                let rec_samples = self.recbuf.as_slice_mut::<u32>();
-                let rec_len = rec_samples.len();
-                loop {
-                    if let Some(frame) = frames.dq_frame() {
-                        for &sample in frame.iter() {
-                            rec_samples[self.rec_sample] = sample;
-                            // increment and wrap around on overflow
-                            // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
-                            // should be no problem for the analysis phase.
-                            self.rec_sample += 1;
-                            if self.rec_sample >= rec_len {
-                                self.rec_sample = 0;
+                if !AUDIO_OQC.load(Ordering::Relaxed) {
+                    let rec_samples = self.recbuf.as_slice_mut::<u32>();
+                    let rec_len = rec_samples.len();
+                    loop {
+                        if let Some(frame) = frames.dq_frame() {
+                            for &sample in frame.iter() {
+                                rec_samples[self.rec_sample] = sample;
+                                // increment and wrap around on overflow
+                                // we should be sampling a continuous tone, so we'll get a small phase discontinutity once in the buffer.
+                                // should be no problem for the analysis phase.
+                                self.rec_sample += 1;
+                                if self.rec_sample >= rec_len {
+                                    self.rec_sample = 0;
+                                }
                             }
-                        }
-                    } else {
-                        break;
-                    };
+                        } else {
+                            break;
+                        };
+                    }
+                } else {
+                    let elapsed = env.ticktimer.elapsed_ms();
+                    let increment = (elapsed - self.oqc_start) / 500;
+                    match increment % 3 {
+                        0 => self.freq = 659.25,
+                        1 => self.freq = 783.99,
+                        2 => self.freq = 987.77,
+                        _ => self.freq = 659.25,
+                    }
+                    if elapsed - self.oqc_start > 6000 {
+                        self.codec.pause().unwrap();
+                    }
                 }
             },
             Message::Move(_mm) => {

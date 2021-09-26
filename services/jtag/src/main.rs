@@ -509,8 +509,9 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     // expect:
     //   - one connection from the key server
-    //   - one connection from shellchat for testing
-    let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(2)).expect("can't register server");
+    //   - one connection from shellchat for command line
+    //   - another connection from shellchat for oqc testing
+    let jtag_sid = xns.register_name(api::SERVER_NAME_JTAG, Some(3)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", jtag_sid);
 
     let mut jtag = JtagMach::new();

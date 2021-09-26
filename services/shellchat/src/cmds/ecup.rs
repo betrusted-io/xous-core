@@ -357,6 +357,9 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                     }
                     "reset" => {
                         env.llio.ec_reset().unwrap();
+                        env.ticktimer.sleep_ms(4000).unwrap();
+                        env.com.link_reset().unwrap();
+                        env.com.reseed_ec_trng().unwrap();
                         write!(ret, "EC has been reset, and new firmware loaded.").unwrap();
                     }
                     "wf200" => {

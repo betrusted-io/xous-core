@@ -236,7 +236,6 @@ fn xmain() -> ! {
           3. (future) PDDB
     */
     let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
-    log::trace!("registered with NS -- {:?}", keys_sid);
 
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());

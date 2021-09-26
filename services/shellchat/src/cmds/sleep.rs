@@ -44,7 +44,7 @@ fn susres_loop() {
     log::info!("suspend/resume stress test active");
 
     let xns = xous_names::XousNames::new().unwrap();
-    let mut susres = susres::Susres::new_without_hook(&xns).unwrap();
+    let susres = susres::Susres::new_without_hook(&xns).unwrap();
     let rtc = rtc::Rtc::new(&xns).unwrap();
     let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
 

@@ -13,6 +13,7 @@ log-server = {path = "../log-server"}
 xous = {path = "../../xous-rs"}
 susres = {path = "../susres"}
 trng = {path = "../trng"}
+ticktimer-server = {path = "../ticktimer-server"}
 
 xous-ipc = {path = "../../xous-ipc"}
 xous-names = {path = "../xous-names"}

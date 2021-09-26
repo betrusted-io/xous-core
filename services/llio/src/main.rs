@@ -247,6 +247,7 @@ mod implementation {
             // (these "should" be redundant)
             self.power_csr.rmwf(utra::power::POWER_SELF, 1);
             self.power_csr.rmwf(utra::power::POWER_STATE, 1);
+            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1);
 
             self.event_susres.resume();
             self.gpio_susres.resume();
@@ -400,6 +401,7 @@ mod implementation {
             }
         }
         pub fn ec_reset(&mut self) {
+            self.power_csr.rmwf(utra::power::POWER_UP5K_ON, 1); // make sure the power is "on" if we're resetting it
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 1);
             self.ticktimer.sleep_ms(20).unwrap();
             self.power_csr.rmwf(utra::power::POWER_RESET_EC, 0);
@@ -692,12 +694,14 @@ fn xmain() -> ! {
     // - shellchat/environment
     // - spinor (for turning off wfi during writes)
     // - rootkeys (for reboots)
-    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(7)).expect("can't register server");
+    // - oqc-test (for testing the vibe motor)
+    let num_conns = 8;
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(num_conns)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
     // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(7)).expect("can't register I2C thread");
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(num_conns)).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");
@@ -705,6 +709,7 @@ fn xmain() -> ! {
     // Create a new llio object
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
+    llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");

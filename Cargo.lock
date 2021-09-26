@@ -843,6 +843,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.4.3",
  "susres",
+ "ticktimer-server",
  "trng",
  "utralib",
  "xous",
@@ -1293,6 +1294,25 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "oqc-test"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "gam",
+ "keyboard",
+ "llio",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
 ]
 
 [[package]]
@@ -1823,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.5"
+version = "0.9.8"
 dependencies = [
  "block-buffer",
  "digest",
@@ -1868,6 +1888,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
+ "oqc-test",
  "rand_core 0.5.1",
  "rkyv 0.4.3",
  "root-keys",

@@ -331,6 +331,7 @@ fn xmain() -> ! {
     const FLASH_LEN: u32 = 0x10_0000;
     const FLASH_TIMEOUT: u32 = 250;
 
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
     // initial seed of the COM trng
     let trng = trng::Trng::new(&xns).expect("couldn't connect to TRNG");
     com.txrx(ComState::TRNG_SEED.verb);
@@ -357,6 +358,11 @@ fn xmain() -> ! {
                 if bl_main != 0 || bl_sec != 0 { // restore the backlight settings, if they are not 0
                     com.txrx(ComState::BL_START.verb | (bl_main as u16) & 0x1f | (((bl_sec as u16) & 0x1f) << 5));
                 }
+            }),
+            Some(Opcode::LinkReset) => xous::msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::LINK_SYNC.verb);
+                ticktimer.sleep_ms(200).unwrap(); // give some time for the link to reset - the EC does not have a guaranteed latency to respond to a link reset
+                xous::return_scalar(msg.sender, 1).unwrap();
             }),
             Some(Opcode::ReseedTrng) => xous::msg_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::TRNG_SEED.verb);

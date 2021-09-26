@@ -66,7 +66,7 @@ impl Susres {
         })
     }
 
-    pub fn initiate_suspend(&mut self) -> Result<(), xous::Error> {
+    pub fn initiate_suspend(&self) -> Result<(), xous::Error> {
         log::trace!("suspend initiated");
         send_message(self.conn,
             Message::new_scalar(Opcode::SuspendRequest.to_usize().unwrap(), 0, 0, 0, 0)
@@ -133,7 +133,7 @@ impl Drop for Susres {
         }
     }
 }
-/// handles callback messages that indicate a USB interrupt has happened, in the library user's process space.
+
 fn suspend_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     loop {
