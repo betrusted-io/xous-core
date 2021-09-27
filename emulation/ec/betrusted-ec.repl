@@ -31,7 +31,11 @@ flash_mem: Memory.MappedMemory @ {
     }
     size: 0x8000000
 
+lm3509: Mocks.LM3509 @ i2c 0x36
+tusb320lai: Mocks.TUSB320LAI @ i2c 0x47
 bq27421: Sensors.BQ27421 @ i2c 0x55
+bq24157: Mocks.BQ24157 @ i2c 0x6a
+lsm6ds3: Mocks.LSM6DS3 @ i2c 0x6b
 
 sysbus:
     init:

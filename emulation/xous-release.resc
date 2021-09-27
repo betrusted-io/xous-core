@@ -12,17 +12,21 @@ i @peripherals/ABRTCMC.cs
 i @peripherals/BetrustedEcI2C.cs
 i @peripherals/BetrustedSocI2C.cs
 i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
 i @peripherals/BQ27421.cs
 i @peripherals/engine.cs
 i @peripherals/keyboard.cs
 i @peripherals/keyrom.cs
 i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
 i @peripherals/memlcd.cs
 i @peripherals/sha512.cs
 i @peripherals/spinor_soft_int.cs
 i @peripherals/ticktimer.cs
 i @peripherals/trng_kernel.cs
 i @peripherals/trng_server.cs
+i @peripherals/TUSB320LAI.cs
 i @peripherals/wfi.cs
 
 ############### Define the Betrusted SoC ###############
@@ -80,9 +84,15 @@ mach clear
 mach create "EC"
 machine LoadPlatformDescription @ec/betrusted-ec.repl
 
+# logLevel -1 i2c
 # logLevel -1 i2c.bq27421
 
+machine StartGdbServer 2222 true
 showAnalyzer uart
+
+# Silence the COM bus, which is currently unimplemented
+sysbus SilenceRange <0xE0005800, 0xE0005FFF>
+
 macro reset
 """
     sysbus LoadBinary @ec/kernel.bin 0x10000000
