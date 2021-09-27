@@ -455,10 +455,10 @@ impl MemoryManager {
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
-        println!(
-            "Mapped {:08x} -> {:08x} (user? {})",
-            phys as usize, virt as usize, is_user
-        );
+        // println!(
+        //     "Mapped {:08x} -> {:08x} (user? {})",
+        //     phys as usize, virt as usize, is_user
+        // );
         Ok(virt)
     }
 
