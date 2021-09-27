@@ -530,8 +530,14 @@ impl MemoryManager {
     /// * MemoryInUse - The specified page is already mapped
     pub fn unmap_page(&mut self, virt: *mut usize) -> Result<usize, xous_kernel::Error> {
         let pid = crate::arch::process::current_pid();
-        let phys = crate::arch::mem::virt_to_phys(virt as usize)?;
-        self.release_page(phys as *mut usize, pid)?;
+
+        // If the virtual address has an assigned physical address, release that
+        // address from this process.
+        if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
+            self.release_page(phys as *mut usize, pid)?;
+        };
+
+        // Free the virtual address.
         crate::arch::mem::unmap_page_inner(self, virt as usize)
     }
 
