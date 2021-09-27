@@ -534,7 +534,7 @@ impl MemoryManager {
         // If the virtual address has an assigned physical address, release that
         // address from this process.
         if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
-            self.release_page(phys as *mut usize, pid)?;
+            self.release_page(phys as *mut usize, pid).ok();
         };
 
         // Free the virtual address.

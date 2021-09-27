@@ -525,10 +525,6 @@ pub fn pagetable_entry(addr: usize) -> Result<&'static mut usize, xous_kernel::E
 pub fn unmap_page_inner(_mm: &mut MemoryManager, virt: usize) -> Result<usize, xous_kernel::Error> {
     let entry = pagetable_entry(virt)?;
 
-    // Ensure the entry hasn't already been mapped.
-    if *entry & 1 == 0 {
-        return Err(xous_kernel::Error::BadAddress);
-    }
     let phys = (*entry >> 10) << 12;
     *entry = 0;
     unsafe { flush_mmu() };
