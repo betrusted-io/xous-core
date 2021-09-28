@@ -647,7 +647,7 @@ impl SystemServices {
             ProcessState::Debug(x) if x & (1 << tid) == 0 => ProcessState::Debug(x | (1 << tid)),
             ProcessState::Exception(ready_threads)
             | ProcessState::BlockedException(ready_threads) => {
-                ProcessState::Exception(ready_threads | (1 << tid))
+                ProcessState::Exception(ready_threads)
             }
             other => panic!(
                 "PID {} was not in a state to wake thread {}: {:?}",
@@ -2205,10 +2205,12 @@ impl SystemServices {
         let process = self.get_process_mut(pid).ok()?;
         let handler = process.exception_handler?;
         process.state = match process.state {
-            ProcessState::Running(x) => ProcessState::Exception(x),
+            ProcessState::Running(x) => ProcessState::Exception(x | 1<<process.current_thread),
             ProcessState::Ready(x) => ProcessState::Exception(x),
             _ => return None,
         };
+        process.previous_thread = process.current_thread;
+        process.current_thread = crate::arch::process::EXCEPTION_TID;
         // Activate the current context
         let mut arch_process = ArchProcess::current();
         arch_process
@@ -2226,7 +2228,9 @@ impl SystemServices {
     ) -> Result<(), xous_kernel::Result> {
         let process = self.get_process_mut(pid)?;
         if let ProcessState::Exception(threads) = process.state {
-            process.state = ProcessState::Running(threads);
+            assert!(threads & (1 << process.previous_thread) != 0);
+            process.state = ProcessState::Running(threads & !(1 << process.previous_thread));
+            process.current_thread = process.previous_thread;
             ArchProcess::current().set_tid(process.current_thread)?;
         } else {
             return Err(xous_kernel::Error::ThreadNotAvailable.into());
