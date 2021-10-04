@@ -47,6 +47,7 @@ wget https://ci.betrusted.io/$REVISION/ec_fw.bin -O /tmp/ec_fw.bin
 ./usb_update.py -e /tmp/ec_fw.bin
 rm /tmp/ec_fw.bin
 
+echo " "
 echo "NOTE: This script merely stages the SOC update object."
 echo "You must run 'Install gateware update' from the root menu on the device itself"
 echo "for the SOC update to take hold!"
