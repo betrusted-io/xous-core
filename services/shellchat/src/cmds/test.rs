@@ -399,6 +399,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
+                        return Ok(Some(ret));
+                    }
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
@@ -433,7 +438,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 use std::str::FromStr;
                                 let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
                                 let s = ssid.replace(".", "");
-                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\nNow press PROG button.\n",
+                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
                                     &s
                                 ).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
@@ -578,6 +583,25 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                     if elapsed - self.oqc_start > 6000 {
                         self.codec.pause().unwrap();
+
+                        // put system automatically into ship mode at conclusion of test
+                        env.gam.shipmode_blank_request().unwrap();
+                        env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                        // allow EC to snoop, so that it can wake up the system
+                        env.llio.allow_ec_snoop(true).unwrap();
+                        // allow the EC to power me down
+                        env.llio.allow_power_off(true).unwrap();
+                        // now send the power off command
+                        env.com.ship_mode().unwrap();
+
+                        // now send the power off command
+                        env.com.power_off_soc().unwrap();
+
+                        log::info!("CMD: ship mode now!");
+                        // pause execution, nothing after this should be reachable
+                        env.ticktimer.sleep_ms(10000).unwrap(); // ship mode happens in 10 seconds
+                        log::info!("CMD: if you can read this, ship mode failed!");
                     }
                 }
             },
