@@ -265,7 +265,7 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     xous::send_message(callback_conn,
                         xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                         UpdateResult::ProgramDone.to_usize().unwrap(),
-                        length - (EC_GATEWARE_LEN) as usize, 0, 0)).unwrap();
+                        (length - (EC_GATEWARE_LEN)) as usize, 0, 0)).unwrap();
                 }
             },
             Some(UpdateOp::UpdateWf200) => {
@@ -336,7 +336,7 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     xous::send_message(callback_conn,
                         xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                         UpdateResult::ProgramDone.to_usize().unwrap(),
-                        length - (EC_GATEWARE_LEN) as usize, 0, 0)).unwrap();
+                        (length - (EC_GATEWARE_LEN)) as usize, 0, 0)).unwrap();
                 }
 
                 // wf200
