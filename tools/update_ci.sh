@@ -23,7 +23,7 @@ else
 fi
 
 wget https://ci.betrusted.io/$REVISION/loader.bin -O /tmp/loader.bin
-./usb_update.py -s /tmp/loader.bin
+./usb_update.py -l /tmp/loader.bin
 rm /tmp/loader.bin
 
 echo "waiting for device to reboot"
