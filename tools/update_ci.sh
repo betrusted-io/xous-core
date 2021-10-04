@@ -15,6 +15,7 @@ elif [ $ARG1 == "-b" ]; then
 else
     echo "Usage: ${0} [-s] [-b]"
     echo "One of -s or -b must be specified for either stabilized or bleeding edge branches"
+    echo " "
     echo "This script also assumes you have initialized your root keys. If you have not,"
     echo "you will have to download and overwrite your base gateware image manually"
     echo "using the './usb_update --soc' command."
