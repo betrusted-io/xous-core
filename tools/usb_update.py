@@ -450,7 +450,7 @@ def main():
         LOC_AUDIO  = 0x06340000
         LEN_AUDIO  = 0x01C40000
     elif args.force == True:
-        # try the v0.8 offsets
+        # try the v0.9 offsets
         LOC_SOC    = 0x00000000
         LOC_STAGING= 0x00280000
         LOC_LOADER = 0x00500000
@@ -507,13 +507,19 @@ def main():
             pc_usb.flash_program(LOC_LOADER, image, verify=verify)
 
     if args.soc != None:
-        print("This will overwrite any secret keys in your device. Continue? (y/n)")
-        confirm = input()
-        if len(confirm) > 0 and confirm.lower()[:1] == 'y':
+        if args.force == True:
             print("Programming SoC gateware {}".format(args.soc))
             with open(args.soc, "rb") as f:
                 image = f.read()
                 pc_usb.flash_program(LOC_SOC, image, verify=verify)
+        else:
+            print("This will overwrite any secret keys in your device. Continue? (y/n)")
+            confirm = input()
+            if len(confirm) > 0 and confirm.lower()[:1] == 'y':
+                print("Programming SoC gateware {}".format(args.soc))
+                with open(args.soc, "rb") as f:
+                    image = f.read()
+                    pc_usb.flash_program(LOC_SOC, image, verify=verify)
 
     if args.audiotest != None:
         print("Loading audio test clip {}".format(args.audiotest))
