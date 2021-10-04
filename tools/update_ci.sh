@@ -15,6 +15,9 @@ elif [ $ARG1 == "-b" ]; then
 else
     echo "Usage: ${0} [-s] [-b]"
     echo "One of -s or -b must be specified for either stabilized or bleeding edge branches"
+    echo "This script also assumes you have initialized your root keys. If you have not,"
+    echo "you will have to download and overwrite your base gateware image manually"
+    echo "using the './usb_update --soc' command."
     exit 1
 fi
 
@@ -42,3 +45,7 @@ sleep 5
 wget https://ci.betrusted.io/$REVISION/ec_fw.bin -O /tmp/ec_fw.bin
 ./usb_update.py -e /tmp/ec_fw.bin
 rm /tmp/ec_fw.bin
+
+echo "NOTE: This script merely stages the SOC update object."
+echo "You must run 'Install gateware update' from the root menu on the device itself"
+echo "for the SOC update to take hold!"
