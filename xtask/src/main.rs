@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
-    let base_pkgs = ["ticktimer-server", "log-server" /*, "test-stub2", "susres", "xous-names", "trng" */];
+    let base_pkgs = ["ticktimer-server", "log-server", "susres", "xous-names", "trng"];
     let cbtest_pkgs = [
         "ticktimer-server",
         "log-server",

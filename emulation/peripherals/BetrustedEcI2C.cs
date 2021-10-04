@@ -55,7 +55,10 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithFlag(6, FieldMode.Read, valueProviderCallback: _ => false, name: "Busy")
                     .WithFlag(5, FieldMode.Read, valueProviderCallback: _ => false, name: "Arbitration lost")
                     .WithReservedBits(2, 3)
-                    .WithFlag(1, FieldMode.Read, valueProviderCallback: _ => false, name: "Transfer in progress")
+                    .WithFlag(1, name: "Transfer in progress", valueProviderCallback: _ => {
+                        fakeTip = !fakeTip;
+                        return fakeTip;
+                    })
                     .WithFlag(0, out i2cIrqStatus, FieldMode.Read)
                 },
 
@@ -65,7 +68,6 @@ namespace Antmicro.Renode.Peripherals.I2C
                     .WithFlag(5, out readFromSlave, FieldMode.Write)
                     .WithFlag(4, out writeToSlave, FieldMode.Write)
                     .WithFlag(3, FieldMode.Read, name: "ACK", valueProviderCallback: _ => true)
-                    // .WithTag("ACK", 3, 1)
                     .WithReservedBits(1, 2)
                     .WithFlag(0, FieldMode.Write, writeCallback: (_, __) => i2cIrqStatus.Value = false)
                     .WithWriteCallback((_, __) =>
@@ -248,6 +250,14 @@ namespace Antmicro.Renode.Peripherals.I2C
 
         private void HandleReadFromSlaveCommand()
         {
+            if (dataFromSlave == null) {
+                this.Log(LogLevel.Error, "dataFromSlave is NULL!");
+                return;
+            }
+            if (selectedSlave == null) {
+                this.Log(LogLevel.Error, "selectedSlave is NULL!");
+                return;
+            }
             if (dataFromSlave.Count == 0)
             {
                 foreach (var b in selectedSlave.Read())
@@ -263,6 +273,10 @@ namespace Antmicro.Renode.Peripherals.I2C
                 }
             }
 
+            if (receiveBuffer == null) {
+                this.Log(LogLevel.Error, "receiveBuffer is NULL!");
+                dataFromSlave.Dequeue();
+            }
             receiveBuffer.Value = dataFromSlave.Dequeue();
             UpdateInterrupts();
         }
@@ -293,6 +307,8 @@ namespace Antmicro.Renode.Peripherals.I2C
         }
 
         private bool transactionInProgress;
+        // Just toggle TIP here to fake it.
+        private bool fakeTip;
         private II2CPeripheral selectedSlave;
 
         private readonly Queue<byte> dataToSlave;
