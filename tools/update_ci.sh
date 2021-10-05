@@ -47,6 +47,8 @@ wget https://ci.betrusted.io/$REVISION/ec_fw.bin -O /tmp/ec_fw.bin
 ./usb_update.py -e /tmp/ec_fw.bin
 rm /tmp/ec_fw.bin
 
+sleep 5
+
 wget https://ci.betrusted.io/$REVISION/wf200_fw.bin -O /tmp/wf200_fw.bin
 ./usb_update.py -w /tmp/wf200_fw.bin
 rm /tmp/wf200_fw.bin
