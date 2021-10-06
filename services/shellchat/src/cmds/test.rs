@@ -415,6 +415,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
+                    env.com.wlan_set_ssid(&String::<1024>::from_str("precursortest")).unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_set_pass(&String::<1024>::from_str("notasecret")).unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_join().unwrap();
 
                     let battstats = env.com.get_more_stats().unwrap();
                     if battstats[12] < 3900 {
@@ -437,22 +442,70 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 let ssid_str = env.com.ssid_fetch_as_string().unwrap();
                                 use std::str::FromStr;
                                 let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
-                                let s = ssid.replace(".", "");
-                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
-                                    &s
+                                let ssid_short = ssid.replace(".", "");
+                                let mut lines = ssid_short.lines();
+                                let _ = lines.next(); // skip the banner
+                                write!(ret, "SSID {}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
+                                    lines.next().unwrap() // just the first SSID result
                                 ).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                                write!(ret, "Version {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
+                                write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
                                 break;
                             }
                             Some(false) => {
-                                write!(ret, "Keyboard test failed.").unwrap();
+                                write!(ret, "Keyboard test failed.\n").unwrap();
                                 break;
                             }
                             None => {
                                 env.ticktimer.sleep_ms(500).unwrap();
                             }
                         }
+                    }
+                    if let Ok(msg) = env.com.wlan_status() {
+                        let mut elements = msg.as_str().unwrap().split(' ');
+                        let rssi_pass = if let Some(_rssi_str) = elements.next() {
+                            //rssi_str.parse::<i32>().unwrap() < -10
+                            // for now always pass, don't use RSSI as it's not reliable
+                            true
+                        } else {
+                            false
+                        };
+                        let net_up = if let Some(up_str) = elements.next() {
+                            up_str == "up"
+                        } else {
+                            false
+                        };
+                        let dhcp_ok = if let Some(dhcp_str) = elements.next() {
+                            dhcp_str == "dhcpBound"
+                        } else {
+                            false
+                        };
+                        let ssid_ok = if let Some(ssid_str) = elements.next() {
+                            ssid_str == "\nprecursortest"
+                        } else {
+                            false
+                        };
+                        if rssi_pass && net_up && dhcp_ok && ssid_ok {
+                            write!(ret, "WLAN OK: {}\n", msg.as_str().unwrap()).unwrap();
+                        } else {
+                            if !rssi_pass {
+                                write!(ret, "WLAN FAIL: rssi weak\n").unwrap();
+                            }
+                            if !net_up {
+                                write!(ret, "WLAN FAIL: connection failed\n").unwrap();
+                            }
+                            if !dhcp_ok {
+                                write!(ret, "WLAN FAIL: dhcp fail\n").unwrap();
+                            }
+                            if !ssid_ok {
+                                write!(ret, "WLAN FAIL: ssid mismatch\n").unwrap();
+                            }
+                            write!(ret, "{}", msg.as_str().unwrap()).unwrap();
+                            return Ok(Some(ret));
+                        }
+                    } else {
+                        write!(ret, "FAIL: Couldn't connect to test wifi network!\n").unwrap();
+                        return Ok(Some(ret));
                     }
 
                     AUDIO_OQC.store(true, Ordering::Relaxed);
