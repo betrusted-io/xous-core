@@ -2,7 +2,9 @@
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
+pub use com_rs_ref::serdes::Ipv4Conf;
 
+pub const NET_MTU: usize = 1500;
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
     /// instantaneous voltage in mV
@@ -172,6 +174,12 @@ pub(crate) enum Opcode {
 
     /// wlan: get wlan radio status (power state? connected? AP info?)
     WlanStatus,
+
+    /// wlan: get current config
+    WlanGetConfig,
+
+    /// wlan: get net packet
+    WlanFetchPacket,
 
     /// sets the EC-side com interrupt mask
     IntSetMask,

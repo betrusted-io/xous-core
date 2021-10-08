@@ -2,7 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 mod api;
-use api::Opcode;
+use api::*;
 
 use num_traits::{ToPrimitive, FromPrimitive};
 
@@ -10,7 +10,7 @@ use log::{error, info, trace};
 
 use com_rs_ref as com_rs;
 use com_rs::*;
-use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes};
+use com_rs::serdes::{STR_32_WORDS, STR_64_WORDS, STR_64_U8_SIZE, StringSer, StringDes, Ipv4Conf};
 
 use xous::{CID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::{Buffer, String};
@@ -141,6 +141,25 @@ mod implementation {
             }
 
             self.txrx(tx)
+        }
+
+        pub fn try_wait_txrx(&mut self, tx: u16, timeout: u32) -> Option<u16> {
+            let curtime = self.ticktimer.elapsed_ms();
+            let mut timed_out = false;
+            let to = timeout as u64;
+            while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
+                if (self.ticktimer.elapsed_ms() - curtime) > to
+                {
+                    timed_out = true;
+                }
+                xous::yield_slice();
+            }
+            if timed_out {
+                self.txrx(tx); // still push the packet in, so that the interface is pumped
+                None // but note the failure
+            } else {
+                Some(self.txrx(tx))
+            }
         }
 
         pub fn process_queue(&mut self) -> Option<xous::CID> {
@@ -723,6 +742,39 @@ fn xmain() -> ! {
                     _ => info!("status decode failed"),
                 };
             }
+            Some(Opcode::WlanGetConfig) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+
+                com.txrx(ComState::WLAN_GET_IPV4_CONF.verb);
+                let mut prealloc = Ipv4Conf::default().encode_u16();
+                for dest in prealloc.iter_mut() {
+                    *dest = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                }
+                buffer.replace(prealloc).expect("couldn't return result on FlashOp");
+            }
+            Some(Opcode::WlanFetchPacket) => {
+                let mut buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut retbuf = buffer.to_original::<[u8; NET_MTU], _>().unwrap();
+                let be_bytes: [u8; 2] = [retbuf[0], retbuf[1]];
+                let len_bytes = u16::from_be_bytes(be_bytes);
+                let len_words = if len_bytes % 2 == 0 {
+                    len_bytes / 2
+                } else {
+                    len_bytes / 2 + 1
+                };
+                if len_words > NET_MTU as u16 / 2 {
+                    log::error!("invalid packet fetch length: {}, aborting without fetch", len_words);
+                    continue;
+                }
+                com.txrx(ComState::NET_FRAME_FETCH_0.verb | len_words);
+                for word_index in 0..len_words as usize {
+                    let w = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                    let be_bytes = w.to_be_bytes();
+                    retbuf[word_index * 2] = be_bytes[0];
+                    retbuf[word_index * 2 + 1] = be_bytes[1];
+                }
+                buffer.replace(retbuf).expect("couldn't return packet");
+            }
             Some(Opcode::IntSetMask) => msg_blocking_scalar_unpack!(msg, mask_val, _, _, _, {
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
                 com.txrx(mask_val as u16);
@@ -743,10 +795,17 @@ fn xmain() -> ! {
             }),
             Some(Opcode::IntFetchVector) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 com.txrx(ComState::LINK_GET_INTERRUPT.verb);
-                let vector = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let maybe_vector = com.try_wait_txrx(ComState::LINK_READ.verb, 500); // longer timeout because interrupts tend to be busy times
                 let rxlen = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
-                xous::return_scalar2(msg.sender, vector as _, rxlen as _)
-                    .expect("couldn't return IntFetchVector");
+                if let Some(vector) = maybe_vector {
+                    log::info!("vector: 0x{:x}, len: {}", vector, rxlen);
+                    xous::return_scalar2(msg.sender, vector as _, rxlen as _)
+                        .expect("couldn't return IntFetchVector");
+                } else {
+                    log::error!("Timeout during interrupt vector fetch. EC may not be responsive. Returning error vector....");
+                    xous::return_scalar2(msg.sender, com_rs::INT_INVALID as usize, 0)
+                        .expect("couldn't return IntFetchVector");
+                }
             }),
             None => {error!("unknown opcode"); break},
         }

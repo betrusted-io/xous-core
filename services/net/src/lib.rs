@@ -2,7 +2,7 @@
 
 pub mod api;
 use xous::{CID, send_message};
-use num_traits::ToPrimitive;
+use num_traits::*;
 
 pub struct Net {
     conn: CID,

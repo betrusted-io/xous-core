@@ -5,10 +5,12 @@
 pub mod api;
 
 pub use api::BattStats;
-use api::{Callback, ComIntSources, Opcode};
+use api::{Callback, ComIntSources, NET_MTU, Opcode};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
+
+pub use com_rs_ref::serdes::Ipv4Conf;
 
 /// mapping of the callback function to the library user
 /// this exists in the library user's memory space, so we can have up to one
@@ -427,6 +429,32 @@ impl Com {
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
         Ok(response)
+    }
+
+    pub fn wlan_get_config(&self) -> Result<Ipv4Conf, xous::Error> {
+        let prealloc = Ipv4Conf::default().encode_u16();
+        let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::WlanGetConfig.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original().unwrap();
+        let config = Ipv4Conf::decode_u16(&response);
+        Ok(config)
+    }
+
+    pub fn wlan_fetch_packet(&self, pkt: &mut [u8]) -> Result<(), xous::Error> {
+        if pkt.len() > NET_MTU {
+            return Err(xous::Error::OutOfMemory)
+        }
+        let mut prealloc: [u8; NET_MTU] = [0; NET_MTU];
+        let len_bytes = (pkt.len() as u16).to_be_bytes();
+        prealloc[0] = len_bytes[0];
+        prealloc[1] = len_bytes[1];
+        let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::WlanFetchPacket.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        let response = buf.as_flat::<[u8; NET_MTU], _>().unwrap();
+        for (&src, dst) in response.iter().zip(pkt.iter_mut()) {
+            *dst = src;
+        }
+        Ok(())
     }
 
     pub fn ints_enable(&self, int_list: &[ComIntSources]) {
