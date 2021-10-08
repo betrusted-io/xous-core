@@ -5,85 +5,16 @@ mod api;
 
 use num_traits::*;
 
-#[cfg(any(target_os = "none", target_os = "xous"))]
-mod implementation {
-    use utralib::generated::*;
-    // use crate::api::*;
-    use log::info;
-    use susres::{RegManager, RegOrField, SuspendResume};
-
-    pub struct Pddb {
-        csr: utralib::CSR<u32>,
-        fifo: xous::MemoryRange,
-        susres_manager: RegManager::<{utra::audio::AUDIO_NUMREGS}>,
-    }
-
-    impl Pddb {
-        pub fn new() -> Pddb {
-            let csr = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utra::audio::HW_AUDIO_BASE),
-                None,
-                4096,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-            let fifo = xous::syscall::map_memory(
-                xous::MemoryAddress::new(utralib::HW_AUDIO_MEM),
-                None,
-                utralib::HW_AUDIO_MEM_LEN,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map Audio CSR range");
-
-            let mut pddb = Pddb {
-                csr: CSR::new(csr.as_mut_ptr() as *mut u32),
-                susres_manager: RegManager::new(csr.as_mut_ptr() as *mut u32),
-                fifo,
-            };
-
-            pddb
-        }
-
-        pub fn suspend(&mut self) {
-            self.susres_manager.suspend();
-        }
-        pub fn resume(&mut self) {
-            self.susres_manager.resume();
-        }
-    }
-}
-
-// a stub to try to avoid breaking hosted mode for as long as possible.
-#[cfg(not(any(target_os = "none", target_os = "xous")))]
-mod implementation {
-    use log::info;
-
-    pub struct Pddb {
-    }
-
-    impl Pddb {
-        pub fn new() -> Pddb {
-            Pddb {
-            }
-        }
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
-    }
-}
-
-
 #[xous::xous_main]
 fn xmain() -> ! {
     use crate::implementation::Pddb;
 
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
-    info!("my PID is {}", xous::process::id());
+    log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB).expect("can't register server");
+    let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
 
     let mut pddb = Pddb::new();

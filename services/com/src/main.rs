@@ -723,6 +723,31 @@ fn xmain() -> ! {
                     _ => info!("status decode failed"),
                 };
             }
+            Some(Opcode::IntSetMask) => msg_blocking_scalar_unpack!(msg, mask_val, _, _, _, {
+                com.txrx(ComState::LINK_SET_INTMASK.verb);
+                com.txrx(mask_val as u16);
+                xous::return_scalar(msg.sender, 1)
+                    .expect("couldn't ack IntSetMask");
+            }),
+            Some(Opcode::IntAck) => msg_blocking_scalar_unpack!(msg, ack_val, _, _, _, {
+                com.txrx(ComState::LINK_ACK_INTERRUPT.verb);
+                com.txrx(ack_val as u16);
+                xous::return_scalar(msg.sender, 1)
+                    .expect("couldn't ack IntAck");
+            }),
+            Some(Opcode::IntGetMask) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::LINK_GET_INTMASK.verb);
+                let mask = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                xous::return_scalar(msg.sender, mask as usize)
+                    .expect("couldn't return mask value");
+            }),
+            Some(Opcode::IntFetchVector) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                com.txrx(ComState::LINK_GET_INTERRUPT.verb);
+                let vector = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                let rxlen = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
+                xous::return_scalar2(msg.sender, vector as _, rxlen as _)
+                    .expect("couldn't return IntFetchVector");
+            }),
             None => {error!("unknown opcode"); break},
         }
 

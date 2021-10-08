@@ -5,7 +5,7 @@
 pub mod api;
 
 pub use api::BattStats;
-use api::{Callback, Opcode};
+use api::{Callback, ComIntSources, Opcode};
 use xous::{send_message, Error, CID, Message, msg_scalar_unpack};
 use xous_ipc::{String, Buffer};
 use num_traits::{ToPrimitive, FromPrimitive};
@@ -427,6 +427,68 @@ impl Com {
         buf.lend_mut(self.conn, Opcode::WlanStatus.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
         let response = buf.to_original::<xous_ipc::String::<STATUS_MAX_LEN>, _>().unwrap();
         Ok(response)
+    }
+
+    pub fn ints_enable(&self, int_list: &[ComIntSources]) {
+        let mut mask_val: u16 = 0;
+        for &item in int_list.iter() {
+            let item_as_u16: u16 = item.into();
+            mask_val |= item_as_u16;
+        }
+        let _ = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::IntSetMask.to_usize().unwrap(), mask_val as usize, 0, 0, 0)
+        ).expect("couldn't send IntSetMask message");
+    }
+    pub fn ints_get_enabled(&self, int_list: &mut Vec::<ComIntSources>) {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IntGetMask.to_usize().unwrap(), 0, 0, 0, 0))
+            .expect("Couldn't get IntGetMask");
+        if let xous::Result::Scalar1(raw_mask) = response {
+            let mut mask_bit: u16 = 1;
+            for _ in 0..16 {
+                let int_src = ComIntSources::from(mask_bit & raw_mask as u16);
+                if int_src != ComIntSources::Invalid {
+                    int_list.push(int_src);
+                }
+                mask_bit <<= 1;
+            }
+        } else {
+            panic!("failed to send IntGetmask message");
+        }
+    }
+    pub fn ints_ack(&self, int_list: &[ComIntSources]) {
+        let mut ack_val: u16 = 0;
+        for &item in int_list.iter() {
+            let item_as_u16: u16 = item.into();
+            ack_val |= item_as_u16;
+        }
+        let _ = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::IntAck.to_usize().unwrap(), ack_val as usize, 0, 0, 0)
+        ).expect("couldn't send IntSetMask message");
+    }
+    pub fn ints_get_active(&self, int_list: &mut Vec::<ComIntSources>) -> Option<u16> {
+        let response = send_message(self.conn,
+            Message::new_blocking_scalar(Opcode::IntFetchVector.to_usize().unwrap(), 0, 0, 0, 0))
+            .expect("couldn't get IntFetchVector");
+        let mut rxlen: Option<u16> = None;
+        if let xous::Result::Scalar2(ints, maybe_rxlen) = response {
+            let mut mask_bit: u16 = 1;
+            for _ in 0..16 {
+                let int_src = ComIntSources::from(mask_bit & ints as u16);
+                if int_src != ComIntSources::Invalid {
+                    int_list.push(int_src);
+                    if int_src == ComIntSources::WlanRxReady {
+                        rxlen = Some(maybe_rxlen as u16)
+                    }
+                }
+                mask_bit <<= 1;
+            }
+        } else {
+            panic!("failed to send IntGetmask message");
+        }
+        rxlen
     }
 
 }

@@ -461,7 +461,7 @@ dependencies = [
 [[package]]
 name = "com_rs"
 version = "0.1.0"
-source = "git+https://github.com/betrusted-io/com_rs.git?rev=5338f9959572d57f1014d04aa129804da5b4d339#5338f9959572d57f1014d04aa129804da5b4d339"
+source = "git+https://github.com/betrusted-io/com_rs.git?rev=0f0998465d756e14d42d96ee348f99c1ba2bedc3#0f0998465d756e14d42d96ee348f99c1ba2bedc3"
 
 [[package]]
 name = "com_rs-ref"
@@ -1171,6 +1171,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "managed"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c75de51135344a4f8ed3cfe2720dc27736f7711989703a0b43aadf3753c55577"
+
+[[package]]
 name = "maybe-uninit"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1227,6 +1233,25 @@ checksum = "0f2d26ec3309788e423cfbf68ad1800f061638098d76a83681af979dc4eda19d"
 dependencies = [
  "adler",
  "autocfg",
+]
+
+[[package]]
+name = "net"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "llio",
+ "log",
+ "log-server",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.7.18",
+ "smoltcp",
+ "susres",
+ "ticktimer-server",
+ "utralib",
+ "xous",
+ "xous-names",
 ]
 
 [[package]]
@@ -2020,6 +2045,19 @@ name = "smallvec"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
+
+[[package]]
+name = "smoltcp"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e4a069bef843d170df47e7c0a8bf8d037f217d9f5b325865acc3e466ffe40d3"
+dependencies = [
+ "bitflags",
+ "byteorder",
+ "libc",
+ "log",
+ "managed",
+]
 
 [[package]]
 name = "socket2"

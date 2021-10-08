@@ -696,7 +696,8 @@ fn xmain() -> ! {
     // - spinor (for turning off wfi during writes)
     // - rootkeys (for reboots)
     // - oqc-test (for testing the vibe motor)
-    let num_conns = 9;
+    // - net (for COM interrupt dispatch)
+    let num_conns = 10;
     let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(num_conns)).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
