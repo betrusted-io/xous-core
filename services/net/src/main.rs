@@ -71,6 +71,20 @@ where
     });
 }
 
+struct SmoltcpTimer {
+    ticktimer: ticktimer_server::Ticktimer,
+}
+impl SmoltcpTimer {
+    pub fn new() -> Self {
+        SmoltcpTimer {
+            ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+        }
+    }
+    pub fn now(&self) -> Instant {
+        Instant::from_millis(self.ticktimer.elapsed_ms() as i64)
+    }
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -126,6 +140,7 @@ fn xmain() -> ! {
     let timeout = Duration::from_secs(10);
 
     // link storage
+    let timer = SmoltcpTimer::new();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let mut routes_storage = [None; 1];
     let routes = Routes::new(&mut routes_storage[..]);
@@ -200,7 +215,7 @@ fn xmain() -> ! {
 
                                     // now fire off the smoltcp receive machine....
                                     {
-                                        let timestamp = Instant::now();
+                                        let timestamp = timer.now();
                                         match iface.poll(&mut sockets, timestamp) {
                                             Ok(_) => {}
                                             Err(e) => {
@@ -208,7 +223,7 @@ fn xmain() -> ! {
                                             }
                                         }
                                         {
-                                            let timestamp = Instant::now();
+                                            let timestamp = timer.now();
                                             let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                                             if !socket.is_open() {
                                                 socket.bind(IcmpEndpoint::Ident(ident)).unwrap();
