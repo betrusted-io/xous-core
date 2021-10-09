@@ -17,9 +17,15 @@ susres = {path = "../susres"}
 rkyv = "0.7.18"
 llio = {path = "../llio"}
 com = {path = "../com"}
+byteorder = { version = "1.0", default-features = false }
 
 [dependencies.smoltcp]
-version = "0.7.5"
+# ugh. have to reference `main` directly because they haven't pushed a new tag in months, and none
+# of the worked examples match the actual documentation now.
+# pin at a commit, at least, so we aren't building on shifting sand
+git = "https://github.com/smoltcp-rs/smoltcp.git"
+commit = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+#version = "0.7.5"
 #features = ["proto-ipv4"]
 
 

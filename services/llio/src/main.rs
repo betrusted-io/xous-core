@@ -44,7 +44,6 @@ mod implementation {
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        // just clear the pending request for now and return
         if xl.event_csr.rf(utra::btevents::EV_PENDING_COM_INT) != 0 {
             if let Some(conn) = xl.handler_conn {
                 xous::try_send_message(conn,

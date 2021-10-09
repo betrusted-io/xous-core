@@ -457,6 +457,22 @@ impl Com {
         Ok(())
     }
 
+    pub fn wlan_send_packet(&self, pkt: &[u8]) -> Result<(), xous::Error> {
+        if pkt.len() > NET_MTU {
+            return Err(xous::Error::OutOfMemory)
+        }
+        let mut prealloc: [u8; NET_MTU + 2] = [0; NET_MTU + 2];
+        let len_bytes = (pkt.len() as u16).to_be_bytes();
+        prealloc[0] = len_bytes[0];
+        prealloc[1] = len_bytes[1];
+        for (&src, dst) in pkt.iter().zip(prealloc[2..].iter_mut()) {
+            *dst = src;
+        }
+        let buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::WlanSendPacket.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
+
     pub fn ints_enable(&self, int_list: &[ComIntSources]) {
         let mut mask_val: u16 = 0;
         for &item in int_list.iter() {

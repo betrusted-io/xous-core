@@ -181,6 +181,9 @@ pub(crate) enum Opcode {
     /// wlan: get net packet
     WlanFetchPacket,
 
+    /// wlan: send net packet
+    WlanSendPacket,
+
     /// sets the EC-side com interrupt mask
     IntSetMask,
 
@@ -209,6 +212,8 @@ pub enum ComIntSources {
     WlanIpConfigUpdate,
     WlanSsidScanDone,
     BatteryCritical,
+    WlanTxErr,
+    WlanRxErr,
     Invalid,
 }
 impl From<u16> for ComIntSources {
@@ -218,6 +223,8 @@ impl From<u16> for ComIntSources {
             com_rs_ref::INT_WLAN_IPCONF_UPDATE => ComIntSources::WlanIpConfigUpdate,
             com_rs_ref::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanDone,
             com_rs_ref::INT_BATTERY_CRITICAL => ComIntSources::BatteryCritical,
+            com_rs_ref::INT_WLAN_TX_ERROR => ComIntSources::WlanTxErr,
+            com_rs_ref::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
             _ => ComIntSources::Invalid,
         }
     }
@@ -229,6 +236,8 @@ impl From<ComIntSources> for u16 {
             ComIntSources::WlanIpConfigUpdate => com_rs_ref::INT_WLAN_IPCONF_UPDATE,
             ComIntSources::WlanSsidScanDone => com_rs_ref::INT_WLAN_SSID_UPDATE,
             ComIntSources::WlanRxReady => com_rs_ref::INT_WLAN_RX_READY,
+            ComIntSources::WlanTxErr => com_rs_ref::INT_WLAN_TX_ERROR,
+            ComIntSources::WlanRxErr => com_rs_ref::INT_WLAN_RX_ERROR,
             ComIntSources::Invalid => 0,
         }
     }

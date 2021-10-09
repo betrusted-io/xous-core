@@ -762,11 +762,11 @@ fn xmain() -> ! {
                 } else {
                     len_bytes / 2 + 1
                 };
-                if len_words > NET_MTU as u16 / 2 {
-                    log::error!("invalid packet fetch length: {}, aborting without fetch", len_words);
+                if len_bytes > NET_MTU as u16 {
+                    log::error!("invalid packet fetch length: {}, aborting without fetch", len_bytes);
                     continue;
                 }
-                com.txrx(ComState::NET_FRAME_FETCH_0.verb | len_words);
+                com.txrx(ComState::NET_FRAME_FETCH_0.verb | len_bytes);
                 for word_index in 0..len_words as usize {
                     let w = com.wait_txrx(ComState::LINK_READ.verb, Some(STD_TIMEOUT));
                     let be_bytes = w.to_be_bytes();
@@ -774,6 +774,26 @@ fn xmain() -> ! {
                     retbuf[word_index * 2 + 1] = be_bytes[1];
                 }
                 buffer.replace(retbuf).expect("couldn't return packet");
+            }
+            Some(Opcode::WlanSendPacket) => {
+                let buffer = unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let txbuf = buffer.as_flat::<[u8; NET_MTU + 2], _>().unwrap();
+                let be_bytes: [u8; 2] = [txbuf[0], txbuf[1]];
+                let len_bytes = u16::from_be_bytes(be_bytes);
+                let len_words = if len_bytes % 2 == 0 {
+                    len_bytes / 2
+                } else {
+                    len_bytes / 2 + 1
+                };
+                if len_bytes > NET_MTU as u16 {
+                    log::error!("invalid packet send length: {}, aborting without send", len_bytes);
+                    continue;
+                }
+                com.txrx(ComState::NET_FRAME_SEND_0.verb | len_bytes);
+                for word_index in 0..len_words as usize {
+                    let be_bytes: [u8; 2] = [txbuf[2 + word_index * 2], txbuf[2 + word_index * 2 + 1]];
+                    com.txrx(u16::from_be_bytes(be_bytes));
+                }
             }
             Some(Opcode::IntSetMask) => msg_blocking_scalar_unpack!(msg, mask_val, _, _, _, {
                 com.txrx(ComState::LINK_SET_INTMASK.verb);
