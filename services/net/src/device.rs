@@ -2,16 +2,10 @@ use com::Com;
 use com::api::NET_MTU;
 
 use smoltcp::Result;
-use smoltcp::phy::{self, DeviceCapabilities, Device, Medium};
+use smoltcp::phy::{self, DeviceCapabilities, Medium};
 
-use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes};
-use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
-use smoltcp::wire::{
-    EthernetAddress, Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr, IpAddress, IpCidr,
-    Ipv4Address, Ipv6Address,
-};
 use smoltcp::{
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 pub struct NetPhy {
@@ -74,13 +68,22 @@ impl<'a, 'c> phy::RxToken for NetPhyRxToken<'a> {
     fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
         where F: FnOnce(&mut [u8]) -> Result<R>
     {
-        if let Some(rx_len) = self.rx_avail {
-            self.com.wlan_fetch_packet(&mut self.buf[..rx_len as usize]).unwrap();
+        if let Some(rx_len) = self.rx_avail.take() {
+            self.com.wlan_fetch_packet(&mut self.buf[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+            self.buf = &mut self.buf[..rx_len as usize];
+            log::info!("rxbuf: {:x?}", self.buf);
         }
         // else, the buf is not updated -- and it would be empty, yielding no availability
 
         let result = f(&mut self.buf);
-        log::info!("rx called");
+        match result {
+            Err(e) => {
+                log::info!("rx err: {:?}", e);
+            }
+            _ => {
+                log::info!("rx result: {:x?}", self.buf);
+            }
+        }
         result
     }
 }

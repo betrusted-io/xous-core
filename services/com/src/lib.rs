@@ -434,8 +434,8 @@ impl Com {
     pub fn wlan_get_config(&self) -> Result<Ipv4Conf, xous::Error> {
         let prealloc = Ipv4Conf::default().encode_u16();
         let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::WlanGetConfig.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let response = buf.to_original().unwrap();
+        buf.lend_mut(self.conn, Opcode::WlanGetConfig.to_u32().expect("WlanGetConfig failed")).or(Err(xous::Error::InternalError))?;
+        let response = buf.to_original().expect("Couldn't convert WlanGetConfig buffer");
         let config = Ipv4Conf::decode_u16(&response);
         Ok(config)
     }
@@ -449,8 +449,8 @@ impl Com {
         prealloc[0] = len_bytes[0];
         prealloc[1] = len_bytes[1];
         let mut buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
-        buf.lend_mut(self.conn, Opcode::WlanFetchPacket.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
-        let response = buf.as_flat::<[u8; NET_MTU], _>().unwrap();
+        buf.lend_mut(self.conn, Opcode::WlanFetchPacket.to_u32().expect("WlanFetchPacket failed")).or(Err(xous::Error::InternalError))?;
+        let response = buf.as_flat::<[u8; NET_MTU], _>().expect("couldn't convert WlanFetchPacket buffer");
         for (&src, dst) in response.iter().zip(pkt.iter_mut()) {
             *dst = src;
         }
@@ -469,7 +469,7 @@ impl Com {
             *dst = src;
         }
         let buf = Buffer::into_buf(prealloc).or(Err(xous::Error::InternalError))?;
-        buf.send(self.conn, Opcode::WlanSendPacket.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::WlanSendPacket.to_u32().expect("WlanSendPacket failed")).or(Err(xous::Error::InternalError))?;
         Ok(())
     }
 

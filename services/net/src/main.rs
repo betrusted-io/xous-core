@@ -7,7 +7,6 @@ use num_traits::*;
 use com::api::{Ipv4Conf, NET_MTU, ComIntSources};
 
 mod device;
-use device::*;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use std::cmp;
@@ -34,7 +33,7 @@ macro_rules! send_icmp_ping {
             data: &$echo_payload,
         };
 
-        let icmp_payload = $socket.send(icmp_repr.buffer_len(), $remote_addr).unwrap();
+        let icmp_payload = $socket.send(icmp_repr.buffer_len(), $remote_addr).expect("couldn't send ping");
 
         let icmp_packet = $packet_type::new_unchecked(icmp_payload);
         (icmp_repr, icmp_packet)
@@ -66,7 +65,7 @@ where
     DeviceT: for<'d> Device<'d>,
 {
     iface.update_ip_addrs(|addrs| {
-        let dest = addrs.iter_mut().next().unwrap();
+        let dest = addrs.iter_mut().next().expect("trouble updating ipv4 addresses in routing table");
         *dest = IpCidr::Ipv4(cidr);
     });
 }
@@ -88,7 +87,7 @@ impl SmoltcpTimer {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -142,6 +141,7 @@ fn xmain() -> ! {
     // link storage
     let timer = SmoltcpTimer::new();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
+    let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
     let mut routes_storage = [None; 1];
     let routes = Routes::new(&mut routes_storage[..]);
 
@@ -149,7 +149,7 @@ fn xmain() -> ! {
     let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
     let mut builder = InterfaceBuilder::new(device)
-        .ip_addrs([IpCidr::new(IpAddress::v4(0, 0, 0, 0), 24,)])
+        .ip_addrs(ip_addrs)
         .routes(routes);
     if medium == Medium::Ethernet {
         builder = builder
@@ -182,7 +182,7 @@ fn xmain() -> ! {
                             log::warn!("Battery is critical! TODO: go into SHIP mode");
                         },
                         ComIntSources::WlanIpConfigUpdate => {
-                            let config = com.wlan_get_config().unwrap();
+                            let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
                             net_config = Some(config);
                             log::info!("Network config updated: {:?}", config);
                             let mac = EthernetAddress::from_bytes(&config.mac);
@@ -203,34 +203,41 @@ fn xmain() -> ! {
                             );
 
                             iface.routes_mut().remove_default_ipv4_route();
-                            iface.routes_mut().add_default_ipv4_route(default_v4_gw).unwrap();
+                            match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
+                                Ok(route) => log::info!("routing table updated successfully: {:?}", route),
+                                Err(e) => log::info!("routing table update error: {}", e),
+                            }
                         },
                         ComIntSources::WlanRxReady => {
                             if let Some(_config) = net_config {
                                 if let Some(rxlen) = maybe_rxlen {
                                     match iface.device_mut().push_rx_avail(rxlen) {
-                                        None => {},
+                                        None => log::info!("pushed {} bytes avail to iface", rxlen),
                                         Some(_) => log::warn!("Got more packets, but smoltcp didn't receive them"),
                                     }
 
                                     // now fire off the smoltcp receive machine....
                                     {
                                         let timestamp = timer.now();
+                                        log::info!("entering poll");
                                         match iface.poll(&mut sockets, timestamp) {
-                                            Ok(_) => {}
+                                            Ok(_) => { log::info!("poll OK") }
                                             Err(e) => {
                                                 log::debug!("poll error: {}", e);
                                             }
                                         }
+                                        log::info!("leaving poll");
                                         {
                                             let timestamp = timer.now();
                                             let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                                             if !socket.is_open() {
-                                                socket.bind(IcmpEndpoint::Ident(ident)).unwrap();
+                                                log::info!("bind to icmp");
+                                                socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
                                                 send_at = timestamp;
                                             }
 
                                             if socket.can_send() && seq_no < count as u16 && send_at <= timestamp {
+                                                log::info!("send icmp {}", count);
                                                 NetworkEndian::write_i64(&mut echo_payload, timestamp.total_millis());
 
                                                 match ping_remote_addr {
@@ -255,13 +262,15 @@ fn xmain() -> ! {
                                             }
 
                                             if socket.can_recv() {
-                                                let (payload, _) = socket.recv().unwrap();
+                                                log::info!("socket can_recv()");
+                                                let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
+                                                log::info!("payload: {:x?}", payload);
 
                                                 match ping_remote_addr {
                                                     IpAddress::Ipv4(_) => {
-                                                        let icmp_packet = Icmpv4Packet::new_checked(&payload).unwrap();
+                                                        let icmp_packet = Icmpv4Packet::new_checked(&payload).expect("couldn't make icmp payload");
                                                         let icmp_repr =
-                                                            Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).unwrap();
+                                                            Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).expect("error parsing icmp4 repr");
                                                         get_icmp_pong!(
                                                             Icmpv4Repr,
                                                             icmp_repr,
@@ -301,7 +310,7 @@ fn xmain() -> ! {
                             }
                         },
                         ComIntSources::WlanSsidScanDone => {
-
+                            log::info!("got ssid scan done");
                         },
                         _ => {
                             log::error!("Invalid interrupt type received");
