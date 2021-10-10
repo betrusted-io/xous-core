@@ -4,17 +4,19 @@
 mod api;
 use api::*;
 use num_traits::*;
-use com::api::{Ipv4Conf, NET_MTU, ComIntSources};
+use com::api::{Ipv4Conf, ComIntSources};
 
 mod device;
 
 use byteorder::{ByteOrder, NetworkEndian};
+use xous::msg_scalar_unpack;
+use xous::{send_message, Message};
 use std::cmp;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use smoltcp::phy::{Loopback, Medium, Device};
+use smoltcp::phy::{Medium, Device};
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, Interface};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
 use smoltcp::wire::{
@@ -23,6 +25,9 @@ use smoltcp::wire::{
 use smoltcp::{
     time::{Duration, Instant},
 };
+use std::thread;
+use std::sync::Arc;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 macro_rules! send_icmp_ping {
     ( $repr_type:ident, $packet_type:ident, $ident:expr, $seq_no:expr,
@@ -84,6 +89,13 @@ impl SmoltcpTimer {
     }
 }
 
+#[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
+enum WaitOp {
+    WaitMs,
+    PollAt,
+    Quit,
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -92,6 +104,7 @@ fn xmain() -> ! {
 
     let xns = xous_names::XousNames::new().unwrap();
     let net_sid = xns.register_name(api::SERVER_NAME_NET, None).expect("can't register server");
+    let net_conn = xous::connect(net_sid).unwrap();
     log::trace!("registered with NS -- {:?}", net_sid);
 
     // hook the COM interrupt listener
@@ -113,12 +126,50 @@ fn xmain() -> ! {
     com.ints_get_active(&mut com_int_list);
     log::info!("COM pending interrupts after enabling: {:?}", com_int_list);
 
+    // build the waiting thread
+    let wait_conn = Arc::new(AtomicU32::new(0));
+    thread::spawn({
+        let parent_conn = net_conn.clone();
+        let wait_conn_clone = wait_conn.clone();
+        move || {
+            let wait_sid = xous::create_server().unwrap();
+            wait_conn_clone.store(xous::connect(wait_sid).unwrap(), Ordering::SeqCst);
+            let tt = ticktimer_server::Ticktimer::new().unwrap();
+            loop {
+                let msg = xous::receive_message(wait_sid).unwrap();
+                match FromPrimitive::from_usize(msg.body.id()) {
+                    Some(WaitOp::WaitMs) => msg_scalar_unpack!(msg, duration_lsb, duration_msb, _, _, {
+                        if duration_msb != 0 {
+                            log::error!("wait duration exceeds API bounds");
+                        }
+                        tt.sleep_ms(duration_lsb).unwrap();
+                        send_message(parent_conn, Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't pump the net loop");
+                    }),
+                    Some(WaitOp::PollAt) => msg_scalar_unpack!(msg, deadline_lsb, deadline_msb, _, _, {
+                        let deadline: u64 = (deadline_lsb as u64) | ((deadline_msb as u64) << 32);
+                        let now = tt.elapsed_ms();
+                        if deadline > now {
+                            log::info!("sleeping for {}", deadline - now);
+                            tt.sleep_ms((deadline - now) as usize).unwrap();
+                            send_message(parent_conn, Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't pump the net loop");
+                        }
+                    }),
+                    Some(WaitOp::Quit) => break,
+                    None => log::error!("got unknown message: {:?}", msg)
+                }
+            }
+            xous::destroy_server(wait_sid).unwrap();
+        }
+    });
+    // wait until the waiting thread starts and has populated a reverse connection ID
+    while wait_conn.load(Ordering::SeqCst) == 0 {
+        xous::yield_slice();
+    }
+
     let mut net_config: Option<Ipv4Conf> = None;
-    let mut incoming_pkt_buf: [u8; NET_MTU] = [0; NET_MTU];
-    let mut incoming_pkt: &mut [u8];
 
     // ping-specific storage
-    let ping_remote_addr = IpAddress::from_str("10.0.245.10").expect("invalid address format");
+    let ping_remote_addr = IpAddress::from_str("10.0.245.243").expect("invalid address format");
 
     let icmp_rx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
     let icmp_tx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
@@ -202,7 +253,7 @@ fn xmain() -> ! {
                                 config.gtwy[3],
                             );
 
-                            iface.routes_mut().remove_default_ipv4_route();
+                            // iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
                                 Ok(route) => log::info!("routing table updated successfully: {:?}", route),
                                 Err(e) => log::info!("routing table update error: {}", e),
@@ -212,98 +263,13 @@ fn xmain() -> ! {
                             if let Some(_config) = net_config {
                                 if let Some(rxlen) = maybe_rxlen {
                                     match iface.device_mut().push_rx_avail(rxlen) {
-                                        None => log::info!("pushed {} bytes avail to iface", rxlen),
-                                        Some(_) => log::warn!("Got more packets, but smoltcp didn't receive them"),
+                                        None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
+                                        Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
                                     }
-
-                                    // now fire off the smoltcp receive machine....
-                                    {
-                                        let timestamp = timer.now();
-                                        log::info!("entering poll");
-                                        match iface.poll(&mut sockets, timestamp) {
-                                            Ok(_) => { log::info!("poll OK") }
-                                            Err(e) => {
-                                                log::debug!("poll error: {}", e);
-                                            }
-                                        }
-                                        log::info!("leaving poll");
-                                        {
-                                            let timestamp = timer.now();
-                                            let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
-                                            if !socket.is_open() {
-                                                log::info!("bind to icmp");
-                                                socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
-                                                send_at = timestamp;
-                                            }
-
-                                            if socket.can_send() && seq_no < count as u16 && send_at <= timestamp {
-                                                log::info!("send icmp {}", count);
-                                                NetworkEndian::write_i64(&mut echo_payload, timestamp.total_millis());
-
-                                                match ping_remote_addr {
-                                                    IpAddress::Ipv4(_) => {
-                                                        let (icmp_repr, mut icmp_packet) = send_icmp_ping!(
-                                                            Icmpv4Repr,
-                                                            Icmpv4Packet,
-                                                            ident,
-                                                            seq_no,
-                                                            echo_payload,
-                                                            socket,
-                                                            ping_remote_addr
-                                                        );
-                                                        icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
-                                                    }
-                                                    _ => unimplemented!(),
-                                                }
-
-                                                waiting_queue.insert(seq_no, timestamp);
-                                                seq_no += 1;
-                                                send_at += interval;
-                                            }
-
-                                            if socket.can_recv() {
-                                                log::info!("socket can_recv()");
-                                                let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
-                                                log::info!("payload: {:x?}", payload);
-
-                                                match ping_remote_addr {
-                                                    IpAddress::Ipv4(_) => {
-                                                        let icmp_packet = Icmpv4Packet::new_checked(&payload).expect("couldn't make icmp payload");
-                                                        let icmp_repr =
-                                                            Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).expect("error parsing icmp4 repr");
-                                                        get_icmp_pong!(
-                                                            Icmpv4Repr,
-                                                            icmp_repr,
-                                                            payload,
-                                                            waiting_queue,
-                                                            ping_remote_addr,
-                                                            timestamp,
-                                                            received
-                                                        );
-                                                    }
-                                                    _ => unimplemented!(),
-                                                }
-                                            }
-
-                                            waiting_queue.retain(|seq, from| {
-                                                if timestamp - *from < timeout {
-                                                    true
-                                                } else {
-                                                    log::info!("From {} icmp_seq={} timeout", ping_remote_addr, seq);
-                                                    false
-                                                }
-                                            });
-
-                                            if seq_no == count as u16 && waiting_queue.is_empty() {
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    /*
-                                    incoming_pkt = &mut incoming_pkt_buf[0..rxlen as usize];
-                                    com.wlan_fetch_packet(incoming_pkt).unwrap();
-                                    log::info!("Rx: {:x?}", incoming_pkt);*/
+                                    send_message(
+                                        net_conn,
+                                        Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)
+                                    ).expect("WlanRxReady couldn't pump the loop");
                                 } else {
                                     log::error!("Got RxReady interrupt but no packet length specified!");
                                 }
@@ -318,6 +284,119 @@ fn xmain() -> ! {
                     }
                 }
                 com.ints_ack(&com_int_list);
+            }
+            Some(Opcode::NetPump) => {
+                let timestamp = timer.now();
+                match iface.poll(&mut sockets, timestamp) {
+                    Ok(_) => { }
+                    Err(e) => {
+                        log::debug!("poll error: {}", e);
+                    }
+                }
+                {
+                    let timestamp = timer.now();
+                    let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                    if !socket.is_open() {
+                        log::info!("bind to icmp");
+                        socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
+                        send_at = timestamp;
+                    }
+
+                    if socket.can_send() && seq_no < count as u16 && send_at <= timestamp {
+                        log::info!("send icmp {}", count);
+                        NetworkEndian::write_i64(&mut echo_payload, timestamp.total_millis());
+
+                        let (icmp_repr, mut icmp_packet) = send_icmp_ping!(
+                            Icmpv4Repr,
+                            Icmpv4Packet,
+                            ident,
+                            seq_no,
+                            echo_payload,
+                            socket,
+                            ping_remote_addr
+                        );
+                        icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
+                        log::info!("icmp pkt: {:?}", icmp_packet);
+
+                        waiting_queue.insert(seq_no, timestamp);
+                        seq_no += 1;
+                        send_at += interval;
+                    }
+
+                    if socket.can_recv() {
+                        log::info!("socket can_recv()");
+                        let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
+                        log::info!("icmp payload: {:x?}", payload);
+
+                        let icmp_packet = Icmpv4Packet::new_checked(&payload).expect("couldn't make icmp payload");
+                        let icmp_repr =
+                            Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).expect("error parsing icmp4 repr");
+                        get_icmp_pong!(
+                            Icmpv4Repr,
+                            icmp_repr,
+                            payload,
+                            waiting_queue,
+                            ping_remote_addr,
+                            timestamp,
+                            received
+                        );
+                    }
+
+                    waiting_queue.retain(|seq, from| {
+                        if timestamp - *from < timeout {
+                            true
+                        } else {
+                            log::info!("From {} icmp_seq={} timeout", ping_remote_addr, seq);
+                            false
+                        }
+                    });
+
+                    if seq_no == count as u16 && waiting_queue.is_empty() {
+                        log::info!("{} packets transmitted, {} received, {:.0}% packet loss",
+                                seq_no,
+                                received,
+                                100.0 * (seq_no - received) as f64 / seq_no as f64
+                        );
+                        seq_no += 1; // extinguish the message after it has printed once
+                    }
+                }
+
+                // establish our next check-up interval
+                // it's unclear why the "ping" example has such a crazy complicated poll_at mechanism...
+                let timestamp = timer.now();
+                match iface.poll_at(&sockets, timestamp) {
+                    Some(poll_at) if timestamp < poll_at => {
+                        //log::info!("poll_at: {}", poll_at);
+                        xous::try_send_message(wait_conn.load(Ordering::SeqCst),
+                            Message::new_scalar(
+                                WaitOp::PollAt.to_usize().unwrap(),
+                                (poll_at.total_millis() as u64 & 0xFFFF_FFFF) as usize,
+                                ((poll_at.total_millis() as u64 >> 32) & 0xFFF_FFFF) as usize,
+                                0, 0)
+                        ).ok();
+                    }
+                    Some(_) => {
+                        //log::info!("didn't get a specific wait_at, polling immediately...");
+                        xous::try_send_message(net_conn,
+                            Message::new_scalar(
+                                Opcode::NetPump.to_usize().unwrap(),
+                                0, 0, 0, 0)
+                        ).ok();
+                    },
+                    None => {
+                        /*
+                        let wait_time = (send_at - timestamp).millis();
+                        log::info!("default wait: {}", wait_time);
+                        send_message(wait_conn.load(Ordering::SeqCst),
+                            Message::new_scalar(
+                                WaitOp::WaitMs.to_usize().unwrap(),
+                                (wait_time & 0xFFFF_FFFF) as usize,
+                                ((wait_time >> 32) & 0xFFF_FFFF) as usize,
+                                0, 0)
+                        ).expect("couldn't issue wait message");
+                        */
+                    }
+                }
             }
             Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
                 // handle an suspend/resume state stuff here. right now, it's a NOP

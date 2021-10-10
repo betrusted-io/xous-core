@@ -41,8 +41,14 @@ impl<'a> phy::Device<'a> for NetPhy {
     type TxToken = NetPhyTxToken<'a>;
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        Some((NetPhyRxToken{buf: &mut self.rx_buffer[..], com: & self.com, rx_avail: self.rx_avail.take()},
-              NetPhyTxToken{buf: &mut self.tx_buffer[..], com: & self.com}))
+        if let Some(rx_len) = self.rx_avail.take() {
+            self.com.wlan_fetch_packet(&mut self.rx_buffer[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
+
+            Some((NetPhyRxToken{buf: &mut self.rx_buffer[..rx_len as usize]},
+            NetPhyTxToken{buf: &mut self.tx_buffer[..], com: & self.com}))
+        } else {
+            None
+        }
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
@@ -60,30 +66,14 @@ impl<'a> phy::Device<'a> for NetPhy {
 
 pub struct NetPhyRxToken<'a> {
     buf: &'a mut [u8],
-    com: &'a Com,
-    rx_avail: Option<u16>,
 }
 
 impl<'a, 'c> phy::RxToken for NetPhyRxToken<'a> {
     fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
         where F: FnOnce(&mut [u8]) -> Result<R>
     {
-        if let Some(rx_len) = self.rx_avail.take() {
-            self.com.wlan_fetch_packet(&mut self.buf[..rx_len as usize]).expect("Couldn't call wlan_fetch_packet in device adapter");
-            self.buf = &mut self.buf[..rx_len as usize];
-            log::info!("rxbuf: {:x?}", self.buf);
-        }
-        // else, the buf is not updated -- and it would be empty, yielding no availability
-
         let result = f(&mut self.buf);
-        match result {
-            Err(e) => {
-                log::info!("rx err: {:?}", e);
-            }
-            _ => {
-                log::info!("rx result: {:x?}", self.buf);
-            }
-        }
+        //log::info!("rx: {:x?}", self.buf);
         result
     }
 }
@@ -98,10 +88,10 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
         where F: FnOnce(&mut [u8]) -> Result<R>
     {
         let result = f(&mut self.buf[..len]);
-        log::info!("tx called {}", len);
+        log::info!("txlen: {}", len);
 
         if result.is_ok() {
-            self.com.wlan_send_packet(self.buf).map_err(|_| smoltcp::Error::Dropped)?;
+            self.com.wlan_send_packet(&self.buf[..len]).map_err(|_| smoltcp::Error::Dropped)?;
         }
         result
     }

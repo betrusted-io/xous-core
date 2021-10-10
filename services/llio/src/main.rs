@@ -712,6 +712,11 @@ fn xmain() -> ! {
     let mut llio = Llio::new(handler_conn, gpio_base);
     llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
 
+    if cfg!(feature = "wfi_off") {
+        log::warn!("WFI is overridden at boot -- automatic power savings is OFF!");
+        llio.wfi_override(true);
+    }
+
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
