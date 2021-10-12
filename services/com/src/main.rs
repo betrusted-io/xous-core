@@ -271,6 +271,9 @@ mod implementation {
         pub fn wait_txrx(&mut self, _tx: u16, _timeout: Option<u32>) -> u16 {
             0xDEAD as u16
         }
+        pub fn try_wait_txrx(&mut self, _tx: u16, _timeout: u32) -> Option<u16> {
+            None
+        }
 
         pub fn get_battstats(&mut self) -> BattStats {
             BattStats {
