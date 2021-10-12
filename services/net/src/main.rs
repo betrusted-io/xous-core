@@ -50,7 +50,7 @@ macro_rules! get_icmp_pong {
         if let $repr_type::EchoReply { seq_no, data, .. } = $repr {
             if let Some(_) = $waiting_queue.get(&seq_no) {
                 let packet_timestamp_ms = NetworkEndian::read_i64(data);
-                println!(
+                log::info!(
                     "{} bytes from {}: icmp_seq={}, time={}ms",
                     data.len(),
                     $remote_addr,
@@ -254,7 +254,7 @@ fn xmain() -> ! {
 
                             // iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
-                                Ok(route) => log::info!("routing table updated successfully: {:?}", route),
+                                Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
                                 Err(e) => log::error!("routing table update error: {}", e),
                             }
                         },
@@ -296,13 +296,12 @@ fn xmain() -> ! {
                     let timestamp = timer.now();
                     let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                     if !socket.is_open() {
-                        log::info!("bind to icmp");
+                        log::info!("Binding smoltcp to icmp socket");
                         socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
                         send_at = timestamp;
                     }
 
                     if socket.can_send() && seq_no < count as u16 && send_at <= timestamp {
-                        log::info!("send icmp {}", count);
                         NetworkEndian::write_i64(&mut echo_payload, timestamp.total_millis());
 
                         let (icmp_repr, mut icmp_packet) = send_icmp_ping!(
