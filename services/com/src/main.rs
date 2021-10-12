@@ -773,7 +773,7 @@ fn xmain() -> ! {
                     retbuf[word_index * 2] = be_bytes[0];
                     retbuf[word_index * 2 + 1] = be_bytes[1];
                 }
-                log::info!("rx: {:?}", &retbuf[..len_bytes as usize]);
+                log::trace!("rx: {:?}", &retbuf[..len_bytes as usize]);
                 buffer.replace(retbuf).expect("couldn't return packet");
             }
             Some(Opcode::WlanSendPacket) => {
@@ -790,7 +790,7 @@ fn xmain() -> ! {
                     log::error!("invalid packet send length: {}, aborting without send", len_bytes);
                     continue;
                 }
-                log::info!("tx: {:?}", &txbuf[2..len_bytes as usize + 2]);
+                log::trace!("tx: {:?}", &txbuf[2..len_bytes as usize + 2]);
                 com.txrx(ComState::NET_FRAME_SEND_0.verb | len_bytes);
                 for word_index in 0..len_words as usize {
                     let be_bytes: [u8; 2] = [txbuf[2 + word_index * 2], txbuf[2 + word_index * 2 + 1]];

@@ -11,7 +11,6 @@ mod device;
 use byteorder::{ByteOrder, NetworkEndian};
 use xous::msg_scalar_unpack;
 use xous::{send_message, Message};
-use std::cmp;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -99,7 +98,7 @@ enum WaitOp {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -256,7 +255,7 @@ fn xmain() -> ! {
                             // iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
                                 Ok(route) => log::info!("routing table updated successfully: {:?}", route),
-                                Err(e) => log::info!("routing table update error: {}", e),
+                                Err(e) => log::error!("routing table update error: {}", e),
                             }
                         },
                         ComIntSources::WlanRxReady => {
@@ -316,7 +315,7 @@ fn xmain() -> ! {
                             ping_remote_addr
                         );
                         icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
-                        log::info!("icmp pkt: {:?}", icmp_packet);
+                        log::trace!("icmp pkt: {:?}", icmp_packet);
 
                         waiting_queue.insert(seq_no, timestamp);
                         seq_no += 1;
@@ -324,9 +323,8 @@ fn xmain() -> ! {
                     }
 
                     if socket.can_recv() {
-                        log::info!("socket can_recv()");
                         let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
-                        log::info!("icmp payload: {:x?}", payload);
+                        log::trace!("icmp payload: {:x?}", payload);
 
                         let icmp_packet = Icmpv4Packet::new_checked(&payload).expect("couldn't make icmp payload");
                         let icmp_repr =

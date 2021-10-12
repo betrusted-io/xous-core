@@ -88,7 +88,7 @@ impl<'a> phy::TxToken for NetPhyTxToken<'a> {
         where F: FnOnce(&mut [u8]) -> Result<R>
     {
         let result = f(&mut self.buf[..len]);
-        log::info!("txlen: {}", len);
+        //log::info!("txlen: {}", len);
 
         if result.is_ok() {
             self.com.wlan_send_packet(&self.buf[..len]).map_err(|_| smoltcp::Error::Dropped)?;
