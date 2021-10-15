@@ -232,8 +232,24 @@ fn xmain() -> ! {
                         },
                         ComIntSources::WlanIpConfigUpdate => {
                             let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
-                            net_config = Some(config);
-                            log::info!("Network config updated: {:?}", config);
+                            if let Some(cur_config) = net_config {
+                                if cur_config.mac == config.mac &&
+                                   cur_config.addr == config.addr &&
+                                   cur_config.gtwy == config.gtwy &&
+                                   cur_config.mask == config.mask &&
+                                   cur_config.dns1 == config.dns1 &&
+                                   cur_config.dns2 == config.dns2 {
+                                    log::info!("DHCP renewed, no change: {:?}", config);
+                                    continue;
+                                } else {
+                                    log::info!("Network config updated: {:?}", config);
+                                    iface.routes_mut().remove_default_ipv4_route();
+                                    net_config = Some(config);
+                                }
+                            } else {
+                                log::info!("Network config acquired: {:?}", config);
+                                net_config = Some(config);
+                            }
                             let mac = EthernetAddress::from_bytes(&config.mac);
                             iface.set_ethernet_addr(mac);
                             let ip_addr =
@@ -251,7 +267,6 @@ fn xmain() -> ! {
                                 config.gtwy[3],
                             );
 
-                            iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
                                 Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
                                 Err(e) => log::error!("routing table update error: {}", e),
