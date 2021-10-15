@@ -192,8 +192,7 @@ fn xmain() -> ! {
     let timer = SmoltcpTimer::new();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-    let mut routes_storage = [None; 1];
-    let routes = Routes::new(&mut routes_storage[..]);
+    let routes = Routes::new(BTreeMap::new());
 
     let device = device::NetPhy::new(&xns);
     let device_caps = device.capabilities();
@@ -252,7 +251,7 @@ fn xmain() -> ! {
                                 config.gtwy[3],
                             );
 
-                            // iface.routes_mut().remove_default_ipv4_route();
+                            iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
                                 Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
                                 Err(e) => log::error!("routing table update error: {}", e),

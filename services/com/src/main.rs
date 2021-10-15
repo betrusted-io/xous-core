@@ -719,11 +719,11 @@ fn xmain() -> ! {
                 }
             }
             Some(Opcode::WlanJoin) => {
-                info!("TODO: implement WlanJoin");
+                info!("Sent WlanJoin");
                 com.txrx(ComState::WLAN_JOIN.verb);
             }
             Some(Opcode::WlanLeave) => {
-                info!("TODO: implement WlanLeave");
+                info!("Sent WlanLeave");
                 com.txrx(ComState::WLAN_LEAVE.verb);
             }
             Some(Opcode::WlanStatus) => {
