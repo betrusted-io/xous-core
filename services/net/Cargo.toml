@@ -7,6 +7,7 @@ description = "Network middleware"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
+xous-ipc = {path="../../xous-ipc"}
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
@@ -14,7 +15,8 @@ log = "0.4"
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 susres = {path = "../susres"}
-rkyv = "0.7.18"
+#rkyv = "0.7.18"
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 llio = {path = "../llio"}
 com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }

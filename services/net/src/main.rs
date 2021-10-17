@@ -22,7 +22,7 @@ use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBu
 use smoltcp::wire::{
     EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr,
 };
-use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer};
+use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle};
 use smoltcp::{
     time::{Duration, Instant},
 };
@@ -178,7 +178,7 @@ fn xmain() -> ! {
 
     let mut sockets = SocketSet::new(vec![]);
     let icmp_handle = sockets.add(icmp_socket);
-    let mut handles = vec![];
+    let mut udp_handles = HashMap::<u16, SocketHandle>::new();
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;
@@ -220,19 +220,44 @@ fn xmain() -> ! {
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let udpspec = buf.to_original::<NetUdpBindIpv4, _>().unwrap();
+                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
 
                 let buflen = if let Some(maxlen) = udpspec.max_payload {
                     maxlen as usize
                 } else {
                     NET_MTU as usize
                 };
-                let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
-                let udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
-                handles.push(sockets.add(udp_socket));
-
-                // TODO: add return code stuff, but let's see how much the borrow checker hates this code so far...
+                if udp_handles.contains_key(&udpspec.port) {
+                    log::error!("Attempt to bind to udp:{}, already in use.", udpspec.port);
+                    buf.replace(NetMemResponse::SocketInUse).unwrap();
+                } else {
+                    let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
+                    let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
+                    let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
+                    match udp_socket.bind(udpspec.port) {
+                        Ok(_) => {
+                            udp_handles.insert(udpspec.port, sockets.add(udp_socket));
+                            buf.replace(NetMemResponse::Ok).unwrap();
+                        }
+                        Err(e) => {
+                            log::error!("Udp couldn't bind to socket: {:?}", e);
+                            buf.replace(NetMemResponse::Invalid).unwrap();
+                        }
+                    }
+                }
+            },
+            Some(Opcode::UdpClose) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
+                match udp_handles.remove(&udpspec.port) {
+                    Some(handle) => {
+                        sockets.get::<UdpSocket>(handle).close();
+                        buf.replace(NetMemResponse::Ok).unwrap()
+                    }
+                    _ => {
+                        buf.replace(NetMemResponse::Invalid).unwrap()
+                    }
+                }
             },
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
@@ -331,6 +356,32 @@ fn xmain() -> ! {
                         log::debug!("poll error: {}", e);
                     }
                 }
+
+                {
+                    for (port, &handle) in udp_handles.iter() {
+                        let mut socket = sockets.get::<UdpSocket>(handle);
+                        match socket.recv() {
+                            Ok((data, endpoint)) => {
+                                log::info!(
+                                    "udp:{} recv data: {:?} from {}",
+                                    port,
+                                    std::str::from_utf8(data).unwrap(),
+                                    endpoint
+                                );
+                                // return the data/endpoint tuple to the caller
+                                // TODO
+
+                            }
+                            Err(_) => {
+                                // do nothing
+                            },
+                        };
+                    }
+                }
+
+                // this enclosure contains an ICMP implementation that needs to be deconstructed
+                // at the moment it bakes in a pinger and ping responder -- we need to remove the pinger
+                // and expose it to a generic interface. Once we figure out what that is.
                 {
                     let timestamp = timer.now();
                     let mut socket = sockets.get::<IcmpSocket>(icmp_handle);

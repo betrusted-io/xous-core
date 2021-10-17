@@ -1246,12 +1246,13 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.7.18",
+ "rkyv 0.4.3",
  "smoltcp",
  "susres",
  "ticktimer-server",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
