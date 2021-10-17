@@ -4,13 +4,14 @@
 mod api;
 use api::*;
 use num_traits::*;
-use com::api::{Ipv4Conf, ComIntSources};
+use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 
 mod device;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use xous::msg_scalar_unpack;
 use xous::{send_message, Message};
+use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -21,6 +22,7 @@ use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBu
 use smoltcp::wire::{
     EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr,
 };
+use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer};
 use smoltcp::{
     time::{Duration, Instant},
 };
@@ -176,6 +178,7 @@ fn xmain() -> ! {
 
     let mut sockets = SocketSet::new(vec![]);
     let icmp_handle = sockets.add(icmp_socket);
+    let mut handles = vec![];
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;
@@ -213,8 +216,24 @@ fn xmain() -> ! {
     let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
     loop {
-        let msg = xous::receive_message(net_sid).unwrap();
+        let mut msg = xous::receive_message(net_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::UdpBind) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let udpspec = buf.to_original::<NetUdpBindIpv4, _>().unwrap();
+
+                let buflen = if let Some(maxlen) = udpspec.max_payload {
+                    maxlen as usize
+                } else {
+                    NET_MTU as usize
+                };
+                let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
+                let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
+                let udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
+                handles.push(sockets.add(udp_socket));
+
+                // TODO: add return code stuff, but let's see how much the borrow checker hates this code so far...
+            },
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
                 let maybe_rxlen = com.ints_get_active(&mut com_int_list);
@@ -232,26 +251,31 @@ fn xmain() -> ! {
                         },
                         ComIntSources::WlanIpConfigUpdate => {
                             let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
-                            if let Some(cur_config) = net_config {
-                                if cur_config.mac == config.mac &&
-                                   cur_config.addr == config.addr &&
-                                   cur_config.gtwy == config.gtwy &&
-                                   cur_config.mask == config.mask &&
-                                   cur_config.dns1 == config.dns1 &&
-                                   cur_config.dns2 == config.dns2 {
-                                    log::info!("DHCP renewed, no change: {:?}", config);
-                                    continue;
-                                } else {
-                                    log::info!("Network config updated: {:?}", config);
-                                    iface.routes_mut().remove_default_ipv4_route();
-                                    net_config = Some(config);
-                                }
-                            } else {
-                                log::info!("Network config acquired: {:?}", config);
-                                net_config = Some(config);
-                            }
+                            log::info!("Network config acquired: {:?}", config);
+                            net_config = Some(config);
                             let mac = EthernetAddress::from_bytes(&config.mac);
-                            iface.set_ethernet_addr(mac);
+
+                            // we need to clear the ARP cache in case we've migrated base stations (e.g. in a wireless network
+                            // that is coverd by multiple AP), as the host AP's MAC address would have changed, and we wouldn't
+                            // be able to route responses back. I can't seem to find a function in smoltcp 0.7.5 that allows us
+                            // to neatly clear the ARP cache as the BTreeMap that underlies it is moved into the container and
+                            // no "clear" API is exposed, so let's just rebuild the whole interface if we get a DHCP renewal.
+                            let neighbor_cache = NeighborCache::new(BTreeMap::new());
+                            let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
+                            let routes = Routes::new(BTreeMap::new());
+                            let device = device::NetPhy::new(&xns);
+                            let device_caps = device.capabilities();
+                            let medium = device.capabilities().medium;
+                            let mut builder = InterfaceBuilder::new(device)
+                                .ip_addrs(ip_addrs)
+                                .routes(routes);
+                            if medium == Medium::Ethernet {
+                                builder = builder
+                                    .ethernet_addr(mac)
+                                    .neighbor_cache(neighbor_cache);
+                            }
+                            let mut iface = builder.finalize();
+
                             let ip_addr =
                                 Ipv4Cidr::new(Ipv4Address::new(
                                     config.addr[0],
@@ -267,6 +291,8 @@ fn xmain() -> ! {
                                 config.gtwy[3],
                             );
 
+                            // reset the default route, in case it has changed
+                            iface.routes_mut().remove_default_ipv4_route();
                             match iface.routes_mut().add_default_ipv4_route(default_v4_gw) {
                                 Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
                                 Err(e) => log::error!("routing table update error: {}", e),
