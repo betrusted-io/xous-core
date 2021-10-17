@@ -264,7 +264,6 @@ fn xmain() -> ! {
                             let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
                             let routes = Routes::new(BTreeMap::new());
                             let device = device::NetPhy::new(&xns);
-                            let device_caps = device.capabilities();
                             let medium = device.capabilities().medium;
                             let mut builder = InterfaceBuilder::new(device)
                                 .ip_addrs(ip_addrs)
@@ -274,7 +273,7 @@ fn xmain() -> ! {
                                     .ethernet_addr(mac)
                                     .neighbor_cache(neighbor_cache);
                             }
-                            let mut iface = builder.finalize();
+                            iface = builder.finalize();
 
                             let ip_addr =
                                 Ipv4Cidr::new(Ipv4Address::new(
