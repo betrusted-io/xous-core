@@ -128,6 +128,7 @@ mod implementation {
                 while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
                     if (self.ticktimer.elapsed_ms() - curtime) > to
                     {
+                        log::warn!("COM timeout");
                         timed_out = true;
                     }
                     xous::yield_slice();
@@ -150,6 +151,7 @@ mod implementation {
             while self.csr.rf(utra::com::STATUS_HOLD) == 1 && !timed_out {
                 if (self.ticktimer.elapsed_ms() - curtime) > to
                 {
+                    log::warn!("COM timeout");
                     timed_out = true;
                 }
                 xous::yield_slice();
