@@ -97,6 +97,11 @@ enum WaitOp {
     Quit,
 }
 
+pub struct UdpState {
+    handle: SocketHandle,
+    cid: xous::CID,
+}
+
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
@@ -170,7 +175,7 @@ fn xmain() -> ! {
     let mut net_config: Option<Ipv4Conf> = None;
 
     // ping-specific storage
-    let ping_remote_addr = IpAddress::from_str("10.0.245.243").expect("invalid address format");
+    let ping_remote_addr = IpAddress::from_str("10.0.245.1").expect("invalid address format");
 
     let icmp_rx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
     let icmp_tx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
@@ -178,7 +183,7 @@ fn xmain() -> ! {
 
     let mut sockets = SocketSet::new(vec![]);
     let icmp_handle = sockets.add(icmp_socket);
-    let mut udp_handles = HashMap::<u16, SocketHandle>::new();
+    let mut udp_handles = HashMap::<u16, UdpState>::new();
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;
@@ -236,7 +241,11 @@ fn xmain() -> ! {
                     let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
                     match udp_socket.bind(udpspec.port) {
                         Ok(_) => {
-                            udp_handles.insert(udpspec.port, sockets.add(udp_socket));
+                            let udpstate = UdpState {
+                                handle: sockets.add(udp_socket),
+                                cid: xous::connect(xous::SID::from_array(udpspec.cb_sid)).unwrap(),
+                            };
+                            udp_handles.insert(udpspec.port, udpstate);
                             buf.replace(NetMemResponse::Ok).unwrap();
                         }
                         Err(e) => {
@@ -250,8 +259,8 @@ fn xmain() -> ! {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
                 match udp_handles.remove(&udpspec.port) {
-                    Some(handle) => {
-                        sockets.get::<UdpSocket>(handle).close();
+                    Some(udpstate) => {
+                        sockets.get::<UdpSocket>(udpstate.handle).close();
                         buf.replace(NetMemResponse::Ok).unwrap()
                     }
                     _ => {
@@ -358,7 +367,8 @@ fn xmain() -> ! {
                 }
 
                 {
-                    for (port, &handle) in udp_handles.iter() {
+                    for (port, udpstate) in udp_handles.iter() {
+                        let handle = udpstate.handle;
                         let mut socket = sockets.get::<UdpSocket>(handle);
                         match socket.recv() {
                             Ok((data, endpoint)) => {
@@ -369,8 +379,17 @@ fn xmain() -> ! {
                                     endpoint
                                 );
                                 // return the data/endpoint tuple to the caller
-                                // TODO
-
+                                let mut response = NetUdpResponse {
+                                    endpoint_ip_addr: NetIpAddr::from(endpoint.addr),
+                                    len: data.len() as u16,
+                                    endpoint_port: endpoint.port,
+                                    data: [0; UDP_RESPONSE_MAX_LEN],
+                                };
+                                for (&src, dst) in data.iter().zip(response.data.iter_mut()) {
+                                    *dst = src;
+                                }
+                                let buf = Buffer::into_buf(response).expect("couldn't convert UDP response to memory message");
+                                buf.send(udpstate.cid, NetUdpCallback::RxData.to_u32().unwrap()).expect("couldn't send UDP response");
                             }
                             Err(_) => {
                                 // do nothing

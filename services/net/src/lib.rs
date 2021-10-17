@@ -8,6 +8,7 @@ use num_traits::*;
 
 pub mod backend;
 pub use backend::*;
+pub use smoltcp::time::Duration;
 
 /// NetConn is a crate-level structure that just counts the number of connections from this process to
 /// the Net server. It's not mean to be created by user-facing code, so the visibility is (crate).

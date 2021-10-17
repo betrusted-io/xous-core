@@ -70,6 +70,7 @@ impl From<IpAddress> for NetIpAddr {
     }
 }
 
+pub(crate) const UDP_RESPONSE_MAX_LEN: usize = 1800;
 /// The data field for a UDP response is limited to less than the theoretical
 /// size of 64k. While UDP allows for a 64k packet, it seems no protoctols
 /// in practice utilize such a length (about 512 bytes is the biggest), due
@@ -84,7 +85,7 @@ pub(crate) struct NetUdpResponse {
     pub endpoint_ip_addr: NetIpAddr,
     pub len: u16,
     pub endpoint_port: u16,
-    pub data: [u8; 1800],
+    pub data: [u8; UDP_RESPONSE_MAX_LEN],
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]

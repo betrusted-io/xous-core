@@ -32,6 +32,7 @@ engine-25519 = {path="../engine-25519"}
 spinor = {path="../spinor"}
 root-keys = {path="../root-keys"}
 jtag = {path="../jtag"}
+net = {path="../net"}
 
 trng = {path = "../trng"}
 

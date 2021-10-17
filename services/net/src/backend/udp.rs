@@ -38,8 +38,8 @@ pub struct UdpSocket{
 
 // next steps: build this stub, and figure out how to clean up the error handling code.
 impl UdpSocket {
-    pub fn bind(maybe_socket: Result<&SocketAddr>, max_payload: Option<u16>) -> Result<UdpSocket> {
-        let socket = maybe_socket?;
+    pub fn bind(socket: SocketAddr, max_payload: Option<u16>) -> Result<UdpSocket> {
+        //let socket = maybe_socket.unwrap();
         let xns = xous_names::XousNames::new().unwrap();
         let net = NetConn::new(&xns).unwrap();
         let cb_sid = xous::create_server().unwrap();
@@ -76,8 +76,8 @@ impl UdpSocket {
                                 endpoint,
                                 data: Vec::new(),
                             };
-                            for (&src, dst) in incoming.data.iter().zip(rx.data.iter_mut()) {
-                                *dst = src;
+                            for &d in incoming.data[..incoming.len as usize].iter() {
+                                rx.data.push(d);
                             }
                             rx_buf.lock().unwrap().push(rx);
                             notify.lock().unwrap().notify(); // this will only notify if a destination has been set
@@ -96,7 +96,7 @@ impl UdpSocket {
         });
 
         let request = NetUdpBind {
-            ip_addr: NetIpAddr::from(*socket),
+            ip_addr: NetIpAddr::from(socket),
             port: socket.port(),
             cb_sid: cb_sid.to_array(),
             max_payload,
@@ -110,7 +110,7 @@ impl UdpSocket {
                 Ok(UdpSocket {
                     net,
                     cb_sid,
-                    socket_addr: *socket,
+                    socket_addr: socket,
                     rx_buf,
                     handle: Some(handle),
                     notify,

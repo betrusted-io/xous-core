@@ -99,6 +99,7 @@ mod memtest;  use memtest::*;
 mod keys;     use keys::*;
 mod wlan;     use wlan::*;
 mod jtag_cmd; use jtag_cmd::*;
+mod net_cmd;  use net_cmd::*;
 
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
@@ -124,6 +125,7 @@ pub struct CmdEnv {
     memtest_cmd: Memtest,
     keys_cmd: Keys,
     jtag_cmd: JtagCmd,
+    net_cmd: NetCmd,
 
     //fcc_cmd: Fcc,
 }
@@ -176,6 +178,7 @@ impl CmdEnv {
             memtest_cmd: memtest,
             keys_cmd: Keys::new(&xns),
             jtag_cmd: JtagCmd::new(&xns),
+            net_cmd: NetCmd::new(&xns),
 
             //fcc_cmd: fcc,
         }
@@ -214,6 +217,7 @@ impl CmdEnv {
             &mut self.keys_cmd,
             &mut wlan_cmd,
             &mut self.jtag_cmd,
+            &mut self.net_cmd,
 
             //&mut self.fcc_cmd,
         ];

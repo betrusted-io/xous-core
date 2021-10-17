@@ -2010,6 +2010,7 @@ dependencies = [
  "llio",
  "log",
  "log-server",
+ "net",
  "num-derive",
  "num-traits",
  "oqc-test",
