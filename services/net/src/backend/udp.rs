@@ -17,12 +17,17 @@ use xous::{CID, SID, Message, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use crate::NetConn;
 use crate::api::*;
+//use crate::api::udp::*;
 use num_traits::*;
 
+//////// Public structures
 pub struct UdpRx {
     pub endpoint: IpEndpoint,
     pub data: Vec<u8>,
 }
+
+
+///////// UdpSocket implementation
 pub struct UdpSocket{
     net: NetConn,
     cb_sid: SID,
@@ -33,6 +38,7 @@ pub struct UdpSocket{
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
     ticktimer: ticktimer_server::Ticktimer,
+    dest_addr: Option<SocketAddr>,
 }
 
 // next steps: build this stub, and figure out how to clean up the error handling code.
@@ -139,6 +145,7 @@ impl UdpSocket {
                     read_timeout: None,
                     write_timeout: None,
                     ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
+                    dest_addr: None,
                 })
             },
             _ => {
@@ -284,8 +291,15 @@ impl UdpSocket {
         self.recv_from_inner(pkt, true)
     }
 
+    pub fn connect(&self, _: io::Result<&SocketAddr>) -> io::Result<()> {
+        unimplemented!("work in progress")
+    }
 
     pub fn send(&self, _: &[u8]) -> io::Result<usize> {
+        unimplemented!("work in progress")
+    }
+
+    pub fn send_to(&self, _: &[u8], _: &SocketAddr) -> io::Result<usize> {
         unimplemented!("work in progress")
     }
 
@@ -294,10 +308,6 @@ impl UdpSocket {
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn send_to(&self, _: &[u8], _: &SocketAddr) -> io::Result<usize> {
         unimplemented!("work in progress")
     }
 
@@ -350,10 +360,6 @@ impl UdpSocket {
     }
 
     pub fn set_nonblocking(&self, _: bool) -> io::Result<()> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn connect(&self, _: io::Result<&SocketAddr>) -> io::Result<()> {
         unimplemented!("work in progress")
     }
 
