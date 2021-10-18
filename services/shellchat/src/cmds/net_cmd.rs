@@ -44,7 +44,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "net [udp [port]]";
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -78,6 +78,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 "udpclose" => {
                     self.udp = None;
+                    write!(ret, "Closed primary UDP socket").unwrap();
                 }
                 "udpclone" => {
                     if let Some(udp_socket) = &self.udp {
@@ -96,6 +97,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 }
                 "udpcloneclose" => {
                     self.udp_clone = None;
+                    write!(ret, "Closed cloned UDP socket").unwrap();
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
