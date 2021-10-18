@@ -21,12 +21,21 @@ pub(crate) struct NetUdpResponse {
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
-pub(crate) struct ScalarHook {
-    pub sid: (u32, u32, u32, u32),
-    pub id: u32,  // ID of the scalar message to send through (e.g. the discriminant of the Enum on the caller's side API)
-    pub cid: xous::CID,   // caller-side connection ID for the scalar message to route to. Created by the caller before hooking.
-    pub token: Option<[u32; 4]>, // 128-bit random token used to identify a connection to the net crate
+pub(crate) struct NetUdpTransmit {
+    pub dest_socket: Option<NetSocketAddr>,
+    /// local_port is the identifier for the socket handle, it must be specified
+    pub local_port: u16,
+    pub len: u16,
+    pub data: [u8; UDP_RESPONSE_MAX_LEN],
 }
+
+/* not used as the connect state is kept on the caller's side
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub(crate) struct NetUdpConnect {
+    pub dest_socket: NetSocketAddr,
+    /// local_port is the identifier for the socket handle, it must be specified
+    pub local_port: u16,
+}*/
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
 pub(crate) struct NetUdpBind {
@@ -34,15 +43,6 @@ pub(crate) struct NetUdpBind {
     pub(crate) ip_addr: NetIpAddr,
     pub(crate) port: u16,
     pub(crate) max_payload: Option<u16>, // defaults to MTU if not specified
-}
-
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
-pub(crate) enum NetMemResponse {
-    Ok,
-    OutOfMemory,
-    SocketInUse,
-    AccessDenied,
-    Invalid,
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]

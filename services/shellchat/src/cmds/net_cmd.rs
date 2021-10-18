@@ -3,12 +3,14 @@ use xous_ipc::String;
 use net::Duration;
 use xous::MessageEnvelope;
 use num_traits::*;
+use std::net::SocketAddr;
 
 #[derive(Debug)]
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
     callback_id: Option<u32>,
     callback_conn: u32,
+    udp_count: u32,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -16,6 +18,7 @@ impl NetCmd {
             udp: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
+            udp_count: 0,
         }
     }
 }
@@ -38,16 +41,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "net [udp]";
+        let helpstring = "net [udp [port]]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
+                /// Testing of udp is done with netcat:
+                /// to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
+                /// to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
                 "udp" => {
-                    if self.udp.is_none() {
+                    if let Some(udp_socket) = &
+                    self.udp {
+                        write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
+                    } else {
+                        let port = if let Some(tok_str) = tokens.next() {
+                            if let Ok(n) = tok_str.parse::<u16>() { n } else { 6502 }
+                        } else {
+                            6502
+                        };
                         let mut udp = net::UdpSocket::bind_xous(
-                            "127.0.0.1:6969",
+                            format!("127.0.0.1:{}", port),
                             Some(UDP_TEST_SIZE as u16)
                         ).unwrap();
                         udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
@@ -57,9 +71,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             [Some(NetCmdDispatch::UdpTest1.to_usize().unwrap()), None, None, None]
                         );
                         self.udp = Some(udp);
-                        write!(ret, "Created UDP socket listener on port 6969").unwrap();
-                    } else {
-                        write!(ret, "Socket listener already installed on 6969").unwrap();
+                        write!(ret, "Created UDP socket listener on port {}", port).unwrap();
                     }
                 }
                 _ => {
@@ -82,12 +94,25 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
         xous::msg_scalar_unpack!(msg, dispatch, _, _, _, {
             match FromPrimitive::from_usize(dispatch) {
                 Some(NetCmdDispatch::UdpTest1) => {
-                    if let Some(udp_socket) = &self.udp {
+                    if let Some(udp_socket) = &mut self.udp {
                         let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
                         match udp_socket.recv_from(&mut pkt) {
                             Ok((len, addr)) => {
-                                write!(ret, "UDP received {} bytes: {:?}: {}", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
-                                log::info!("UDP received {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
+                                write!(ret, "UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                log::info!("UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
+                                self.udp_count += 1;
+
+                                let response_addr = SocketAddr::new(
+                                    addr.ip(),
+                                    udp_socket.socket_addr().unwrap().port()
+                                );
+                                match udp_socket.send_to(
+                                    format!("Received {} packets\n\r", self.udp_count).as_bytes(),
+                                    &response_addr
+                                ) {
+                                    Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                    Err(_) => write!(ret, "UDP tx err").unwrap(),
+                                }
                             },
                             Err(e) => {
                                 log::error!("Net UDP error: {:?}", e);

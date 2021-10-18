@@ -20,7 +20,7 @@ use smoltcp::phy::{Medium, Device};
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, Interface};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
 use smoltcp::wire::{
-    EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr,
+    EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint
 };
 use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle};
 use smoltcp::{
@@ -266,6 +266,29 @@ fn xmain() -> ! {
                     _ => {
                         buf.replace(NetMemResponse::Invalid).unwrap()
                     }
+                }
+            },
+            Some(Opcode::UdpTx) => {
+                use std::convert::TryInto;
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let udp_tx = buf.to_original::<NetUdpTransmit, _>().unwrap();
+                match udp_handles.get_mut(&udp_tx.local_port) {
+                    Some(udpstate) => {
+                        if let Some(dest_socket) = udp_tx.dest_socket {
+                            let endpoint = IpEndpoint::new(
+                                dest_socket.addr.try_into().unwrap(),
+                                dest_socket.port
+                            );
+                            let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
+                            match socket.send_slice(&udp_tx.data[..udp_tx.len as usize], endpoint) {
+                                Ok(_) => buf.replace(NetMemResponse::Sent(udp_tx.len)).unwrap(),
+                                _ => buf.replace(NetMemResponse::LibraryError).unwrap(),
+                            }
+                        } else {
+                            buf.replace(NetMemResponse::Invalid).unwrap()
+                        }
+                    }
+                    _ => buf.replace(NetMemResponse::Invalid).unwrap()
                 }
             },
             Some(Opcode::ComInterrupt) => {

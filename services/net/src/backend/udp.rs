@@ -38,7 +38,7 @@ pub struct UdpSocket{
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
     ticktimer: ticktimer_server::Ticktimer,
-    dest_addr: Option<SocketAddr>,
+    dest_socket: Option<SocketAddr>,
 }
 
 // next steps: build this stub, and figure out how to clean up the error handling code.
@@ -55,14 +55,10 @@ impl UdpSocket {
                             Ok(&socket_addr),
                             max_payload)
                     }
-                    _ => {
-                        Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
-                    }
+                    _ => Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
                 }
             }
-            _ => {
-                Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
-            }
+            _ => Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
         }
     }
 
@@ -145,7 +141,7 @@ impl UdpSocket {
                     read_timeout: None,
                     write_timeout: None,
                     ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
-                    dest_addr: None,
+                    dest_socket: None,
                 })
             },
             _ => {
@@ -291,23 +287,79 @@ impl UdpSocket {
         self.recv_from_inner(pkt, true)
     }
 
-    pub fn connect(&self, _: io::Result<&SocketAddr>) -> io::Result<()> {
-        unimplemented!("work in progress")
+    pub fn connect(&mut self, maybe_socket_addr: io::Result<&SocketAddr>) -> io::Result<()> {
+        let socket = *maybe_socket_addr?;
+        self.dest_socket = Some(socket);
+        // the socket is just locally stored until the next send call, so there's nothing to send to the Net server
+        Ok(())
+    }
+    pub fn connect_xous<A: ToSocketAddrs>(&mut self, addr: A) -> io::Result<()> {
+        match addr.to_socket_addrs() {
+            Ok(socks) => {
+                match socks.into_iter().next() {
+                    Some(socket_addr) => self.connect(Ok(&socket_addr)),
+                    _ => Err(Error::new(ErrorKind::InvalidInput, "Destination socket invalid"))
+                }
+            }
+            _ => Err(Error::new(ErrorKind::InvalidInput, "Destination socket invalid"))
+        }
     }
 
-    pub fn send(&self, _: &[u8]) -> io::Result<usize> {
-        unimplemented!("work in progress")
+    pub fn send(&mut self, pkt: &[u8]) -> io::Result<usize> {
+        self.send_inner(pkt, None)
     }
 
-    pub fn send_to(&self, _: &[u8], _: &SocketAddr) -> io::Result<usize> {
-        unimplemented!("work in progress")
+    pub fn send_to(&mut self, pkt: &[u8], addr: &SocketAddr) -> io::Result<usize> {
+        self.send_inner(pkt, Some(addr))
+    }
+    pub fn send_to_xous<A: ToSocketAddrs>(&mut self, pkt: &[u8], addr: A) -> io::Result<usize> {
+        match addr.to_socket_addrs() {
+            Ok(socks) => {
+                match socks.into_iter().next() {
+                    Some(socket_addr) => self.send_inner(pkt, Some(&socket_addr)),
+                    _ => Err(Error::new(ErrorKind::InvalidInput, "Destination socket invalid"))
+                }
+            }
+            _ => Err(Error::new(ErrorKind::InvalidInput, "Destination socket invalid"))
+        }
     }
 
-    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
-        unimplemented!("work in progress")
+    fn send_inner(&mut self, pkt: &[u8], maybe_dest: Option<&SocketAddr>) -> io::Result<usize> {
+        let dest = if let Some(&d) = maybe_dest {
+            Some(NetSocketAddr::from(d))
+        } else {
+            // if not specified, grab from the local destination copy stored here
+            if let Some(dest) = self.dest_socket {
+                Some(NetSocketAddr::from(dest))
+            } else {
+                return Err(Error::new(ErrorKind::AddrNotAvailable, "Destination address was not specified with connect"));
+            }
+        };
+        let mut udp_tx = NetUdpTransmit {
+            dest_socket: dest,
+            local_port: self.socket_addr.port(),
+            len: pkt.len() as u16,
+            data: [0; UDP_RESPONSE_MAX_LEN],
+        };
+        for (&src, dst) in pkt.iter().zip(udp_tx.data.iter_mut()) {
+            *dst = src;
+        }
+
+        let mut buf = Buffer::into_buf(udp_tx)
+            .or(Err(Error::new(ErrorKind::Other, "can't send to Net server")))?;
+        buf.lend_mut(self.net.conn(), Opcode::UdpTx.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "can't send to Net server")))?;
+        match buf.to_original().unwrap() {
+            NetMemResponse::Sent(len) => Ok(len as usize),
+            _ => Err(Error::new(ErrorKind::Other, "send failed")),
+        }
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
+        Ok(self.socket_addr)
+    }
+
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
         unimplemented!("work in progress")
     }
 

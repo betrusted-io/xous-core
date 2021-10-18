@@ -4,9 +4,11 @@ pub(crate) use udp::*;
 use rkyv::{Archive, Deserialize, Serialize};
 use std::net::SocketAddr;
 use smoltcp::wire::IpAddress;
+use std::convert::TryInto;
 
 pub(crate) const SERVER_NAME_NET: &str     = "_Middleware Network Server_";
 
+/// Dispatch opcodes to the Net crate main loop.
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
     UdpBind,
@@ -33,6 +35,32 @@ pub(crate) enum Opcode {
 pub(crate) enum NetCallback {
     Ping,
     Drop,
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub(crate) enum NetMemResponse {
+    Ok,
+    Sent(u16),
+    OutOfMemory,
+    SocketInUse,
+    AccessDenied,
+    Invalid,
+    LibraryError,
+}
+
+/////// a bunch of structures are re-derived here so we can infer `rkyv` traits on them
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub (crate) struct NetSocketAddr {
+    pub(crate) addr: NetIpAddr,
+    pub(crate) port: u16,
+}
+impl From<SocketAddr> for NetSocketAddr {
+    fn from(other: SocketAddr) -> NetSocketAddr {
+        NetSocketAddr {
+            addr: NetIpAddr::from(other),
+            port: other.port(),
+        }
+    }
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
@@ -63,6 +91,28 @@ impl From<IpAddress> for NetIpAddr {
             },
             _ => {
                 panic!("Invalid IpAddress")
+            }
+        }
+    }
+}
+impl From<NetIpAddr> for IpAddress {
+    fn from(other: NetIpAddr) -> IpAddress {
+        match other {
+            NetIpAddr::Ipv4([a, b, c, d]) => {
+                IpAddress::Ipv4(smoltcp::wire::Ipv4Address::new(a, b, c, d))
+            }
+            NetIpAddr::Ipv6(ipv6) => {
+                    IpAddress::Ipv6(smoltcp::wire::Ipv6Address::new(
+                        u16::from_be_bytes(ipv6[0..1].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[2..3].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[4..5].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[6..7].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[8..9].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[10..11].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[12..13].try_into().unwrap()),
+                        u16::from_be_bytes(ipv6[14..15].try_into().unwrap()),
+                    )
+                )
             }
         }
     }
