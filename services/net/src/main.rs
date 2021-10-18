@@ -651,7 +651,7 @@ fn xmain() -> ! {
                 break;
             }
             None => {
-                log::error!("couldn't convert opcode: {}", msg);
+                log::error!("couldn't convert opcode: {:?}", msg);
             }
         }
     }
