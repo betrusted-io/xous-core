@@ -9,8 +9,7 @@ use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 mod device;
 
 use byteorder::{ByteOrder, NetworkEndian};
-use xous::msg_scalar_unpack;
-use xous::{send_message, Message};
+use xous::{send_message, Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -99,7 +98,8 @@ enum WaitOp {
 
 pub struct UdpState {
     handle: SocketHandle,
-    cid: xous::CID,
+    cid: CID,
+    sid: SID,
 }
 
 #[xous::xous_main]
@@ -184,6 +184,10 @@ fn xmain() -> ! {
     let mut sockets = SocketSet::new(vec![]);
     let icmp_handle = sockets.add(icmp_socket);
     let mut udp_handles = HashMap::<u16, UdpState>::new();
+    // UDP requires multiple copies. The way it works is that Tx can come from anyone;
+    // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
+    // allows for the Rx data to be cc:'d to each clone, and identified by SID upon drop
+    let mut udp_clones = HashMap::<u16, HashMap::<[u32; 4], CID>>::new(); // additional clones for UDP responders
 
     let mut send_at = Instant::from_millis(0);
     let mut seq_no = 0;
@@ -220,8 +224,13 @@ fn xmain() -> ! {
     let sr_cid = xous::connect(net_sid).expect("couldn't create suspend callback connection");
     let mut susres = susres::Susres::new(&xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
 
+    let mut cid_to_disconnect: Option<CID> = None;
     loop {
         let mut msg = xous::receive_message(net_sid).unwrap();
+        if let Some(_dc_cid) = cid_to_disconnect.take() { // disconnect previous loop iter's connection after d/c OK response was sent
+            // CHECK WITH XOBS: maybe these connections are auto-closed when the server is destroyed?
+            // unsafe{xous::disconnect(dc_cid).expect("couldn't disconnect from dropped UDP object")};
+        }
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
@@ -233,17 +242,39 @@ fn xmain() -> ! {
                     NET_MTU as usize
                 };
                 if udp_handles.contains_key(&udpspec.port) {
-                    log::error!("Attempt to bind to udp:{}, already in use.", udpspec.port);
-                    buf.replace(NetMemResponse::SocketInUse).unwrap();
+                    // if we're already connected, just register the extra listener in the clones array
+                    let sid = udpspec.cb_sid;
+                    let cid = xous::connect(SID::from_array(sid)).unwrap();
+                    if let Some(clone_map) = udp_clones.get_mut(&udpspec.port) {
+                        // if a clone already exists, put the additional clone into the map
+                        match clone_map.insert(sid, cid) {
+                            Some(_) => {
+                                log::error!("Something went wrong in a UDP clone operation -- same SID registered twice");
+                                buf.replace(NetMemResponse::SocketInUse).unwrap()
+                            }, // the same SID has double-registered, this is an error
+                            None => buf.replace(NetMemResponse::Ok).unwrap()
+                        }
+                    } else {
+                        // otherwise, create the clone mapping entry
+                        let mut newmap = HashMap::new();
+                        newmap.insert(sid, cid);
+                        udp_clones.insert(
+                            udpspec.port,
+                            newmap
+                        );
+                    }
+                    buf.replace(NetMemResponse::Ok).unwrap();
                 } else {
                     let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
                     let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; buflen]);
                     let mut udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
                     match udp_socket.bind(udpspec.port) {
                         Ok(_) => {
+                            let sid = SID::from_array(udpspec.cb_sid);
                             let udpstate = UdpState {
                                 handle: sockets.add(udp_socket),
-                                cid: xous::connect(xous::SID::from_array(udpspec.cb_sid)).unwrap(),
+                                cid: xous::connect(sid).unwrap(),
+                                sid
                             };
                             udp_handles.insert(udpspec.port, udpstate);
                             buf.replace(NetMemResponse::Ok).unwrap();
@@ -258,10 +289,57 @@ fn xmain() -> ! {
             Some(Opcode::UdpClose) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
+                // need to find the SID that matches either in the clone array, or the primary binding.
+                // first check the clone array, then fall back to the primary binding
+                match udp_clones.get_mut(&udpspec.port) {
+                    Some(clone_map) => {
+                        match clone_map.remove(&udpspec.cb_sid) {
+                            Some(cid) => {
+                                cid_to_disconnect = Some(cid);
+                                buf.replace(NetMemResponse::Ok).unwrap();
+                                continue;
+                            }
+                            None => {}
+                        }
+                    }
+                    None => {}
+                }
                 match udp_handles.remove(&udpspec.port) {
                     Some(udpstate) => {
-                        sockets.get::<UdpSocket>(udpstate.handle).close();
-                        buf.replace(NetMemResponse::Ok).unwrap()
+                        if udpstate.sid == SID::from_array(udpspec.cb_sid) {
+                            match udp_clones.get_mut(&udpspec.port) {
+                                // if the clone map is nil, close the socket, we're done
+                                None => {
+                                    sockets.get::<UdpSocket>(udpstate.handle).close();
+                                    buf.replace(NetMemResponse::Ok).unwrap();
+                                }
+                                // if the clone map has entries, promote an arbitrary map entry to the primary handle
+                                Some(clone_map) => {
+                                    if clone_map.len() == 0 {
+                                        // removing SIDs doesn't remove the map, so it's possible to have an empty mapping. Get rid of it, and we're done.
+                                        udp_clones.remove(&udpspec.port);
+                                        sockets.get::<UdpSocket>(udpstate.handle).close();
+                                        buf.replace(NetMemResponse::Ok).unwrap();
+                                    } else {
+                                        // take an arbitrary key, re-insert it into the handles map.
+                                        let new_primary_sid = *clone_map.keys().next().unwrap(); // unwrap is appropriate because len already checked as not 0
+                                        let udpstate = UdpState {
+                                            handle: udpstate.handle,
+                                            cid: *clone_map.get(&new_primary_sid).unwrap(),
+                                            sid: SID::from_array(new_primary_sid),
+                                        };
+                                        udp_handles.insert(udpspec.port, udpstate);
+                                        // now remove it from the clone map
+                                        clone_map.remove(&new_primary_sid);
+                                        // clean up the clone map if it's empty
+                                        if clone_map.len() == 0 {
+                                            udp_clones.remove(&udpspec.port);
+                                        }
+                                        buf.replace(NetMemResponse::Ok).unwrap();
+                                    }
+                                }
+                            }
+                        }
                     }
                     _ => {
                         buf.replace(NetMemResponse::Invalid).unwrap()
@@ -291,6 +369,36 @@ fn xmain() -> ! {
                     _ => buf.replace(NetMemResponse::Invalid).unwrap()
                 }
             },
+            Some(Opcode::UdpSetTtl) => msg_scalar_unpack!(msg, ttl, port, _, _, {
+                match udp_handles.get_mut(&(port as u16)) {
+                    Some(udpstate) => {
+                        let mut socket = sockets.get::<UdpSocket>(udpstate.handle);
+                        let checked_ttl = if ttl > 255 || ttl == 0 {
+                            64
+                        } else {
+                            ttl as u8
+                        };
+                        socket.set_hop_limit(Some(checked_ttl));
+                    }
+                    None => {
+                        log::error!("Set TTL message received, but no port was bound! port {} ttl {}", port, ttl);
+                    }
+                }
+            }),
+            Some(Opcode::UdpGetTtl) => msg_blocking_scalar_unpack!(msg, port, _, _, _, {
+                match udp_handles.get_mut(&(port as u16)) {
+                    Some(udpstate) => {
+                        let socket = sockets.get::<UdpSocket>(udpstate.handle);
+                        let ttl = socket.hop_limit().unwrap_or(64); // 64 is the value used by smoltcp if hop limit isn't set
+                        xous::return_scalar(msg.sender, ttl as usize).expect("couldn't return TTL");
+                    }
+                    None => {
+                        log::error!("Set TTL message received, but no port was bound! port {}", port);
+                        xous::return_scalar(msg.sender, usize::MAX).expect("couldn't return TTL");
+                    }
+                }
+            }),
+
             Some(Opcode::ComInterrupt) => {
                 com_int_list.clear();
                 let maybe_rxlen = com.ints_get_active(&mut com_int_list);
@@ -413,6 +521,13 @@ fn xmain() -> ! {
                                 }
                                 let buf = Buffer::into_buf(response).expect("couldn't convert UDP response to memory message");
                                 buf.send(udpstate.cid, NetUdpCallback::RxData.to_u32().unwrap()).expect("couldn't send UDP response");
+                                // now send copies to the cloned receiver array, if they exist
+                                if let Some(clone_map) = udp_clones.get(port) {
+                                    for &cids in clone_map.values() {
+                                        let buf = Buffer::into_buf(response).expect("couldn't convert UDP response to memory message");
+                                        buf.send(cids, NetUdpCallback::RxData.to_u32().unwrap()).expect("couldn't send UDP response");
+                                    }
+                                }
                             }
                             Err(_) => {
                                 // do nothing

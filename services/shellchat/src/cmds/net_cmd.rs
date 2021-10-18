@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 #[derive(Debug)]
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
+    udp_clone: Option<net::UdpSocket>,
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
@@ -16,6 +17,7 @@ impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
         NetCmd {
             udp: None,
+            udp_clone: None,
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
@@ -26,6 +28,7 @@ impl NetCmd {
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetCmdDispatch {
     UdpTest1,
+    UdpTest2,
 }
 
 pub const UDP_TEST_SIZE: usize = 64;
@@ -47,12 +50,11 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         if let Some(sub_cmd) = tokens.next() {
             match sub_cmd {
-                /// Testing of udp is done with netcat:
-                /// to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
-                /// to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
+                // Testing of udp is done with netcat:
+                // to send packets run `netcat -u <precursor ip address> 6502` on a remote host, and then type some data
+                // to receive packets, use `netcat -u -l 6502`, on the same remote host, and it should show a packet of counts received
                 "udp" => {
-                    if let Some(udp_socket) = &
-                    self.udp {
+                    if let Some(udp_socket) = &self.udp {
                         write!(ret, "Socket listener already installed on {:?}.", udp_socket.socket_addr().unwrap()).unwrap();
                     } else {
                         let port = if let Some(tok_str) = tokens.next() {
@@ -73,6 +75,27 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         self.udp = Some(udp);
                         write!(ret, "Created UDP socket listener on port {}", port).unwrap();
                     }
+                }
+                "udpclose" => {
+                    self.udp = None;
+                }
+                "udpclone" => {
+                    if let Some(udp_socket) = &self.udp {
+                        let mut udp_clone = udp_socket.duplicate().unwrap();
+                        udp_clone.set_scalar_notification(
+                            self.callback_conn,
+                            self.callback_id.unwrap() as usize, // this is guaranteed in the prelude
+                            [Some(NetCmdDispatch::UdpTest2.to_usize().unwrap()), None, None, None]
+                        );
+                        let sa = udp_clone.socket_addr().unwrap();
+                        self.udp_clone = Some(udp_clone);
+                        write!(ret, "Cloned UDP socket on {:?}", sa).unwrap();
+                    } else {
+                        write!(ret, "Run `net udp` before cloning.").unwrap();
+                    }
+                }
+                "udpcloneclose" => {
+                    self.udp_clone = None;
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
@@ -123,7 +146,38 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         log::error!("Got NetCmd callback from uninitialized socket");
                         write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
                     }
-                }
+                },
+                Some(NetCmdDispatch::UdpTest2) => {
+                    if let Some(udp_socket) = &mut self.udp_clone {
+                        let mut pkt: [u8; UDP_TEST_SIZE] = [0; UDP_TEST_SIZE];
+                        match udp_socket.recv_from(&mut pkt) {
+                            Ok((len, addr)) => {
+                                write!(ret, "Clone UDP rx {} bytes: {:?}: {}\n", len, addr, std::str::from_utf8(&pkt[..len]).unwrap()).unwrap();
+                                log::info!("Clone UDP rx {} bytes: {:?}: {:?}", len, addr, &pkt[..len]);
+                                self.udp_count += 1;
+
+                                let response_addr = SocketAddr::new(
+                                    addr.ip(),
+                                    udp_socket.socket_addr().unwrap().port()
+                                );
+                                match udp_socket.send_to(
+                                    format!("Clone received {} packets\n\r", self.udp_count).as_bytes(),
+                                    &response_addr
+                                ) {
+                                    Ok(len) => write!(ret, "UDP tx {} bytes", len).unwrap(),
+                                    Err(e) => write!(ret, "UDP tx err: {:?}", e).unwrap(),
+                                }
+                            },
+                            Err(e) => {
+                                log::error!("Net UDP error: {:?}", e);
+                                write!(ret, "UDP receive error: {:?}", e).unwrap();
+                            }
+                        }
+                    } else {
+                        log::error!("Got NetCmd callback from uninitialized socket");
+                        write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
+                    }
+                },
                 None => {
                     log::error!("NetCmd callback with unrecognized dispatch ID");
                     write!(ret, "NetCmd callback with unrecognized dispatch ID").unwrap();

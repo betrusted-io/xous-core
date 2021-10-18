@@ -10,10 +10,10 @@ use std::thread::JoinHandle;
 use smoltcp::wire::{Ipv4Address, Ipv6Address, IpAddress};
 use smoltcp::{
     wire::IpEndpoint,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
-use xous::{CID, SID, Message, msg_blocking_scalar_unpack};
+use xous::{CID, Message, SID, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use crate::NetConn;
 use crate::api::*;
@@ -39,6 +39,8 @@ pub struct UdpSocket{
     write_timeout: Option<Duration>,
     ticktimer: ticktimer_server::Ticktimer,
     dest_socket: Option<SocketAddr>,
+    max_payload: Option<u16>,
+    nonblocking: bool,
 }
 
 // next steps: build this stub, and figure out how to clean up the error handling code.
@@ -142,6 +144,8 @@ impl UdpSocket {
                     write_timeout: None,
                     ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
                     dest_socket: None,
+                    max_payload,
+                    nonblocking: false,
                 })
             },
             _ => {
@@ -149,6 +153,7 @@ impl UdpSocket {
             }
         }
     }
+    pub fn get_nonblocking(&self) -> bool { self.nonblocking }
 
     pub fn set_scalar_notification(&mut self, cid: CID, op: usize, args: [Option<usize>; 4]) {
         self.notify.lock().unwrap().set(cid, op, args);
@@ -212,6 +217,8 @@ impl UdpSocket {
                     self.rx_buf.lock().unwrap().insert(0, rx_pkt);
                 }
                 return Ok(len);
+            } else if self.nonblocking {
+                return Err(Error::new(ErrorKind::WouldBlock, "Nonblocking mode: Rx is empty"));
             }
             if timeout > self.ticktimer.elapsed_ms() {
                 return Err(Error::new(ErrorKind::WouldBlock, "UDP Rx timeout reached"));
@@ -360,13 +367,63 @@ impl UdpSocket {
     }
 
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
-        unimplemented!("work in progress")
+        match self.dest_socket {
+            Some(dest) => {
+                Ok(dest)
+            }
+            None => {
+                Err(Error::new(ErrorKind::NotConnected, "No peer specified"))
+            }
+        }
     }
 
     pub fn duplicate(&self) -> io::Result<UdpSocket> {
-        unimplemented!("work in progress")
+        // do the basic clone connection
+        let mut cloned_socket = UdpSocket::bind_inner(Ok(&self.socket_addr), self.max_payload)?;
+        // now copy all the properties over as required by spec
+        cloned_socket.set_read_timeout(self.read_timeout)?;
+        cloned_socket.set_write_timeout(self.write_timeout)?;
+        if let Some(sa) = self.dest_socket {
+            cloned_socket.connect(Ok(&sa))?
+        }
+        cloned_socket.set_nonblocking(self.get_nonblocking())?;
+        // TTL doesn't need to be cloned because it is attached to the port itself in the Net server
+        Ok(cloned_socket)
     }
 
+    pub fn set_ttl(&self, ttl: u32) -> io::Result<()> {
+        if ttl > 255 {
+            return Err(Error::new(ErrorKind::InvalidInput, "TTL must be less than 256"))
+        }
+        send_message(
+            self.net.conn(),
+            Message::new_scalar(Opcode::UdpSetTtl.to_usize().unwrap(), ttl as usize, self.socket_addr.port() as usize, 0, 0)
+        ).map_or_else(|_| Ok(()), |_| Err(Error::new(ErrorKind::ConnectionRefused, "can't send TTL set message")))
+    }
+
+    pub fn ttl(&self) -> io::Result<u32> {
+        let result = send_message(
+            self.net.conn(),
+            Message::new_blocking_scalar(Opcode::UdpGetTtl.to_usize().unwrap(), self.socket_addr.port() as usize, 0, 0, 0)
+        ).expect("couldn't retrieve TTL value");
+        if let xous::Result::Scalar1(ttl) = result {
+            Ok(ttl as u32)
+        } else {
+            Err(Error::new(ErrorKind::ConnectionRefused, "can't get TTL value from Net server"))
+        }
+    }
+
+    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
+        // we don't have stateful errors, yet?...
+        Ok(None)
+    }
+
+    pub fn set_nonblocking(&mut self, nb: bool) -> io::Result<()> {
+        self.nonblocking = nb;
+        Ok(())
+    }
+
+    //////// the remaining functions are currently unimplemented: we don't have multicast or broadcast support //////////
     pub fn set_broadcast(&self, _: bool) -> io::Result<()> {
         unimplemented!("work in progress")
     }
@@ -396,22 +453,6 @@ impl UdpSocket {
     }
 
     pub fn leave_multicast_v4(&self, _: &Ipv4Addr, _: &Ipv4Addr) -> io::Result<()> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn set_ttl(&self, _: u32) -> io::Result<()> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn ttl(&self) -> io::Result<u32> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn set_nonblocking(&self, _: bool) -> io::Result<()> {
         unimplemented!("work in progress")
     }
 

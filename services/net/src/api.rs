@@ -14,6 +14,8 @@ pub(crate) enum Opcode {
     UdpBind,
     UdpClose,
     UdpTx,
+    UdpSetTtl,
+    UdpGetTtl,
 
     /// initiates a ping packet
     //PingSend,
