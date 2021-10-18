@@ -646,9 +646,12 @@ fn xmain() -> ! {
                 // handle an suspend/resume state stuff here. right now, it's a NOP
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
             }),
+            Some(Opcode::Quit) => {
+                log::warn!("quit received");
+                break;
+            }
             None => {
-                log::error!("couldn't convert opcode");
-                break
+                log::error!("couldn't convert opcode: {}", msg);
             }
         }
     }

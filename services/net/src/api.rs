@@ -25,12 +25,12 @@ pub(crate) enum Opcode {
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,
-
     /// [Internal] run the network stack code
     NetPump,
-
     /// Suspend/resume callback
     SuspendResume,
+    /// Quit the server
+    Quit
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
