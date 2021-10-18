@@ -3,7 +3,6 @@ use xous_ipc::String;
 use net::Duration;
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::ToSocketAddrs;
 
 #[derive(Debug)]
 pub struct NetCmd {
@@ -47,8 +46,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
             match sub_cmd {
                 "udp" => {
                     if self.udp.is_none() {
-                        let mut udp = net::UdpSocket::bind(
-                            "127.0.0.1:6969".to_socket_addrs().unwrap().into_iter().next().unwrap(),
+                        let mut udp = net::UdpSocket::bind_xous(
+                            "127.0.0.1:6969",
                             Some(UDP_TEST_SIZE as u16)
                         ).unwrap();
                         udp.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();

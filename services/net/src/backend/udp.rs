@@ -1,5 +1,5 @@
 use std::convert::TryInto;
-use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr, Ipv6Addr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::unimplemented;
 use std::io;
 use std::io::{Error, ErrorKind, Result};
@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 
-use smoltcp::socket::UdpPacketMetadata;
 use smoltcp::wire::{Ipv4Address, Ipv6Address, IpAddress};
 use smoltcp::{
     wire::IpEndpoint,
@@ -38,8 +37,31 @@ pub struct UdpSocket{
 
 // next steps: build this stub, and figure out how to clean up the error handling code.
 impl UdpSocket {
-    pub fn bind(socket: SocketAddr, max_payload: Option<u16>) -> Result<UdpSocket> {
-        //let socket = maybe_socket.unwrap();
+    pub fn bind(maybe_socket: io::Result<&SocketAddr>) -> Result<UdpSocket> {
+        UdpSocket::bind_inner(maybe_socket, None)
+    }
+    pub fn bind_xous<A: ToSocketAddrs>(socket: A, max_payload: Option<u16>) -> Result<UdpSocket> {
+        match socket.to_socket_addrs() {
+            Ok(socks) => {
+                match socks.into_iter().next() {
+                    Some(socket_addr) => {
+                        UdpSocket::bind_inner(
+                            Ok(&socket_addr),
+                            max_payload)
+                    }
+                    _ => {
+                        Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
+                    }
+                }
+            }
+            _ => {
+                Err(Error::new(ErrorKind::InvalidInput, "IP address invalid"))
+            }
+        }
+    }
+
+    fn bind_inner(maybe_socket: io::Result<&SocketAddr>, max_payload: Option<u16>) -> Result<UdpSocket> {
+        let socket = maybe_socket?;
         let xns = xous_names::XousNames::new().unwrap();
         let net = NetConn::new(&xns).unwrap();
         let cb_sid = xous::create_server().unwrap();
@@ -96,7 +118,7 @@ impl UdpSocket {
         });
 
         let request = NetUdpBind {
-            ip_addr: NetIpAddr::from(socket),
+            ip_addr: NetIpAddr::from(*socket),
             port: socket.port(),
             cb_sid: cb_sid.to_array(),
             max_payload,
@@ -110,7 +132,7 @@ impl UdpSocket {
                 Ok(UdpSocket {
                     net,
                     cb_sid,
-                    socket_addr: socket,
+                    socket_addr: *socket,
                     rx_buf,
                     handle: Some(handle),
                     notify,
@@ -125,7 +147,7 @@ impl UdpSocket {
         }
     }
 
-    pub fn set_scalar_notification(&mut self, cid: xous::CID, op: usize, args: [Option<usize>; 4]) {
+    pub fn set_scalar_notification(&mut self, cid: CID, op: usize, args: [Option<usize>; 4]) {
         self.notify.lock().unwrap().set(cid, op, args);
     }
     pub fn clear_scalar_notification(&mut self) {
@@ -168,7 +190,7 @@ impl UdpSocket {
         Ok(self.write_timeout)
     }
 
-    pub fn recv(&self, pkt: &mut [u8]) -> io::Result<usize> {
+    fn recv_inner(&self, pkt: &mut[u8], do_peek: bool) -> io::Result<usize> {
         let timeout = if let Some(to) = self.read_timeout {
             to.total_millis() + self.ticktimer.elapsed_ms()
         } else {
@@ -180,7 +202,13 @@ impl UdpSocket {
                 for (&src, dst) in rx_pkt.data.iter().zip(pkt.iter_mut()) {
                     *dst = src;
                 }
-                return Ok(rx_pkt.data.len());
+                let len = rx_pkt.data.len();
+                if do_peek {
+                    // re-insert the element after taking it out. We can't mux it above with the if/else because
+                    // a peek is a borrow, but a remove is a move, and that's not easy to coerce in Rust
+                    self.rx_buf.lock().unwrap().insert(0, rx_pkt);
+                }
+                return Ok(len);
             }
             if timeout > self.ticktimer.elapsed_ms() {
                 return Err(Error::new(ErrorKind::WouldBlock, "UDP Rx timeout reached"));
@@ -188,8 +216,14 @@ impl UdpSocket {
             xous::yield_slice();
         }
     }
+    pub fn recv(&self, pkt: &mut [u8]) -> io::Result<usize> {
+        self.recv_inner(pkt, false)
+    }
+    pub fn peek(&self, pkt: &mut [u8]) -> io::Result<usize> {
+        self.recv_inner(pkt, true)
+    }
 
-    pub fn recv_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+    fn recv_from_inner(&self, pkt: &mut [u8], do_peek: bool) -> io::Result<(usize, SocketAddr)> {
         let timeout = if let Some(to) = self.read_timeout {
             to.total_millis() + self.ticktimer.elapsed_ms()
         } else {
@@ -221,12 +255,19 @@ impl UdpSocket {
                         panic!("malformed endpoint record");
                     }
                 };
+                let len = rx_pkt.data.len();
+                let socket_addr = SocketAddr::new(
+                    addr,
+                    rx_pkt.endpoint.port,
+                );
+                if do_peek {
+                    // re-insert the element after taking it out. We can't mux it above with the if/else because
+                    // a peek is a borrow, but a remove is a move, and that's not easy to coerce in Rust
+                    self.rx_buf.lock().unwrap().insert(0, rx_pkt);
+                }
                 return Ok((
-                    rx_pkt.data.len(),
-                    SocketAddr::new(
-                        addr,
-                        rx_pkt.endpoint.port,
-                    )
+                    len,
+                    socket_addr
                 ));
             }
             if timeout > self.ticktimer.elapsed_ms() {
@@ -236,9 +277,13 @@ impl UdpSocket {
         }
     }
 
-    pub fn peek(&self, _: &mut [u8]) -> io::Result<usize> {
-        unimplemented!("work in progress")
+    pub fn recv_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+        self.recv_from_inner(pkt, false)
     }
+    pub fn peek_from(&self, pkt: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
+        self.recv_from_inner(pkt, true)
+    }
+
 
     pub fn send(&self, _: &[u8]) -> io::Result<usize> {
         unimplemented!("work in progress")
@@ -249,10 +294,6 @@ impl UdpSocket {
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
-        unimplemented!("work in progress")
-    }
-
-    pub fn peek_from(&self, _: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
         unimplemented!("work in progress")
     }
 
