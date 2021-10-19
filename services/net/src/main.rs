@@ -227,9 +227,18 @@ fn xmain() -> ! {
     let mut cid_to_disconnect: Option<CID> = None;
     loop {
         let mut msg = xous::receive_message(net_sid).unwrap();
-        if let Some(_dc_cid) = cid_to_disconnect.take() { // disconnect previous loop iter's connection after d/c OK response was sent
-            // CHECK WITH XOBS: maybe these connections are auto-closed when the server is destroyed?
-            // unsafe{xous::disconnect(dc_cid).expect("couldn't disconnect from dropped UDP object")};
+        if let Some(dc_cid) = cid_to_disconnect.take() { // disconnect previous loop iter's connection after d/c OK response was sent
+            unsafe{
+                match xous::disconnect(dc_cid) {
+                   Ok(_) => {},
+                   Err(xous::Error::ServerNotFound) => {
+                       log::trace!("Disconnect returned the expected error code for a remote that has been destroyed.")
+                   },
+                   Err(e) => {
+                       log::error!("Attempt to de-allocate CID to destroyed server met with error: {:?}", e);
+                   },
+                }
+            }
         }
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(Opcode::UdpBind) => {
