@@ -12,6 +12,7 @@ pub struct NetCmd {
     callback_id: Option<u32>,
     callback_conn: u32,
     udp_count: u32,
+    dns: dns::Dns,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -21,6 +22,7 @@ impl NetCmd {
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
+            dns: dns::Dns::new(&xns).unwrap()
         }
     }
 }
@@ -98,6 +100,18 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                 "udpcloneclose" => {
                     self.udp_clone = None;
                     write!(ret, "Closed cloned UDP socket").unwrap();
+                }
+                "dns" => {
+                    if let Some(name) = tokens.next() {
+                        match self.dns.lookup(name) {
+                            Ok(ipaddr) => {
+                                write!(ret, "DNS resolved {}->{:?}", name, ipaddr).unwrap();
+                            }
+                            Err(e) => {
+                                write!(ret, "DNS lookup error: {:?}", e).unwrap();
+                            }
+                        }
+                    }
                 }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();

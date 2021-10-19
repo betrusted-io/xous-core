@@ -33,6 +33,7 @@ spinor = {path="../spinor"}
 root-keys = {path="../root-keys"}
 jtag = {path="../jtag"}
 net = {path="../net"}
+dns = {path="../dns"}
 
 trng = {path = "../trng"}
 

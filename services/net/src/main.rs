@@ -219,6 +219,15 @@ fn xmain() -> ! {
     }
     let mut iface = builder.finalize();
 
+    // DNS hooks - the DNS server can ask the Net crate to tickle it when IP configs change using these hooks
+    // Currently, we assume there is only one DNS server in Xous. I suppose you could
+    // upgrade the code to handle multiple DNS servers, but...why???
+    // ... nevermind, someone will invent a $reason because there was never a shiny
+    // new feature that a coder didn't love and *had* to have *right now*.
+    let mut dns_ipv4_hook = XousScalarEndpoint::new();
+    let mut dns_ipv6_hook = XousScalarEndpoint::new();
+    let mut dns_allclear_hook = XousScalarEndpoint::new();
+
     log::trace!("ready to accept requests");
     // register a suspend/resume listener
     let sr_cid = xous::connect(net_sid).expect("couldn't create suspend callback connection");
@@ -241,6 +250,55 @@ fn xmain() -> ! {
             }
         }
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::DnsHookAddIpv4) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                if dns_ipv4_hook.is_set() {
+                    buf.replace(NetMemResponse::AlreadyUsed).unwrap();
+                } else {
+                    dns_ipv4_hook.set(
+                        xous::connect(SID::from_array(hook.one_time_sid)).unwrap(),
+                        hook.op,
+                        hook.args,
+                    );
+                    buf.replace(NetMemResponse::Ok).unwrap();
+                }
+            }
+            Some(Opcode::DnsHookAddIpv6) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                if dns_ipv6_hook.is_set() {
+                    buf.replace(NetMemResponse::AlreadyUsed).unwrap();
+                } else {
+                    dns_ipv6_hook.set(
+                        xous::connect(SID::from_array(hook.one_time_sid)).unwrap(),
+                        hook.op,
+                        hook.args,
+                    );
+                    buf.replace(NetMemResponse::Ok).unwrap();
+                }
+            }
+            Some(Opcode::DnsHookAllClear) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                if dns_allclear_hook.is_set() {
+                    buf.replace(NetMemResponse::AlreadyUsed).unwrap();
+                } else {
+                    dns_allclear_hook.set(
+                        xous::connect(SID::from_array(hook.one_time_sid)).unwrap(),
+                        hook.op,
+                        hook.args,
+                    );
+                    buf.replace(NetMemResponse::Ok).unwrap();
+                }
+
+            }
+            Some(Opcode::DnsUnhookAll) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                dns_ipv4_hook.clear();
+                dns_ipv6_hook.clear();
+                dns_allclear_hook.clear();
+                xous::return_scalar(msg.sender, 1).expect("couldn't ack unhook");
+            }),
             Some(Opcode::UdpBind) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
                 let udpspec = buf.to_original::<NetUdpBind, _>().unwrap();
@@ -424,6 +482,8 @@ fn xmain() -> ! {
                             log::warn!("Battery is critical! TODO: go into SHIP mode");
                         },
                         ComIntSources::WlanIpConfigUpdate => {
+                            // right now the WLAN implementation only does IPV4. So IPV6 compatibility ends here.
+                            // if IPV6 gets added to the EC/COM bus, ideally this is one of a couple spots in Xous that needs a tweak.
                             let config = com.wlan_get_config().expect("couldn't retrieve updated ipv4 config");
                             log::info!("Network config acquired: {:?}", config);
                             net_config = Some(config);
@@ -470,6 +530,19 @@ fn xmain() -> ! {
                                 Ok(route) => log::info!("routing table updated successfully [{:?}]", route),
                                 Err(e) => log::error!("routing table update error: {}", e),
                             }
+                            dns_allclear_hook.notify();
+                            dns_ipv4_hook.notify_custom_args([
+                                Some(u32::from_be_bytes(config.dns1)),
+                                None, None, None,
+                            ]);
+                            // the current implementation always returns 0.0.0.0 as the second dns,
+                            // ignore this if that's what we've got; otherwise, pass it on.
+                            if config.dns2 != [0, 0, 0, 0] {
+                                dns_ipv4_hook.notify_custom_args([
+                                    Some(u32::from_be_bytes(config.dns2)),
+                                    None, None, None,
+                                ]);
+                            }
                         },
                         ComIntSources::WlanRxReady => {
                             if let Some(_config) = net_config {
@@ -513,9 +586,9 @@ fn xmain() -> ! {
                         match socket.recv() {
                             Ok((data, endpoint)) => {
                                 log::info!(
-                                    "udp:{} recv data: {:?} from {}",
+                                    "udp:{} recv data: {:x?} from {}",
                                     port,
-                                    std::str::from_utf8(data).unwrap(),
+                                    data,
                                     endpoint
                                 );
                                 // return the data/endpoint tuple to the caller

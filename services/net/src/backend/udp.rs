@@ -220,7 +220,7 @@ impl UdpSocket {
             } else if self.nonblocking {
                 return Err(Error::new(ErrorKind::WouldBlock, "Nonblocking mode: Rx is empty"));
             }
-            if timeout > self.ticktimer.elapsed_ms() {
+            if timeout < self.ticktimer.elapsed_ms() {
                 return Err(Error::new(ErrorKind::WouldBlock, "UDP Rx timeout reached"));
             }
             xous::yield_slice();

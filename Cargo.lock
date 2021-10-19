@@ -646,6 +646,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "net",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1998,6 +2016,7 @@ dependencies = [
  "curve25519-dalek",
  "debug-here",
  "digest",
+ "dns",
  "ed25519-dalek",
  "engine-25519",
  "gam",
