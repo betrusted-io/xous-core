@@ -93,7 +93,7 @@ impl DnsServerManager {
             }
         });
         let mut success = true;
-        let hook = XousPrivateServerScalarHook {
+        let hook = XousPrivateServerHook {
             one_time_sid: cb_sid.to_array(),
             op: PrivateDnsOp::AddIpv4DnsServer.to_usize().unwrap(),
             args: [None; 4]
@@ -106,7 +106,7 @@ impl DnsServerManager {
             NetMemResponse::Ok => {},
             _ => success = false,
         }
-        let hook = XousPrivateServerScalarHook {
+        let hook = XousPrivateServerHook {
             one_time_sid: cb_sid.to_array(),
             op: PrivateDnsOp::AddIpv6DnsServer.to_usize().unwrap(),
             args: [None; 4]
@@ -119,7 +119,7 @@ impl DnsServerManager {
             NetMemResponse::Ok => {},
             _ => success = false,
         }
-        let hook = XousPrivateServerScalarHook {
+        let hook = XousPrivateServerHook {
             one_time_sid: cb_sid.to_array(),
             op: PrivateDnsOp::RemoveAllServers.to_usize().unwrap(),
             args: [None; 4]

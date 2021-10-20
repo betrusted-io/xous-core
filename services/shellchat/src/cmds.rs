@@ -104,7 +104,6 @@ mod net_cmd;  use net_cmd::*;
 //mod fcc;      use fcc::*;
 //mod pds; // dependency of the FCC file
 
-#[derive(Debug)]
 pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String::<256>,

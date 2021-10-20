@@ -1268,6 +1268,7 @@ dependencies = [
  "smoltcp",
  "susres",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
  "xous-ipc",

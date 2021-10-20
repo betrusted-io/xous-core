@@ -20,6 +20,7 @@ rkyv = {version = "0.4.3", features = ["const_generics"], default-features = fal
 llio = {path = "../llio"}
 com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }
+trng = {path = "../trng"}
 
 [dependencies.smoltcp]
 # ugh. have to reference `main` directly because they haven't pushed a new tag in months, and none

@@ -3,9 +3,8 @@ use xous_ipc::String;
 use net::Duration;
 use xous::MessageEnvelope;
 use num_traits::*;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 
-#[derive(Debug)]
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
     udp_clone: Option<net::UdpSocket>,
@@ -13,6 +12,7 @@ pub struct NetCmd {
     callback_conn: u32,
     udp_count: u32,
     dns: dns::Dns,
+    ping: Option<net::Ping>,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -22,7 +22,8 @@ impl NetCmd {
             callback_id: None,
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
-            dns: dns::Dns::new(&xns).unwrap()
+            dns: dns::Dns::new(&xns).unwrap(),
+            ping: None,
         }
     }
 }
@@ -31,6 +32,7 @@ impl NetCmd {
 pub(crate) enum NetCmdDispatch {
     UdpTest1,
     UdpTest2,
+    Ping,
 }
 
 pub const UDP_TEST_SIZE: usize = 64;
@@ -113,6 +115,36 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         }
                     }
                 }
+                "ping" => {
+                    if self.ping.is_none() {
+                        let mut pinger = net::Ping::new();
+                        pinger.set_scalar_notification(
+                            self.callback_conn,
+                            self.callback_id.unwrap() as usize,
+                            NetCmdDispatch::Ping.to_u32().unwrap()
+                        );
+                        self.ping = Some(pinger);
+                        log::info!("made pinger");
+                    }
+                    if let Some(name) = tokens.next() {
+                        match self.dns.lookup(name) {
+                            Ok(ipaddr) => {
+                                log::info!("sending ping to {:?}", ipaddr);
+                                if let Some(pinger) = &mut self.ping {
+                                    pinger.ping(IpAddr::from(ipaddr));
+                                    write!(ret, "Ping to {} ({:?})", name, ipaddr).unwrap();
+                                } else {
+                                    write!(ret, "Internal error in ping").unwrap();
+                                }
+                            }
+                            Err(e) => {
+                                write!(ret, "Can't ping, DNS lookup error: {:?}", e).unwrap();
+                            }
+                        }
+                    } else {
+                        write!(ret, "Missing url: net ping [url]").unwrap();
+                    }
+                }
                 _ => {
                     write!(ret, "{}", helpstring).unwrap();
                 }
@@ -130,7 +162,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         log::info!("net callback");
         let mut ret = String::<1024>::new();
-        xous::msg_scalar_unpack!(msg, dispatch, _, _, _, {
+        xous::msg_scalar_unpack!(msg, dispatch, response_time, remote, _, {
             match FromPrimitive::from_usize(dispatch) {
                 Some(NetCmdDispatch::UdpTest1) => {
                     if let Some(udp_socket) = &mut self.udp {
@@ -194,6 +226,18 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
                     }
                 },
+                Some(NetCmdDispatch::Ping) => {
+                    log::info!("pong {:?} t={}ms", IpAddr::from((remote as u32).to_be_bytes()), response_time);
+                    // this only works for ipv4, but ping is ipv6 compatible and could send you an ipv6 response. oh well.
+                    if response_time > 0 {
+                        write!(ret, "Pong from {:?} time={}ms",
+                            IpAddr::from((remote as u32).to_be_bytes()),
+                            response_time
+                        ).unwrap();
+                    } else {
+                        write!(ret, "Ping timeout {:?}", IpAddr::from((remote as u32).to_be_bytes())).unwrap();
+                    }
+                }
                 None => {
                     log::error!("NetCmd callback with unrecognized dispatch ID");
                     write!(ret, "NetCmd callback with unrecognized dispatch ID").unwrap();

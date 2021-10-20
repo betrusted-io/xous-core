@@ -50,7 +50,6 @@ struct History {
     pub is_input: bool,
 }
 
-#[derive(Debug)]
 struct Repl {
     // optional structures that indicate new input to the Repl loop per iteration
     // an input string

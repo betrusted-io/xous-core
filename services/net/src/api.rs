@@ -1,8 +1,10 @@
 pub(crate) mod udp;
 pub(crate) use udp::*;
+pub(crate) mod ping;
+pub(crate) use ping::*;
 
 use rkyv::{Archive, Deserialize, Serialize};
-use std::net::{SocketAddr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use smoltcp::wire::IpAddress;
 use std::convert::TryInto;
 use std::fmt;
@@ -30,8 +32,12 @@ pub(crate) enum Opcode {
     DnsHookAllClear,
     DnsUnhookAll,
 
-    /// initiates a ping packet
-    //PingSend,
+    /// Ping stack
+    PingTx,
+    PingRegisterRx,
+    PingUnregisterRx,
+    PingSetTtl,
+    PingGetTtl,
 
     /// subscription for network responses
     //NetCallbackSubscribe,
@@ -135,6 +141,18 @@ impl From<IpAddr> for NetIpAddr {
         }
     }
 }
+impl From<NetIpAddr> for IpAddr {
+    fn from(other: NetIpAddr) -> IpAddr {
+        match other {
+            NetIpAddr::Ipv4(octets) => {
+                IpAddr::V4(Ipv4Addr::from(octets))
+            }
+            NetIpAddr::Ipv6(octets) => {
+                IpAddr::V6(Ipv6Addr::from(octets))
+            }
+        }
+    }
+}
 impl From<NetIpAddr> for IpAddress {
     fn from(other: NetIpAddr) -> IpAddress {
         match other {
@@ -155,6 +173,19 @@ impl From<NetIpAddr> for IpAddress {
                 )
             }
         }
+    }
+}
+pub fn ipaddress_to_ipaddr(other: IpAddress) -> IpAddr {
+    match other {
+        IpAddress::Ipv4(ipv4) => {
+            let octets = ipv4.0;
+            IpAddr::V4(Ipv4Addr::from(octets))
+        }
+        IpAddress::Ipv6(ipv6) => {
+            let octets = ipv6.0;
+            IpAddr::V6(Ipv6Addr::from(octets))
+        }
+        _ => unimplemented!()
     }
 }
 
@@ -190,9 +221,22 @@ impl fmt::Debug for NetIpAddr {
     }
 }
 
-/// This defines a Xous Scalar message endpoint. Used for defining
-/// notification messages for incoming packets, for main loops that want to be
-/// able to process both events from Xous and from the network.
+/// This defines a Xous Scalar message endpoint.
+/// This is useful for bridging the gap between a dedicated callback
+/// server and a main loop. Note that both are within the same code
+/// base and thus inherently trusted. It's assumed that you can create
+/// a CID to bridge between the two, because you have free access
+/// to the private SID.
+///
+/// The object is structured so that one can ask it to send a notification
+/// at any time, but the notification is only issued if the
+/// callback has been "hooked", that is, a CID/Op pair has been defined.
+/// This way the notification can be optional, can also be unhookd once used.
+///
+/// This structure is not serializable or meant to be passed between memory
+/// spaces: this is not the right object for passing messages from a remote server
+/// in a potentially hostile foreign process into your local memory space.
+/// See XousPrivateScalarHook for that function.
 pub(crate) struct XousScalarEndpoint {
     cid: Option<xous::CID>,
     op: Option<usize>,
@@ -270,8 +314,20 @@ impl XousScalarEndpoint {
     }
 }
 
+
+/// This is a "generic" object for registering a hook between a remote, potentially
+/// untrusted server and my process. The SID filled into the hook should be a
+/// "one time" (or perhaps better phrased as "single purpose") SID. In other words, it's
+/// a SID created specifically to transact with this untrusted process, and nothing else;
+/// you can receive as many messages as you like on it, but you should not use it for anything else.
+///
+/// This structure is rkyv-able, which means it can be serialized and sent between
+/// process spaces.
+///
+/// The args field allow a scalar hook to define some extra metadata to send back and forth,
+/// but they have no meaning in the case this is used for a Memory hook
 #[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
-pub struct XousPrivateServerScalarHook {
+pub struct XousPrivateServerHook {
     /// The SID shared here should be dedicated only to responding to this hook
     pub one_time_sid: [u32; 4],
     /// Opcode discriminant of the response message

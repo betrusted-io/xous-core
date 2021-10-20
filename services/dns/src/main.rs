@@ -359,18 +359,6 @@ impl Resolver {
                     if message.id() == query.id() && message.is_response() {
                         return match message.rcode() {
                             DnsResponseCode::NoError => {
-                                /*
-                                let mut map = HashMap::<IpAddr, u32>::new();
-                                // TODO: Parse the datagram instead of
-                                // extracting the last 4 bytes.
-                                //let rdata = message.answer().rdata();
-                                let n = message.datagram.len();
-                                let mut rdata: [u8; 4] = [0; 4];
-                                log::trace!("datagram{}: {:x?}", n, message.datagram);
-                                for (&src, dst) in message.datagram[(n - 4)..].iter().zip(rdata.iter_mut()) {
-                                    *dst = src;
-                                }
-                                map.insert(IpAddr::V4(Ipv4Addr::from(rdata)), 3600);*/
                                 message.parse_response()
                             }
                             rcode => {
@@ -509,6 +497,7 @@ fn xmain() -> ! {
                         // decrement the TTL, and note which go to zero
                         let mut expired_entries = Vec::<IpAddr>::new();
                         for (entry, ttl) in cache_map.iter_mut() {
+                            log::info!("entry: {:?}, ttl: {}, incr: {}", entry, ttl, increment);
                             if *ttl < increment {
                                 *ttl = 0;
                                 expired_entries.push(*entry);

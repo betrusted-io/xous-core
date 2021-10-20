@@ -174,33 +174,26 @@ fn xmain() -> ! {
 
     let mut net_config: Option<Ipv4Conf> = None;
 
-    // ping-specific storage
-    let ping_remote_addr = IpAddress::from_str("10.0.245.1").expect("invalid address format");
+    // storage for all our sockets
+    let mut sockets = SocketSet::new(vec![]);
 
+    // ping storage
+    let mut ping_responders = HashMap::<[u32;4], CID>::new();
     let icmp_rx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
     let icmp_tx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
-    let icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
-
-    let mut sockets = SocketSet::new(vec![]);
+    let mut icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
+    let ident = 0x22b;
+    icmp_socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
     let icmp_handle = sockets.add(icmp_socket);
+
+    /// udp storage
     let mut udp_handles = HashMap::<u16, UdpState>::new();
     // UDP requires multiple copies. The way it works is that Tx can come from anyone;
     // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
     // allows for the Rx data to be cc:'d to each clone, and identified by SID upon drop
     let mut udp_clones = HashMap::<u16, HashMap::<[u32; 4], CID>>::new(); // additional clones for UDP responders
 
-    let mut send_at = Instant::from_millis(0);
-    let mut seq_no = 0;
-    let mut received = 0;
-    let mut echo_payload = [0xffu8; 40];
-    let mut waiting_queue = HashMap::new();
-    let ident = 0x22b;
-
-    let count = 10; // number of ping iters
-    let interval = Duration::from_secs(1);
-    let timeout = Duration::from_secs(10);
-
-    // link storage
+    // other link storage
     let timer = SmoltcpTimer::new();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
@@ -250,9 +243,52 @@ fn xmain() -> ! {
             }
         }
         match FromPrimitive::from_usize(msg.body.id()) {
+            Some(Opcode::PingTx) => {
+                let buf = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
+                let pkt = buf.to_original::<NetPingPacket, _>().unwrap();
+                let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                if socket.can_send() {
+                    socket.send_slice(
+                        &pkt.data[..pkt.len as usize],
+                        IpAddress::from(pkt.endpoint)
+                    ).expect("couldn't send ICMP");
+                } else {
+                    log::warn!("Ping packet dropped, local ICMP socket not available for sending");
+                }
+            }
+            Some(Opcode::PingRegisterRx) => msg_scalar_unpack!(msg, s0, s1, s2, s3, {
+                let sid = [s0 as u32, s1 as u32, s2 as u32, s3 as u32];
+                let cid = xous::connect(SID::from_array(sid)).expect("couldn't connect ping callback");
+                ping_responders.insert(sid, cid);
+            }),
+            Some(Opcode::PingUnregisterRx) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
+                let sid = [s0 as u32, s1 as u32, s2 as u32, s3 as u32];
+                if ping_responders.remove(&sid).is_none() {
+                    log::warn!("got an unregistration request for a server that wasn't registered: {:?}", sid);
+                };
+                xous::return_scalar(msg.sender, 1).unwrap();
+            }),
+            Some(Opcode::PingSetTtl) => msg_scalar_unpack!(msg, ttl, _, _, _, {
+                let checked_ttl = if ttl > 255 {
+                    255 as u8
+                } else {
+                    ttl as u8
+                };
+                let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
+                socket.set_hop_limit(Some(checked_ttl));
+            }),
+            Some(Opcode::PingGetTtl) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                let socket = sockets.get::<IcmpSocket>(icmp_handle);
+                let checked_ttl = if let Some(ttl) = socket.hop_limit() {
+                    ttl
+                } else {
+                    64 // because this is the default according to the smoltcp source code
+                };
+                xous::return_scalar(msg.sender, checked_ttl as usize).unwrap();
+            }),
             Some(Opcode::DnsHookAddIpv4) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_ipv4_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
                 } else {
@@ -266,7 +302,7 @@ fn xmain() -> ! {
             }
             Some(Opcode::DnsHookAddIpv6) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_ipv6_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
                 } else {
@@ -280,7 +316,7 @@ fn xmain() -> ! {
             }
             Some(Opcode::DnsHookAllClear) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
-                let hook = buf.to_original::<XousPrivateServerScalarHook, _>().unwrap();
+                let hook = buf.to_original::<XousPrivateServerHook, _>().unwrap();
                 if dns_allclear_hook.is_set() {
                     buf.replace(NetMemResponse::AlreadyUsed).unwrap();
                 } else {
@@ -618,81 +654,35 @@ fn xmain() -> ! {
                     }
                 }
 
-                // this enclosure contains an ICMP implementation that needs to be deconstructed
-                // at the moment it bakes in a pinger and ping responder -- we need to remove the pinger
-                // and expose it to a generic interface. Once we figure out what that is.
+                // this enclosure contains the ICMP handler. Tx is initiated by an incoming message to the Net crate.
                 {
-                    let timestamp = timer.now();
                     let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                     if !socket.is_open() {
-                        log::info!("Binding smoltcp to icmp socket");
-                        socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
-                        send_at = timestamp;
-                    }
-
-                    if socket.can_send() && seq_no < count as u16 && send_at <= timestamp {
-                        NetworkEndian::write_i64(&mut echo_payload, timestamp.total_millis());
-
-                        let (icmp_repr, mut icmp_packet) = send_icmp_ping!(
-                            Icmpv4Repr,
-                            Icmpv4Packet,
-                            ident,
-                            seq_no,
-                            echo_payload,
-                            socket,
-                            ping_remote_addr
-                        );
-                        icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
-                        log::trace!("icmp pkt: {:?}", icmp_packet);
-
-                        waiting_queue.insert(seq_no, timestamp);
-                        seq_no += 1;
-                        send_at += interval;
+                        log::error!("ICMP socket isn't open, something went wrong...");
                     }
 
                     if socket.can_recv() {
                         let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
                         log::trace!("icmp payload: {:x?}", payload);
-
-                        let icmp_packet = Icmpv4Packet::new_checked(&payload).expect("couldn't make icmp payload");
-                        let icmp_repr =
-                            Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).expect("error parsing icmp4 repr");
-                        get_icmp_pong!(
-                            Icmpv4Repr,
-                            icmp_repr,
-                            payload,
-                            waiting_queue,
-                            ping_remote_addr,
-                            timestamp,
-                            received
-                        );
-                    }
-
-                    waiting_queue.retain(|seq, from| {
-                        if timestamp - *from < timeout {
-                            true
-                        } else {
-                            log::info!("From {} icmp_seq={} timeout", ping_remote_addr, seq);
-                            false
+                        let mut response = NetPingResponsePacket {
+                            len: payload.len() as u32,
+                            data: [0; PING_MAX_PKT_LEN],
+                        };
+                        for (&src, dst) in payload.iter().zip(response.data.iter_mut()) {
+                            *dst = src;
                         }
-                    });
-
-                    if seq_no == count as u16 && waiting_queue.is_empty() {
-                        log::info!("{} packets transmitted, {} received, {:.0}% packet loss",
-                                seq_no,
-                                received,
-                                100.0 * (seq_no - received) as f64 / seq_no as f64
-                        );
-                        seq_no += 1; // extinguish the message after it has printed once
+                        for (_, responder_cid) in ping_responders.iter() {
+                            let buf = Buffer::into_buf(response).expect("couldn't alloc send buffer");
+                            buf.send(*responder_cid, NetPingCallback::RxData.to_u32().unwrap()).expect("couldn't send ping Rx data");
+                        }
                     }
                 }
 
                 // establish our next check-up interval
-                // it's unclear why the "ping" example has such a crazy complicated poll_at mechanism...
                 let timestamp = timer.now();
                 match iface.poll_at(&sockets, timestamp) {
+                    // set a future time to check the interface
                     Some(poll_at) if timestamp < poll_at => {
-                        //log::info!("poll_at: {}", poll_at);
                         xous::try_send_message(wait_conn.load(Ordering::SeqCst),
                             Message::new_scalar(
                                 WaitOp::PollAt.to_usize().unwrap(),
@@ -702,7 +692,7 @@ fn xmain() -> ! {
                         ).ok();
                     }
                     Some(_) => {
-                        //log::info!("didn't get a specific wait_at, polling immediately...");
+                        // we should check immediately (e.g. more packets known to be in the queue)
                         xous::try_send_message(net_conn,
                             Message::new_scalar(
                                 Opcode::NetPump.to_usize().unwrap(),
@@ -710,17 +700,7 @@ fn xmain() -> ! {
                         ).ok();
                     },
                     None => {
-                        /*
-                        let wait_time = (send_at - timestamp).millis();
-                        log::info!("default wait: {}", wait_time);
-                        send_message(wait_conn.load(Ordering::SeqCst),
-                            Message::new_scalar(
-                                WaitOp::WaitMs.to_usize().unwrap(),
-                                (wait_time & 0xFFFF_FFFF) as usize,
-                                ((wait_time >> 32) & 0xFFF_FFFF) as usize,
-                                0, 0)
-                        ).expect("couldn't issue wait message");
-                        */
+                        // no need to set a poll time
                     }
                 }
             }
