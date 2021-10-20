@@ -12,7 +12,10 @@ pub(crate) enum Opcode {
     Lookup,
     Flush,
 
-    /// issuing this opcode causes all future attempts to change the DNS server configs to be ignored
+    /// used internally to update the TTL field, and eventually expire the cache (unless cache is frozen)
+    UpdateTtl,
+
+    /// issuing this opcode causes all future attempts to change the DNS server configs to be ignored. This also freezes the cache.
     FreezeConfig,
     /// this allows automatic updates to the DNS server configs based on DHCP. This is the default state.
     ThawConfig,
