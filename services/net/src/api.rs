@@ -5,6 +5,9 @@ use rkyv::{Archive, Deserialize, Serialize};
 use std::net::{SocketAddr, IpAddr};
 use smoltcp::wire::IpAddress;
 use std::convert::TryInto;
+use std::fmt;
+use std::fmt::Debug;
+use std::io::Write;
 
 pub(crate) const SERVER_NAME_NET: &str     = "_Middleware Network Server_";
 
@@ -88,7 +91,7 @@ impl From<SocketAddr> for NetSocketAddr {
     }
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+#[derive(Archive, Serialize, Deserialize, Copy, Clone)]
 pub enum NetIpAddr {
     Ipv4([u8; 4]),
     Ipv6([u8; 16]),
@@ -154,32 +157,38 @@ impl From<NetIpAddr> for IpAddress {
         }
     }
 }
-/* // can't quite figure this one out. oh well.
-impl TryFrom<dyn ToSocketAddrs> for IpAddress {
-    fn try_from(socket: dyn ToSocketAddrs) -> Result<IpAddress, xous::Error> {
-        match socket.to_socket_addrs() {
-            Ok(socks) => {
-                match socks.into_iter().next() {
-                    Some(socket_addr) => {
-                        Ok(
-                            match socket_addr {
-                                std::net::SocketAddr::V4(v4addr) => {
-                                    IpAddress::Ipv4(v4addr.ip())
-                                }
-                                std::net::SocketAddr::V6(v6addr) => {
-                                    IpAddress::Ipv6(v6addr.ip())
-                                }
-                            }
-                        )
-                    }
-                    _ => Err(xous::Error::InvalidString)
+
+impl fmt::Display for NetIpAddr {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NetIpAddr::Ipv4(octets) => {
+                // Fast Path: if there's no alignment stuff, write directly to the buffer
+                if fmt.precision().is_none() && fmt.width().is_none() {
+                    write!(fmt, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3])
+                } else {
+                    const IPV4_BUF_LEN: usize = 15; // Long enough for the longest possible IPv4 address
+                    let mut buf = [0u8; IPV4_BUF_LEN];
+                    let mut buf_slice = &mut buf[..];
+
+                    // Note: The call to write should never fail, hence the unwrap
+                    write!(buf_slice, "{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]).unwrap();
+                    let len = IPV4_BUF_LEN - buf_slice.len();
+
+                    // This unsafe is OK because we know what is being written to the buffer
+                    let buf = unsafe { std::str::from_utf8_unchecked(&buf[..len]) };
+                    fmt.pad(buf)
                 }
-            }
-            _ => Err(xous::Error::InvalidString)
+            },
+            NetIpAddr::Ipv6(ip) => ip.fmt(fmt),
         }
     }
 }
-*/
+
+impl fmt::Debug for NetIpAddr {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, fmt)
+    }
+}
 
 /// This defines a Xous Scalar message endpoint. Used for defining
 /// notification messages for incoming packets, for main loops that want to be
