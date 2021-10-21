@@ -2072,7 +2072,7 @@ checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 [[package]]
 name = "smoltcp"
 version = "0.8.0"
-source = "git+https://github.com/smoltcp-rs/smoltcp.git#35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+source = "git+https://github.com/smoltcp-rs/smoltcp.git?rev=35e833e33dfd3e4efc3eb7d5de06bec17c54b011#35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
 dependencies = [
  "bitflags",
  "byteorder",

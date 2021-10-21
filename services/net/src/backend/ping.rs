@@ -1,30 +1,23 @@
 use std::convert::TryInto;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
+use std::net::IpAddr;
 use std::unimplemented;
-use std::io;
-use std::io::{Error, ErrorKind, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::collections::HashMap;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use byteorder::{ByteOrder, NetworkEndian};
-use smoltcp::phy::{ChecksumCapabilities, DeviceCapabilities};
-use smoltcp::{
-    time::{Duration, Instant},
-};
-use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
+use smoltcp::phy::ChecksumCapabilities;
 use smoltcp::wire::{
-    EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint,
+    Icmpv4Packet, Icmpv4Repr, IpAddress,
     Icmpv6Packet, Icmpv6Repr, Ipv6Address
 };
 
-use utralib::utra::trng_server;
 use xous::{CID, Message, SID, msg_blocking_scalar_unpack, send_message};
 use xous_ipc::Buffer;
 use crate::NetConn;
 use crate::api::*;
-//use crate::api::udp::*;
 use num_traits::*;
 
 ///////// Ping implementation
@@ -41,9 +34,11 @@ use num_traits::*;
 ///
 /// The default timeout is 10 seconds.
 const PING_DEFAULT_TIMEOUT_MS: u64 = 10_000;
+const PING_POLL_INTERVAL_MS: usize = 1_000;
 pub struct Ping {
     net: NetConn,
     cb_sid: SID,
+    self_cid: CID,
     handle: Option<JoinHandle::<()>>,
     timer: ticktimer_server::Ticktimer,
     timeout: Arc<Mutex<u64>>,
@@ -54,6 +49,7 @@ pub struct Ping {
     checksum_caps: Arc<Mutex<ChecksumCapabilities>>,
     src_addr: Arc<Mutex<Option<IpAddr>>>,
     remote_addr: Arc<Mutex<Option<IpAddress>>>,
+    one_shot_active: Arc<AtomicBool>,
 }
 
 impl Ping {
@@ -70,7 +66,8 @@ impl Ping {
         let remote_addr = Arc::new(Mutex::new(None));
         let checksum_caps = Arc::new(Mutex::new(ChecksumCapabilities::default())); // defaults to "Both"
         let timeout = Arc::new(Mutex::new(PING_DEFAULT_TIMEOUT_MS));
-
+        let one_shot_active = Arc::new(AtomicBool::new(false));
+        let self_cid = xous::connect(cb_sid).unwrap();
         let handle = thread::spawn({
             let cb_sid_clone = cb_sid.clone();
             let waiting_queue = Arc::clone(&waiting_queue);
@@ -79,6 +76,8 @@ impl Ping {
             let checksum_caps = Arc::clone(&checksum_caps);
             let remote_addr = Arc::clone(&remote_addr);
             let timeout = Arc::clone(&timeout);
+            let one_shot_active = Arc::clone(&one_shot_active);
+            let self_cid = self_cid.clone();
             move || {
                 loop {
                     let tt = ticktimer_server::Ticktimer::new().unwrap();
@@ -88,39 +87,48 @@ impl Ping {
                             let buffer = unsafe {Buffer::from_memory_message(msg.body.memory_message().unwrap())};
                             let incoming = buffer.to_original::<NetPingResponsePacket, _>().unwrap();
                             let payload = &incoming.data[..incoming.len as usize];
-                            log::info!("pinger got {:?}", payload);
-                            match *remote_addr.lock().unwrap() {
-                                Some(IpAddress::Ipv4(_)) => {
-                                    log::info!("decode ipv4 ping");
+                            log::trace!("pinger got {:?}", payload);
+                            let remote_addr_clone = match *remote_addr.lock().unwrap() {
+                                Some(ra) => ra,
+                                None => {
+                                    log::warn!("remote address was not set, yet somehow a remote has responded!");
+                                    continue
+                                },
+                            };
+                            match remote_addr_clone {
+                                IpAddress::Ipv4(_) => {
+                                    log::trace!("decode ipv4 ping");
                                     let icmp_packet = Icmpv4Packet::new_checked(&payload).unwrap();
-                                    log::info!("icmp_packet: {:?}", icmp_packet);
+                                    log::trace!("icmp_packet: {:?}", icmp_packet);
                                     let icmp_repr =
                                         Icmpv4Repr::parse(&icmp_packet, &checksum_caps.lock().unwrap()).unwrap();
-                                    log::info!("icmp_repr: {:?}", icmp_repr);
+                                    log::trace!("icmp_repr: {:?}", icmp_repr);
                                     if let Icmpv4Repr::EchoReply{
                                         seq_no,
                                         data,
                                         ..
                                     } = icmp_repr {
-                                        log::info!("ping back of seq {}", seq_no);
-                                        if let Some(_) = waiting_queue.lock().unwrap().get(&seq_no) {
+                                        log::trace!("ping back of seq {}", seq_no);
+                                        let seq_valid = waiting_queue.lock().unwrap().contains_key(&seq_no);
+                                        // bind to seq_valid so lock is droppped, alowing lock to be got again inside the if below
+                                        if seq_valid {
                                             let packet_timestamp_ms = NetworkEndian::read_u64(data);
                                             waiting_queue.lock().unwrap().remove(&seq_no);
-                                            log::info!("sending notification of seq {}", seq_no);
+                                            log::trace!("sending notification of seq {}", seq_no);
                                             notify.lock().unwrap().notify_custom_args([
                                                 None, // replaced with discriminant setup in the callback
                                                 Some((tt.elapsed_ms() - packet_timestamp_ms) as u32),
-                                                Some(u32::from_be_bytes(remote_addr.lock().unwrap().unwrap().as_bytes().try_into().unwrap())),
+                                                Some(u32::from_be_bytes(remote_addr_clone.as_bytes().try_into().unwrap())),
                                                 None,
                                             ]);
                                         } else {
-                                            log::info!("pong seq {} not found!", seq_no);
+                                            log::warn!("pong seq {} not found!", seq_no);
                                         }
                                     } else {
-                                        log::info!("packet response did not match icmp template");
+                                        log::warn!("packet response did not match icmp template");
                                     }
                                 }
-                                Some(IpAddress::Ipv6(_)) => {
+                                IpAddress::Ipv6(_) => {
                                     if let Some(src_addr) = *src_addr.lock().unwrap() {
                                         let src_ipv6 = match src_addr {
                                             // not sure if this a valid way to convert v4->v6, but "meh"
@@ -148,11 +156,12 @@ impl Ping {
                                             data,
                                             ..
                                         } = icmp_repr {
-                                            if let Some(_) = waiting_queue.lock().unwrap().get(&seq_no) {
+                                            let seq_valid = waiting_queue.lock().unwrap().contains_key(&seq_no);
+                                            // bind to seq_valid so lock is droppped, alowing lock to be got again inside the if below
+                                            if seq_valid {
                                                 let packet_timestamp_ms = NetworkEndian::read_u64(data);
                                                 waiting_queue.lock().unwrap().remove(&seq_no);
-                                                let addr = remote_addr.lock().unwrap().unwrap();
-                                                let octet_slice = addr.as_bytes();
+                                                let octet_slice = remote_addr_clone.as_bytes();
                                                 let mut octets: [u8; 16] = [0; 16];
                                                 for (&src, dst) in octet_slice.iter().zip(octets.iter_mut()) {
                                                     *dst = src;
@@ -169,20 +178,19 @@ impl Ping {
                                         log::error!("Got IPV6 response, but our source address wasn't set.")
                                     }
                                 }
-                                Some(_) => {
-                                    log::error!("decode problem on remote address");
-                                    unimplemented!()
-                                },
-                                None => log::error!("Pong received, but somehow no remote address was specified. Ignoring.")
+                                _ => {
+                                    log::warn!("Internal error on formatting of remote address. Memory corruption?");
+                                }
                             }
+                            log::info!("managing wait queue");
                             let timestamp = tt.elapsed_ms();
                             waiting_queue.lock().unwrap().retain(|seq, from| {
                                 if timestamp - *from < *timeout.lock().unwrap() {
-                                    log::info!("sequence {} still pending", seq);
+                                    log::trace!("sequence {} still pending", seq);
                                     true
                                 } else {
-                                    log::info!("expiring sequence {}", seq);
-                                    // TODO: fix IPV6 case
+                                    log::trace!("expiring sequence {}", seq);
+                                    // TODO: fix IPV6 case -- need to pack out partial args of the address or something...
                                     notify.lock().unwrap().notify_custom_args([
                                         None, // replaced with discriminant setup in the callback
                                         None, // indicates failure -> resolves to 0 time
@@ -195,11 +203,11 @@ impl Ping {
                         },
                         Some(NetPingCallback::CheckTimeout) => {
                             let timestamp = tt.elapsed_ms();
-                            waiting_queue.lock().unwrap().retain(|seq, from| {
+                            waiting_queue.lock().unwrap().retain(|_seq, from| {
                                 if timestamp - *from < *timeout.lock().unwrap() {
                                     true
                                 } else {
-                                    // TODO: fix IPV6 case
+                                    // TODO: fix IPV6 case -- need to pack out partial args of the address or something...
                                     notify.lock().unwrap().notify_custom_args([
                                         None, // replaced with discriminant setup in the callback
                                         None, // indicates failure -> resolves to 0 time
@@ -209,6 +217,30 @@ impl Ping {
                                     false
                                 }
                             });
+                            if waiting_queue.lock().unwrap().len() > 0 {
+                                if !one_shot_active.swap(true, Ordering::SeqCst) {
+                                    log::trace!("spawing one-shot");
+                                    thread::spawn({
+                                        let self_cid = self_cid.clone();
+                                        let one_shot_active = one_shot_active.clone();
+                                        move || {
+                                            let tt = ticktimer_server::Ticktimer::new().unwrap();
+                                            tt.sleep_ms(PING_POLL_INTERVAL_MS).unwrap();
+                                            one_shot_active.store(false, Ordering::SeqCst);
+                                            match xous::send_message(self_cid,
+                                                Message::new_scalar(NetPingCallback::CheckTimeout.to_usize().unwrap(), 0, 0, 0, 0)
+                                            ) {
+                                                Ok(_) => {},
+                                                Err(xous::Error::ServerNotFound) => {
+                                                    log::warn!("Responder went out of scope for timeout poll. Maybe the lifetime of your Ping object was too short?");
+                                                }
+                                                _ => panic!("unhandled error in sending ping poll")
+                                            }
+                                        }
+                                    });
+                                    log::trace!("one-shot spawned");
+                                }
+                            }
                         }
                         Some(NetPingCallback::SrcAddr) => {
                             // source address is required for ipv6 icmp packet generation
@@ -240,6 +272,7 @@ impl Ping {
         Ping {
             net,
             cb_sid,
+            self_cid,
             handle: Some(handle),
             timer: ticktimer_server::Ticktimer::new().unwrap(),
             timeout,
@@ -250,7 +283,14 @@ impl Ping {
             checksum_caps,
             src_addr,
             remote_addr,
+            one_shot_active,
         }
+    }
+    pub fn set_timeout(&mut self, timeout_ms: u64) {
+        *self.timeout.lock().unwrap() = timeout_ms;
+    }
+    pub fn get_timeout(&self) -> u64 {
+        *self.timeout.lock().unwrap()
     }
     pub fn set_scalar_notification(&mut self, cid: CID, op: usize, discriminant: u32) {
         self.notify.lock().unwrap().set(cid, op, [Some(discriminant as usize), None, None, None]);
@@ -275,8 +315,20 @@ impl Ping {
             Message::new_scalar(Opcode::PingSetTtl.to_usize().unwrap(), ttl as usize, 0, 0, 0)
         ).expect("couldn't send set TTL message for ping");
     }
+    /// blocks until all the pings have either pong'd or timed out -- not sure if this is actually a good idea to have instead of
+    /// relying on the async callback in all cases?
+    /*
+    pub fn wait_pong(&self) {
+        loop {
+            let no_pongs_pending = self.waiting_queue.lock().unwrap().is_empty();
+            if no_pongs_pending {
+                break;
+            } else {
+                self.timer.sleep_ms(PING_POLL_INTERVAL_MS / 4).unwrap();
+            }
+        }
+    }*/
     pub fn ping(&mut self, remote: IpAddr) {
-        log::info!("ping");
         let ident = 0x22b;
         let timestamp = self.timer.elapsed_ms();
         let mut echo_payload = [0xffu8; 40];
@@ -284,7 +336,7 @@ impl Ping {
         let remote_addr = IpAddress::from(remote);
         match remote_addr {
             IpAddress::Ipv4(_) => {
-                log::info!("ping sending to {:?} seq_no {}", remote_addr, self.seq_no);
+                log::debug!("ping sending to {:?} seq_no {}", remote_addr, self.seq_no);
                 let icmp_repr = Icmpv4Repr::EchoRequest {
                     ident,
                     seq_no: self.seq_no,
@@ -306,6 +358,7 @@ impl Ping {
                 buf.send(self.net.conn(), Opcode::PingTx.to_u32().unwrap()).expect("couldn't send Ping packet");
             }
             IpAddress::Ipv6(_) => {
+                // this code probably does not work, as it has not been tested
                 if let Some(src_addr) = *self.src_addr.lock().unwrap() {
                     let src_ipv6 = match src_addr {
                         // not sure if this a valid way to convert v4->v6, but "meh"
@@ -354,6 +407,27 @@ impl Ping {
 
         // record the remote_addr so we know if we're parsing an ipv4 or ipv6 packet
         *self.remote_addr.lock().unwrap() = Some(remote_addr);
+        log::debug!("spawning first one-shot");
+        self.one_shot_active.store(true, Ordering::SeqCst);
+        thread::spawn({
+            let self_cid = self.self_cid.clone();
+            let one_shot_active = self.one_shot_active.clone();
+            move || {
+                let tt = ticktimer_server::Ticktimer::new().unwrap();
+                tt.sleep_ms(PING_POLL_INTERVAL_MS).unwrap();
+                one_shot_active.store(false, Ordering::SeqCst);
+                match xous::try_send_message(self_cid,
+                    Message::new_scalar(NetPingCallback::CheckTimeout.to_usize().unwrap(), 0, 0, 0, 0)
+                ) {
+                    Ok(_) => {},
+                    Err(xous::Error::ServerNotFound) => {
+                        log::warn!("Responder went out of scope for timeout poll. Maybe the lifetime of your Ping object was too short?");
+                    }
+                    _ => panic!("unhandled error in sending ping poll")
+                }
+            }
+        });
+        log::debug!("spawning first one-shot spawned");
     }
 }
 

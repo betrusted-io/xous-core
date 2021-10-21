@@ -175,6 +175,7 @@ impl From<NetIpAddr> for IpAddress {
         }
     }
 }
+#[allow(dead_code)]
 pub fn ipaddress_to_ipaddr(other: IpAddress) -> IpAddr {
     match other {
         IpAddress::Ipv4(ipv4) => {
@@ -291,8 +292,12 @@ impl XousScalarEndpoint {
     /// that assumes a 64-bit usize for the args on a 64-bit arch won't run on
     /// a 32-bit machine, so limit the max arg size to 32 bits.
     pub(crate) fn notify_custom_args(&mut self, custom: [Option<u32>; 4]) {
+        log::trace!("custom args");
         if let Some(cid) = self.cid {
             if let Some(op) = self.op {
+                log::trace!("ca: {} {} cust{:?} self{:?} 0:{}", cid, op, custom, self.args,
+                    if let Some(b) = custom[0] {b as usize} else { if let Some(a) = self.args[0] {a} else {0} }
+                );
                 match xous::send_message(
                     cid,
                     xous::Message::new_scalar(

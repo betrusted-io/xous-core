@@ -8,62 +8,22 @@ use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 
 mod device;
 
-use byteorder::{ByteOrder, NetworkEndian};
 use xous::{send_message, Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use smoltcp::phy::{Medium, Device};
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, Interface};
 use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBuffer, SocketSet};
 use smoltcp::wire::{
-    EthernetAddress, Icmpv4Packet, Icmpv4Repr, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint
+    EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint
 };
 use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle};
-use smoltcp::{
-    time::{Duration, Instant},
-};
+use smoltcp::time::Instant;
 use std::thread;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, Ordering};
-
-macro_rules! send_icmp_ping {
-    ( $repr_type:ident, $packet_type:ident, $ident:expr, $seq_no:expr,
-      $echo_payload:expr, $socket:expr, $remote_addr:expr ) => {{
-        let icmp_repr = $repr_type::EchoRequest {
-            ident: $ident,
-            seq_no: $seq_no,
-            data: &$echo_payload,
-        };
-
-        let icmp_payload = $socket.send(icmp_repr.buffer_len(), $remote_addr).expect("couldn't send ping");
-
-        let icmp_packet = $packet_type::new_unchecked(icmp_payload);
-        (icmp_repr, icmp_packet)
-    }};
-}
-
-macro_rules! get_icmp_pong {
-    ( $repr_type:ident, $repr:expr, $payload:expr, $waiting_queue:expr, $remote_addr:expr,
-      $timestamp:expr, $received:expr ) => {{
-        if let $repr_type::EchoReply { seq_no, data, .. } = $repr {
-            if let Some(_) = $waiting_queue.get(&seq_no) {
-                let packet_timestamp_ms = NetworkEndian::read_i64(data);
-                log::info!(
-                    "{} bytes from {}: icmp_seq={}, time={}ms",
-                    data.len(),
-                    $remote_addr,
-                    seq_no,
-                    $timestamp.total_millis() - packet_timestamp_ms
-                );
-                $waiting_queue.remove(&seq_no);
-                $received += 1;
-            }
-        }
-    }};
-}
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -122,7 +82,7 @@ fn xmain() -> ! {
     let com = com::Com::new(&xns).unwrap();
     let mut com_int_list: Vec::<ComIntSources> = vec![];
     com.ints_get_active(&mut com_int_list);
-    log::info!("COM initial pending interrupts: {:?}", com_int_list);
+    log::debug!("COM initial pending interrupts: {:?}", com_int_list);
     com_int_list.clear();
     com_int_list.push(ComIntSources::WlanIpConfigUpdate);
     com_int_list.push(ComIntSources::WlanRxReady);
@@ -130,7 +90,7 @@ fn xmain() -> ! {
     com.ints_enable(&com_int_list);
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list);
-    log::info!("COM pending interrupts after enabling: {:?}", com_int_list);
+    log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
 
     // build the waiting thread
     let wait_conn = Arc::new(AtomicU32::new(0));
@@ -155,7 +115,7 @@ fn xmain() -> ! {
                         let deadline: u64 = (deadline_lsb as u64) | ((deadline_msb as u64) << 32);
                         let now = tt.elapsed_ms();
                         if deadline > now {
-                            log::info!("sleeping for {}", deadline - now);
+                            log::debug!("sleeping for {}", deadline - now);
                             tt.sleep_ms((deadline - now) as usize).unwrap();
                             send_message(parent_conn, Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't pump the net loop");
                         }
@@ -186,7 +146,7 @@ fn xmain() -> ! {
     icmp_socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
     let icmp_handle = sockets.add(icmp_socket);
 
-    /// udp storage
+    // udp storage
     let mut udp_handles = HashMap::<u16, UdpState>::new();
     // UDP requires multiple copies. The way it works is that Tx can come from anyone;
     // for Rx, copies of a CID,SID tuple are kept for every clone is kept in a HashMap. This
@@ -200,7 +160,6 @@ fn xmain() -> ! {
     let routes = Routes::new(BTreeMap::new());
 
     let device = device::NetPhy::new(&xns);
-    let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
     let mut builder = InterfaceBuilder::new(device)
         .ip_addrs(ip_addrs)
@@ -621,7 +580,7 @@ fn xmain() -> ! {
                         let mut socket = sockets.get::<UdpSocket>(handle);
                         match socket.recv() {
                             Ok((data, endpoint)) => {
-                                log::info!(
+                                log::trace!(
                                     "udp:{} recv data: {:x?} from {}",
                                     port,
                                     data,
@@ -673,7 +632,13 @@ fn xmain() -> ! {
                         }
                         for (_, responder_cid) in ping_responders.iter() {
                             let buf = Buffer::into_buf(response).expect("couldn't alloc send buffer");
-                            buf.send(*responder_cid, NetPingCallback::RxData.to_u32().unwrap()).expect("couldn't send ping Rx data");
+                            match buf.send(*responder_cid, NetPingCallback::RxData.to_u32().unwrap()) {
+                                Ok(_) => {},
+                                Err(xous::Error::ServerNotFound) => {
+                                    log::warn!("Ping responder went out of scope. Maybe the lifetime of the originator was not long enough?");
+                                }
+                                _ => panic!("unhandled error in sending ping response")
+                            }
                         }
                     }
                 }

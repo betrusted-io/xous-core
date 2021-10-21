@@ -103,7 +103,7 @@ impl Message {
         use DnsResponseCode::FormatError;
         let mut index = start;
         loop {
-            log::info!("cname index: {}", index);
+            log::trace!("cname index: {}", index);
             if *(self.datagram.get(index).ok_or(FormatError)?) == 0 {
                 index += 1;
                 break;
@@ -117,7 +117,7 @@ impl Message {
 
     pub fn parse_response(&self) -> Result<HashMap<IpAddr, u32>, DnsResponseCode> {
         use DnsResponseCode::FormatError;
-        log::info!("parsing packet: {:?}", self.datagram);
+        log::trace!("parsing packet: {:?}", self.datagram);
 
         let mut map = HashMap::<IpAddr, u32>::new();
         // ASSUME: the query ID and response bit fields have already been checked
@@ -128,9 +128,9 @@ impl Message {
         let mut index = 12;
         // fast forward past the qname
         for queries in 0..qdcount {
-            log::info!("parsing query{}, index {}", queries, index);
+            log::trace!("parsing query{}, index {}", queries, index);
             index = self.fast_foward_name(index)?;
-            log::info!("fast forward through qname to {}", index);
+            log::trace!("fast forward through qname to {}", index);
             // index is now at qtype
             let qtype = u16::from_be_bytes(self.datagram[index..index+2].try_into().unwrap());
             if qtype != 1 && qtype != 28 { // A = 1, AAAA = 28
@@ -147,7 +147,7 @@ impl Message {
         }
         // index is now at the aname section
         for aname in 0..ancount {
-            log::info!("parsing aname{}, index {}", aname, index);
+            log::trace!("parsing aname{}, index {}", aname, index);
             // first check to see if we're dealing with a pointer or a name
             if self.datagram[index] >= 0xc0 {
                 // pointer
@@ -160,7 +160,7 @@ impl Message {
             } else {
                 // name, fast forward past the name
                 index = self.fast_foward_name(index)?;
-                log::info!("fast forward aname to {}", index);
+                log::trace!("fast forward aname to {}", index);
             }
             // index is now at type
             let atype = u16::from_be_bytes(self.datagram[index..index+2].try_into().unwrap());
@@ -177,6 +177,7 @@ impl Message {
             index += 2;
             // this is our TTL
             let ttl = u32::from_be_bytes(self.datagram[index..index+4].try_into().unwrap());
+            log::trace!("got ttl: {}", ttl);
             index += 4;
             // this is the payload length
             let addr_len = u16::from_be_bytes(self.datagram[index..index+2].try_into().unwrap());
@@ -390,7 +391,7 @@ impl Resolver {
 #[xous::xous_main]
 fn xmain() -> ! {
     log_server::init_wait().unwrap();
-    log::set_max_level(log::LevelFilter::Trace);
+    log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
@@ -433,7 +434,7 @@ fn xmain() -> ! {
                     let rand = resolver.trng_u32() as usize % cache_entry.len();
                     for (index, (ip_addr, _)) in cache_entry.iter().enumerate() {
                         if rand == index {
-                            log::info!("DNS cached: {}->{:?}", name, ip_addr);
+                            log::debug!("DNS cached: {}->{:?}", name, ip_addr);
                             let response = DnsResponse {
                                 addr: Some(NetIpAddr::from(*ip_addr)),
                                 code: DnsResponseCode::NoError,
@@ -474,7 +475,7 @@ fn xmain() -> ! {
                             }
                         },
                         Err(e) => {
-                            log::info!("DNS query failed: {}->{:?}", name, e);
+                            log::debug!("DNS query failed: {}->{:?}", name, e);
                             let response = DnsResponse {
                                 addr: None,
                                 code: e,
@@ -497,7 +498,7 @@ fn xmain() -> ! {
                         // decrement the TTL, and note which go to zero
                         let mut expired_entries = Vec::<IpAddr>::new();
                         for (entry, ttl) in cache_map.iter_mut() {
-                            log::info!("entry: {:?}, ttl: {}, incr: {}", entry, ttl, increment);
+                            log::debug!("entry: {:?}, ttl: {}, incr: {}", entry, ttl, increment);
                             if *ttl < increment {
                                 *ttl = 0;
                                 expired_entries.push(*entry);
@@ -507,7 +508,7 @@ fn xmain() -> ! {
                         }
                         // remove the entries that are 0
                         for entry in expired_entries {
-                            log::info!("DNS cache expiring {:?}", entry);
+                            log::debug!("DNS cache expiring {:?}", entry);
                             cache_map.remove(&entry);
                         }
                         // if all the entries are removed, mark for removal from the cache entirely
@@ -518,7 +519,7 @@ fn xmain() -> ! {
                         }
                     }
                     for name in expired_names {
-                        log::info!("DNS cache removing {}", &name);
+                        log::debug!("DNS cache removing {}", &name);
                         dns_cache.remove(&name);
                     }
                 }

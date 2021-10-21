@@ -4,6 +4,7 @@ use net::Duration;
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{SocketAddr, IpAddr};
+use std::thread;
 
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
@@ -12,7 +13,6 @@ pub struct NetCmd {
     callback_conn: u32,
     udp_count: u32,
     dns: dns::Dns,
-    ping: Option<net::Ping>,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -23,7 +23,6 @@ impl NetCmd {
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
-            ping: None,
         }
     }
 }
@@ -42,7 +41,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         if self.callback_id.is_none() {
             let cb_id = env.register_handler(String::<256>::from_str(self.verb()));
-            log::info!("hooking net callback with ID {}", cb_id);
+            log::trace!("hooking net callback with ID {}", cb_id);
             self.callback_id = Some(cb_id);
         }
 
@@ -116,26 +115,36 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     }
                 }
                 "ping" => {
-                    if self.ping.is_none() {
-                        let mut pinger = net::Ping::new();
-                        pinger.set_scalar_notification(
-                            self.callback_conn,
-                            self.callback_id.unwrap() as usize,
-                            NetCmdDispatch::Ping.to_u32().unwrap()
-                        );
-                        self.ping = Some(pinger);
-                        log::info!("made pinger");
-                    }
                     if let Some(name) = tokens.next() {
                         match self.dns.lookup(name) {
                             Ok(ipaddr) => {
-                                log::info!("sending ping to {:?}", ipaddr);
-                                if let Some(pinger) = &mut self.ping {
-                                    pinger.ping(IpAddr::from(ipaddr));
-                                    write!(ret, "Ping to {} ({:?})", name, ipaddr).unwrap();
+                                log::debug!("sending ping to {:?}", ipaddr);
+                                let count = if let Some(count_str) = tokens.next() {
+                                    count_str.parse::<u32>().unwrap()
                                 } else {
-                                    write!(ret, "Internal error in ping").unwrap();
-                                }
+                                    1
+                                };
+                                thread::spawn({
+                                    let count = count.clone();
+                                    let cb_conn = self.callback_conn.clone();
+                                    let cb_id = self.callback_id.unwrap() as usize;
+                                    move || {
+                                        let tt = ticktimer_server::Ticktimer::new().unwrap();
+                                        let mut pinger = net::Ping::new();
+                                        pinger.set_scalar_notification(
+                                            cb_conn,
+                                            cb_id,
+                                            NetCmdDispatch::Ping.to_u32().unwrap()
+                                        );
+                                        for i in 0..count {
+                                            log::info!("ping {} of {}", i + 1, count);
+                                            pinger.ping(IpAddr::from(ipaddr));
+                                            tt.sleep_ms(1000).unwrap();
+                                        }
+                                        // pinger.wait_pong();
+                                    }
+                                });
+                                write!(ret, "Sending {} pings to {} ({:?})", count, name, ipaddr).unwrap();
                             }
                             Err(e) => {
                                 write!(ret, "Can't ping, DNS lookup error: {:?}", e).unwrap();
@@ -160,7 +169,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
     fn callback(&mut self, msg: &MessageEnvelope, _env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         use core::fmt::Write;
 
-        log::info!("net callback");
+        log::debug!("net callback");
         let mut ret = String::<1024>::new();
         xous::msg_scalar_unpack!(msg, dispatch, response_time, remote, _, {
             match FromPrimitive::from_usize(dispatch) {
