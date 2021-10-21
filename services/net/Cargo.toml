@@ -7,6 +7,7 @@ description = "Network middleware"
 
 [dependencies]
 xous = { path = "../../xous-rs" }
+xous-ipc = {path="../../xous-ipc"}
 log-server = { path = "../log-server" }
 ticktimer-server = { path = "../ticktimer-server" }
 xous-names = { path = "../xous-names" }
@@ -14,17 +15,19 @@ log = "0.4"
 num-derive = {version = "0.3", default-features = false}
 num-traits = {version = "0.2", default-features = false}
 susres = {path = "../susres"}
-rkyv = "0.7.18"
+#rkyv = "0.7.18"
+rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 llio = {path = "../llio"}
 com = {path = "../com"}
 byteorder = { version = "1.0", default-features = false }
+trng = {path = "../trng"}
 
 [dependencies.smoltcp]
 # ugh. have to reference `main` directly because they haven't pushed a new tag in months, and none
 # of the worked examples match the actual documentation now.
 # pin at a commit, at least, so we aren't building on shifting sand
 git = "https://github.com/smoltcp-rs/smoltcp.git"
-commit = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+rev = "35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
 #path = "../../../smoltcp"
 #features = ["verbose"]
 #version = "0.7.5"

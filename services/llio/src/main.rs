@@ -1035,10 +1035,28 @@ fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
     for entry in cb_conns.iter() {
         if let Some(scb) = entry {
             // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
-            xous::send_message(scb.server_to_cb_cid,
+            match xous::try_send_message(scb.server_to_cb_cid,
                 xous::Message::new_scalar(EventCallback::Event.to_usize().unwrap(),
                    scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, which, 0)
-            ).unwrap();
+            ) {
+                Ok(_) => {},
+                Err(e) => {
+                    match e {
+                        xous::Error::ServerQueueFull => {
+                            // this triggers if an interrupt storm happens. This could be perfectly natural and/or
+                            // "expected", and the "best" behavior is probably to drop the events, but leave a warning.
+                            // Examples of this would be a ping flood overwhelming the network stack.
+                            log::warn!("Attempted to send event, but destination queue is full. Event was dropped: {:?}", scb);
+                        }
+                        xous::Error::ServerNotFound => {
+                            log::warn!("Event callback subscriber has died. Event was dropped: {:?}", scb);
+                        }
+                        _ => {
+                            log::error!("Callback error {:?}: {:?}", e, scb);
+                        }
+                    }
+                }
+            }
         };
     }
 }

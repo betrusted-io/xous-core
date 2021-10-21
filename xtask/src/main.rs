@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "jtag",
         "oqc-test",
         "net",
+        "dns",
     ];
     let benchmark_pkgs = [
         "benchmark",

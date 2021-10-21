@@ -646,6 +646,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "log-server",
+ "net",
+ "num-derive",
+ "num-traits",
+ "rkyv 0.4.3",
+ "ticktimer-server",
+ "trng",
+ "utralib",
+ "xous",
+ "xous-ipc",
+ "xous-names",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1246,12 +1264,14 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.7.18",
+ "rkyv 0.4.3",
  "smoltcp",
  "susres",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1997,6 +2017,7 @@ dependencies = [
  "curve25519-dalek",
  "debug-here",
  "digest",
+ "dns",
  "ed25519-dalek",
  "engine-25519",
  "gam",
@@ -2009,6 +2030,7 @@ dependencies = [
  "llio",
  "log",
  "log-server",
+ "net",
  "num-derive",
  "num-traits",
  "oqc-test",
@@ -2050,7 +2072,7 @@ checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 [[package]]
 name = "smoltcp"
 version = "0.8.0"
-source = "git+https://github.com/smoltcp-rs/smoltcp.git#35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
+source = "git+https://github.com/smoltcp-rs/smoltcp.git?rev=35e833e33dfd3e4efc3eb7d5de06bec17c54b011#35e833e33dfd3e4efc3eb7d5de06bec17c54b011"
 dependencies = [
  "bitflags",
  "byteorder",

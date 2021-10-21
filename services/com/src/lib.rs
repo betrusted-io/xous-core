@@ -523,8 +523,13 @@ impl Com {
                 let int_src = ComIntSources::from(mask_bit & ints as u16);
                 if int_src != ComIntSources::Invalid {
                     int_list.push(int_src);
-                    if int_src == ComIntSources::WlanRxReady {
-                        rxlen = Some(maybe_rxlen as u16)
+                    if maybe_rxlen > NET_MTU {
+                        log::error!("got an RX_LEN bigger than NET_MTU: {}, squashing packet; ints vector: 0x{:x?}", maybe_rxlen, ints);
+                        rxlen = None;
+                    } else {
+                        if int_src == ComIntSources::WlanRxReady {
+                            rxlen = Some(maybe_rxlen as u16)
+                        }
                     }
                 }
                 mask_bit <<= 1;

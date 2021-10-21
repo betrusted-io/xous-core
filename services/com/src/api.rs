@@ -4,7 +4,8 @@
 pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
 pub use com_rs_ref::serdes::Ipv4Conf;
 
-pub const NET_MTU: usize = 1500;
+// extra 30 bytes for the header over 1500
+pub const NET_MTU: usize = 1530;
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
     /// instantaneous voltage in mV

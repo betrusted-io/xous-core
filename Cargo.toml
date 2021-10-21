@@ -36,6 +36,7 @@ default-members = [
   "services/test-stub2",
   "services/pddb",
   "services/net",
+  "services/dns",
 ]
 members = [
   "xous-ipc",
@@ -86,6 +87,7 @@ members = [
   "services/test-stub2",
   "services/pddb",
   "services/net",
+  "services/dns",
 ]
 resolver = "2"
 
