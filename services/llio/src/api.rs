@@ -1,3 +1,5 @@
+use rkyv::{Archive, Deserialize, Serialize};
+
 /////////////////////// UART TYPE
 #[allow(dead_code)]  // we actually use this constant, but clippy insists that we don't
 pub(crate) const BOOT_UART: u32 = UartType::Log as u32;
@@ -74,7 +76,7 @@ pub(crate) enum I2cCallback {
 // maybe once things stabilize, it's probably a good idea to make this structure private to the crate,
 // and create a "public" version for return values via callbacks. But for now, it's pretty
 // convenient to reach into the state of the I2C machine to debug problems in the callbacks.
-#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, Copy, Clone, Archive, Serialize, Deserialize)]
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
