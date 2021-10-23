@@ -1,5 +1,6 @@
 use std::{
     env,
+    fs::File,
     io::{Read, Write},
     path::{Path, PathBuf, MAIN_SEPARATOR},
     process::Command,
@@ -83,7 +84,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
     // A base set of packages. This is all you need for a normal
     // operating system that can run libstd
-    let base_pkgs = ["ticktimer-server", "log-server", "susres", "xous-names", "trng"];
+    let base_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "susres",
+        "xous-names",
+        "trng",
+    ];
     let cbtest_pkgs = [
         "ticktimer-server",
         "log-server",
@@ -583,6 +590,32 @@ fn ensure_compiler(target: &Option<&str>) -> Result<(), String> {
             .trim()
             .to_owned();
 
+        // Look for the "RUST_VERSION" file to ensure it's compatible with this version.
+        if let Some(target) = target {
+            let mut version_path = PathBuf::from(&toolchain_path);
+            version_path.push("lib");
+            version_path.push("rustlib");
+            version_path.push(target);
+            version_path.push("RUST_VERSION");
+            if let Ok(mut vp) = File::open(&version_path) {
+                let mut version_str = String::new();
+                if let Err(_) = vp.read_to_string(&mut version_str) {
+                    return Err("Unable to get version string".to_owned());
+                }
+
+                let rustc_version_str = format!("{}", rustc_version::version().unwrap());
+                if version_str != rustc_version_str {
+                    println!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", version_str, rustc_version_str);
+                    // return Err(format!("Version upgrade. Compiler is version {}, the installed toolchain is for {}", version_str, rustc_version_str));
+                    return Ok(None);
+                }
+            } else {
+                println!("Outdated toolchain installed.");
+                // return Err("Outdated toolchain installed".to_owned());
+                return Ok(None);
+            }
+        }
+
         if have_toolchain {
             Ok(Some(toolchain_path))
         } else {
@@ -889,7 +922,7 @@ fn whycheproof_import() -> Result<(), DynError> {
             "wycheproof-import",
             "--",
             input_file,
-            output_file
+            output_file,
         ])
         .status()?;
     if !status.success() {
@@ -899,7 +932,7 @@ fn whycheproof_import() -> Result<(), DynError> {
     println!();
     println!("Wrote wycheproof x25519 testvectors to '{}'.", output_file);
 
-    return Ok(())
+    return Ok(());
 }
 
 // fn dist_dir() -> PathBuf {
