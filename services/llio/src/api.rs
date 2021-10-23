@@ -80,9 +80,9 @@ pub(crate) enum I2cCallback {
 pub struct I2cTransaction {
     pub bus_addr: u8,
     // write address and read address are encoded in the packet field below
-    pub txbuf: Option<[u8; I2C_MAX_LEN]>, // long enough for a 256-byte operation + 2 bytes of "register address"
+    pub txbuf: Option<[u8; 33]>, // long enough for a 256-byte operation + 2 bytes of "register address"
     pub txlen: u32,
-    pub rxbuf: Option<[u8; I2C_MAX_LEN]>,
+    pub rxbuf: Option<[u8; 33]>,
     pub rxlen: u32,
     pub listener: Option<(u32, u32, u32, u32)>, // where Rx split transactions should be routed to
     pub timeout_ms: u32,
