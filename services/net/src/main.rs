@@ -12,6 +12,7 @@ use xous::{send_message, Message, CID, SID, msg_scalar_unpack, msg_blocking_scal
 use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 use smoltcp::phy::{Medium, Device};
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes, Interface};
@@ -19,11 +20,18 @@ use smoltcp::socket::{IcmpEndpoint, IcmpPacketMetadata, IcmpSocket, IcmpSocketBu
 use smoltcp::wire::{
     EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv4Cidr, IpEndpoint
 };
+use smoltcp::wire::{
+    Icmpv4Packet, Icmpv4Repr, Icmpv6Packet, Icmpv6Repr,
+};
+use byteorder::{ByteOrder, NetworkEndian};
+
 use smoltcp::socket::{UdpPacketMetadata, UdpSocket, UdpSocketBuffer, SocketHandle};
 use smoltcp::time::Instant;
 use std::thread;
 use std::sync::Arc;
 use core::sync::atomic::{AtomicU32, Ordering};
+
+const PING_DEFAULT_TIMEOUT_MS: u32 = 10_000;
 
 fn set_ipv4_addr<DeviceT>(iface: &mut Interface<'_, DeviceT>, cidr: Ipv4Cidr)
 where
@@ -35,20 +43,6 @@ where
     });
 }
 
-struct SmoltcpTimer {
-    ticktimer: ticktimer_server::Ticktimer,
-}
-impl SmoltcpTimer {
-    pub fn new() -> Self {
-        SmoltcpTimer {
-            ticktimer: ticktimer_server::Ticktimer::new().unwrap(),
-        }
-    }
-    pub fn now(&self) -> Instant {
-        Instant::from_millis(self.ticktimer.elapsed_ms() as i64)
-    }
-}
-
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 enum WaitOp {
     WaitMs,
@@ -56,10 +50,32 @@ enum WaitOp {
     Quit,
 }
 
+/// UdpState will return a full custom datastructure, and is designed to work with
+/// a one-time use dedicated server created as part of the Net library code.
 pub struct UdpState {
     handle: SocketHandle,
     cid: CID,
     sid: SID,
+}
+
+/// PingConnection can return a Scalar: because of the simplicity of the return data
+/// we give implementors the option to unpack the Scalar themselves within the main loop
+/// of their event handler, *or* they can create a dedicated server that handles the return
+/// code.
+///
+/// Unpacking the Scalar type is more efficient, but essentially requires a connection
+/// to their private main loop server connection for the message to arrive, brokered via
+/// xous-names. This can create a potential security concern, as the "unclaimed" connection
+/// could be abused by a malicious process, which would have access to all of the dispatchable
+/// opcodes of the main loop through that connection.
+///
+/// Thus, for security-sensitive processes, it is recommended that those create a single-purpose
+/// server ID and broker the connection through that mechanism.
+#[derive(Hash, PartialEq, Eq)]
+pub struct PingConnection {
+    remote: IpAddress,
+    cid: CID,
+    retop: usize,
 }
 
 #[xous::xous_main]
@@ -138,13 +154,31 @@ fn xmain() -> ! {
     let mut sockets = SocketSet::new(vec![]);
 
     // ping storage
-    let mut ping_responders = HashMap::<[u32;4], CID>::new();
-    let icmp_rx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
-    let icmp_tx_buffer = IcmpSocketBuffer::new(vec![IcmpPacketMetadata::EMPTY], vec![0; 256]);
+    // up to four concurrent pings in the queue
+    let icmp_rx_buffer = IcmpSocketBuffer::new(
+        vec![
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY
+            ],
+            vec![0; 1024]);
+    let icmp_tx_buffer = IcmpSocketBuffer::new(
+        vec![
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY,
+                IcmpPacketMetadata::EMPTY
+            ],
+            vec![0; 1024]);
     let mut icmp_socket = IcmpSocket::new(icmp_rx_buffer, icmp_tx_buffer);
     let ident = 0x22b;
     icmp_socket.bind(IcmpEndpoint::Ident(ident)).expect("couldn't bind to icmp socket");
     let icmp_handle = sockets.add(icmp_socket);
+    let mut seq: u16 = 0;
+    // this record stores the origin time + IP address of the outgoing ping sequence number
+    let mut ping_destinations = HashMap::<PingConnection, HashMap::<u16, u64>>::new();
+    let mut ping_timeout_ms = PING_DEFAULT_TIMEOUT_MS;
 
     // udp storage
     let mut udp_handles = HashMap::<u16, UdpState>::new();
@@ -154,12 +188,14 @@ fn xmain() -> ! {
     let mut udp_clones = HashMap::<u16, HashMap::<[u32; 4], CID>>::new(); // additional clones for UDP responders
 
     // other link storage
-    let timer = SmoltcpTimer::new();
+    let timer = ticktimer_server::Ticktimer::new().unwrap();
     let neighbor_cache = NeighborCache::new(BTreeMap::new());
     let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
     let routes = Routes::new(BTreeMap::new());
 
     let device = device::NetPhy::new(&xns);
+    // needed by ICMP to determine if we should compute checksums
+    let device_caps = device.capabilities();
     let medium = device.capabilities().medium;
     let mut builder = InterfaceBuilder::new(device)
         .ip_addrs(ip_addrs)
@@ -202,31 +238,87 @@ fn xmain() -> ! {
             }
         }
         match FromPrimitive::from_usize(msg.body.id()) {
-            Some(Opcode::PingTx) => {
-                let buf = unsafe{Buffer::from_memory_message(msg.body.memory_message().unwrap())};
-                let pkt = buf.to_original::<NetPingPacket, _>().unwrap();
+            Some(Opcode::Ping) => {
+                let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
+                let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
                 let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                 if socket.can_send() {
-                    socket.send_slice(
-                        &pkt.data[..pkt.len as usize],
-                        IpAddress::from(pkt.endpoint)
-                    ).expect("couldn't send ICMP");
+                    let remote = IpAddress::from(pkt.endpoint);
+                    // we take advantage of the fact that the same CID is always returned for repeated connect requests to the same SID.
+                    let cid = match pkt.server {
+                        XousServerId::PrivateSid(sid) => match xous::connect(SID::from_array(sid)) {
+                            Ok(cid) => cid,
+                            Err(e) => {
+                                log::error!("Ping request with single-use callback SID is invalid. Aborting request. {:?}",e);
+                                continue;
+                            }
+                        }
+                        XousServerId::ServerName(name) => match xns.request_connection(name.to_str()) {
+                            Ok(cid) => cid,
+                            Err(e) => {
+                                log::error!("Ping request received, but callback name '{}' is invalid. Aborting request. {:?}", name, e);
+                                continue;
+                            }
+                        }
+                    };
+                    // this structure can be a HashMap key because it "should" be invariant across well-formed ping requests
+                    let conn = PingConnection {
+                        remote,
+                        cid,
+                        retop: pkt.return_opcode,
+                    };
+                    // this code will guarantee the sequence number goes up, but if multiple concurrent
+                    // pings are in progress, they may not be directly in sequence. This is OK.
+                    let now = timer.elapsed_ms();
+                    if let Some(queue) = ping_destinations.get_mut(&conn) {
+                        queue.insert(seq, now);
+                    } else {
+                        let mut new_queue = HashMap::<u16, u64>::new();
+                        new_queue.insert(seq, now);
+                        ping_destinations.insert(conn, new_queue);
+                    };
+                    seq += 1;
+
+                    // now emit the actual packet
+                    let mut echo_payload = [0xffu8; 40];
+                    let ident = 0x22b;
+                    NetworkEndian::write_i64(&mut echo_payload, now as i64);
+                    match remote {
+                        IpAddress::Ipv4(_) => {
+                            let icmp_repr = Icmpv4Repr::EchoRequest {
+                                ident,
+                                seq_no: seq,
+                                data: &echo_payload,
+                            };
+                            let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
+                            let mut icmp_packet = Icmpv4Packet::new_unchecked(icmp_payload);
+                            icmp_repr.emit(&mut icmp_packet, &device_caps.checksum);
+                        }
+                        IpAddress::Ipv6(_) => {
+                            // not sure if this is a valid thing to do, to just assign the source some number like this??
+                            let src_ipv6 = IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1);
+                            let icmp_repr = Icmpv6Repr::EchoRequest {
+                                ident,
+                                seq_no: seq,
+                                data: &echo_payload,
+                            };
+                            let icmp_payload = socket.send(icmp_repr.buffer_len(), remote).unwrap();
+                            let mut icmp_packet = Icmpv6Packet::new_unchecked(icmp_payload);
+                            icmp_repr.emit(
+                                &src_ipv6,
+                                &remote,
+                                &mut icmp_packet,
+                                &device_caps.checksum,
+                            );
+                        }
+                        _ => unimplemented!(),
+                    }
+                    pkt.sent_ok = Some(true);
                 } else {
-                    log::warn!("Ping packet dropped, local ICMP socket not available for sending");
+                    pkt.sent_ok = Some(false);
                 }
+                buf.replace(pkt).expect("Xous couldn't issue response to Ping request");
             }
-            Some(Opcode::PingRegisterRx) => msg_scalar_unpack!(msg, s0, s1, s2, s3, {
-                let sid = [s0 as u32, s1 as u32, s2 as u32, s3 as u32];
-                let cid = xous::connect(SID::from_array(sid)).expect("couldn't connect ping callback");
-                ping_responders.insert(sid, cid);
-            }),
-            Some(Opcode::PingUnregisterRx) => msg_blocking_scalar_unpack!(msg, s0, s1, s2, s3, {
-                let sid = [s0 as u32, s1 as u32, s2 as u32, s3 as u32];
-                if ping_responders.remove(&sid).is_none() {
-                    log::warn!("got an unregistration request for a server that wasn't registered: {:?}", sid);
-                };
-                xous::return_scalar(msg.sender, 1).unwrap();
-            }),
             Some(Opcode::PingSetTtl) => msg_scalar_unpack!(msg, ttl, _, _, _, {
                 let checked_ttl = if ttl > 255 {
                     255 as u8
@@ -244,6 +336,12 @@ fn xmain() -> ! {
                     64 // because this is the default according to the smoltcp source code
                 };
                 xous::return_scalar(msg.sender, checked_ttl as usize).unwrap();
+            }),
+            Some(Opcode::PingSetTimeout) => msg_scalar_unpack!(msg, to, _, _, _, {
+                ping_timeout_ms = to as u32;
+            }),
+            Some(Opcode::PingGetTimeout) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
+                xous::return_scalar(msg.sender, ping_timeout_ms as usize).unwrap();
             }),
             Some(Opcode::DnsHookAddIpv4) => {
                 let mut buf = unsafe{Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())};
@@ -566,7 +664,7 @@ fn xmain() -> ! {
                 com.ints_ack(&com_int_list);
             }
             Some(Opcode::NetPump) => {
-                let timestamp = timer.now();
+                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
                 match iface.poll(&mut sockets, timestamp) {
                     Ok(_) => { }
                     Err(e) => {
@@ -574,6 +672,7 @@ fn xmain() -> ! {
                     }
                 }
 
+                // this block handles UDP
                 {
                     for (port, udpstate) in udp_handles.iter() {
                         let handle = udpstate.handle;
@@ -613,7 +712,7 @@ fn xmain() -> ! {
                     }
                 }
 
-                // this enclosure contains the ICMP handler. Tx is initiated by an incoming message to the Net crate.
+                // this block contains the ICMP Rx handler. Tx is initiated by an incoming message to the Net crate.
                 {
                     let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                     if !socket.is_open() {
@@ -623,28 +722,189 @@ fn xmain() -> ! {
                     if socket.can_recv() {
                         let (payload, _) = socket.recv().expect("couldn't receive on socket despite asserting availability");
                         log::trace!("icmp payload: {:x?}", payload);
-                        let mut response = NetPingResponsePacket {
-                            len: payload.len() as u32,
-                            data: [0; PING_MAX_PKT_LEN],
-                        };
-                        for (&src, dst) in payload.iter().zip(response.data.iter_mut()) {
-                            *dst = src;
-                        }
-                        for (_, responder_cid) in ping_responders.iter() {
-                            let buf = Buffer::into_buf(response).expect("couldn't alloc send buffer");
-                            match buf.send(*responder_cid, NetPingCallback::RxData.to_u32().unwrap()) {
-                                Ok(_) => {},
-                                Err(xous::Error::ServerNotFound) => {
-                                    log::warn!("Ping responder went out of scope. Maybe the lifetime of the originator was not long enough?");
+                        let now = timer.elapsed_ms();
+
+                        for (connection, waiting_queue) in ping_destinations.iter_mut() {
+                            let remote_addr = connection.remote;
+                            match remote_addr {
+                                IpAddress::Ipv4(_) => {
+                                    let icmp_packet = Icmpv4Packet::new_checked(&payload).unwrap();
+                                    let icmp_repr =
+                                        Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).unwrap();
+                                    if let Icmpv4Repr::EchoReply { seq_no, data, .. } = icmp_repr {
+                                        if let Some(_) = waiting_queue.get(&seq_no) {
+                                            let packet_timestamp_ms = NetworkEndian::read_i64(data);
+                                            waiting_queue.remove(&seq_no);
+                                            // use try_send_message because we don't want to block if the recipient's queue is full;
+                                            // instead, the message is just dropped
+                                            match xous::try_send_message(connection.cid,
+                                                Message::new_scalar(
+                                                    connection.retop,
+                                                    NetPingCallback::NoErr.to_usize().unwrap(),
+                                                    u32::from_be_bytes(remote_addr.as_bytes().try_into().unwrap()) as usize,
+                                                    seq_no as usize,
+                                                    (now as i64 - packet_timestamp_ms) as usize,
+                                                )
+                                            ) {
+                                                Ok(_) => {},
+                                                Err(xous::Error::ServerQueueFull) => {
+                                                    log::warn!("Got seq {} response, but upstream server queue is full; dropping.", &seq_no);
+                                                },
+                                                Err(e) => {
+                                                    log::error!("Unhandled error: {:?}; ignoring", e);
+                                                }
+                                            }
+                                        }
+                                    } else if let Icmpv4Repr::DstUnreachable { reason, header, .. } = icmp_repr {
+                                        log::warn!("Got dst unreachable {:?}: {:?}", header.dst_addr, reason);
+                                        let reason_code: u8 = From::from(reason);
+                                        match xous::try_send_message(connection.cid,
+                                            Message::new_scalar(
+                                                connection.retop,
+                                                NetPingCallback::Unreachable.to_usize().unwrap() | (reason_code as usize) << 24,
+                                                u32::from_be_bytes(remote_addr.as_bytes().try_into().unwrap()) as usize,
+                                                0,
+                                                0,
+                                            )
+                                        ) {
+                                            Ok(_) => {},
+                                            Err(xous::Error::ServerQueueFull) => {
+                                                log::warn!("Got dst {:?} unreachable, but upstream server queue is full; dropping.", remote_addr);
+                                            },
+                                            Err(e) => {
+                                                log::error!("Unhandled error: {:?}; ignoring", e);
+                                            }
+                                        }
+                                    } else {
+                                        log::error!("got unhandled ICMP type, ignoring!");
+                                    }
                                 }
-                                _ => panic!("unhandled error in sending ping response")
+
+                                IpAddress::Ipv6(_) => {
+                                    // NOTE: actually not sure what src_ipv6 should be. This is just from an example.
+                                    let src_ipv6 = IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1);
+                                    let icmp_packet = Icmpv6Packet::new_checked(&payload).unwrap();
+                                    let icmp_repr = Icmpv6Repr::parse(
+                                        &remote_addr,
+                                        &src_ipv6,
+                                        &icmp_packet,
+                                        &device_caps.checksum,
+                                    )
+                                    .unwrap();
+                                    let ra = remote_addr.as_bytes();
+                                    if let Icmpv6Repr::EchoReply { seq_no, data, .. } = icmp_repr {
+                                        if let Some(_) = waiting_queue.get(&seq_no) {
+                                            let packet_timestamp_ms = NetworkEndian::read_i64(data);
+                                            waiting_queue.remove(&seq_no);
+                                            match xous::try_send_message(connection.cid,
+                                                Message::new_scalar(
+                                                    connection.retop,
+                                                    NetPingCallback::NoErr.to_usize().unwrap(),
+                                                    u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                                    u32::from_be_bytes(ra[12..].try_into().unwrap()) as usize,
+                                                    (now as i64 - packet_timestamp_ms) as usize,
+                                                )
+                                            ) {
+                                                Ok(_) => {},
+                                                Err(xous::Error::ServerQueueFull) => {
+                                                    log::warn!("Got seq {} response, but upstream server queue is full; dropping.", &seq_no);
+                                                },
+                                                Err(e) => {
+                                                    log::error!("Unhandled error: {:?}; ignoring", e);
+                                                }
+                                            }
+                                        }
+                                    } else if let Icmpv6Repr::DstUnreachable { reason, header, .. } = icmp_repr {
+                                        let reason_code: u8 = From::from(reason);
+                                        log::warn!("Got dst unreachable {:?}: {:?}", header.dst_addr, reason);
+                                        match xous::try_send_message(connection.cid,
+                                            Message::new_scalar(
+                                                connection.retop,
+                                                NetPingCallback::Unreachable.to_usize().unwrap() | (reason_code as usize) << 24,
+                                                u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                                u32::from_be_bytes(ra[8..12].try_into().unwrap()) as usize,
+                                                u32::from_be_bytes(ra[12..].try_into().unwrap()) as usize,
+                                            )
+                                        ){
+                                            Ok(_) => {},
+                                            Err(xous::Error::ServerQueueFull) => {
+                                                log::warn!("Got dst {:?} unreachable, but upstream server queue is full; dropping.", remote_addr);
+                                            },
+                                            Err(e) => {
+                                                log::error!("Unhandled error: {:?}; ignoring", e);
+                                            }
+                                        }
+                                    } else {
+                                        log::error!("got unhandled ICMP type, ignoring!");
+                                    }
+                                }
+                                _ => unimplemented!(),
                             }
+                        }
+
+                        // notify the callback to drop its connection, because the queue is now empty
+                        // do this before we clear the queue, because we want the Drop message to come on the iteration
+                        // *after* the queue is empty.
+                        ping_destinations.retain(|conn, v|
+                            if v.len() == 0 {
+                                let ra = conn.remote.as_bytes();
+                                xous::send_message(conn.cid,
+                                    Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
+                                        conn.retop,
+                                        NetPingCallback::Drop.to_usize().unwrap(),
+                                        u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                        if ra.len() == 16 {u32::from_be_bytes(ra[12..16].try_into().unwrap()) as usize} else {0},
+                                        0,
+                                    )
+                                ).expect("couldn't send Drop on empty queue from Ping server");
+                                match unsafe{xous::disconnect(conn.cid)} {
+                                    Ok(_) => {},
+                                    Err(xous::Error::ServerNotFound) => {
+                                        log::debug!("Disconnected from a server that has already disappeared. Moving on.");
+                                    }
+                                    Err(e) => {
+                                        panic!("Unhandled error disconnecting from ping server: {:?}", e);
+                                    }
+                                }
+                                false
+                            } else {
+                                true
+                            }
+                        );
+
+                        // now: sequence through the waiting_queue and remove entries that have hit our timeout
+                        for (conn, waiting_queue) in ping_destinations.iter_mut() {
+                            let ra = conn.remote.as_bytes();
+                            waiting_queue.retain(|&seq, &mut start_time|
+                                if now - start_time > ping_timeout_ms as u64 {
+                                    match xous::try_send_message(conn.cid,
+                                        Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
+                                            conn.retop,
+                                            NetPingCallback::Timeout.to_usize().unwrap(),
+                                            u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                            seq as usize,
+                                            (now - start_time) as usize,
+                                        )
+                                    ) {
+                                        Ok(_) => {},
+                                        Err(xous::Error::ServerQueueFull) => {
+                                            log::warn!("Got dst {:?} timeout, but upstream server queue is full; dropping.", conn.remote);
+                                        },
+                                        Err(e) => {
+                                            log::error!("Unhandled error: {:?}; ignoring", e);
+                                        }
+                                    }
+                                    false
+                                } else {
+                                    true
+                                }
+                            );
                         }
                     }
                 }
 
                 // establish our next check-up interval
-                let timestamp = timer.now();
+                let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
                 match iface.poll_at(&sockets, timestamp) {
                     // set a future time to check the interface
                     Some(poll_at) if timestamp < poll_at => {
