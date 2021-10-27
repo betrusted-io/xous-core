@@ -14,7 +14,8 @@ pub enum NetPingCallback {
     Timeout,
     /// dest unreachable
     Unreachable,
-    /// drop the responding server, if it was spawned specifically for this use
+    /// An advisory message that one could drop the responding server, if it was spawned specifically for this use
+    /// However, if the caller has grand plans to queue up more pings...then by all means, keep it around.
     Drop,
 }
 

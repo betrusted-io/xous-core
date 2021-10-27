@@ -828,7 +828,7 @@ fn xmain() -> ! {
                         if v.len() == 0 {
                             log::debug!("Dropping ping record for {:?}", conn.remote);
                             let ra = conn.remote.as_bytes();
-                            xous::send_message(conn.cid,
+                            match xous::send_message(conn.cid,
                                 Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
                                     conn.retop,
                                     NetPingCallback::Drop.to_usize().unwrap(),
@@ -836,7 +836,15 @@ fn xmain() -> ! {
                                     if ra.len() == 16 {u32::from_be_bytes(ra[12..16].try_into().unwrap()) as usize} else {0},
                                     0,
                                 )
-                            ).expect("couldn't send Drop on empty queue from Ping server");
+                            ) {
+                                Ok(_) => {},
+                                Err(xous::Error::ServerNotFound) => {
+                                    log::debug!("Server already dropped before we could send it a drop message. Ignoring.");
+                                }
+                                Err(e) => {
+                                    panic!("couldn't send Drop on empty queue from Ping server: {:?}", e);
+                                }
+                            }
                             match unsafe{xous::disconnect(conn.cid)} {
                                 Ok(_) => {},
                                 Err(xous::Error::ServerNotFound) => {
@@ -870,6 +878,9 @@ fn xmain() -> ! {
                                     Ok(_) => {},
                                     Err(xous::Error::ServerQueueFull) => {
                                         log::warn!("Got dst {:?} timeout, but upstream server queue is full; dropping.", conn.remote);
+                                    },
+                                    Err(xous::Error::ServerNotFound) => {
+                                        log::debug!("Callback server disappeared before we could inform it of timeout on {:?}, seq {}", conn.remote, seq);
                                     },
                                     Err(e) => {
                                         log::error!("Unhandled error: {:?}; ignoring", e);

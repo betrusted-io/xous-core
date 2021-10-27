@@ -248,7 +248,9 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                     let timestamp = arg4;
                     match FromPrimitive::from_usize(op & 0xFF) {
                         Some(NetPingCallback::Drop) => {
-                            write!(ret, "Info: All pending pings done").unwrap();
+                            // write!(ret, "Info: All pending pings done").unwrap();
+                            // ignore the message, just creates visual noise
+                            return Ok(None);
                         }
                         Some(NetPingCallback::NoErr) => {
                             match addr {
