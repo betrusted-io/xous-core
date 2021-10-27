@@ -7,6 +7,7 @@ use xous_ipc::{Buffer, String};
 use num_traits::ToPrimitive;
 
 use net::NetIpAddr;
+use std::net::IpAddr;
 
 #[derive(Debug)]
 pub struct Dns {
@@ -21,16 +22,22 @@ impl Dns {
         })
     }
 
+    /// Checks first to see if the name could be just an IPv4 or IPv6 in string form,
+    /// then tries to pass it to the DNS resolver.
     pub fn lookup(&self, name: &str) -> Result<NetIpAddr, DnsResponseCode> {
-        let alloc_name = String::<DNS_NAME_LENGTH_LIMIT>::from_str(name);
-        let mut buf = Buffer::into_buf(alloc_name).or(Err(DnsResponseCode::UnknownError))?;
-        buf.lend_mut(self.conn, Opcode::Lookup.to_u32().unwrap())
-            .or(Err(DnsResponseCode::UnknownError))?;
-        let response = buf.to_original::<DnsResponse,_>().or(Err(DnsResponseCode::UnknownError))?;
-        if let Some(addr) = response.addr {
-            Ok(addr)
+        if let Ok(simple_ip) = name.parse::<IpAddr>() {
+            Ok(NetIpAddr::from(simple_ip))
         } else {
-            Err(response.code)
+            let alloc_name = String::<DNS_NAME_LENGTH_LIMIT>::from_str(name);
+            let mut buf = Buffer::into_buf(alloc_name).or(Err(DnsResponseCode::UnknownError))?;
+            buf.lend_mut(self.conn, Opcode::Lookup.to_u32().unwrap())
+                .or(Err(DnsResponseCode::UnknownError))?;
+            let response = buf.to_original::<DnsResponse,_>().or(Err(DnsResponseCode::UnknownError))?;
+            if let Some(addr) = response.addr {
+                Ok(addr)
+            } else {
+                Err(response.code)
+            }
         }
     }
     pub fn flush_cache(&self) -> Result<(), xous::Error> {
