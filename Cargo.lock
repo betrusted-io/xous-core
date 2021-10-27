@@ -42,17 +42,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ahash"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43bb833f0bf979d8475d38fbf09ed3b8a55e1885fe93ad3f93239fc6a4f17b98"
-dependencies = [
- "getrandom",
- "once_cell",
- "version_check",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,7 +113,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -140,7 +129,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "utralib",
  "xous",
  "xous-ipc",
@@ -182,7 +171,7 @@ version = "0.5.0"
 source = "git+https://github.com/betrusted-io/blitstr.git?rev=89675bf468fa51baaf0de94e806b85c92466ae64#89675bf468fa51baaf0de94e806b85c92466ae64"
 dependencies = [
  "log",
- "rkyv 0.4.3",
+ "rkyv",
 ]
 
 [[package]]
@@ -237,27 +226,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c59e7af012c713f529e7a3ee57ce9b31ddd858d4b512923602f74608b009631"
 
 [[package]]
-name = "bytecheck"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb738a1e65989ecdcd5bba16079641bd7209688fa546e1064832fd6e012fd32a"
-dependencies = [
- "bytecheck_derive",
- "ptr_meta",
-]
-
-[[package]]
-name = "bytecheck_derive"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3b4dff26fdc9f847dab475c9fec16f2cba82d5aa1f09981b87c44520721e10a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "byteorder"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,7 +261,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -310,7 +278,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -327,7 +295,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -428,7 +396,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -447,7 +415,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -485,7 +453,7 @@ version = "0.1.0"
 dependencies = [
  "graphics-server",
  "log",
- "rkyv 0.3.1",
+ "rkyv",
  "xous",
  "xous-names",
 ]
@@ -654,7 +622,7 @@ dependencies = [
  "net",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "trng",
  "utralib",
@@ -710,7 +678,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -837,7 +805,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -891,7 +859,7 @@ dependencies = [
  "minifb",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -899,15 +867,6 @@ dependencies = [
  "xous",
  "xous-ipc",
  "xous-names",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-dependencies = [
- "ahash",
 ]
 
 [[package]]
@@ -985,7 +944,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1001,7 +960,7 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "xous",
  "xous-ipc",
  "xous-names",
@@ -1016,7 +975,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1053,7 +1012,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -1082,7 +1041,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -1145,7 +1104,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -1264,7 +1223,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "smoltcp",
  "susres",
  "ticktimer-server",
@@ -1423,7 +1382,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.7.18",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -1660,15 +1619,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rend"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d0351a2e529ee30d571ef31faa5a4e0b9addaad087697b77efb20d2809e41c7"
-dependencies = [
- "bytecheck",
-]
-
-[[package]]
 name = "ring"
 version = "0.16.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1685,36 +1635,13 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba0dea2b9efaa468bc76d09a06741839d84c70a746edb1793d9653828532666"
-dependencies = [
- "memoffset",
- "rkyv_derive 0.3.1",
-]
-
-[[package]]
-name = "rkyv"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70de01b38fe7baba4ecdd33b777096d2b326993d8ea99bc5b6ede691883d3010"
 dependencies = [
  "memoffset",
  "ptr_meta",
- "rkyv_derive 0.4.0",
-]
-
-[[package]]
-name = "rkyv"
-version = "0.7.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f371763528cb5a45ff01879d08355c39d49b849e2e6e665989abe3262997bde0"
-dependencies = [
- "bytecheck",
- "hashbrown",
- "ptr_meta",
- "rend",
- "rkyv_derive 0.7.18",
+ "rkyv_derive",
  "seahash",
 ]
 
@@ -1741,7 +1668,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "xous",
  "xous-ipc",
@@ -1750,31 +1677,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddf04e93b51e6cfcc0eeee3bbf121d978303b83fbf2dc49085cff7855478fd4b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "rkyv_derive"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a169f6bc5a81033e86ed39d0f4150e2608160b73d2b93c6e8e6a3efa873f14"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "rkyv_derive"
-version = "0.7.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97fc962ad6ffbcc218212c465318c7c151221474350b281b4912f4890ea590b5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1804,7 +1709,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rand_core 0.5.1",
- "rkyv 0.4.3",
+ "rkyv",
  "rtc",
  "sha2",
  "spinor",
@@ -1832,7 +1737,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -1995,7 +1900,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "opaque-debug",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -2035,7 +1940,7 @@ dependencies = [
  "num-traits",
  "oqc-test",
  "rand_core 0.5.1",
- "rkyv 0.4.3",
+ "rkyv",
  "root-keys",
  "rtc",
  "sha2",
@@ -2121,7 +2026,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rand 0.8.3",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "trng",
@@ -2153,7 +2058,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "root-keys",
  "rtc",
  "susres",
@@ -2191,7 +2096,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "utralib",
  "xous",
  "xous-ipc",
@@ -2298,7 +2203,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "ticktimer-server",
  "utralib",
  "xous",
@@ -2392,7 +2297,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rand_core 0.5.1",
- "rkyv 0.4.3",
+ "rkyv",
  "susres",
  "ticktimer-server",
  "utralib",
@@ -2774,7 +2679,7 @@ name = "xous-ipc"
 version = "0.8.0"
 dependencies = [
  "bitflags",
- "rkyv 0.4.3",
+ "rkyv",
  "xous",
 ]
 
@@ -2796,7 +2701,7 @@ dependencies = [
  "log-server",
  "num-derive",
  "num-traits",
- "rkyv 0.4.3",
+ "rkyv",
  "utralib",
  "xous",
  "xous-ipc",
