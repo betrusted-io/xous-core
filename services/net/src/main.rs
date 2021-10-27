@@ -107,47 +107,8 @@ fn xmain() -> ! {
     com_int_list.clear();
     com.ints_get_active(&mut com_int_list);
     log::debug!("COM pending interrupts after enabling: {:?}", com_int_list);
-
-    // build the waiting thread
-    let wait_conn = Arc::new(AtomicU32::new(0));
-    thread::spawn({
-        let parent_conn = net_conn.clone();
-        let wait_conn_clone = wait_conn.clone();
-        move || {
-            let wait_sid = xous::create_server().unwrap();
-            wait_conn_clone.store(xous::connect(wait_sid).unwrap(), Ordering::SeqCst);
-            let tt = ticktimer_server::Ticktimer::new().unwrap();
-            loop {
-                let msg = xous::receive_message(wait_sid).unwrap();
-                match FromPrimitive::from_usize(msg.body.id()) {
-                    Some(WaitOp::WaitMs) => msg_scalar_unpack!(msg, duration_lsb, duration_msb, _, _, {
-                        if duration_msb != 0 {
-                            log::error!("wait duration exceeds API bounds");
-                        }
-                        tt.sleep_ms(duration_lsb).unwrap();
-                        send_message(parent_conn, Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't pump the net loop");
-                    }),
-                    Some(WaitOp::PollAt) => msg_scalar_unpack!(msg, deadline_lsb, deadline_msb, _, _, {
-                        let deadline: u64 = (deadline_lsb as u64) | ((deadline_msb as u64) << 32);
-                        let now = tt.elapsed_ms();
-                        if deadline > now {
-                            log::debug!("sleeping for {}", deadline - now);
-                            tt.sleep_ms((deadline - now) as usize).unwrap();
-                            send_message(parent_conn, Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)).expect("couldn't pump the net loop");
-                        }
-                    }),
-                    Some(WaitOp::Quit) => break,
-                    None => log::error!("got unknown message: {:?}", msg)
-                }
-            }
-            xous::destroy_server(wait_sid).unwrap();
-        }
-    });
-    // wait until the waiting thread starts and has populated a reverse connection ID
-    while wait_conn.load(Ordering::SeqCst) == 0 {
-        xous::yield_slice();
-    }
-
+    const MAX_DELAY_THREADS: u32 = 10; // limit the number of concurrent delay threads. Typically we have 1-2 running at any time, but DoS conditions could lead to many more.
+    let delay_threads = Arc::new(AtomicU32::new(0));
     let mut net_config: Option<Ipv4Conf> = None;
 
     // storage for all our sockets
@@ -243,6 +204,7 @@ fn xmain() -> ! {
                 let mut pkt = buf.to_original::<NetPingPacket, _>().unwrap();
                 let mut socket = sockets.get::<IcmpSocket>(icmp_handle);
                 if socket.can_send() {
+                    log::trace!("sending ping to {:?}", pkt.endpoint);
                     let remote = IpAddress::from(pkt.endpoint);
                     // we take advantage of the fact that the same CID is always returned for repeated connect requests to the same SID.
                     let cid = match pkt.server {
@@ -267,6 +229,7 @@ fn xmain() -> ! {
                         cid,
                         retop: pkt.return_opcode,
                     };
+                    log::trace!("ping conn info: remote {:?} / cid: {} / retp: {}", remote, cid, pkt.return_opcode);
                     // this code will guarantee the sequence number goes up, but if multiple concurrent
                     // pings are in progress, they may not be directly in sequence. This is OK.
                     let now = timer.elapsed_ms();
@@ -277,11 +240,9 @@ fn xmain() -> ! {
                         new_queue.insert(seq, now);
                         ping_destinations.insert(conn, new_queue);
                     };
-                    seq += 1;
 
                     // now emit the actual packet
                     let mut echo_payload = [0xffu8; 40];
-                    let ident = 0x22b;
                     NetworkEndian::write_i64(&mut echo_payload, now as i64);
                     match remote {
                         IpAddress::Ipv4(_) => {
@@ -313,6 +274,13 @@ fn xmain() -> ! {
                         }
                         _ => unimplemented!(),
                     }
+                    seq += 1;
+                    // fire off a Pump to get the stack to actually transmit the ping; this call merely queues it for sending
+                    xous::try_send_message(net_conn,
+                        Message::new_scalar(
+                            Opcode::NetPump.to_usize().unwrap(),
+                            0, 0, 0, 0)
+                    ).ok();
                     pkt.sent_ok = Some(true);
                 } else {
                     pkt.sent_ok = Some(false);
@@ -522,6 +490,12 @@ fn xmain() -> ! {
                                 Ok(_) => buf.replace(NetMemResponse::Sent(udp_tx.len)).unwrap(),
                                 _ => buf.replace(NetMemResponse::LibraryError).unwrap(),
                             }
+                            // fire off a Pump to get the stack to actually transmit the ping; the send call merely queues it for sending
+                            xous::try_send_message(net_conn,
+                                Message::new_scalar(
+                                    Opcode::NetPump.to_usize().unwrap(),
+                                    0, 0, 0, 0)
+                            ).ok();
                         } else {
                             buf.replace(NetMemResponse::Invalid).unwrap()
                         }
@@ -732,6 +706,7 @@ fn xmain() -> ! {
                                     let icmp_repr =
                                         Icmpv4Repr::parse(&icmp_packet, &device_caps.checksum).unwrap();
                                     if let Icmpv4Repr::EchoReply { seq_no, data, .. } = icmp_repr {
+                                        log::trace!("got icmp seq no {} / data: {:x?}", seq_no, data);
                                         if let Some(_) = waiting_queue.get(&seq_no) {
                                             let packet_timestamp_ms = NetworkEndian::read_i64(data);
                                             waiting_queue.remove(&seq_no);
@@ -841,29 +816,63 @@ fn xmain() -> ! {
                                 _ => unimplemented!(),
                             }
                         }
+                    }
+                }
+                // this block handles ICMP retirement; it runs everytime we pump the block
+                {
+                    let now = timer.elapsed_ms();
+                    // notify the callback to drop its connection, because the queue is now empty
+                    // do this before we clear the queue, because we want the Drop message to come on the iteration
+                    // *after* the queue is empty.
+                    ping_destinations.retain(|conn, v|
+                        if v.len() == 0 {
+                            log::debug!("Dropping ping record for {:?}", conn.remote);
+                            let ra = conn.remote.as_bytes();
+                            xous::send_message(conn.cid,
+                                Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
+                                    conn.retop,
+                                    NetPingCallback::Drop.to_usize().unwrap(),
+                                    u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
+                                    if ra.len() == 16 {u32::from_be_bytes(ra[12..16].try_into().unwrap()) as usize} else {0},
+                                    0,
+                                )
+                            ).expect("couldn't send Drop on empty queue from Ping server");
+                            match unsafe{xous::disconnect(conn.cid)} {
+                                Ok(_) => {},
+                                Err(xous::Error::ServerNotFound) => {
+                                    log::debug!("Disconnected from a server that has already disappeared. Moving on.");
+                                }
+                                Err(e) => {
+                                    panic!("Unhandled error disconnecting from ping server: {:?}", e);
+                                }
+                            }
+                            false
+                        } else {
+                            true
+                        }
+                    );
 
-                        // notify the callback to drop its connection, because the queue is now empty
-                        // do this before we clear the queue, because we want the Drop message to come on the iteration
-                        // *after* the queue is empty.
-                        ping_destinations.retain(|conn, v|
-                            if v.len() == 0 {
-                                let ra = conn.remote.as_bytes();
-                                xous::send_message(conn.cid,
+                    // now: sequence through the waiting_queue and remove entries that have hit our timeout
+                    for (conn, waiting_queue) in ping_destinations.iter_mut() {
+                        let ra = conn.remote.as_bytes();
+                        waiting_queue.retain(|&seq, &mut start_time|
+                            if now - start_time > ping_timeout_ms as u64 {
+                                log::debug!("timeout - removing {:?}, {}", conn.remote, seq);
+                                match xous::try_send_message(conn.cid,
                                     Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
                                         conn.retop,
-                                        NetPingCallback::Drop.to_usize().unwrap(),
+                                        NetPingCallback::Timeout.to_usize().unwrap(),
                                         u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
-                                        if ra.len() == 16 {u32::from_be_bytes(ra[12..16].try_into().unwrap()) as usize} else {0},
-                                        0,
+                                        seq as usize,
+                                        (now - start_time) as usize,
                                     )
-                                ).expect("couldn't send Drop on empty queue from Ping server");
-                                match unsafe{xous::disconnect(conn.cid)} {
+                                ) {
                                     Ok(_) => {},
-                                    Err(xous::Error::ServerNotFound) => {
-                                        log::debug!("Disconnected from a server that has already disappeared. Moving on.");
-                                    }
+                                    Err(xous::Error::ServerQueueFull) => {
+                                        log::warn!("Got dst {:?} timeout, but upstream server queue is full; dropping.", conn.remote);
+                                    },
                                     Err(e) => {
-                                        panic!("Unhandled error disconnecting from ping server: {:?}", e);
+                                        log::error!("Unhandled error: {:?}; ignoring", e);
                                     }
                                 }
                                 false
@@ -871,61 +880,41 @@ fn xmain() -> ! {
                                 true
                             }
                         );
-
-                        // now: sequence through the waiting_queue and remove entries that have hit our timeout
-                        for (conn, waiting_queue) in ping_destinations.iter_mut() {
-                            let ra = conn.remote.as_bytes();
-                            waiting_queue.retain(|&seq, &mut start_time|
-                                if now - start_time > ping_timeout_ms as u64 {
-                                    match xous::try_send_message(conn.cid,
-                                        Message::new_scalar( // we should wait if the queue is full, as the "Drop" message is important
-                                            conn.retop,
-                                            NetPingCallback::Timeout.to_usize().unwrap(),
-                                            u32::from_be_bytes(ra[..4].try_into().unwrap()) as usize,
-                                            seq as usize,
-                                            (now - start_time) as usize,
-                                        )
-                                    ) {
-                                        Ok(_) => {},
-                                        Err(xous::Error::ServerQueueFull) => {
-                                            log::warn!("Got dst {:?} timeout, but upstream server queue is full; dropping.", conn.remote);
-                                        },
-                                        Err(e) => {
-                                            log::error!("Unhandled error: {:?}; ignoring", e);
-                                        }
-                                    }
-                                    false
-                                } else {
-                                    true
-                                }
-                            );
-                        }
                     }
                 }
 
                 // establish our next check-up interval
                 let timestamp = Instant::from_millis(timer.elapsed_ms() as i64);
-                match iface.poll_at(&sockets, timestamp) {
-                    // set a future time to check the interface
-                    Some(poll_at) if timestamp < poll_at => {
-                        xous::try_send_message(wait_conn.load(Ordering::SeqCst),
-                            Message::new_scalar(
-                                WaitOp::PollAt.to_usize().unwrap(),
-                                (poll_at.total_millis() as u64 & 0xFFFF_FFFF) as usize,
-                                ((poll_at.total_millis() as u64 >> 32) & 0xFFF_FFFF) as usize,
-                                0, 0)
-                        ).ok();
-                    }
-                    Some(_) => {
-                        // we should check immediately (e.g. more packets known to be in the queue)
+                if let Some(delay) = iface.poll_delay(&sockets, timestamp) {
+                    let delay_ms = delay.total_millis();
+                    if delay_ms < 2 {
                         xous::try_send_message(net_conn,
                             Message::new_scalar(
                                 Opcode::NetPump.to_usize().unwrap(),
                                 0, 0, 0, 0)
                         ).ok();
-                    },
-                    None => {
-                        // no need to set a poll time
+                    } else {
+                        if delay_threads.load(Ordering::SeqCst) < MAX_DELAY_THREADS {
+                            let prev_count = delay_threads.fetch_add(1, Ordering::SeqCst);
+                            log::trace!("spawning checkup thread for {}ms. New total threads: {}", delay_ms, prev_count + 1);
+                            thread::spawn({
+                                let parent_conn = net_conn.clone();
+                                let delay_threads = delay_threads.clone();
+                                move || {
+                                    let tt = ticktimer_server::Ticktimer::new().unwrap();
+                                    tt.sleep_ms(delay_ms as usize).unwrap();
+                                    xous::try_send_message(parent_conn,
+                                        Message::new_scalar(
+                                            Opcode::NetPump.to_usize().unwrap(),
+                                            0, 0, 0, 0)
+                                    ).ok();
+                                    let prev_count = delay_threads.fetch_sub(1, Ordering::SeqCst);
+                                    log::trace!("terminating checkup thread. New total threads: {}", prev_count - 1);
+                                }
+                            });
+                        } else {
+                            log::warn!("Could not queue delay of {}ms in net stack due to thread exhaustion.", delay_ms);
+                        }
                     }
                 }
             }
