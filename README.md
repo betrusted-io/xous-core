@@ -17,6 +17,7 @@ from source.  It consists of the following projects:
 ## Dependencies
 
 - Xous requires its own Rust target, `riscv32imac-unknown-xous-elf`. If you run `cargo xtask` from the command line, you should be prompted to install the target automatically if it does not already exist.
+- You may need to remove the `target/` directory before building, if `rustc` continues to behave like it can't find the `xous` target even after it is installed.
 - If you plan on doing USB firmware updates, you'll need `progressbar2` (updates) and `pyusb` (updates). Note that `pyusb` has name space conflicts with similarly named packages, so if updates aren't working you may need to create a `venv` or uninstall conflicting packages.
 - If you are doing development on the digital signatures with the Python helper scripts, you will need: `pycryptodome` (signing - PEM read), `cryptography` (signing - x509 read), `pynacl` (signing - ed25519 signatures) (most users won't need this).
 
