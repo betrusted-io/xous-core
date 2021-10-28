@@ -3,7 +3,7 @@
 <device schemaVersion="1.1" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="CMSIS-SVD.xsd" >
     <vendor>litex</vendor>
     <name>SOC</name>
-    <description><![CDATA[Litex SoC 2021-10-28 15:14:30]]></description>
+    <description><![CDATA[Litex SoC 2021-10-28 23:48:14]]></description>
 
     <addressUnitBits>8</addressUnitBits>
     <width>32</width>
@@ -3585,7 +3585,7 @@ inject too fast.]]></description>
                     <name>SEED1</name>
                     <description><![CDATA[Bits 32-63 of `SEED_SEED`. Seed used for the build]]></description>
                     <addressOffset>0x0000</addressOffset>
-                    <resetValue>0x75c1ce44</resetValue>
+                    <resetValue>0x5ee713b</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
@@ -3600,7 +3600,7 @@ inject too fast.]]></description>
                     <name>SEED0</name>
                     <description><![CDATA[Bits 0-31 of `SEED_SEED`.]]></description>
                     <addressOffset>0x0004</addressOffset>
-                    <resetValue>0x5e3b41c1</resetValue>
+                    <resetValue>0x2d7b3713</resetValue>
                     <size>32</size>
                     <fields>
                         <field>
