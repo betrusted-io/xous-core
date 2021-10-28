@@ -461,32 +461,58 @@ impl<'a> ShellCmdApi<'a> for Test {
                             }
                         }
                     }
-                    if let Ok(msg) = env.com.wlan_status() {
-                        let mut elements = msg.as_str().unwrap().split(' ');
-                        let rssi_pass = if let Some(_rssi_str) = elements.next() {
-                            //rssi_str.parse::<i32>().unwrap() < -10
-                            // for now always pass, don't use RSSI as it's not reliable
-                            true
+                    // re-connect to the network, if things didn't work in the first place
+                    let mut net_up = false;
+                    let mut dhcp_ok = false;
+                    let mut ssid_ok = false;
+                    let mut rssi_pass = false;
+                    let mut wifi_tries = 0;
+                    loop {
+                        // parse and see if we connected from the first attempt (called before this loop)
+                        if let Ok(msg) = env.com.wlan_status() {
+                            let mut elements = msg.as_str().unwrap().split(' ');
+                            rssi_pass = if let Some(_rssi_str) = elements.next() {
+                                //rssi_str.parse::<i32>().unwrap() < -10
+                                // for now always pass, don't use RSSI as it's not reliable
+                                true
+                            } else {
+                                false
+                            };
+                            net_up = if let Some(up_str) = elements.next() {
+                                up_str == "up"
+                            } else {
+                                false
+                            };
+                            dhcp_ok = if let Some(dhcp_str) = elements.next() {
+                                dhcp_str == "dhcpBound"
+                            } else {
+                                false
+                            };
+                            ssid_ok = if let Some(ssid_str) = elements.next() {
+                                ssid_str == "\nprecursortest"
+                            } else {
+                                false
+                            };
+                            // if connected, break
+                            if rssi_pass && net_up && dhcp_ok && ssid_ok {
+                                write!(ret, "WLAN OK: {}\n", msg.as_str().unwrap()).unwrap();
+                                break;
+                            } else {
+                                write!(ret, "WLAN TRY: {}", msg.as_str().unwrap()).unwrap();
+                            }
                         } else {
-                            false
-                        };
-                        let net_up = if let Some(up_str) = elements.next() {
-                            up_str == "up"
-                        } else {
-                            false
-                        };
-                        let dhcp_ok = if let Some(dhcp_str) = elements.next() {
-                            dhcp_str == "dhcpBound"
-                        } else {
-                            false
-                        };
-                        let ssid_ok = if let Some(ssid_str) = elements.next() {
-                            ssid_str == "\nprecursortest"
-                        } else {
-                            false
-                        };
-                        if rssi_pass && net_up && dhcp_ok && ssid_ok {
-                            write!(ret, "WLAN OK: {}\n", msg.as_str().unwrap()).unwrap();
+                            write!(ret, "WLAN TRY: Couldn't get status!\n").unwrap();
+                        }
+                        if wifi_tries < 3 {
+                            // else retry the connection sequence -- leave, ssid, pass, join. takes some time.
+                            env.com.wlan_leave().unwrap();
+                            env.ticktimer.sleep_ms(2000).unwrap();
+                            env.com.wlan_set_ssid(&String::<1024>::from_str("precursortest")).unwrap();
+                            env.ticktimer.sleep_ms(800).unwrap();
+                            env.com.wlan_set_pass(&String::<1024>::from_str("notasecret")).unwrap();
+                            env.ticktimer.sleep_ms(800).unwrap();
+                            env.com.wlan_join().unwrap();
+                            env.ticktimer.sleep_ms(8000).unwrap();
                         } else {
                             if !rssi_pass {
                                 write!(ret, "WLAN FAIL: rssi weak\n").unwrap();
@@ -500,12 +526,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                             if !ssid_ok {
                                 write!(ret, "WLAN FAIL: ssid mismatch\n").unwrap();
                             }
-                            write!(ret, "{}", msg.as_str().unwrap()).unwrap();
                             return Ok(Some(ret));
                         }
-                    } else {
-                        write!(ret, "FAIL: Couldn't connect to test wifi network!\n").unwrap();
-                        return Ok(Some(ret));
+                        wifi_tries += 1;
                     }
 
                     AUDIO_OQC.store(true, Ordering::Relaxed);
