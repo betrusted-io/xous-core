@@ -618,10 +618,18 @@ fn xmain() -> ! {
                                         None => {} //log::info!("pushed {} bytes avail to iface", rxlen),
                                         Some(_) => log::warn!("Got more packets, but smoltcp didn't drain them in time"),
                                     }
-                                    send_message(
+                                    match xous::try_send_message(
                                         net_conn,
                                         Message::new_scalar(Opcode::NetPump.to_usize().unwrap(), 0, 0, 0, 0)
-                                    ).expect("WlanRxReady couldn't pump the loop");
+                                    ) {
+                                        Ok(_) => {},
+                                        Err(xous::Error::ServerQueueFull) => {
+                                            log::warn!("Our net queue runneth over, packets will be dropped.");
+                                        },
+                                        Err(e) => {
+                                            log::error!("Unhandled error sending NetPump to self: {:?}", e);
+                                        }
+                                    }
                                 } else {
                                     log::error!("Got RxReady interrupt but no packet length specified!");
                                 }
