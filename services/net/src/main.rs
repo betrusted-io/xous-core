@@ -8,7 +8,7 @@ use com::api::{ComIntSources, Ipv4Conf, NET_MTU};
 
 mod device;
 
-use xous::{send_message, Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
+use xous::{Message, CID, SID, msg_scalar_unpack, msg_blocking_scalar_unpack};
 use xous_ipc::Buffer;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
