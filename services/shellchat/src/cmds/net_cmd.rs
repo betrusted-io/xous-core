@@ -47,7 +47,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose]";
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -155,7 +155,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                             }
                         }
                     } else {
-                        write!(ret, "Missing url: net ping [url]").unwrap();
+                        write!(ret, "Missing host: net ping [host] [count]").unwrap();
                     }
                 }
                 _ => {
