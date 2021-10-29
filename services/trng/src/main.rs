@@ -582,7 +582,7 @@ impl Tester {
     pub fn new(server_csr: *mut u32) -> Tester {
         use utralib::generated::*;
         let buff_a = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4080_0000), // fix this at a known physical address
+            xous::MemoryAddress::new(0x40B0_0000), // fix this at a known physical address
             None,
             crate::TRNG_BUFF_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
@@ -590,7 +590,7 @@ impl Tester {
         .expect("couldn't map TRNG comms buffer A");
 
         let buff_b = xous::syscall::map_memory(
-            xous::MemoryAddress::new(0x4090_0000), // fix this at a known physical address
+            xous::MemoryAddress::new(0x40C0_0000), // fix this at a known physical address
             None,
             crate::TRNG_BUFF_LEN,
             xous::MemoryFlags::R | xous::MemoryFlags::W,
