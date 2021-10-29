@@ -292,8 +292,8 @@ def main():
 
     messible2_in = pc_usb.register('messible2_in')
     messible_out = pc_usb.register('messible_out')
-    RAM_A = 0x4080_0000
-    RAM_B = 0x4090_0000
+    RAM_A = 0x40B0_0000
+    RAM_B = 0x40C0_0000
     BURST_LEN = 512 * 1024
     TIMEOUT = 30.0
 
