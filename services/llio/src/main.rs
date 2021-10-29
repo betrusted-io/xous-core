@@ -44,7 +44,6 @@ mod implementation {
 
     fn handle_event_irq(_irq_no: usize, arg: *mut usize) {
         let xl = unsafe { &mut *(arg as *mut Llio) };
-        // just clear the pending request for now and return
         if xl.event_csr.rf(utra::btevents::EV_PENDING_COM_INT) != 0 {
             if let Some(conn) = xl.handler_conn {
                 xous::try_send_message(conn,
@@ -692,16 +691,22 @@ fn xmain() -> ! {
     // - keyboard
     // - shellchat/sleep
     // - shellchat/environment
+    // - shellchat/autoupdater
     // - spinor (for turning off wfi during writes)
     // - rootkeys (for reboots)
     // - oqc-test (for testing the vibe motor)
-    let num_conns = 8;
-    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, Some(num_conns)).expect("can't register server");
+    // - net (for COM interrupt dispatch)
+    // - problem: `sleep killbounce` allocates a connection. That would bring us to 10 normally, but 11 when that function is needed.
+    //   for now we're going to leave the total server count as "None" (open-ended) but we probably want to rethink this as
+    //   the I2C access is in this crate. Perhaps we should split I2C out, so that the RTC can be protected and not grouped
+    //   into the same severe security restrictions as the other LLIO items?
+    let num_conns = 10;
+    let llio_sid = xns.register_name(api::SERVER_NAME_LLIO, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", llio_sid);
 
     // create the I2C handler thread
     // each connection to llio also creates an i2c connection, so it has the same expectation list
-    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, Some(num_conns)).expect("can't register I2C thread");
+    let i2c_sid = xns.register_name(api::SERVER_NAME_I2C, None).expect("can't register I2C thread");
     log::trace!("registered I2C thread with NS -- {:?}", i2c_sid);
     let (sid0, sid1, sid2, sid3) = i2c_sid.to_u32();
     xous::create_thread_4(i2c_thread, sid0 as usize, sid1 as usize, sid2 as usize, sid3 as usize).expect("couldn't start I2C handler thread");
@@ -710,6 +715,11 @@ fn xmain() -> ! {
     let handler_conn = xous::connect(llio_sid).expect("can't create IRQ handler connection");
     let mut llio = Llio::new(handler_conn, gpio_base);
     llio.ec_power_on(); // ensure this is set correctly; if we're on, we always want the EC on.
+
+    if cfg!(feature = "wfi_off") {
+        log::warn!("WFI is overridden at boot -- automatic power savings is OFF!");
+        llio.wfi_override(true);
+    }
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(llio_sid).expect("couldn't create suspend callback connection");
@@ -1029,10 +1039,28 @@ fn send_event(cb_conns: &[Option<ScalarCallback>; 32], which: usize) {
     for entry in cb_conns.iter() {
         if let Some(scb) = entry {
             // note that the "which" argument is only used for GPIO events, to indicate which pin had the event
-            xous::send_message(scb.server_to_cb_cid,
+            match xous::try_send_message(scb.server_to_cb_cid,
                 xous::Message::new_scalar(EventCallback::Event.to_usize().unwrap(),
                    scb.cb_to_client_cid as usize, scb.cb_to_client_id as usize, which, 0)
-            ).unwrap();
+            ) {
+                Ok(_) => {},
+                Err(e) => {
+                    match e {
+                        xous::Error::ServerQueueFull => {
+                            // this triggers if an interrupt storm happens. This could be perfectly natural and/or
+                            // "expected", and the "best" behavior is probably to drop the events, but leave a warning.
+                            // Examples of this would be a ping flood overwhelming the network stack.
+                            log::warn!("Attempted to send event, but destination queue is full. Event was dropped: {:?}", scb);
+                        }
+                        xous::Error::ServerNotFound => {
+                            log::warn!("Event callback subscriber has died. Event was dropped: {:?}", scb);
+                        }
+                        _ => {
+                            log::error!("Callback error {:?}: {:?}", e, scb);
+                        }
+                    }
+                }
+            }
         };
     }
 }

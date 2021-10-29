@@ -69,7 +69,7 @@ impl XousLoggerBacking<'_> {
             }
 
             let mut wrapper = cursor::BufferWrapper::new(&mut log_record.args);
-            write!(wrapper, "{}", record.args()).unwrap();
+            write!(wrapper, "{}", record.args()).ok(); // truncate if error
             log_record.args_length = wrapper.len() as u32;
         }
 

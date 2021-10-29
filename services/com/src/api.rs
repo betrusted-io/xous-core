@@ -2,7 +2,10 @@
 // It's just a convenient abuse of already-defined constants. However, it's intended that
 // the COM server on the SoC side abstracts much of the EC bus complexity away.
 pub(crate) const SERVER_NAME_COM: &str      = "_COM manager_";
+pub use com_rs_ref::serdes::Ipv4Conf;
 
+// extra 30 bytes for the header over 1500
+pub const NET_MTU: usize = 1530;
 #[derive(Debug, Default, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub struct BattStats {
     /// instantaneous voltage in mV
@@ -172,6 +175,27 @@ pub(crate) enum Opcode {
 
     /// wlan: get wlan radio status (power state? connected? AP info?)
     WlanStatus,
+
+    /// wlan: get current config
+    WlanGetConfig,
+
+    /// wlan: get net packet
+    WlanFetchPacket,
+
+    /// wlan: send net packet
+    WlanSendPacket,
+
+    /// sets the EC-side com interrupt mask
+    IntSetMask,
+
+    /// gets the EC-side com interrupt mask
+    IntGetMask,
+
+    /// acknowledges interrupts with the given mask
+    IntAck,
+
+    /// gets more details on the latest interrupt
+    IntFetchVector,
 }
 
 /// These enums indicate what kind of callback type we're sending.
@@ -181,4 +205,41 @@ pub(crate) enum Callback {
     BattStats,
     /// Server is quitting, drop connections
     Drop,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ComIntSources {
+    WlanRxReady,
+    WlanIpConfigUpdate,
+    WlanSsidScanDone,
+    BatteryCritical,
+    WlanTxErr,
+    WlanRxErr,
+    Invalid,
+}
+impl From<u16> for ComIntSources {
+    fn from(n: u16) -> ComIntSources {
+        match n {
+            com_rs_ref::INT_WLAN_RX_READY => ComIntSources::WlanRxReady,
+            com_rs_ref::INT_WLAN_IPCONF_UPDATE => ComIntSources::WlanIpConfigUpdate,
+            com_rs_ref::INT_WLAN_SSID_UPDATE => ComIntSources::WlanSsidScanDone,
+            com_rs_ref::INT_BATTERY_CRITICAL => ComIntSources::BatteryCritical,
+            com_rs_ref::INT_WLAN_TX_ERROR => ComIntSources::WlanTxErr,
+            com_rs_ref::INT_WLAN_RX_ERROR => ComIntSources::WlanRxErr,
+            _ => ComIntSources::Invalid,
+        }
+    }
+}
+impl From<ComIntSources> for u16 {
+    fn from(cis: ComIntSources) -> u16 {
+        match cis {
+            ComIntSources::BatteryCritical => com_rs_ref::INT_BATTERY_CRITICAL,
+            ComIntSources::WlanIpConfigUpdate => com_rs_ref::INT_WLAN_IPCONF_UPDATE,
+            ComIntSources::WlanSsidScanDone => com_rs_ref::INT_WLAN_SSID_UPDATE,
+            ComIntSources::WlanRxReady => com_rs_ref::INT_WLAN_RX_READY,
+            ComIntSources::WlanTxErr => com_rs_ref::INT_WLAN_TX_ERROR,
+            ComIntSources::WlanRxErr => com_rs_ref::INT_WLAN_RX_ERROR,
+            ComIntSources::Invalid => 0,
+        }
+    }
 }

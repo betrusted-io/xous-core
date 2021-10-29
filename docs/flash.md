@@ -56,7 +56,7 @@ There is one wart, where the [font maps are defined](https://github.com/betruste
 + 2050_0000 |  Loader top 0x1000 is signature record |
 + 2051_FFFF |  0x2050_1000: loader.bin - Xous loader |
 +-----------+----------------------------------------+
-+ 2052_0000 |   Built-in font planes                 |
++ 2053_0000 |   Built-in font planes                 |
 + 2097_FFFF |   Extended fonts in PDDB               |
 +-----------+----------------------------------------+
 + 2098_0000 |   Xous kernel plus                     |

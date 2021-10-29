@@ -33,7 +33,10 @@ default-members = [
   "services/root-keys",
   "services/jtag",
   "services/oqc-test",
-  "services/test-stub2"
+  "services/test-stub2",
+  "services/pddb",
+  "services/net",
+  "services/dns",
 ]
 members = [
   "xous-ipc",
@@ -81,7 +84,10 @@ members = [
   "services/jtag",
   "tools/wycheproof-import",
   "services/oqc-test",
-  "services/test-stub2"
+  "services/test-stub2",
+  "services/pddb",
+  "services/net",
+  "services/dns",
 ]
 resolver = "2"
 

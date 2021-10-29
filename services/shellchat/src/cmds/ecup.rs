@@ -15,6 +15,7 @@ pub(crate) enum UpdateOp {
     UpdateGateware,
     UpdateFirmware,
     UpdateWf200,
+    UpdateAll,
     Quit,
 }
 
@@ -22,6 +23,7 @@ pub(crate) enum UpdateOp {
 pub(crate) enum UpdateResult {
     PackageValid,
     ProgramDone,
+    AutoDone,
     Abort,
 }
 #[derive(PartialEq, Eq)]
@@ -179,6 +181,9 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     let sid = xous::SID::from_u32(sid0 as u32, sid1 as u32, sid2 as u32, sid3 as u32);
     let xns = xous_names::XousNames::new().unwrap();
     let mut com = com::Com::new(&xns).unwrap();
+    let ticktimer = ticktimer_server::Ticktimer::new().unwrap();
+    let llio = llio::Llio::new(&xns).unwrap();
+    let gam = gam::Gam::new(&xns).unwrap();
     let callback_conn = xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap();
     let mut susres = susres::Susres::new_without_hook(&xns).unwrap();
 
@@ -260,7 +265,7 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     xous::send_message(callback_conn,
                         xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                         UpdateResult::ProgramDone.to_usize().unwrap(),
-                        EC_GATEWARE_LEN as usize, 0, 0)).unwrap();
+                        (length - (EC_GATEWARE_LEN)) as usize, 0, 0)).unwrap();
                 }
             },
             Some(UpdateOp::UpdateWf200) => {
@@ -284,8 +289,108 @@ fn ecupdate_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
                     xous::send_message(callback_conn,
                         xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
                         UpdateResult::ProgramDone.to_usize().unwrap(),
+                        length as usize, 0, 0)).unwrap();
+                }
+            },
+            Some(UpdateOp::UpdateAll) => {
+                // gateware
+                let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
+
+                if !validate_package(package,PackageType::Ec) {
+                    log::error!("firmware package did not pass validation");
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::Abort.to_usize().unwrap(),
+                        0, 0, 0)).unwrap();
+                    continue;
+                } else {
+                    susres.set_suspendable(false).unwrap(); // block suspend/resume operations
+                    do_update(&mut com, callback_conn, package, CTRL_PAGE_LEN, EC_GATEWARE_BASE, EC_GATEWARE_LEN, "gateware");
+                    susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
+
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::ProgramDone.to_usize().unwrap(),
                         EC_GATEWARE_LEN as usize, 0, 0)).unwrap();
                 }
+
+                // firmware
+                let package = unsafe{ core::slice::from_raw_parts(ec_package.as_ptr() as *const u8, xous::EC_FW_PKG_LEN as usize)};
+                let mut temp: [u8; 4] = Default::default();
+                temp.copy_from_slice(&package[0x28..0x2c]);
+                let length = u32::from_le_bytes(temp); // total length of package
+
+                if !validate_package(package,PackageType::Ec) {
+                    log::error!("firmware package did not pass validation");
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::Abort.to_usize().unwrap(),
+                        0, 0, 0)).unwrap();
+                    continue;
+                } else {
+                    susres.set_suspendable(false).unwrap(); // block suspend/resume operations
+                    do_update(&mut com, callback_conn, package, EC_GATEWARE_LEN + CTRL_PAGE_LEN,
+                        EC_FIRMWARE_BASE, length - (EC_GATEWARE_LEN), "firmware");
+                    susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
+
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::ProgramDone.to_usize().unwrap(),
+                        (length - (EC_GATEWARE_LEN)) as usize, 0, 0)).unwrap();
+                }
+
+                // wf200
+                let package = unsafe{ core::slice::from_raw_parts(wf_package.as_ptr() as *const u8, xous::EC_WF200_PKG_LEN as usize)};
+                let mut temp: [u8; 4] = Default::default();
+                temp.copy_from_slice(&package[0x28..0x2c]);
+                let length = u32::from_le_bytes(temp); // total length of package
+
+                if !validate_package(package,PackageType::Wf200) {
+                    log::error!("WF200 firmware package did not pass validation");
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::Abort.to_usize().unwrap(),
+                        0, 0, 0)).unwrap();
+                    continue;
+                } else {
+                    susres.set_suspendable(false).unwrap(); // block suspend/resume operations
+                    do_update(&mut com, callback_conn, package, CTRL_PAGE_LEN,
+                        WF200_FIRMWARE_BASE, length, "wf200");
+                    susres.set_suspendable(true).unwrap(); // resume suspend/resume operations
+
+                    xous::send_message(callback_conn,
+                        xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                        UpdateResult::ProgramDone.to_usize().unwrap(),
+                        length as usize, 0, 0)).unwrap();
+                }
+                ticktimer.sleep_ms(500).unwrap(); // paranoia wait
+                llio.ec_reset().unwrap();
+                ticktimer.sleep_ms(4000).unwrap();
+                com.link_reset().unwrap();
+                com.reseed_ec_trng().unwrap();
+                xous::send_message(callback_conn,
+                    xous::Message::new_scalar(CB_ID.load(Ordering::Relaxed) as usize,
+                    UpdateResult::AutoDone.to_usize().unwrap(),
+                    0, 0, 0)).unwrap();
+
+                ticktimer.sleep_ms(2000).unwrap();
+                gam.shipmode_blank_request().unwrap();
+                ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                // allow EC to snoop, so that it can wake up the system
+                llio.allow_ec_snoop(true).unwrap();
+                // allow the EC to power me down
+                llio.allow_power_off(true).unwrap();
+                // now send the power off command
+                com.ship_mode().unwrap();
+
+                // now send the power off command
+                com.power_off_soc().unwrap();
+
+                log::info!("CMD: ship mode now!");
+                // pause execution, nothing after this should be reachable
+                ticktimer.sleep_ms(10000).unwrap(); // ship mode happens in 10 seconds
+                log::info!("CMD: if you can read this, ship mode failed!");
             },
             Some(UpdateOp::Quit) => {
                 log::info!("quitting updater thread");
@@ -326,7 +431,7 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
 
     fn process(&mut self, args: String::<1024>, env: &mut CommonEnv) -> Result<Option<String::<1024>>, xous::Error> {
         let mut ret = String::<1024>::new();
-        let helpstring = "ecup [gw] [fw] [wf200] [reset]";
+        let helpstring = "ecup [gw] [fw] [wf200] [reset] [auto]";
 
         log::debug!("ecup handling {}", args.as_str().unwrap());
         let mut tokens = args.as_str().unwrap().split(' ');
@@ -371,6 +476,21 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                         ).unwrap();
                         write!(ret, "Starting EC wf200 update").unwrap();
                     }
+                    "auto" => {
+                        if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                            // if power is plugged in, deny powerdown request
+                            write!(ret, "Can't EC auto update while charging. Unplug charging cable and try again.").unwrap();
+                            return Ok(Some(ret));
+                        }
+
+                        self.in_progress = true;
+                        let start = env.ticktimer.elapsed_ms();
+                        self.start_time = Some(start);
+                        xous::send_message(self.update_cid,
+                            xous::Message::new_scalar(UpdateOp::UpdateAll.to_usize().unwrap(), 0, 0, 0, 0)
+                        ).unwrap();
+                        write!(ret, "Starting full EC firmware update").unwrap();
+                    }
                     _ => {
                         write!(ret, "{}", helpstring).unwrap();
                     }
@@ -403,6 +523,10 @@ impl<'a> ShellCmdApi<'a> for EcUpdate {
                     },
                     Some(UpdateResult::ProgramDone) => {
                         write!(ret, "Programming of {} bytes done in {:.1}s. Please restart EC with `ecup reset`.", progress, elapsed / 1000.0).unwrap();
+                        self.in_progress = false;
+                    },
+                    Some(UpdateResult::AutoDone) => {
+                        write!(ret, "Autoupdate of EC finished. Shutting down now...").unwrap();
                         self.in_progress = false;
                     },
                     Some(UpdateResult::Abort) => {

@@ -399,6 +399,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("{}|ASTOP|", SENTINEL);
                 }
                 "oqc" => {
+                    if ((env.llio.adc_vbus().unwrap() as f64) * 0.005033) > 1.5 {
+                        // if power is plugged in, deny powerdown request
+                        write!(ret, "Can't run OQC test while charging. Unplug charging cable and try again.").unwrap();
+                        return Ok(Some(ret));
+                    }
                     let susres = susres::Susres::new_without_hook(&env.xns).unwrap();
                     env.llio.wfi_override(true).unwrap();
                     // activate SSID scanning while the test runs
@@ -410,6 +415,11 @@ impl<'a> ShellCmdApi<'a> for Test {
                         write!(ret, "FAIL: JTAG self access").unwrap();
                         return Ok(Some(ret));
                     }
+                    env.com.wlan_set_ssid(&String::<1024>::from_str("precursortest")).unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_set_pass(&String::<1024>::from_str("notasecret")).unwrap();
+                    env.ticktimer.sleep_ms(500).unwrap();
+                    env.com.wlan_join().unwrap();
 
                     let battstats = env.com.get_more_stats().unwrap();
                     if battstats[12] < 3900 {
@@ -432,22 +442,93 @@ impl<'a> ShellCmdApi<'a> for Test {
                                 let ssid_str = env.com.ssid_fetch_as_string().unwrap();
                                 use std::str::FromStr;
                                 let ssid = std::string::String::from_str(ssid_str.as_str().unwrap()).unwrap();
-                                let s = ssid.replace(".", "");
-                                write!(ret, "{}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\nNow press PROG button.\n",
-                                    &s
+                                let ssid_short = ssid.replace(".", "");
+                                let mut lines = ssid_short.lines();
+                                let _ = lines.next(); // skip the banner
+                                write!(ret, "SSID {}\nCHECK: was backlight on?\ndid keyboard vibrate?\nwas there sound?\n",
+                                    lines.next().unwrap() // just the first SSID result
                                 ).unwrap();
                                 let (maj, min, rev, extra, gitrev) = env.llio.soc_gitrev().unwrap();
-                                write!(ret, "Version {}.{}.{}+{}, commit {:x}", maj, min, rev, extra, gitrev).unwrap();
+                                write!(ret, "Version {}.{}.{}+{}, commit {:x}\n", maj, min, rev, extra, gitrev).unwrap();
                                 break;
                             }
                             Some(false) => {
-                                write!(ret, "Keyboard test failed.").unwrap();
+                                write!(ret, "Keyboard test failed.\n").unwrap();
                                 break;
                             }
                             None => {
                                 env.ticktimer.sleep_ms(500).unwrap();
                             }
                         }
+                    }
+                    // re-connect to the network, if things didn't work in the first place
+                    let mut net_up = false;
+                    let mut dhcp_ok = false;
+                    let mut ssid_ok = false;
+                    let mut rssi_pass = false;
+                    let mut wifi_tries = 0;
+                    loop {
+                        // parse and see if we connected from the first attempt (called before this loop)
+                        if let Ok(msg) = env.com.wlan_status() {
+                            let mut elements = msg.as_str().unwrap().split(' ');
+                            rssi_pass = if let Some(_rssi_str) = elements.next() {
+                                //rssi_str.parse::<i32>().unwrap() < -10
+                                // for now always pass, don't use RSSI as it's not reliable
+                                true
+                            } else {
+                                false
+                            };
+                            net_up = if let Some(up_str) = elements.next() {
+                                up_str == "up"
+                            } else {
+                                false
+                            };
+                            dhcp_ok = if let Some(dhcp_str) = elements.next() {
+                                dhcp_str == "dhcpBound"
+                            } else {
+                                false
+                            };
+                            ssid_ok = if let Some(ssid_str) = elements.next() {
+                                ssid_str == "\nprecursortest"
+                            } else {
+                                false
+                            };
+                            // if connected, break
+                            if rssi_pass && net_up && dhcp_ok && ssid_ok {
+                                write!(ret, "WLAN OK: {}\n", msg.as_str().unwrap()).unwrap();
+                                break;
+                            } else {
+                                write!(ret, "WLAN TRY: {}", msg.as_str().unwrap()).unwrap();
+                            }
+                        } else {
+                            write!(ret, "WLAN TRY: Couldn't get status!\n").unwrap();
+                        }
+                        if wifi_tries < 3 {
+                            // else retry the connection sequence -- leave, ssid, pass, join. takes some time.
+                            env.com.wlan_leave().unwrap();
+                            env.ticktimer.sleep_ms(2000).unwrap();
+                            env.com.wlan_set_ssid(&String::<1024>::from_str("precursortest")).unwrap();
+                            env.ticktimer.sleep_ms(800).unwrap();
+                            env.com.wlan_set_pass(&String::<1024>::from_str("notasecret")).unwrap();
+                            env.ticktimer.sleep_ms(800).unwrap();
+                            env.com.wlan_join().unwrap();
+                            env.ticktimer.sleep_ms(8000).unwrap();
+                        } else {
+                            if !rssi_pass {
+                                write!(ret, "WLAN FAIL: rssi weak\n").unwrap();
+                            }
+                            if !net_up {
+                                write!(ret, "WLAN FAIL: connection failed\n").unwrap();
+                            }
+                            if !dhcp_ok {
+                                write!(ret, "WLAN FAIL: dhcp fail\n").unwrap();
+                            }
+                            if !ssid_ok {
+                                write!(ret, "WLAN FAIL: ssid mismatch\n").unwrap();
+                            }
+                            return Ok(Some(ret));
+                        }
+                        wifi_tries += 1;
                     }
 
                     AUDIO_OQC.store(true, Ordering::Relaxed);
@@ -578,6 +659,25 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                     if elapsed - self.oqc_start > 6000 {
                         self.codec.pause().unwrap();
+
+                        // put system automatically into ship mode at conclusion of test
+                        env.gam.shipmode_blank_request().unwrap();
+                        env.ticktimer.sleep_ms(500).unwrap(); // let the screen redraw
+
+                        // allow EC to snoop, so that it can wake up the system
+                        env.llio.allow_ec_snoop(true).unwrap();
+                        // allow the EC to power me down
+                        env.llio.allow_power_off(true).unwrap();
+                        // now send the power off command
+                        env.com.ship_mode().unwrap();
+
+                        // now send the power off command
+                        env.com.power_off_soc().unwrap();
+
+                        log::info!("CMD: ship mode now!");
+                        // pause execution, nothing after this should be reachable
+                        env.ticktimer.sleep_ms(10000).unwrap(); // ship mode happens in 10 seconds
+                        log::info!("CMD: if you can read this, ship mode failed!");
                     }
                 }
             },

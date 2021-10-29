@@ -44,6 +44,20 @@ pub fn handle(irqs_pending: usize) -> Result<xous_kernel::Result, xous_kernel::E
     Ok(xous_kernel::Result::ResumeProcess)
 }
 
+pub fn for_each_irq<F>(op: F)
+where
+    F: Fn(usize, &PID, MemoryAddress, Option<MemoryAddress>),
+{
+    unsafe {
+        for (idx, handler) in IRQ_HANDLERS.iter().enumerate() {
+            // Ignore threads that have no PC, and ignore the ISR thread
+            if let Some(handler) = handler {
+                op(idx, &handler.0, handler.1, handler.2);
+            }
+        }
+    }
+}
+
 pub fn interrupt_claim(
     irq: usize,
     pid: PID,

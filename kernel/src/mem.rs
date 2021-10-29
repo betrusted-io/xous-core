@@ -455,10 +455,10 @@ impl MemoryManager {
         if is_user {
             crate::arch::mem::hand_page_to_user(virt as _)?;
         }
-        println!(
-            "Mapped {:08x} -> {:08x} (user? {})",
-            phys as usize, virt as usize, is_user
-        );
+        // println!(
+        //     "Mapped {:08x} -> {:08x} (user? {})",
+        //     phys as usize, virt as usize, is_user
+        // );
         Ok(virt)
     }
 
@@ -534,7 +534,7 @@ impl MemoryManager {
         // If the virtual address has an assigned physical address, release that
         // address from this process.
         if let Ok(phys) = crate::arch::mem::virt_to_phys(virt as usize) {
-            self.release_page(phys as *mut usize, pid)?;
+            self.release_page(phys as *mut usize, pid).ok();
         };
 
         // Free the virtual address.

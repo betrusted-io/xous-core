@@ -664,11 +664,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                 // don't need to do this.
                 if phys.is_some() {
                     if mm.is_main_memory(phys_ptr) {
-                        println!(
-                            "Going to zero out {} bytes @ {:08x}",
-                            range.len(),
-                            range.as_ptr() as usize,
-                        );
+                        // println!(
+                        //     "Going to zero out {} bytes @ {:08x}",
+                        //     range.len(),
+                        //     range.as_ptr() as usize,
+                        // );
                         unsafe {
                             range
                                 .as_mut_ptr()

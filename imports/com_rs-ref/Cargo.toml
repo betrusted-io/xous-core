@@ -6,7 +6,7 @@ edition = "2018"
 description = "com_rs import package"
 
 [dependencies]
-com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "5338f9959572d57f1014d04aa129804da5b4d339" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs.git", rev = "b3bf4aebe1d3c91e77dae5d3832d17e717c5669b" }
 #com_rs = { path = "../../../betrusted-ec/sw/com_rs" }
 
 

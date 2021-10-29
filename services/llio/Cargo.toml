@@ -25,5 +25,6 @@ utralib = {path = "../../utralib"}
 
 [features]
 debugprint = []
+wfi_off = [] # useful for serial port debugging, forces power on so the UART characters can finish printing
 default = [] # "debugprint"
 #default = ["debugprint"] # , "fccagent"
