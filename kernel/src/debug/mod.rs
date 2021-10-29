@@ -167,6 +167,21 @@ fn process_irq_character(b: u8) {
     }
 
     match b {
+        b'i' => {
+            println!("Interrupt handlers:");
+            println!("  IRQ | Process | Handler | Argument");
+            crate::services::SystemServices::with(|system_services| {
+                crate::irq::for_each_irq(|irq, pid, address, arg| {
+                    println!(
+                        "    {}:  {} @ {:x?} {:x?}",
+                        irq,
+                        system_services.process_name(*pid).unwrap_or(""),
+                        address,
+                        arg
+                    );
+                });
+            });
+        }
         b'm' => {
             println!("Printing memory page tables");
             crate::services::SystemServices::with(|system_services| {
@@ -268,6 +283,7 @@ fn process_irq_character(b: u8) {
             println!("--- + -----------------------");
             #[cfg(all(feature = "gdbserver", baremetal))]
             println!(" g  | enter the gdb server");
+            println!(" i  | print irq handlers");
             println!(" m  | print MMU page tables of all processes");
             println!(" p  | print all processes");
             println!(" P  | print all processes and threads");
