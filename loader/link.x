@@ -90,7 +90,7 @@ SECTIONS
     _edata = .;
   } > REGION_DATA AT > REGION_RODATA
 
-  .fonts ALIGN(131072) : SUBALIGN(131072)
+  .fonts ALIGN(65536) : SUBALIGN(65536)
   {
       KEEP(*(.fontdata));
   } > REGION_RODATA

@@ -2,6 +2,7 @@ pub(crate) mod udp;
 pub(crate) use udp::*;
 pub(crate) mod ping;
 pub(crate) use ping::*;
+pub use ping::NetPingCallback;
 
 use rkyv::{Archive, Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -10,6 +11,9 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::io::Write;
+
+// republish this so we can decode the icmpv4 error codes
+pub use smoltcp::wire::Icmpv4DstUnreachable;
 
 pub(crate) const SERVER_NAME_NET: &str     = "_Middleware Network Server_";
 
@@ -33,14 +37,11 @@ pub(crate) enum Opcode {
     DnsUnhookAll,
 
     /// Ping stack
-    PingTx,
-    PingRegisterRx,
-    PingUnregisterRx,
+    Ping,
     PingSetTtl,
     PingGetTtl,
-
-    /// subscription for network responses
-    //NetCallbackSubscribe,
+    PingSetTimeout,
+    PingGetTimeout,
 
     /// [Internal] com llio interrupt callback
     ComInterrupt,
@@ -50,6 +51,15 @@ pub(crate) enum Opcode {
     SuspendResume,
     /// Quit the server
     Quit
+}
+
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub enum XousServerId {
+    /// A SID that is shared directly with the Net crate; a private, single-use SID for best security
+    PrivateSid([u32; 4]),
+    /// A name that needs to be looked up with XousNames. Easier to implement, but less secure as it requires
+    /// an open connection slot that could be abused by other processes.
+    ServerName(xous_ipc::String::<64>),
 }
 
 /// These opcodes are reserved for private SIDs shared from a DNS server to

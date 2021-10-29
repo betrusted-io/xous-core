@@ -1,10 +1,9 @@
 use crate::{ShellCmdApi, CommonEnv};
 use xous_ipc::String;
-use net::Duration;
+use net::{Duration, XousServerId, NetPingCallback};
 use xous::MessageEnvelope;
 use num_traits::*;
 use std::net::{SocketAddr, IpAddr};
-use std::thread;
 
 pub struct NetCmd {
     udp: Option<net::UdpSocket>,
@@ -13,6 +12,7 @@ pub struct NetCmd {
     callback_conn: u32,
     udp_count: u32,
     dns: dns::Dns,
+    ping: Option<net::Ping>,
 }
 impl NetCmd {
     pub fn new(xns: &xous_names::XousNames) -> Self {
@@ -23,15 +23,15 @@ impl NetCmd {
             callback_conn: xns.request_connection_blocking(crate::SERVER_NAME_SHELLCHAT).unwrap(),
             udp_count: 0,
             dns: dns::Dns::new(&xns).unwrap(),
+            ping: None,
         }
     }
 }
 
 #[derive(Debug, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub(crate) enum NetCmdDispatch {
-    UdpTest1,
-    UdpTest2,
-    Ping,
+    UdpTest1 = 0x1_0000, // we're muxing our own dispatch + ping dispatch, so we need a custom discriminant
+    UdpTest2 = 0x1_0001,
 }
 
 pub const UDP_TEST_SIZE: usize = 64;
@@ -47,7 +47,7 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         use core::fmt::Write;
         let mut ret = String::<1024>::new();
-        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose]";
+        let helpstring = "net [udp [port]] [udpclose] [udpclone] [udpcloneclose] [ping [host] [count]]";
 
         let mut tokens = args.as_str().unwrap().split(' ');
 
@@ -119,39 +119,43 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         match self.dns.lookup(name) {
                             Ok(ipaddr) => {
                                 log::debug!("sending ping to {:?}", ipaddr);
-                                let count = if let Some(count_str) = tokens.next() {
-                                    count_str.parse::<u32>().unwrap()
-                                } else {
-                                    1
-                                };
-                                thread::spawn({
-                                    let count = count.clone();
-                                    let cb_conn = self.callback_conn.clone();
-                                    let cb_id = self.callback_id.unwrap() as usize;
-                                    move || {
-                                        let tt = ticktimer_server::Ticktimer::new().unwrap();
-                                        let mut pinger = net::Ping::new();
-                                        pinger.set_scalar_notification(
-                                            cb_conn,
-                                            cb_id,
-                                            NetCmdDispatch::Ping.to_u32().unwrap()
+                                if self.ping.is_none() {
+                                    self.ping = Some(net::Ping::non_blocking_handle(
+                                        XousServerId::ServerName(xous_ipc::String::from_str(crate::SERVER_NAME_SHELLCHAT)),
+                                        self.callback_id.unwrap() as usize,
+                                    ));
+                                }
+                                if let Some(count_str) = tokens.next() {
+                                    let count = count_str.parse::<u32>().unwrap();
+                                    if let Some(pinger) = &self.ping {
+                                        pinger.ping_spawn_thread(
+                                            IpAddr::from(ipaddr),
+                                            count as usize,
+                                            1000
                                         );
-                                        for i in 0..count {
-                                            log::info!("ping {} of {}", i + 1, count);
-                                            pinger.ping(IpAddr::from(ipaddr));
-                                            tt.sleep_ms(1000).unwrap();
-                                        }
-                                        // pinger.wait_pong();
+                                        write!(ret, "Sending {} pings to {} ({:?})", count, name, ipaddr).unwrap();
+                                    } else {
+                                        // this just shouldn't happen based on the structure of the code above.
+                                        write!(ret, "Can't ping, internal error.").unwrap();
                                     }
-                                });
-                                write!(ret, "Sending {} pings to {} ({:?})", count, name, ipaddr).unwrap();
+                                } else {
+                                    if let Some(pinger) = &self.ping {
+                                        if pinger.ping(IpAddr::from(ipaddr)) {
+                                            write!(ret, "Sending a ping to {} ({:?})", name, ipaddr).unwrap();
+                                        } else {
+                                            write!(ret, "Couldn't send a ping to {}, maybe socket is busy?", name).unwrap();
+                                        }
+                                    } else {
+                                        write!(ret, "Can't ping, internal error.").unwrap();
+                                    }
+                                };
                             }
                             Err(e) => {
                                 write!(ret, "Can't ping, DNS lookup error: {:?}", e).unwrap();
                             }
                         }
                     } else {
-                        write!(ret, "Missing url: net ping [url]").unwrap();
+                        write!(ret, "Missing host: net ping [host] [count]").unwrap();
                     }
                 }
                 _ => {
@@ -171,7 +175,8 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
 
         log::debug!("net callback");
         let mut ret = String::<1024>::new();
-        xous::msg_scalar_unpack!(msg, dispatch, response_time, remote, _, {
+        xous::msg_scalar_unpack!(msg, arg1, arg2, arg3, arg4, {
+            let dispatch = arg1;
             match FromPrimitive::from_usize(dispatch) {
                 Some(NetCmdDispatch::UdpTest1) => {
                     if let Some(udp_socket) = &mut self.udp {
@@ -235,22 +240,44 @@ impl<'a> ShellCmdApi<'a> for NetCmd {
                         write!(ret, "Got NetCmd callback from uninitialized socket").unwrap();
                     }
                 },
-                Some(NetCmdDispatch::Ping) => {
-                    log::info!("pong {:?} t={}ms", IpAddr::from((remote as u32).to_be_bytes()), response_time);
-                    // this only works for ipv4, but ping is ipv6 compatible and could send you an ipv6 response. oh well.
-                    if response_time > 0 {
-                        write!(ret, "Pong from {:?} time={}ms",
-                            IpAddr::from((remote as u32).to_be_bytes()),
-                            response_time
-                        ).unwrap();
-                    } else {
-                        write!(ret, "Ping timeout {:?}", IpAddr::from((remote as u32).to_be_bytes())).unwrap();
-                    }
-                }
                 None => {
-                    log::error!("NetCmd callback with unrecognized dispatch ID");
-                    write!(ret, "NetCmd callback with unrecognized dispatch ID").unwrap();
-                }
+                    // rebind the scalar args to the Ping convention
+                    let op = arg1;
+                    let addr = IpAddr::from((arg2 as u32).to_be_bytes());
+                    let seq_or_addr = arg3;
+                    let timestamp = arg4;
+                    match FromPrimitive::from_usize(op & 0xFF) {
+                        Some(NetPingCallback::Drop) => {
+                            // write!(ret, "Info: All pending pings done").unwrap();
+                            // ignore the message, just creates visual noise
+                            return Ok(None);
+                        }
+                        Some(NetPingCallback::NoErr) => {
+                            match addr {
+                                IpAddr::V4(_) => {
+                                    write!(ret, "Pong from {:?} seq {} received: {} ms",
+                                    addr,
+                                    seq_or_addr,
+                                    timestamp).unwrap();
+                                },
+                                IpAddr::V6(_) => {
+                                    write!(ret, "Ipv6 pong received: {} ms", timestamp).unwrap();
+                                },
+                            }
+                        }
+                        Some(NetPingCallback::Timeout) => {
+                            write!(ret, "Ping to {:?} timed out", addr).unwrap();
+                        }
+                        Some(NetPingCallback::Unreachable) => {
+                            let code = net::Icmpv4DstUnreachable::from((op >> 24) as u8);
+                            write!(ret, "Ping to {:?} unreachable: {:?}", addr, code).unwrap();
+                        }
+                        None => {
+                            log::error!("Unknown opcode received in NetCmd callback: {:?}", op);
+                            write!(ret, "Unknown opcode received in NetCmd callback: {:?}", op).unwrap();
+                        }
+                    }
+                },
             }
         });
         Ok(Some(ret))
