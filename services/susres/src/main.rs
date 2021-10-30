@@ -53,7 +53,7 @@ mod implementation {
         timer.wfo(utra::timer0::EV_PENDING_ZERO, 0b1);
     }
 
-    // this is just for testing, remove for production
+    #[cfg(feature = "sus_reboot")]
     static REBOOT_CSR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
     // we do all the suspend/resume coordination in an interrupt context
@@ -74,7 +74,8 @@ mod implementation {
 
         if sr.csr.rf(utra::susres::STATE_RESUME) == 0 {
             //println!("going into suspend");
-            if false { // this is just for testing, doing a quick full-soc boot instead of a power down
+            #[cfg(feature = "sus_reboot")]
+            { // this is just for testing, doing a quick full-soc boot instead of a power down
                 let mut reboot_csr = CSR::new(REBOOT_CSR.load(Ordering::Relaxed) as *mut u32);
                 reboot_csr.wfo(utra::reboot::SOC_RESET_SOC_RESET, 0xAC);
             }
@@ -163,6 +164,7 @@ mod implementation {
                 xous::MemoryFlags::R | xous::MemoryFlags::W,
             )
             .expect("couldn't map Reboot CSR range");
+            #[cfg(feature = "sus_reboot")]
             REBOOT_CSR.store(reboot_csr.as_mut_ptr() as u32, Ordering::Relaxed); // for testing only
             let mut sr = SusResHw {
                 csr: CSR::new(csr.as_mut_ptr() as *mut u32),
@@ -239,6 +241,7 @@ mod implementation {
                 }
             }
 
+            #[cfg(feature = "debugprint")]
             println!("Stopping preemption");
             // stop pre-emption
             self.os_timer.wfo(utra::timer0::EN_EN, 0);
@@ -250,6 +253,7 @@ mod implementation {
             // ensure that the resume bit is not set
             self.csr.wfo(utra::susres::STATE_RESUME, 0);
 
+            #[cfg(feature = "debugprint")]
             println!("Stopping ticktimer");
             // stop deferred thread scheduling, by stopping the ticktimer
             self.csr.wfo(utra::susres::CONTROL_PAUSE, 1);
@@ -261,6 +265,7 @@ mod implementation {
                (self.csr.r(utra::susres::TIME1) as u64) << 32)
                + 0 // a placeholder in case we need to advance time on save
             );
+            #[cfg(feature = "debugprint")]
             println!("Stored time: {}", self.stored_time.unwrap());
 
             // setup the clean suspend marker, note if things were forced
@@ -339,18 +344,21 @@ mod implementation {
                 index += range;
             }
 
+            #[cfg(feature = "debugprint")]
             println!("Triggering suspend interrupt");
             // trigger an interrupt to process the final suspend bits
             self.csr.wfo(utra::susres::INTERRUPT_INTERRUPT, 1);
 
             // SHOULD_RESUME will be set true by the interrupt context when it re-enters from resume
             while !SHOULD_RESUME.load(Ordering::Relaxed) {
+                #[cfg(feature = "debugprint")]
                 println!("Waiting for resume");
                 xous::yield_slice();
             }
         }
         pub fn do_resume(&mut self) -> bool { // returns true if the previous suspend was forced
             // resume the ticktimer where it left off
+            #[cfg(feature = "debugprint")]
             println!("Trying to resume");
             if let Some(time)= self.stored_time.take() {
                 // zero out the clean-suspend marker
@@ -362,6 +370,7 @@ mod implementation {
                 // restore the ticktimer
                 self.csr.wo(utra::susres::RESUME_TIME0, time as u32);
                 self.csr.wo(utra::susres::RESUME_TIME1, (time >> 32) as u32);
+                #[cfg(feature = "debugprint")]
                 println!("Ticktimer loaded with {}", time);
 
                 // set up pre-emption timer
@@ -384,6 +393,7 @@ mod implementation {
                 log::trace!("Resume {} / control {}", self.csr.r(utra::susres::RESUME_TIME0), self.csr.r(utra::susres::CONTROL));
                 log::trace!("Ticktimer loaded with {} / {}", time, self.csr.r(utra::susres::TIME0));
                 self.csr.wo(utra::susres::CONTROL, 0);
+                #[cfg(feature = "debugprint")]
                 println!("Ticktimer and OS timer now running");
 
             } else {

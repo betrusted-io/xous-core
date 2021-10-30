@@ -21,5 +21,6 @@ rkyv = {version = "0.4.3", default-features = false, features = ["const_generics
 utralib = { path = "../../utralib"}
 
 [features]
+sus_reboot = [] # when selected, suspend triggers an immediate reboot instead of suspend. For testing only.
 debugprint = []
 default = []
