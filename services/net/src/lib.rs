@@ -3,8 +3,8 @@
 pub mod api;
 use xous::CID;
 
-pub mod backend;
-pub use backend::*;
+pub mod protocols;
+pub use protocols::*;
 pub use smoltcp::time::Duration;
 pub use api::*;
 pub use smoltcp::wire::IpEndpoint;
