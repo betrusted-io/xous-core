@@ -41,8 +41,11 @@ class PrecursorUsb:
                 wValue=(addr & 0xffff), wIndex=((addr >> 16) & 0xffff),
                 data_or_wLength=data, timeout=500)
             except Exception as e:
-                self.dev.reset()
-                time.sleep(2)
+                try:
+                    self.dev.reset()
+                except usb.core.USBTimeoutError:
+                    pass
+                time.sleep(3.0)
             else:
                 break
 
@@ -71,8 +74,11 @@ class PrecursorUsb:
                     data_or_wLength=data, timeout=500)
             except Exception as e:
                 sys.stderr.write("error; resetting device\n")
-                self.dev.reset()
-                time.sleep(2)
+                try:
+                    self.dev.reset()
+                except usb.core.USBTimeoutError:
+                    pass
+                time.sleep(3.0)
             else:
                 break
 
@@ -111,24 +117,29 @@ class PrecursorUsb:
                 bufsize = maxlen
 
             data = array.array('B', _dummy_s * bufsize)
+            if self.vexdbg_addr != None:
+                self.poke(self.vexdbg_addr, 0x00020000)
+                time.sleep(0.1)
             for attempt in range(10):
                 try:
-                    if self.vexdbg_addr != None:
-                        self.poke(self.vexdbg_addr, 0x00020000)
                     numread = self.dev.ctrl_transfer(bmRequestType=(0x80 | 0x43), bRequest=0,
                         wValue=(cur_addr & 0xffff), wIndex=((cur_addr >> 16) & 0xffff),
-                        data_or_wLength=data, timeout=50000)
-                    if self.vexdbg_addr != None:
-                        self.poke(self.vexdbg_addr, 0x02000000)
+                        data_or_wLength=data, timeout=60000)
                 except Exception as e:
                     sys.stderr.write("error; resetting device\n")
-                    self.dev.reset()
-                    time.sleep(2)
+                    try:
+                        self.dev.reset()
+                    except:
+                        pass
+                    time.sleep(2.2)
                 else:
                     break
             else:
                 sys.stderr.write("Burst read failed\n")
-                exit(1)
+                #exit(1)
+            if self.vexdbg_addr != None:
+                self.poke(self.vexdbg_addr, 0x02000000)
+                time.sleep(0.1)
 
             if numread != bufsize:
                 sys.stderr.write("Burst read error: {} bytes requested, {} bytes read at 0x{:08x}\n".format(bufsize, numread, cur_addr))
@@ -292,8 +303,8 @@ def main():
 
     messible2_in = pc_usb.register('messible2_in')
     messible_out = pc_usb.register('messible_out')
-    RAM_A = 0x4080_0000
-    RAM_B = 0x4090_0000
+    RAM_A = 0x40B0_0000
+    RAM_B = 0x40C0_0000
     BURST_LEN = 512 * 1024
     TIMEOUT = 30.0
 
@@ -313,7 +324,7 @@ def main():
                     pc_usb.poke(pc_usb.register('reboot_soc_reset'), 0xac, display=False)
                 except usb.core.USBError:
                     pass # we expect an error because we reset the SOC and that includes the USB core
-                time.sleep(2.0)
+                time.sleep(3.0)
                 dev = usb.core.find(idProduct=0x5bf0, idVendor=0x1209)
                 dev.set_configuration()
                 pc_usb = PrecursorUsb(dev)

@@ -35,7 +35,7 @@ fn kill_thread(bounce: usize) {
         llio.self_destruct(0x2718_2818).unwrap();
         llio.self_destruct(0x3141_5926).unwrap();
         com.power_off_soc().unwrap();
-        ticktimer.sleep_ms(100).unwrap();
+        ticktimer.sleep_ms(1000).unwrap();
         log::info!("If you can read this, we failed to destroy ourselves!");
     }
 }
