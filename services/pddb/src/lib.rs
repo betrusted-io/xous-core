@@ -6,89 +6,77 @@ pub mod frontend;
 pub use frontend::*;
 
 use xous::{CID, send_message};
+use xous_ipc::Buffer;
+
 use num_traits::*;
+use std::io::{Result, Error, ErrorKind};
+use std::path::Path;
+use std::format;
 
+pub const PDDB_MAX_DICT_NAME_LEN: usize = 64;
+pub const PDDB_MAX_KEY_NAME_LEN: usize = 256;
 
-/// This constant maps onto a region that's "unused" by Xous, and claimable by user
-/// processes.
-const PDDB_BACKING_BASE: usize = 0x8000_0000;
-/// This designates the largest contiguous extent that we could allocate for a file.
-/// The backing isn't allocated -- it is merely reserved. Accesses to the backing trigger
-/// page faults that are handled by the PDDB, and just the pages actively being dereferenced is
-/// swapped into physical memory on demand. This does put a pretty hard upper limit on file sizes
-/// on a 32-bit system, but PDDB is coded such that we could extend to a 64-bit system and
-/// increase this limit my changing the constants here.
-const PDDB_BACKING_SIZE: usize = 0x4000_0000;
-
-fn handle_exception(exception: xous::Exception) -> isize {
-    use xous::Exception::*;
-    match exception {
-        IllegalInstruction(epc, instruction) => {
-            println!(
-                "Caught illegal instruction {:08x} at {:08x}, just skipping it...",
-                epc, instruction
-            );
-            4
-        }
-        InstructionAddressMisaligned(epc, addr) => {
-            println!(
-                "Misaligned instruction at {:08x} ({:08x}), trying to nudge forward a bit",
-                epc, addr
-            );
-            1
-        }
-        InstructionAccessFault(epc, addr)
-        | LoadAccessFault(epc, addr)
-        | StoreAccessFault(epc, addr) => {
-            panic!(
-                "Access fault of some sort: ({:08x} {:08x}): {:?}",
-                epc, addr, epc
-            );
-        }
-        LoadAddressMisaligned(epc, addr) | StoreAddressMisaligned(epc, addr) => {
-            println!(
-                "Load was misaligned ({:08x} @ {:08x}). Just skipping the instruction and hoping nobody notices.", epc, addr
-            );
-            4
-        }
-        InstructionPageFault(epc, addr) | LoadPageFault(epc, addr) | StorePageFault(epc, addr) => {
-            println!("Memory access fault at address 0x{:08x} (pc is at 0x{:08x}), allocating a new page", addr, epc);
-            let base = addr & !4095;
-            let size = 4096;
-            xous::map_memory(
-                None,
-                xous::MemoryAddress::new(base),
-                size,
-                xous::MemoryFlags::R | xous::MemoryFlags::W,
-            )
-            .expect("couldn't map memory");
-            // Retry the instruction
-            0
-        }
-        Unknown(a1, a2, a3) => panic!("unknown exception: {:08x} {:08x} {:08x}", a1, a2, a3),
-    }
-}
-
-pub struct Pddb {
+pub struct PddbKey {
     conn: CID,
-    backing: MemoryRange,
+    dict: String,
+    key: String,
+    token: [u32; 3],
 }
-impl Pddb {
-    pub fn new(xns: &xous_names::XousNames) -> core::result::Result<Self, xous::Error> {
+impl PddbKey {
+    pub fn get<P: AsRef<Path>>(path: P) -> Result<PddbKey> {
+        let xns = xous_names::XousNames::new().unwrap();
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("Can't connect to Pddb server");
 
-        xous::syscall::set_exception_handler(handle_exception).unwrap();
+        if !path.is_absolute() {
+            return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be fully specified relative to a dictionary"));
+        }
+        let mut dict = String::new();
+        let mut key = String::new();
+        if let Some(pathstr) = path.to_str() {
+            if let Some(path_lstrip) = path.strip_prefix("/") {
+                if let Some((dictstr, keystr)) = path_lstrip.split_once("/") {
+                    if dictstr.len() < PDDB_MAX_DICT_NAME_LEN {
+                        dict.push_str(dictstr);
+                    } else {
+                        return Err(Error::new(ErrorKind::InvalidInput, format!("Xous dictionary names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
+                    }
+                    if keystr.len() < PDDB_MAX_KEY_NAME_LEN {
+                        key.push_str(keystr);
+                    } else {
+                        return Err(Error::new(ErrorKind::InvalidInput, format!("Xous key names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
+                    }
+                } else {
+                    return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be of the format /dict/key; the key may contain more /'s"));
+                }
+            } else {
+                return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be absolute and start with a /"));
+            }
+        } else {
+            return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be valid UTF-8"));
+        }
 
-        let backing = unsafe {MemoryRange::new(
-            0x8000_0000,
-            0x1000_0000,
-        ).expect("couldn't reserve pages for file backing region") };
+        let request = PddbKeyRequest {
+            dict: xous_ipc::String::<PDDB_MAX_DICT_NAME_LEN>::from_str(dict.as_str()),
+            key: xous_ipc::String::<PDDB_MAX_KEY_NAME_LEN>::from_str(key.as_str()),
+            token: None,
+        };
+        let mut buf = Buffer::into_buf(request)
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
+        buf.lend_mut(conn, Opcode::KeyRequest.to_u32().unwrap())
+            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
 
-        Ok(Pddb {
-            conn,
-            backing
-        })
+        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
+        if let Some(token) = response.token {
+            Ok(PddbKey {
+                conn,
+                dict,
+                key,
+                token,
+            })
+        } else {
+            Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied"))
+        }
     }
 
     pub(crate) fn conn(&self) -> CID {
@@ -98,7 +86,7 @@ impl Pddb {
 
 use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for Pddb {
+impl Drop for PddbKey {
     fn drop(&mut self) {
         // the connection to the server side must be reference counted, so that multiple instances of this object within
         // a single process do not end up de-allocating the CID on other threads before they go out of scope.
@@ -118,7 +106,6 @@ impl Drop for Pddb {
 use xous::MemoryRange;
 use std::collections::HashMap;
 use std::io::SeekFrom;
-use std::io::{Error, ErrorKind, Result};
 
 // this is an intenal structure for managing the overall PDDB
 pub(crate) struct PddbManager {
@@ -141,7 +128,7 @@ impl PddbBasis {
 
 // this structure can be shared on the user side?
 pub struct PddbDict<'a> {
-    contents: HashMap<PddbKey<'a>, &'a [u8]>,
+    contents: HashMap<PddbKey, &'a [u8]>,
     callback: Box<dyn FnMut() + 'a>,
 }
 impl<'a> PddbDict<'a> {

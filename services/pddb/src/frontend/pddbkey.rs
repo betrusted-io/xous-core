@@ -1,9 +1,20 @@
-use std::io::{Error, ErrorKind, Result};
-use xous::MemoryRange;
-use std::io::SeekFrom;
+//use std::io::{Error, ErrorKind, Result};
+//use xous::MemoryRange;
+//use std::io::SeekFrom;
 
-use crate::PddbDict;
+//use crate::*;
+use rkyv::{Archive, Deserialize, Serialize};
+use xous_ipc::String;
 
+#[derive(Debug, Archive, Serialize, Deserialize, Copy, Clone)]
+pub(crate) struct PddbKeyRequest {
+    pub(crate) dict: String::</*PDDB_MAX_DICT_NAME_LEN*/ 64>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub(crate) key: String::</*PDDB_MAX_KEY_NAME_LEN*/ 256>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub(crate) token: Option<[u32; 3]>,
+}
+
+
+/*
 /// PddbKey is somewhat isomorphic to a File in Rust, in that it provides slices of [u8] that
 /// can be `read()`, `write()` and `seek()`.
 /// this is definitely a user-facing structure
@@ -42,3 +53,5 @@ impl<'a> PddbKey<'a> {
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> { Ok(0) }
     */
 }
+
+*/

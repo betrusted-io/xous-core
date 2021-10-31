@@ -1383,10 +1383,13 @@ dependencies = [
  "num-derive",
  "num-traits",
  "rkyv",
+ "spinor",
  "susres",
  "ticktimer-server",
+ "trng",
  "utralib",
  "xous",
+ "xous-ipc",
  "xous-names",
 ]
 
@@ -1642,7 +1645,6 @@ dependencies = [
  "memoffset",
  "ptr_meta",
  "rkyv_derive",
- "seahash",
 ]
 
 [[package]]
@@ -1821,12 +1823,6 @@ dependencies = [
  "unidiff",
  "version-compare",
 ]
-
-[[package]]
-name = "seahash"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "semver"
