@@ -7,8 +7,6 @@ use num_traits::*;
 
 #[xous::xous_main]
 fn xmain() -> ! {
-    use crate::implementation::Pddb;
-
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
@@ -16,8 +14,6 @@ fn xmain() -> ! {
     let xns = xous_names::XousNames::new().unwrap();
     let pddb_sid = xns.register_name(api::SERVER_NAME_PDDB, None).expect("can't register server");
     log::trace!("registered with NS -- {:?}", pddb_sid);
-
-    let mut pddb = Pddb::new();
 
     log::trace!("ready to accept requests");
 
@@ -29,9 +25,9 @@ fn xmain() -> ! {
         let msg = xous::receive_message(pddb_sid).unwrap();
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(api::Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
-                pddb.suspend();
+                /* pddb.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
-                pddb.resume();
+                pddb.resume(); */
             }),
             None => {
                 log::error!("couldn't convert opcode");

@@ -113,6 +113,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "com",
         "susres",
     ];
+    let pddb_dev_pkgs = [
+        "ticktimer-server",
+        "log-server",
+        "susres",
+        "xous-names",
+        "trng",
+        "pddb",
+    ];
+
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];
     let mut args = env::args();
     let task = args.nth(1);
@@ -138,6 +147,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("hw-image") => {
             build_hw_image(false, env::args().nth(2), &hw_pkgs, lkey, kkey, None, &[])?
         }
+        Some("pddb-dev") => build_hw_image(
+            false,
+            env::args().nth(2),
+            &pddb_dev_pkgs,
+            lkey,
+            kkey,
+            None,
+            &[],
+        )?,
+        Some("pddb-hosted") => run(false, &pddb_dev_pkgs)?,
         Some("benchmark") => build_hw_image(
             false,
             env::args().nth(2),
@@ -231,6 +250,8 @@ burn-soc                invoke the `usb_update.py` utility to stage the SoC gate
 nuke-soc                'Factory reset' - invoke the `usb_update.py` utility to burn the SoC gateware, erasing most secrets. For developers.
 generate-locales        only generate the locales include for the language selected in xous-rs/src/locale.rs
 wycheproof-import       generate binary test vectors for engine-25519 from whycheproof-import/x25519.json
+pddb-dev                PDDB testing only for live hardware
+pddb-hosted             PDDB testing in a hosted environment
 
 Please refer to tools/README_UPDATE.md for instructions on how to set up `usb_update.py`
 "
