@@ -10,7 +10,7 @@ use xous_ipc::Buffer;
 
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
-use std::path::Path;
+use std::path::{Path, Component};
 use std::format;
 
 pub const PDDB_MAX_DICT_NAME_LEN: usize = 64;
@@ -28,32 +28,39 @@ impl PddbKey {
         REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
         let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("Can't connect to Pddb server");
 
-        if !path.is_absolute() {
-            return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be fully specified relative to a dictionary"));
+        if !path.as_ref().is_absolute() {
+            return Err(Error::new(ErrorKind::InvalidInput, "All PDDB keys must be fully specified relative to a dictionary"));
         }
         let mut dict = String::new();
         let mut key = String::new();
-        if let Some(pathstr) = path.to_str() {
-            if let Some(path_lstrip) = path.strip_prefix("/") {
-                if let Some((dictstr, keystr)) = path_lstrip.split_once("/") {
-                    if dictstr.len() < PDDB_MAX_DICT_NAME_LEN {
+        let mut components = path.as_ref().components();
+        match components.next().unwrap() {
+            Component::Prefix(prefix_component) => {
+                if let Some(dictstr) = prefix_component.as_os_str().to_str() {
+                    if dictstr.len() <= PDDB_MAX_DICT_NAME_LEN {
                         dict.push_str(dictstr);
                     } else {
-                        return Err(Error::new(ErrorKind::InvalidInput, format!("Xous dictionary names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
-                    }
-                    if keystr.len() < PDDB_MAX_KEY_NAME_LEN {
-                        key.push_str(keystr);
-                    } else {
-                        return Err(Error::new(ErrorKind::InvalidInput, format!("Xous key names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
+                        return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB dictionary names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
                     }
                 } else {
-                    return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be of the format /dict/key; the key may contain more /'s"));
+                    return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
                 }
-            } else {
-                return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be absolute and start with a /"));
             }
-        } else {
-            return Err(Error::new(ErrorKind::InvalidInput, "All Xous keys must be valid UTF-8"));
+            _ => {
+                return Err(Error::new(ErrorKind::InvalidInput, "All PDDB entries must be of the format `dict:key`, where `dict` is treated as a Prefix"));
+            }
+        }
+        // collect the remaining components into the key
+        for comps in components {
+            if let Some(keystr) = comps.as_os_str().to_str() {
+                key.push_str(keystr);
+            } else {
+                return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
+            }
+        }
+
+        if key.len() > PDDB_MAX_KEY_NAME_LEN {
+            return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB key names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
         }
 
         let request = PddbKeyRequest {
