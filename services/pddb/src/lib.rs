@@ -5,114 +5,16 @@ pub use api::*;
 pub mod frontend;
 pub use frontend::*;
 
-use xous::{CID, send_message};
-use xous_ipc::Buffer;
-
 use num_traits::*;
 use std::io::{Result, Error, ErrorKind};
-use std::path::{Path, Component};
-use std::format;
-
-pub const PDDB_MAX_DICT_NAME_LEN: usize = 64;
-pub const PDDB_MAX_KEY_NAME_LEN: usize = 256;
-
-pub struct PddbKey {
-    conn: CID,
-    dict: String,
-    key: String,
-    token: [u32; 3],
-}
-impl PddbKey {
-    pub fn get<P: AsRef<Path>>(path: P) -> Result<PddbKey> {
-        let xns = xous_names::XousNames::new().unwrap();
-        REFCOUNT.store(REFCOUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
-        let conn = xns.request_connection_blocking(api::SERVER_NAME_PDDB).expect("Can't connect to Pddb server");
-
-        if !path.as_ref().is_absolute() {
-            return Err(Error::new(ErrorKind::InvalidInput, "All PDDB keys must be fully specified relative to a dictionary"));
-        }
-        let mut dict = String::new();
-        let mut key = String::new();
-        let mut components = path.as_ref().components();
-        match components.next().unwrap() {
-            Component::Prefix(prefix_component) => {
-                if let Some(dictstr) = prefix_component.as_os_str().to_str() {
-                    if dictstr.len() <= PDDB_MAX_DICT_NAME_LEN {
-                        dict.push_str(dictstr);
-                    } else {
-                        return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB dictionary names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
-                    }
-                } else {
-                    return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
-                }
-            }
-            _ => {
-                return Err(Error::new(ErrorKind::InvalidInput, "All PDDB entries must be of the format `dict:key`, where `dict` is treated as a Prefix"));
-            }
-        }
-        // collect the remaining components into the key
-        for comps in components {
-            if let Some(keystr) = comps.as_os_str().to_str() {
-                key.push_str(keystr);
-            } else {
-                return Err(Error::new(ErrorKind::InvalidInput, "PDDB dictionary names must valid UTF-8"));
-            }
-        }
-
-        if key.len() > PDDB_MAX_KEY_NAME_LEN {
-            return Err(Error::new(ErrorKind::InvalidInput, format!("PDDB key names must be shorter than {} bytes", PDDB_MAX_DICT_NAME_LEN)));
-        }
-
-        let request = PddbKeyRequest {
-            dict: xous_ipc::String::<PDDB_MAX_DICT_NAME_LEN>::from_str(dict.as_str()),
-            key: xous_ipc::String::<PDDB_MAX_KEY_NAME_LEN>::from_str(key.as_str()),
-            token: None,
-        };
-        let mut buf = Buffer::into_buf(request)
-            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-        buf.lend_mut(conn, Opcode::KeyRequest.to_u32().unwrap())
-            .or(Err(Error::new(ErrorKind::Other, "Xous internal error")))?;
-
-        let response = buf.to_original::<PddbKeyRequest, _>().unwrap();
-        if let Some(token) = response.token {
-            Ok(PddbKey {
-                conn,
-                dict,
-                key,
-                token,
-            })
-        } else {
-            Err(Error::new(ErrorKind::PermissionDenied, "Dict/Key access denied"))
-        }
-    }
-
-    pub(crate) fn conn(&self) -> CID {
-        self.conn
-    }
-}
-
-use core::sync::atomic::{AtomicU32, Ordering};
-static REFCOUNT: AtomicU32 = AtomicU32::new(0);
-impl Drop for PddbKey {
-    fn drop(&mut self) {
-        // the connection to the server side must be reference counted, so that multiple instances of this object within
-        // a single process do not end up de-allocating the CID on other threads before they go out of scope.
-        // Note to future me: you want this. Don't get rid of it because you think, "nah, nobody will ever make more than one copy of this object".
-        if REFCOUNT.load(Ordering::Relaxed) == 0 {
-            unsafe{xous::disconnect(self.conn).unwrap();}
-        }
-        // if there was object-specific state (such as a one-time use server for async callbacks, specific to the object instance),
-        // de-allocate those items here. They don't need a reference count because they are object-specific
-    }
-}
-
-
-
-
 
 use xous::MemoryRange;
 use std::collections::HashMap;
-use std::io::SeekFrom;
+
+
+
+////// probably things in this file should eventually be split ount into their own
+////// frontend module file.
 
 // this is an intenal structure for managing the overall PDDB
 pub(crate) struct PddbManager {
@@ -135,7 +37,7 @@ impl PddbBasis {
 
 // this structure can be shared on the user side?
 pub struct PddbDict<'a> {
-    contents: HashMap<PddbKey, &'a [u8]>,
+    contents: HashMap<PddbKey<'a>, &'a [u8]>,
     callback: Box<dyn FnMut() + 'a>,
 }
 impl<'a> PddbDict<'a> {

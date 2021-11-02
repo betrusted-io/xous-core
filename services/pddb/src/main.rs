@@ -5,6 +5,7 @@ mod api;
 use api::*;
 
 use num_traits::*;
+use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 
 /// PDDB - Plausibly Deniable DataBase
 ///
@@ -97,7 +98,25 @@ fn xmain() -> ! {
             Some(Opcode::KeyRequest) => {
                 // placeholder
             }
-            Some(Opcode::SuspendResume) => xous::msg_scalar_unpack!(msg, token, _, _, _, {
+            Some(Opcode::ReadKeyScalar) => msg_blocking_scalar_unpack!(msg, tok0, tok1, tok2, len, {
+                // placeholder
+            }),
+            Some(Opcode::ReadKeyMem) => {
+                // placeholder
+            }
+            Some(Opcode::WriteKeyScalar1)
+            | Some(Opcode::WriteKeyScalar2)
+            | Some(Opcode::WriteKeyScalar3)
+            | Some(Opcode::WriteKeyScalar4) => msg_blocking_scalar_unpack!(msg, tok0, tok1, tok2, data, {
+                // placeholder
+            }),
+            Some(Opcode::WriteKeyMem) => {
+                // placeholder
+            }
+            Some(Opcode::WriteKeyFlush) => {
+                // placeholder
+            }
+            Some(Opcode::SuspendResume) => msg_scalar_unpack!(msg, token, _, _, _, {
                 /* pddb.suspend();
                 susres.suspend_until_resume(token).expect("couldn't execute suspend/resume");
                 pddb.resume(); */
