@@ -1378,10 +1378,12 @@ dependencies = [
 name = "pddb"
 version = "0.1.0"
 dependencies = [
+ "aes-xous",
  "log",
  "log-server",
  "num-derive",
  "num-traits",
+ "rand_core 0.5.1",
  "rkyv",
  "spinor",
  "susres",

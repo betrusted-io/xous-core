@@ -120,6 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "xous-names",
         "trng",
         "pddb",
+        "sha2",
     ];
 
     let aestest_pkgs = ["ticktimer-server", "log-server", "aes-test"];

@@ -18,6 +18,8 @@ susres = {path = "../susres"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 trng = {path = "../trng"}
 spinor = {path = "../spinor"}
+aes-xous = {path="../aes"}
+rand_core = "0.5"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

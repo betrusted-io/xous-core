@@ -1,8 +1,14 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
-pub const PDDB_MAX_DICT_NAME_LEN: usize = 64;
-pub const PDDB_MAX_KEY_NAME_LEN: usize = 256;
+pub(crate) const PDDB_MAX_BASIS_NAME_LEN: usize = 64;
+pub(crate) const PDDB_MAX_DICT_NAME_LEN: usize = 64;
+pub(crate) const PDDB_MAX_KEY_NAME_LEN: usize = 128;
+pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
+pub(crate) const PDDB_VERSION: u16 = 0;
+
+pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
+pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
 
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -28,7 +34,7 @@ pub(crate) enum Opcode {
 #[derive(Archive, Serialize, Deserialize)]
 pub(crate) struct PddbKeyRequest {
     pub(crate) dict: xous_ipc::String::</*PDDB_MAX_DICT_NAME_LEN*/ 64>, // pending https://github.com/rust-lang/rust/issues/90195
-    pub(crate) key: xous_ipc::String::</*PDDB_MAX_KEY_NAME_LEN*/ 256>, // pending https://github.com/rust-lang/rust/issues/90195
+    pub(crate) key: xous_ipc::String::</*PDDB_MAX_KEY_NAME_LEN*/ 128>, // pending https://github.com/rust-lang/rust/issues/90195
     pub(crate) token: Option<[u32; 3]>,
 }
 
@@ -68,7 +74,7 @@ mod tests {
     }
 }
 impl PddbBuf {
-    pub fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
+    pub(crate) fn from_slice_mut(slice: &mut [u8]) -> &mut PddbBuf {
         // this transforms the slice [u8] into a PddbBuf ref.
         unsafe {core::mem::transmute::<*mut u8, &mut PddbBuf>(slice.as_mut_ptr()) }
     }
