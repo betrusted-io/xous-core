@@ -233,9 +233,9 @@ fn xmain() -> ! {
           0. Key purge timer (self, created without xns)
           1. Shellchat for test initiation
           2. Main menu -> trigger initialization
-          3. (future) PDDB
+          3. PDDB
     */
-    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(2)).expect("can't register server");
+    let keys_sid = xns.register_name(api::SERVER_NAME_KEYS, Some(3)).expect("can't register server");
 
     let mut keys = RootKeys::new();
     log::info!("Boot FPGA key source: {:?}", keys.fpga_key_source());

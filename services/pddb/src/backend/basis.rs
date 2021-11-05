@@ -1,5 +1,4 @@
-use pddb::PDDB_MAX_BASIS_NAME_LEN;
-
+use crate::api::*;
 use crate::api::{PDDB_MAX_DICT_NAME_LEN, PDDB_MAX_KEY_NAME_LEN};
 
 use core::num::NonZeroU64;
@@ -67,6 +66,7 @@ pub(crate) struct DictPointer {
     addr: u64, // the virtual address of the dictionary
 }
 
+/// FreeSpace address space is in the Basis virtual memory space
 #[derive(Copy, Clone)]
 pub(crate) struct FreeSpace {
     start: u64,
@@ -89,6 +89,7 @@ pub(crate) struct Dictionary {
 /// HashKeys are packed at the end of a Dictionary.
 pub(crate) struct HashKey {
     name: [u8; PDDB_MAX_KEY_NAME_LEN],
+    journal_rev: u32,
     /// incremented every time the key is re-written to flash. saturating add.
     age: u32,
     /// length of the data stored in the HashKey

@@ -6,6 +6,7 @@ edition = "2018"
 description = "Plausibly Deniable Database"
 
 [dependencies]
+bitflags = {version = "1"}
 xous = { path = "../../xous-rs" }
 xous-ipc = { path = "../../xous-ipc" }
 log-server = { path = "../log-server" }
@@ -20,6 +21,8 @@ trng = {path = "../trng"}
 spinor = {path = "../spinor"}
 aes-xous = {path="../aes"}
 rand_core = "0.5"
+root-keys = {path="../root-keys"}
+cipher = "0.3"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

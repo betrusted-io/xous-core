@@ -1,6 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 
+extern crate bitflags;
+
 mod api;
 use api::*;
 mod backend;
@@ -191,10 +193,10 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 ///
 /// Basis Unlock Procedure
 ///
-/// Each Basis has a name and a passcode associated with it. The two default Basis names are
-/// - `.System`
-/// - `.FastSpace`
+/// Each Basis has a name and a passcode associated with it. The default Basis name is `.System`.
+/// In addition to that, a `.FastSpace` structure is unlocked along side the default Basis.
 /// These are both associated with the default system unlock passcode.
+///
 /// A newly created Basis will request a name for the Basis, and a password. It is a requirement
 /// that the combination of `(name, password)` be unique; this property is enforced and a system will
 /// reject attempts to create identically named, identially passworded Basis. However, one can have
