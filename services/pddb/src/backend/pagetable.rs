@@ -9,8 +9,8 @@ use bitflags::bitflags;
 bitflags! {
     /// flags used by the page table
     pub struct PtFlags: u8 {
-        /// Pages that don't decrypt properly are marked as LOCKED in the cache.
-        const  LOCKED             = 0b0000_0000;
+        /// Pages that don't decrypt properly are marked as INVALID in the cache.
+        const  INVALID            = 0b0000_0000;
         /// set for records that are synced to the copy in Flash. Every valid record
         /// from Flash should have this set; it should only be cleared for blocks in Cache.
         const  CLEAN              = 0b0000_0001;
@@ -18,7 +18,7 @@ bitflags! {
     }
 }
 impl Default for PtFlags {
-    fn default() -> PtFlags {PtFlags::UNINITIALIZED}
+    fn default() -> PtFlags {PtFlags::INVALID}
 }
 
 /// A Page Table Entry. Contains the address map of the corresponding entry,
@@ -38,7 +38,7 @@ pub(crate) struct Pte {
     /// the virtual address is 48 bits long
     pddb_addr: [u8; 6],
     /// this maps to a u8
-    flags: PtFags,
+    flags: PtFlags,
     reserved: u8,
     /// 32-bit strength of a nonce, but can be varied
     nonce: [u8; 4],
@@ -48,11 +48,10 @@ pub(crate) struct Pte {
 }
 
 #[repr(C, packed)]
-#[derive(Default)]
 pub(crate) struct ReversePte {
     phys_addr: PhysAddr,
     /// this maps to a u8
-    flags: PtFags,
+    flags: PtFlags,
 }
 
 pub const PDDB_SIZE_PAGES: usize = xous::PDDB_LEN as usize / PAGE_SIZE;
@@ -63,7 +62,6 @@ pub const PDDB_SIZE_PAGES: usize = xous::PDDB_LEN as usize / PAGE_SIZE;
 /// always corresponds to the base of data in FLASH, which means the excess
 /// pages are going to be toward the high end of the page table range.
 #[repr(C, packed)]
-#[derive(Default)]
 pub(crate) struct PageTableInFlash {
     table: [Pte; PDDB_SIZE_PAGES],
 }

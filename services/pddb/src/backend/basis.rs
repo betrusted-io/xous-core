@@ -1,5 +1,5 @@
 use crate::api::*;
-use crate::api::{PDDB_MAX_DICT_NAME_LEN, PDDB_MAX_KEY_NAME_LEN};
+use super::*;
 
 use core::num::NonZeroU64;
 use core::ops::{Deref, DerefMut};
@@ -30,12 +30,19 @@ pub(crate) struct BasisRoot {
     pub(crate) name: [u8; PDDB_MAX_BASIS_NAME_LEN],
     /// increments every time the BasisRoot is modified. This field must saturate, not roll over.
     pub(crate) age: u32,
-    pub(crate) num_dictionaries: u32,
-    /// a cache of up FREE_CACHE_SIZE indicating the location of free space in the dictionary
-    /// allocation. This saves from having to do frequent free space search/compaction operations
-    /// on memory during writes and updates.
+    /*
+    /// a cache of up FREE_CACHE_SIZE indicating the location of free space for use by basis
+    /// functions, such as adding growing the size of this structure, adding more dictionaries,
+    /// adding keys to dictionaries, or extending existing keys. This saves from having to do
+    /// frequent free space search/compaction operations on memory during writes and updates.
     pub(crate) free_cache: [Option<FreeSpace>; FREE_CACHE_SIZE],
-    // dict_slice: [DictPointer],  // a synthetic record that is a slice of dictionaries
+    */
+    /// "open end" of the pre-allocated space for the Basis. All Basis data must exist in an extent that is
+    /// less than this value. This can be grown and shrunk with allocation and compaction processes.
+    pub(crate) prealloc_open_end: PageAlignedU64,
+    pub(crate) num_dictionaries: u32,
+    // dict_slice: [DictPointer],  // DictPointers + num_dictionaries above can be turned into a dict_slice
+    ////// the following records are appended by the Serialization routine
     // pad: [u8],    // padding out to the next 4096-byte block less 16 bytes
     // p_tag: [u8; 16], // auth tag output of the AES-GCM-SIV
 }
@@ -43,7 +50,7 @@ impl Deref for BasisRoot {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         unsafe {
-            slice::from_raw_parts(self as *const BasisRoot as *const u8, mem::size_of::<BasisRoot>())
+            core::slice::from_raw_parts(self as *const BasisRoot as *const u8, core::mem::size_of::<BasisRoot>())
                 as &[u8]
         }
     }
@@ -52,7 +59,7 @@ impl Deref for BasisRoot {
 impl DerefMut for BasisRoot {
     fn deref_mut(&mut self) -> &mut [u8] {
         unsafe {
-            slice::from_raw_parts_mut(self as *mut BasisRoot as *mut u8, mem::size_of::<BasisRoot>())
+            core::slice::from_raw_parts_mut(self as *mut BasisRoot as *mut u8, core::mem::size_of::<BasisRoot>())
                 as &mut [u8]
         }
     }
@@ -66,7 +73,7 @@ pub(crate) struct DictPointer {
     addr: u64, // the virtual address of the dictionary
 }
 
-/// FreeSpace address space is in the Basis virtual memory space
+/// FreeSpace address space is in the virtual memory space of the containing Basis
 #[derive(Copy, Clone)]
 pub(crate) struct FreeSpace {
     start: u64,

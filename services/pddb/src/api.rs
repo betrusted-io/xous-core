@@ -1,7 +1,5 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::backend::PAGE_SIZE;
-
 pub(crate) const SERVER_NAME_PDDB: &str     = "_Plausibly Deniable Database_";
 pub(crate) const PDDB_MAX_BASIS_NAME_LEN: usize = 64;
 pub(crate) const PDDB_MAX_DICT_NAME_LEN: usize = 64;

@@ -5,6 +5,7 @@ use rand_core::{CryptoRng, RngCore};
 use cipher::{BlockCipher, BlockDecrypt};
 use root_keys::api::{AesRootkeyType, Block};
 use core::ops::Deref;
+use core::convert::TryFrom;
 
 use std::collections::HashMap;
 use std::io::{Result, Error, ErrorKind};
@@ -18,20 +19,19 @@ pub(crate) const INITIAL_BASIS_ALLOC: usize = 16;
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
 
 #[repr(C, packed)] // this can map directly into Flash
-#[derive(Default)]
 pub(crate) struct StaticCryptoData {
     /// aes-256 key of the system basis, encrypted with the User0 root key
-    system_key: [u8; 32],
+    pub(crate) system_key: [u8; 32],
     /// a pool of fixed data used to pick salts, based on a hash of the basis name
-    salt_base: [u8; 2048],
+    pub(crate) salt_base: [u8; 2048],
     /// also random data, but no specific purpose
-    reserved: [u8; 2016],
+    pub(crate) reserved: [u8; 2016],
 }
 impl Deref for StaticCryptoData {
     type Target = [u8];
     fn deref(&self) -> &[u8] {
         unsafe {
-            slice::from_raw_parts(self as *const StaticCryptoData as *const u8, mem::size_of::<StaticCryptoData>())
+            core::slice::from_raw_parts(self as *const StaticCryptoData as *const u8, core::mem::size_of::<StaticCryptoData>())
                 as &[u8]
         }
     }
@@ -69,18 +69,18 @@ impl PddbOs {
 
         // the mbbb is located one page off from the Page Table
         let key_phys_base = PageAlignedU32::from(core::mem::size_of::<PageTableInFlash>());
-        let mbbb_phys_base = PageAlignedU32::from(key_phys_base + PAGE_SIZE);
-        let fscb_phys_base = PageAlignedU32::from(u32::From(mbbb_phys_base) + MBBB_PAGES as u32 * PAGE_SIZE);
+        let mbbb_phys_base = key_phys_base + PageAlignedU32::from(PAGE_SIZE);
+        let fscb_phys_base = PageAlignedU32::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
         PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
-            rootkeys: root_keys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
+            rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
             pddb_mr: pddb,
             trng: trng::Trng::new(&xns).unwrap(),
-            pt_phys_base: PageAlignedU32::from(0),
+            pt_phys_base: PageAlignedU32::from(0 as u32),
             key_phys_base,
             mbbb_phys_base,
             fscb_phys_base,
-            data_phys_base: PageAlignedU32::from(u32::From(fscb_phys_base) + FSCB_PAGES * PAGE_SIZE),
+            data_phys_base: PageAlignedU32::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
             v2p_map: HashMap::<BasisRoot, HashMap<VirtAddr, ReversePte>>::new(),
         }
@@ -116,7 +116,7 @@ impl PddbOs {
 
         // step 2. create the system basis root structure
         let mut name: [u8; PDDB_MAX_BASIS_NAME_LEN] = [0; PDDB_MAX_BASIS_NAME_LEN];
-        for (&src, dst) in (PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut())) {
+        for (&src, dst) in PDDB_DEFAULT_SYSTEM_BASIS.as_bytes().iter().zip(name.iter_mut()) {
             *dst = src;
         }
         let mut basis_root = BasisRoot {
@@ -127,47 +127,53 @@ impl PddbOs {
             name,
             age: 0,
             num_dictionaries: 0,
-            free_cache: [None; FREE_CACHE_SIZE],
+            prealloc_open_end: PageAlignedU64::from(INITIAL_BASIS_ALLOC * PAGE_SIZE),
         };
-        // allocate a few initial free pages to the basis, so it can operate a bit without having
-        // to immediately call a time-consuming free space acquisition.
-        basis_root.free_cache[0] = Some(FreeSpace {
-            start: PAGE_SIZE,
-            len: (INITIAL_BASIS_ALLOC - 1) * PAGE_SIZE,
-        });
         // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
         let br_slice: &[u8] = basis_root.deref();
 
         // step 3. create our key material
-        if !self.rootkeys.ensure_aes_password() {
-            return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
-        }
+        // consider: making ensure_aes_password() a pub-scoped function? let's see how this works in practice.
+        //if !self.rootkeys.ensure_aes_password() {
+        //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
+        //}
         assert!(core::mem::size_of::<StaticCryptoData>() == PAGE_SIZE, "StaticCryptoData structure is not correctly sized");
-        let mut crypto_keys = StaticCryptoData::default();
-        self.trng.fill_bytes(&crypto_keys.system_key); // this is our "encrypted" key
-        self.trng.fill_bytes(&crypto_keys.salt_base);
-        self.trng.fill_bytes(&crypto_keys.reserved);
+        let mut system_basis_key: [u8; 32] = [0; 32];
+        self.trng.fill_bytes(&mut system_basis_key);
+        let mut basis_key_enc: [u8; 32] = system_basis_key.clone();
+        self.system_basis_key = Some(system_basis_key); // causes system_basis_key to be owned by self
+        log::info!("sanity check: plaintext system basis key: {:x?}", basis_key_enc);
+        self.rootkeys.decrypt_block(Block::from_mut_slice(&mut basis_key_enc));
+        log::info!("sanity check: encrypted system basis key: {:x?}", basis_key_enc);
+        let mut crypto_keys = StaticCryptoData {
+            system_key: [0; 32],
+            salt_base: [0; 2048],
+            reserved: [0; 2016],
+        };
+        // copy the encrypted key into the data structure for commit to Flash
+        for (&src, dst) in basis_key_enc.iter().zip(crypto_keys.system_key.iter_mut()) {
+            *dst = src;
+        }
+        self.trng.fill_bytes(&mut crypto_keys.salt_base);
+        self.trng.fill_bytes(&mut crypto_keys.reserved);
         self.spinor.patch(
             self.pddb_mr.as_slice(),
             xous::PDDB_LOC,
             crypto_keys.deref(),
-            u32::From(self.key_phys_base)
+            self.key_phys_base.as_u32()
         ).expect("couldn't burn keys");
-
-        { // create a block so we know that the system_basis_key goes out of scope when this is done
-            let mut system_basis_key: [u8; 32] = [0; 32];
-            // copy the encrypted key into the buffer
-            for (&src, dst) in crypto_keys.system_key.iter().zip(system_basis_key.iter_mut()) {
-                *dst = src;
-            }
-            log::info!("sanity check: encrypted root key: {:x?}", system_basis_key);
-            self.rootkeys.decrypt_block(Block::from_mut_slice(&mut system_basis_key));
-            log::info!("sanity check: decrypted root key: {:x?}", system_basis_key);
-            self.system_basis_key = Some(system_basis_key);
-        }
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
-        // step 4. generate & write initial page table entries
+        // step 4. Create a hashmap for our reverse PTE, and add it to the Pddb's cache
+        // we don't have a fscb yet, and everything is free space, so we will manually place these initial entries.
+        let mut basis_v2p_map = HashMap::<VirtAddr, ReversePte>::new();
+        for phys_page in (
+            self.data_phys_base.as_u32()..self.data_phys_base.as_u32() + basis_root.prealloc_open_end.as_u32()
+        ).step_by(PAGE_SIZE) {
+
+        }
+
+        // step 5. generate & write initial page table entries
         // page table organization:
         //
         //   offset from |

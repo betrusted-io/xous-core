@@ -1,6 +1,7 @@
 use core::num::NonZeroU32;
 
 use super::PAGE_SIZE;
+use crate::*;
 
 #[repr(u8)]
 pub(crate) enum SpaceState {
