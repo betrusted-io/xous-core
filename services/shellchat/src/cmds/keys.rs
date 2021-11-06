@@ -61,7 +61,7 @@ impl<'a> ShellCmdApi<'a> for Keys {
                     write!(ret, "Provisioning BBRAM").unwrap();
                 }
                 "aes" => {
-                    use aes_xous::{BlockEncrypt, BlockDecrypt};
+                    use aes::{BlockEncrypt, BlockDecrypt};
                     let mut pass = true;
                     let mut block = Block::clone_from_slice(&[0; 16]);
                     self.rootkeys.encrypt_block(&mut block);

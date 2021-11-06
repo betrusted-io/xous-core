@@ -26,7 +26,7 @@ codec = {path = "../codec"}
 #engine-sha512 = {path="../engine-sha512"}
 sha2 = {path="../engine-sha512"}
 digest = "0.9"
-aes-xous={path="../aes"}
+aes={path="../aes"}
 cipher = "0.3"
 engine-25519 = {path="../engine-25519"}
 spinor = {path="../spinor"}

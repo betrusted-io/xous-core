@@ -3,7 +3,7 @@ use crate::bitflip;
 
 use core::convert::TryInto;
 
-use aes_xous::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
+use aes::{Aes256, NewBlockCipher, BlockDecrypt, BlockEncrypt};
 use cipher::generic_array::GenericArray;
 
 #[derive(Debug, Copy, Clone)]
