@@ -63,8 +63,8 @@ impl fmt::Display for XousArguments {
             self.ram_start + self.ram_length
         )?;
 
-        for arg in &self.arguments {
-            write!(f, "{}", arg)?;
+        for (index, arg) in self.arguments.iter().enumerate() {
+            write!(f, "{:2}{}", index+1, arg)?;
         }
         Ok(())
     }
