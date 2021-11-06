@@ -1,6 +1,8 @@
 use std::convert::TryInto;
 
 use crate::*;
+use aes_gcm_siv::{Aes256GcmSiv, Nonce, Key};
+use aes_gcm_siv::aead::{NewAead, Aead};
 use rand_core::{CryptoRng, RngCore};
 use cipher::{BlockCipher, BlockDecrypt};
 use root_keys::api::{AesRootkeyType, Block};
@@ -53,7 +55,7 @@ pub(crate) struct PddbOs {
     fscb_phys_base: PageAlignedU32,
     data_phys_base: PageAlignedU32,
     system_basis_key: Option<[u8; 32]>,
-    v2p_map: HashMap<BasisRoot, HashMap<VirtAddr, ReversePte>>,
+    v2p_map: HashMap<BasisRootName, HashMap<VirtAddr, PhysPage>>,
 }
 
 impl PddbOs {
@@ -82,7 +84,7 @@ impl PddbOs {
             fscb_phys_base,
             data_phys_base: PageAlignedU32::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
-            v2p_map: HashMap::<BasisRoot, HashMap<VirtAddr, ReversePte>>::new(),
+            v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
         }
     }
 
@@ -166,14 +168,49 @@ impl PddbOs {
 
         // step 4. Create a hashmap for our reverse PTE, and add it to the Pddb's cache
         // we don't have a fscb yet, and everything is free space, so we will manually place these initial entries.
-        let mut basis_v2p_map = HashMap::<VirtAddr, ReversePte>::new();
-        for phys_page in (
+        let mut basis_v2p_map = HashMap::<VirtAddr, PhysPage>::new();
+        for (virt_page, phys_addr) in (
             self.data_phys_base.as_u32()..self.data_phys_base.as_u32() + basis_root.prealloc_open_end.as_u32()
-        ).step_by(PAGE_SIZE) {
+        ).step_by(PAGE_SIZE).enumerate() {
+            let mut rpte = PhysPage(0);
+            rpte.set_page_number(phys_addr / PAGE_SIZE as u32);
+            rpte.set_clean(true);
+            rpte.set_valid(true);
+            basis_v2p_map.insert((virt_page * PAGE_SIZE) as VirtAddr, rpte);
+        }
+        self.v2p_map.insert(basis_root.name, basis_v2p_map);
 
+        // step 5. write the basis to Flash, at the physical locations noted above
+        let mut basis_ser = vec![];
+        for &b in br_slice {
+            basis_ser.push(b)
+        }
+        for _ in (0..basis_root.padding_count()) {
+            basis_ser.push(0)
+        }
+        // basis_ser can now be passed to an encryption function
+        if let Some(system_basis_key) = self.system_basis_key {
+            let key = Key::from_slice(&system_basis_key);
+            let cipher = Aes256GcmSiv::new(key);
+            let nonce = Nonce::from_slice(&basis_root.p_nonce);
+            let ciphertext = cipher.encrypt(nonce, &basis_ser[12..]);
+
+            let ct_to_flash: &[u8] = ciphertext.as_ref().unwrap(); // this now contains the encrypted basis + 16-byte tag at the very end
+            assert!( ( ct_to_flash.len() + basis_root.p_nonce.len()) & (PAGE_SIZE - 1) == 0, "Padding failure during basis serialization!");
+            // we're now ready to write the encrypted basis to Flash.
+            self.spinor.patch(
+                self.pddb_mr.as_slice(),
+                xous::PDDB_LOC,
+                &[&basis_root.p_nonce, ct_to_flash].concat(),
+                self.data_phys_base.as_u32()
+            ).expect("couldn't write basis structure");
+            // now fill in the rest of Flash with random data. Because the rest of the Basis is blank, random data is "just fine".
+            // LEFT OFF HERE
+        } else {
+            panic!("invalid state"); // we should never hit this because we created the key earlier in the same routine.
         }
 
-        // step 5. generate & write initial page table entries
+        // step 6. generate & write initial page table entries
         // page table organization:
         //
         //   offset from |
@@ -193,6 +230,7 @@ impl PddbOs {
         //   0x0007_B000 |  fscb start (example of 10 pages)
         //    ...
         //   0x0008_5000 |  data_phys_base - start of basis + dictionary + key data region
+
 
         Ok(())
     }

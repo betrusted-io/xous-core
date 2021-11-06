@@ -21,7 +21,7 @@ pub(crate) enum SpaceState {
 pub (crate) struct FastSpace {
     p_nonce: [u8; 12],
     journal_rev: [u8; 4],
-    free_pool: [Option<PhysAddr>; (PAGE_SIZE - 16 - 4 -12) / 4],
+    free_pool: [PhysPage; (PAGE_SIZE - 16 - 4 -12) / 4],
     p_tag: [u8; 16],
 }
 

@@ -19,10 +19,12 @@ susres = {path = "../susres"}
 rkyv = {version = "0.4.3", features = ["const_generics"], default-features = false}
 trng = {path = "../trng"}
 spinor = {path = "../spinor"}
-aes-xous = {path="../aes"}
+aes = {path="../aes"}
 rand_core = "0.5"
 root-keys = {path="../root-keys"}
 cipher = "0.3"
+bitfield = "0.13.2"
+aes-gcm-siv = "0.10.3"
 
 [target.'cfg(not(any(windows,unix)))'.dependencies]
 utralib = { path = "../../utralib"}

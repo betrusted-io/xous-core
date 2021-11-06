@@ -120,13 +120,17 @@ impl Add for PageAlignedU32 {
     }*/
 }
 
-
+/*
 #[derive(Hash, Copy, Clone, PartialEq, Eq)]
 pub struct PhysAddr(NonZeroU32);
+impl From<u32> for PhysAddr {
+    fn from(arg: u32) -> Self {
+        PhysAddr( NonZeroU32::try_from(arg).expect("Physical addresses must not be zero") )
+    }
+}
+*/
 
-#[derive(Hash, Copy, Clone, PartialEq, Eq)]
-pub struct VirtAddr(NonZeroU64);
-
+pub type VirtAddr = u64;
 
 mod tests {
     use super::*;

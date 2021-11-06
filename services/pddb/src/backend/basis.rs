@@ -6,7 +6,7 @@ use core::ops::{Deref, DerefMut};
 use core::{mem, slice};
 
 pub(crate) const FREE_CACHE_SIZE: usize = 16;
-
+pub type BasisRootName = [u8; PDDB_MAX_BASIS_NAME_LEN];
 /// In basis space, the BasisRoot is located at 0
 /// The first 4GiB is reserved for the Basis Root.
 /// Keys begin at the next 4GiB.
@@ -27,7 +27,7 @@ pub(crate) struct BasisRoot {
     pub(crate) magic: [u8; 4],
     pub(crate) version: u16,
     pub(crate) journal_rev: u32,
-    pub(crate) name: [u8; PDDB_MAX_BASIS_NAME_LEN],
+    pub(crate) name: BasisRootName,
     /// increments every time the BasisRoot is modified. This field must saturate, not roll over.
     pub(crate) age: u32,
     /*
@@ -41,10 +41,38 @@ pub(crate) struct BasisRoot {
     /// less than this value. This can be grown and shrunk with allocation and compaction processes.
     pub(crate) prealloc_open_end: PageAlignedU64,
     pub(crate) num_dictionaries: u32,
-    // dict_slice: [DictPointer],  // DictPointers + num_dictionaries above can be turned into a dict_slice
+    // dict_slice: [DictPointer; num_dictionaries],  // DictPointers + num_dictionaries above can be turned into a dict_slice
     ////// the following records are appended by the Serialization routine
     // pad: [u8],    // padding out to the next 4096-byte block less 16 bytes
     // p_tag: [u8; 16], // auth tag output of the AES-GCM-SIV
+}
+impl BasisRoot {
+    /// Compute the number of memory pages consumed by the BasisRoot structure itself.
+    /// This is the size of BasisRoot, plus the dictionaries allocated within the Basis.
+    /// It does mean that your memory usage scales directly with the number of dictionaries
+    /// you put in the Basis, because there is no way to chain or defer the Basis structure
+    /// if you get thousands of Dictionaries. Note that the intent is to have typcially no
+    /// more than a couple dozen dictionaries; if you want to store a lot of different records,
+    /// you can create thousands of Keys more efficiently, than you can dictionaries.
+    pub(crate) fn len_pages(&self) -> usize {
+        let min_len = core::mem::size_of::<BasisRoot>()
+            + ((self.num_dictionaries as usize)
+            * core::mem::size_of::<DictPointer>())
+            + core::mem::size_of::<aes_gcm_siv::Tag>();
+        if (min_len & (1 - PAGE_SIZE)) == 0 {
+            min_len / PAGE_SIZE
+        } else {
+            min_len / PAGE_SIZE + 1
+        }
+    }
+    /// Number of bytes needed to pad between the length of the BasisRoot structure and the plaintext
+    /// tag that will get appended to the end
+    pub(crate) fn padding_count(&self) -> usize {
+        self.len_pages() * PAGE_SIZE -
+        (core::mem::size_of::<BasisRoot>()
+         + ((self.num_dictionaries as usize) * core::mem::size_of::<DictPointer>())
+        )
+    }
 }
 impl Deref for BasisRoot {
     type Target = [u8];

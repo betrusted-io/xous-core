@@ -2,6 +2,7 @@
 #![cfg_attr(target_os = "none", no_main)]
 
 extern crate bitflags;
+extern crate bitfield;
 
 mod api;
 use api::*;

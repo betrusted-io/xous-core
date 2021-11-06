@@ -1,10 +1,10 @@
 use super::PAGE_SIZE;
-use super::PhysAddr;
 use core::num::NonZeroU8;
 use core::num::NonZeroU32;
 use core::num::NonZeroU64;
 
 use bitflags::bitflags;
+use bitfield::bitfield;
 
 bitflags! {
     /// flags used by the page table
@@ -21,7 +21,10 @@ impl Default for PtFlags {
     fn default() -> PtFlags {PtFlags::INVALID}
 }
 
-/// A Page Table Entry. Contains the address map of the corresponding entry,
+/// A Page Table Entry. Must be equual in length to one AES block size (128 bits).
+/// This is stored in the FLASH itself, so size is not as much of a constraint.
+///
+/// Contains the address map of the corresponding entry,
 /// plus a nonce, and a checksum. Due to the Page Table being deliberately
 /// srtuctured to have invalid entries that don't decrypt correctly, you
 /// can't use a chaining approach. Thus these entries are encrypted closer to
@@ -47,11 +50,14 @@ pub(crate) struct Pte {
     checksum: [u8; 4],
 }
 
-#[repr(C, packed)]
-pub(crate) struct ReversePte {
-    phys_addr: PhysAddr,
-    /// this maps to a u8
-    flags: PtFlags,
+/// Physical page information, coded as a bitfield, because space is a premium!
+bitfield! {
+    #[derive(Copy, Clone, Hash)]
+    pub struct PhysPage(u32);
+    impl Debug;
+    pub page_number, set_page_number: 20, 0;
+    pub clean, set_clean: 21;
+    pub valid, set_valid: 22;
 }
 
 pub const PDDB_SIZE_PAGES: usize = xous::PDDB_LEN as usize / PAGE_SIZE;
