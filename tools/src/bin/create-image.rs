@@ -188,11 +188,18 @@ fn main() {
             // region is largely empty and we want to avoid allocating too much space.
             if region.name == "CSR" {
                 const PAGE_SIZE: usize = 4096;
+                // round to the nearest page, then add one page as the last entry in the csr_top
+                // is an alloatable page, and not an end-stop.
+                let length = if csr_top - region.base & (PAGE_SIZE - 1) == 0 {
+                    csr_top - region.base
+                } else {
+                    ((csr_top - region.base) & !(PAGE_SIZE - 1)) + PAGE_SIZE
+                } + PAGE_SIZE;
                 map.insert(
                     region.name.to_lowercase(),
                     tools::utils::CsrMemoryRegion {
                         start: region.base.try_into().unwrap(),
-                        length: (((csr_top - region.base) + PAGE_SIZE) & !(PAGE_SIZE - 1))
+                        length: length
                             .try_into()
                             .unwrap(),
                     },
