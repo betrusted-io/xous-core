@@ -39,7 +39,7 @@ pub(crate) struct BasisRoot {
     */
     /// "open end" of the pre-allocated space for the Basis. All Basis data must exist in an extent that is
     /// less than this value. This can be grown and shrunk with allocation and compaction processes.
-    pub(crate) prealloc_open_end: PageAlignedU64,
+    pub(crate) prealloc_open_end: PageAlignedVa,
     pub(crate) num_dictionaries: u32,
     // dict_slice: [DictPointer; num_dictionaries],  // DictPointers + num_dictionaries above can be turned into a dict_slice
     ////// the following records are appended by the Serialization routine

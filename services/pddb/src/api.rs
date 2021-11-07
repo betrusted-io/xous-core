@@ -6,6 +6,20 @@ pub(crate) const PDDB_MAX_DICT_NAME_LEN: usize = 64;
 pub(crate) const PDDB_MAX_KEY_NAME_LEN: usize = 128;
 pub(crate) const PDDB_MAGIC: [u8; 4] = [0x50, 0x44, 0x44, 0x42];
 pub(crate) const PDDB_VERSION: u16 = 0;
+/// PDDB_A_LEN may be shorter than xous::PDDB_LEN, to speed up testing
+pub(crate) const PDDB_A_LEN: usize = 16 * 1024 * 1024;
+
+/// A number between (0, 1] that defines how many of the "truly free" pages we
+/// should put into the FSCB. A value of 0.0 is not allowed as that leaves no free pages.
+/// A value of 1.0 would allow an attacker to deduce the real size of data because all
+/// the freee space would be tracked in the FSCB. Thus the trade-off is deniability versus
+/// performance: a fill coefficient of 1.0 means we'd never have to do a brute force scan
+/// for free pages, but you would have no deniability; a fill coefficient of near-0 means
+/// we could plausibly deny a lot of pages as being free space, but every time you wanted
+/// to grow a record, you'd have to unlock all your Basis and do a brute force scan, otherwise
+/// you risk overwriting hidden data by mistaking it as free space. The initial setting is
+/// 0.5: with this setting, we won't be more than a factor of 2 off from the ideal setting!
+pub(crate) const FSCB_FILL_COEFFICIENT: f32 = 0.5;
 
 pub const PDDB_DEFAULT_SYSTEM_BASIS: &'static str = ".System";
 pub(crate) const PDDB_FAST_SPACE_SYSTEM_BASIS: &'static str = ".FastSpace";
@@ -71,6 +85,9 @@ mod tests {
     #[test]
     fn test_pddbuf_size() {
         assert!(core::mem::size_of::<PddbBuf>() == 4096, "PddBuf record has the wrong size");
+    }
+    fn test_pddb_len() {
+        assert!(PDDB_A_LEN <= xous::PDDB_LEN, "PDDB_A_LEN is larger than the maximum extents available in the hardware");
     }
 }
 impl PddbBuf {

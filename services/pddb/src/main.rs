@@ -42,6 +42,34 @@ use xous::{msg_blocking_scalar_unpack, msg_scalar_unpack};
 /// settings:wifi/Kosagi.json
 /// Would be deconstructed into the "settings" dictionary with a key of wifi/Kosagi.json.
 ///
+///
+/// Threat model:
+///
+/// The user is forced to divulge "all the Basis passwords" on the device, through
+/// coercion, blackmail, subpoena, customs checkpoint etc. The adversary has physical
+/// access to the device, and is able to take a static disk image; they may even have
+/// the opportunity to take several disk images over time and diff the images.
+/// The adversary may be able to decrypt the root key of the cryptographic enclave.
+/// The adversary may also be able to observe the contents of encrypted data within the
+/// "system" basis, which includes some of the bookkeeping information for the PDDB,
+/// as the user will have at least been forced to divulge the system basis password as
+/// this is a password that every device requires and they cannot deny its existence.
+///
+/// Under these conditions, it should be impossible for the adversary to conclusively prove or
+/// disprove that every Basis password has been presented and unlocked for inspection
+/// through forensic analysis of the PDDB alone (significantly, we cannot prevent disclosure
+/// by poorly constructed end-user applications storing things like "last opened Basis"
+/// convenience lists, or if the user themselves wrote a note referring to a secret
+/// Basis in a less secret area). Furthermore, if a device is permanently seized by
+/// the adversary for extensive analysis, any Basis whose password that has not been
+/// voluntarily disclosed should be "as good as deleted".
+///
+/// The PDDB also cannot protect against key loggers or surveillance cameras recording
+/// key strokes as the user operates the device. Resistance to key loggers is instead
+/// a problem handled by the OS, and it is up to the user to not type secret passwords
+/// in areas that may be under camera surveillance.
+///
+///
 /// General Operation:
 ///
 /// The initial Basis is known as the "System" Basis. It's a low-security framework basis
@@ -97,7 +125,7 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 /// an encrypted, plausibly deniable filesystem, as you have to trade-off the side channel of partially
 /// erased blocks versus the finite write lifetime of flash storage.
 ///
-/// When a Basis is created, it starts with 64k of FLASH allocated to it. Most of this is blank (but encrypted
+/// When a Basis is created, it starts with 64k of space allocated to it. Most of this is blank (but encrypted
 /// in flash), but it is important in a PD filesystem to claim some freespace for day-to-day operations. This
 /// is because when you need to allocate more data, you have to make a guess as to what is free, and what
 /// previously allocated but currently denied to exist (locked Basis look identical to free space when locked).
@@ -109,8 +137,16 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 /// Blocks on disk are mapped into a virtual PDDB space via a page table. The virtual PDDB space is 64-bit.
 /// Each Basis gets its own 48-bit address space, allowing for up to 64k Basis.
 /// The PDDB page table guarantees that no matter the order of allocation in FLASH, a Basis can linearly
-/// access its blocks by doing a page table lookup. A reverse-lookup structure is constructed on boot
+/// access its blocks through a page table lookup. A reverse-lookup structure is constructed on boot
 /// by scanning the entire PDDB, and creating a HashMap of (basis, offset) -> pddb_addr tuples.
+///
+/// Physical addresses can be 32 or 64 bit based upon the specific implementation. The physical address
+/// type is defined in types.rs. For Precursor, it's defined as a u32, which limits the physical address
+/// size to 32 bits. This is important because Precursor operates out of a very small amount of RAM,
+/// and doubling the size of the overhead bookkeeping structures to handle disk sizes that are well
+/// beyond the current implementation has a real impact on the system's free memory footprint. However,
+/// the PDDB is coded in a way such that one "should" be able to swap out the u32 for a u64 in the
+/// "newtype" definition for a PhysAddr, and the system will work.
 ///
 /// Page table entries don't define themselves with a Basis -- every time a Basis is opened, the entire
 /// table must be scanned, brute-force decrypting every entry against the Basis key, and seeing if the
@@ -134,7 +170,6 @@ const PDDB_BACKING_SIZE: usize = 0x4000_0000;
 /// to all 1's) in a circular buffer basis. The state of where the .FastSpace record is in the "clean" pages
 /// disclose nothing other than the fact that the system has been used.
 ///
-/// TODO: define .FastSpace records and structures.
 ///
 ///
 /// Basis Deniability

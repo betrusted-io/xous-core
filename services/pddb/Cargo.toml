@@ -30,4 +30,7 @@ aes-gcm-siv = "0.10.3"
 utralib = { path = "../../utralib"}
 
 [features]
+# when selected, physical disk addresses are set to 64 bits, otherwise, they are 32 bits.
+# 32 bit addressing is recommended for Precursor, as its disk is only 128MiB and it has limited RAM for bookkeeping.
+u64_pa = []
 default = []

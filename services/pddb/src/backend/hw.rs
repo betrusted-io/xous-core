@@ -10,12 +10,14 @@ use core::ops::Deref;
 use core::convert::TryFrom;
 
 use std::collections::HashMap;
+use std::collections::BinaryHeap;
+use std::cmp::Reverse;
 use std::io::{Result, Error, ErrorKind};
 
 /// Implementation-specific PDDB structures: for Precursor/Xous OS pair
 
 pub(crate) const MBBB_PAGES: usize = 10;
-pub(crate) const FSCB_PAGES: usize = 10;
+pub(crate) const FSCB_PAGES: usize = 16;
 pub(crate) const INITIAL_BASIS_ALLOC: usize = 16;
 
 pub const PAGE_SIZE: usize = spinor::SPINOR_ERASE_SIZE as usize;
@@ -45,17 +47,20 @@ pub(crate) struct PddbOs {
     pddb_mr: xous::MemoryRange,
     trng: trng::Trng,
     /// page table base -- location in FLASH, offset from physical bottom of pddb_mr
-    pt_phys_base: PageAlignedU32,
+    pt_phys_base: PageAlignedPa,
     /// local key store -- one page, to store exactly one key, used for the system basis.
     /// the rest of the keys are generated on the fly entirely from the user password + a salt also stored in this page
-    key_phys_base: PageAlignedU32,
+    key_phys_base: PageAlignedPa,
     /// make before break buffer base -- location in FLASH, offset from physical bottom of pddb_mr
-    mbbb_phys_base: PageAlignedU32,
+    mbbb_phys_base: PageAlignedPa,
     /// free space circular buffer base -- location in FLASH, offset from physical bottom of pddb_mr
-    fscb_phys_base: PageAlignedU32,
-    data_phys_base: PageAlignedU32,
+    fscb_phys_base: PageAlignedPa,
+    data_phys_base: PageAlignedPa,
     system_basis_key: Option<[u8; 32]>,
     v2p_map: HashMap<BasisRootName, HashMap<VirtAddr, PhysPage>>,
+    /// The PDDB eats a lot of entropy. Keep a local pool of entropy, so we're not wasting a lot of
+    /// overhead passing messages to the TRNG.
+    e_cache: Vec::<u8>,
 }
 
 impl PddbOs {
@@ -64,35 +69,187 @@ impl PddbOs {
         let pddb = xous::syscall::map_memory(
             xous::MemoryAddress::new(xous::PDDB_LOC as usize),
             None,
-            xous::PDDB_LEN as usize,
+            PDDB_A_LEN as usize,
             xous::MemoryFlags::R,
         )
         .expect("Couldn't map the PDDB memory range");
 
         // the mbbb is located one page off from the Page Table
-        let key_phys_base = PageAlignedU32::from(core::mem::size_of::<PageTableInFlash>());
-        let mbbb_phys_base = key_phys_base + PageAlignedU32::from(PAGE_SIZE);
-        let fscb_phys_base = PageAlignedU32::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
+        let key_phys_base = PageAlignedPa::from(core::mem::size_of::<PageTableInFlash>());
+        let mbbb_phys_base = key_phys_base + PageAlignedPa::from(PAGE_SIZE);
+        let fscb_phys_base = PageAlignedPa::from(mbbb_phys_base.as_u32() + MBBB_PAGES as u32 * PAGE_SIZE as u32);
+
+        let mut trng = trng::Trng::new(&xns).unwrap();
+        let mut cache: [u8; 8192] = [0; 8192];
+        trng.fill_bytes(&mut cache);
+
         PddbOs {
             spinor: spinor::Spinor::new(&xns).unwrap(),
             rootkeys: root_keys::RootKeys::new(&xns, Some(AesRootkeyType::User0)).expect("FATAL: couldn't access RootKeys!"),
             pddb_mr: pddb,
-            trng: trng::Trng::new(&xns).unwrap(),
-            pt_phys_base: PageAlignedU32::from(0 as u32),
+            trng,
+            pt_phys_base: PageAlignedPa::from(0 as u32),
             key_phys_base,
             mbbb_phys_base,
             fscb_phys_base,
-            data_phys_base: PageAlignedU32::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
+            data_phys_base: PageAlignedPa::from(fscb_phys_base.as_u32() + FSCB_PAGES as u32 * PAGE_SIZE as u32),
             system_basis_key: None,
             v2p_map: HashMap::<BasisRootName, HashMap<VirtAddr, PhysPage>>::new(),
+            e_cache: cache.to_vec(),
         }
     }
 
+    /// patches data at an offset starting from the data physical base address, which corresponds
+    /// exactly to the first entry in the page table
+    fn patch_data(&self, data: &[u8], offset: u32) {
+        assert!(data.len() + offset as usize <= PDDB_A_LEN - self.data_phys_base.as_usize(), "attempt to store past disk boundary");
+        self.spinor.patch(
+            self.pddb_mr.as_slice(),
+            xous::PDDB_LOC,
+            &data,
+            offset + self.data_phys_base.as_u32(),
+        ).expect("couldn't write to data region in the PDDB");
+    }
+    fn patch_keys(&self, data: &[u8], offset: u32) {
+        assert!(data.len() + offset as usize <= PAGE_SIZE, "attempt to burn key data that is outside the key region");
+        self.spinor.patch(
+            self.pddb_mr.as_slice(),
+            xous::PDDB_LOC,
+            data,
+            self.key_phys_base.as_u32() + offset
+        ).expect("couldn't burn keys");
+    }
+    fn patch_mbbb(&self, data: &[u8], offset: u32) {
+        assert!(data.len() + offset as usize <= PAGE_SIZE * MBBB_PAGES, "mbbb patch would go out of bounds");
+        self.spinor.patch(
+            self.pddb_mr.as_slice(),
+            xous::PDDB_LOC,
+            data,
+            self.mbbb_phys_base.as_u32() + offset
+        ).expect("couldn't burn mbbb");
+    }
+    fn patch_fscb(&self, data: &[u8], offset: u32) {
+        assert!(data.len() + offset as usize <= PAGE_SIZE * FSCB_PAGES, "fscb patch would go out of bounds");
+        self.spinor.patch(
+            self.pddb_mr.as_slice(),
+            xous::PDDB_LOC,
+            data,
+            self.fscb_phys_base.as_u32() + offset
+        ).expect("couldn't burn fscb");
+    }
+
+    fn ensure_entropy(&mut self, amount: usize) {
+        if self.e_cache.len() < amount {
+            let mut cache: [u8; 8192] = [0; 8192];
+            self.trng.fill_bytes(&mut cache);
+            self.e_cache.extend_from_slice(&cache);
+        }
+    }
+    fn trng_cache_u8(&mut self) -> u8 {
+        self.ensure_entropy(1);
+        self.e_cache.pop().unwrap()
+    }
+    fn trng_cache_u32(&mut self) -> u32 {
+        self.ensure_entropy(4);
+        let ret = u32::from_le_bytes(self.e_cache[self.e_cache.len() - 4..].try_into().unwrap());
+        self.e_cache.truncate(self.e_cache.len() - 4);
+        ret
+    }
+    fn trng_cache_u64(&mut self) -> u64 {
+        self.ensure_entropy(8);
+        let ret = u64::from_le_bytes(self.e_cache[self.e_cache.len() - 8..].try_into().unwrap());
+        self.e_cache.truncate(self.e_cache.len() - 8);
+        ret
+    }
+    fn trng_cache_slice(&mut self, bucket: &mut [u8]) {
+        self.ensure_entropy(bucket.len());
+        for (src, dst) in self.e_cache.drain(
+            (self.e_cache.len() - bucket.len())..
+        ).zip(bucket.iter_mut()) {
+            *dst = src;
+        }
+    }
     /// generates a 96-bit nonce using the CPRNG
     pub fn gen_nonce(&mut self) -> [u8; 12] {
         let mut nonce: [u8; 12] = [0; 12];
-        self.trng.fill_bytes(&mut nonce);
+        self.trng_cache_slice(&mut nonce);
         nonce
+    }
+
+
+    /// WARNING: only call this function when all knows Basis have been unlocked, otherwise locked
+    /// Basis will be marked in the freespace sweep for deletion.
+    ///
+    /// Sweeps through the entire set of known data (as loaded in v2p_map) and
+    /// returns a subset of the total free space in a PhysPage vector that is a list of physical pages,
+    /// in random order, that can be used by PDDB operations in the future without worry about
+    /// accidentally overwriting Basis data that are locked.
+    ///
+    /// The function is coded to prioritize small peak memory footprint over speed, as it
+    /// needs to run in a fairly memory-constrained environment, keeping in mind that if the PDDB
+    /// structures were to be extended to run on say, an external USB drive with gigabytes of space,
+    /// we cannot afford to naively allocate vectors that count every single page.
+    fn collect_fastspace(&self) -> Vec::<PhysPage> {
+        let mut free_pool = Vec::<usize>::new();
+        let max_entries = FASTSPACE_PAGES * PAGE_SIZE / core::mem::size_of::<PhysPage>();
+        free_pool.reserve_exact(max_entries);
+        // 1. scan through all of the known physical pages, and add them to a binary heap.
+        //    WARNING: this could get really big for a very large filesystem. It's capped at ~100k for
+        //    Precursor's ~100MiB storage increment.
+        let mut page_heap = BinaryHeap::new();
+        for (_, basismap) in self.v2p_map {
+            for (_, pp) in basismap {
+                page_heap.push(Reverse(pp.page_number()));
+            }
+        }
+        let total_free_pages = page_heap.len();
+        if total_free_pages == 0 {
+            log::warn!("Disk is out of space, no free pages available!");
+            // return an empty free_pool vector.
+            return Vec::<PhysPage>::new();
+        }
+        // 2. fill the free_pool, avoiding entries in the page_heap. This algorithm
+        // uses a fixed amount of storage regardless of the size of the disk, but
+        // it produces a free_pool that has entries biased toward the high
+        // addresses.
+        let mut min_used_page = page_heap.pop();
+        // consider every page
+        for page_candidate in (0..PDDB_A_LEN / PAGE_SIZE) {
+            // if the page is used, skip it.
+            if let Some(Reverse(mp)) = min_used_page {
+                if page_candidate == mp as usize {
+                    min_used_page = page_heap.pop();
+                    continue;
+                }
+            }
+            // page is free. if we've space in the pool, just deposit it there
+            if free_pool.len() < max_entries {
+                free_pool.push(page_candidate);
+            } else {
+                // page is free, but we have no space in the pool.
+                // pick a random page from the pool, and replace it with the current page
+                free_pool[self.trng_cache_u32() as usize % free_pool.len()] = page_candidate;
+            }
+        }
+        // 3. shuffle the contents of free_pool. This is important in the case that the
+        // amount of free space starts to approach the size of the free pool, as it will
+        // essentially come out of step 2 as a sorted list.
+        // this shuffle is stolen out of the rand crate directly -- it's a small function,
+        // and pulling in the ENTIRE rand crate for this code seemed very unnecessary.
+        // https://github.com/rust-random/rand/blob/0f4fc6b4c303696bd5f8765a375162ac7142b1df/src/seq/mod.rs#L586-L592
+        for i in (1..free_pool.len()).rev() {
+            // invariant: elements with index > i have been locked in place.
+            free_pool.swap(i, self.trng_cache_u32() as usize % (i+1));
+        }
+
+        // 4. ensure that the free pool stays within the defined deniability ratio
+        let deniable_free_pages = (total_free_pages as f32 * FSCB_FILL_COEFFICIENT) as usize;
+        // we're guarantede to have at least one free page, because we errored out if the pages was 0 above.
+        let deniable_free_pages = if deniable_free_pages == 0 { 1 } else { deniable_free_pages };
+        free_pool.truncate(deniable_free_pages);
+
+        /// TODO: translate the free_pool into a PhysPage vector with the right bitfields attached to it.
+        free_pool
     }
 
     /// this function is dangerous in that calling it will completely erase all of the previous data
@@ -107,12 +264,13 @@ impl PddbOs {
         log::info!("Erasing the PDDB region");
         let blank_sector: [u8; PAGE_SIZE] = [0xff; PAGE_SIZE];
 
-        for offset in (0..xous::PDDB_LEN).step_by(PAGE_SIZE) {
+        // there is no convenience routine for erasing the entire disk. Maybe that's a good thing?
+        for offset in (0..PDDB_A_LEN).step_by(PAGE_SIZE) {
             self.spinor.patch(
                 self.pddb_mr.as_slice(),
                 xous::PDDB_LOC,
                 &blank_sector,
-                offset
+                offset as u32
             ).expect("couldn't erase memory");
         }
 
@@ -129,7 +287,7 @@ impl PddbOs {
             name,
             age: 0,
             num_dictionaries: 0,
-            prealloc_open_end: PageAlignedU64::from(INITIAL_BASIS_ALLOC * PAGE_SIZE),
+            prealloc_open_end: PageAlignedVa::from(INITIAL_BASIS_ALLOC * PAGE_SIZE),
         };
         // extract a slice-u8 that maps onto the basis_root record, allowing us to patch this into a FLASH page
         let br_slice: &[u8] = basis_root.deref();
@@ -158,12 +316,7 @@ impl PddbOs {
         }
         self.trng.fill_bytes(&mut crypto_keys.salt_base);
         self.trng.fill_bytes(&mut crypto_keys.reserved);
-        self.spinor.patch(
-            self.pddb_mr.as_slice(),
-            xous::PDDB_LOC,
-            crypto_keys.deref(),
-            self.key_phys_base.as_u32()
-        ).expect("couldn't burn keys");
+        self.patch_keys(crypto_keys.deref(), 0);
         // now we have a copy of the AES key necessary to encrypt the default System basis that we created in step 2.
 
         // step 4. Create a hashmap for our reverse PTE, and add it to the Pddb's cache
@@ -192,25 +345,35 @@ impl PddbOs {
         if let Some(system_basis_key) = self.system_basis_key {
             let key = Key::from_slice(&system_basis_key);
             let cipher = Aes256GcmSiv::new(key);
-            let nonce = Nonce::from_slice(&basis_root.p_nonce);
+            let nonce_array = self.gen_nonce();
+            let nonce = Nonce::from_slice(&nonce_array);
             let ciphertext = cipher.encrypt(nonce, &basis_ser[12..]);
 
             let ct_to_flash: &[u8] = ciphertext.as_ref().unwrap(); // this now contains the encrypted basis + 16-byte tag at the very end
             assert!( ( ct_to_flash.len() + basis_root.p_nonce.len()) & (PAGE_SIZE - 1) == 0, "Padding failure during basis serialization!");
             // we're now ready to write the encrypted basis to Flash.
-            self.spinor.patch(
-                self.pddb_mr.as_slice(),
-                xous::PDDB_LOC,
-                &[&basis_root.p_nonce, ct_to_flash].concat(),
-                self.data_phys_base.as_u32()
-            ).expect("couldn't write basis structure");
-            // now fill in the rest of Flash with random data. Because the rest of the Basis is blank, random data is "just fine".
-            // LEFT OFF HERE
+            self.patch_data(&[&nonce_array, ct_to_flash].concat(), 0);
+
+            // now fill in the rest of Flash with random data. This includes filling in the current Basis allocation
+            // with random data, as that is the "free" state (as well as, at least facially, the "used" state)
+            let start_offset = PageAlignedPa::from(ct_to_flash.len() + basis_root.p_nonce.len());
+            let mut erase_buf: [u8; 4096] = [0; 4096];
+            for page_offset in (start_offset.as_u32()..PDDB_A_LEN as u32).step_by(PAGE_SIZE) {
+                self.trng.fill_bytes(&mut erase_buf);
+                self.patch_data(&erase_buf, page_offset);
+            }
         } else {
             panic!("invalid state"); // we should never hit this because we created the key earlier in the same routine.
         }
 
-        // step 6. generate & write initial page table entries
+        // step 6. mbbb handling
+        // mbbb should just be blank at this point, so there's nothing to do.
+
+        // step 7. fscb handling
+        // pick a set of random pages from the free pool and assign it to the fscb
+        let page_state = Vec::<u8>::new(); // bools also take up a byte
+
+        // step 8. generate & write initial page table entries
         // page table organization:
         //
         //   offset from |

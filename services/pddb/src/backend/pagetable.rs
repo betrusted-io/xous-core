@@ -4,7 +4,6 @@ use core::num::NonZeroU32;
 use core::num::NonZeroU64;
 
 use bitflags::bitflags;
-use bitfield::bitfield;
 
 bitflags! {
     /// flags used by the page table
@@ -50,17 +49,7 @@ pub(crate) struct Pte {
     checksum: [u8; 4],
 }
 
-/// Physical page information, coded as a bitfield, because space is a premium!
-bitfield! {
-    #[derive(Copy, Clone, Hash)]
-    pub struct PhysPage(u32);
-    impl Debug;
-    pub page_number, set_page_number: 20, 0;
-    pub clean, set_clean: 21;
-    pub valid, set_valid: 22;
-}
-
-pub const PDDB_SIZE_PAGES: usize = xous::PDDB_LEN as usize / PAGE_SIZE;
+pub const PDDB_SIZE_PAGES: usize = crate::PDDB_A_LEN as usize / PAGE_SIZE;
 /// This structure is mapped into the top of FLASH memory, starting at
 /// xous::PDDB_LOC. This actually slightly over-sizes the page table,
 /// because the page table does not map the locations for the page table
